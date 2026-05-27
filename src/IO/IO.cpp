@@ -453,11 +453,16 @@ namespace EmEn::Base::IO
 			return {};
 		}
 
-		auto extension = filepath.extension().string().substr(1);
+		/* NOTE: On Windows, path::string() converts the native wide path to the system
+		 * ANSI code page, which collapses non-ASCII characters (e.g. 'É' → single byte).
+		 * toU8String() guarantees a UTF-8 result on every platform. */
+		auto extension = toU8String(filepath.extension()).substr(1);
 
 		if ( forceToLower )
 		{
-			std::ranges::transform(extension, extension.begin(), ::tolower);
+			std::ranges::transform(extension, extension.begin(), [] (char character) {
+				return static_cast< char >(::tolower(static_cast< unsigned char >(character)));
+			});
 		}
 
 		return extension;

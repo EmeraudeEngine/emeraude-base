@@ -13,7 +13,7 @@ endif ()
 if ( CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel" )
 	set(EXTERNAL_DEPENDENCIES_BUILD_TYPE Release)
 else ()
-	set(EXTERNAL_DEPENDENCIES_TYPE Debug)
+	set(EXTERNAL_DEPENDENCIES_BUILD_TYPE Debug)
 endif ()
 
 # Get the right archive name.
