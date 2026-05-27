@@ -1,0 +1,6 @@
+[submodule "dependencies/asio"]
+	path = dependencies/asio
+	url = https://github.com/chriskohlhoff/asio
+[submodule "dependencies/tinysoundfont"]
+	path = dependencies/tinysoundfont
+	url = https://github.com/schellingb/TinySoundFont.git

@@ -1,0 +1,68 @@
+# Explicit source lists for emeraude-base (no globbing — new files must be added here).
+# Mirrors the engine's PrepareEngineSourceFiles.cmake approach.
+
+set(EMERAUDE_BASE_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA/Compressor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA/Decompressor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/ZLIB.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Debug/Statistics.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/FastJSON.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/FileTimestamps.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/GameTools/CardDeck.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/CRC32.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/Hash.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/MD5.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/SHA256.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/SHA512.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/IO.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipReader.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipWriter.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/KVParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponse.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Network.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Query.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URI.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URIDomain.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ObservableTrait.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ObserverTrait.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/SourceCodeParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/String.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/Abstract.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/CPUTime.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/TokenFormatter.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Variant.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/TreeGenerator.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/Processor.cpp
+)
+
+set(EMERAUDE_BASE_TEST_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/main.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Hash.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_LineFormula.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathBasics.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathCartesianFrame.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathMatrix.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathQuaternion.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace2D.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace3D.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathTransformConversions.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NodeTrait.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ObserverPattern.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryColor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmap.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmapFormat.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryProcessor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryTextPixmap.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_StaticVector.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_String.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ThreadPool.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_TokenFormatter.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Version.cpp
+)

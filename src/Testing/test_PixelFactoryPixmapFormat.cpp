@@ -1,0 +1,73 @@
+/*
+ * src/Testing/test_PixelFactoryPixmapFormat.cpp
+ * This file is part of Emeraude-Base
+ *
+ * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
+ *
+ * Emeraude-Base is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * Emeraude-Base is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Emeraude-Base; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ * Complete project and additional information can be found at :
+ * https://github.com/EmeraudeEngine/emeraude-base
+ *
+ * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
+ */
+
+/* Third-party inclusions. */
+#include <gtest/gtest.h>
+
+/* Local inclusions. */
+#include "Constants.hpp"
+#include "PixelFactory/FileFormatTarga.hpp"
+#include "PixelFactory/FileIO.hpp"
+#include "Time/Elapsed/PrintScopeRealTime.hpp"
+
+using namespace EmEn::Base;
+using namespace EmEn::Base::PixelFactory;
+using namespace EmEn::Base::Time::Elapsed;
+
+TEST(PixelFactoryPixmapFormat, readTarga)
+{
+	Pixmap< uint8_t > image;
+
+	ASSERT_TRUE(FileIO::read(FixedFont, image));
+
+	ASSERT_EQ(image.width(), 512);
+	ASSERT_EQ(image.height(), 512);
+	ASSERT_EQ(image.colorCount(), 1);
+}
+
+TEST(PixelFactoryPixmapFormat, writeTarga)
+{
+	Pixmap< uint8_t > image;
+
+	ASSERT_TRUE(FileIO::read(LargeRGB, image));
+
+	ASSERT_TRUE(FileIO::write(image, {"./assets/tmp_writeTarga.tga"}, true));
+}
+
+TEST(PixelFactoryPixmapFormat, readTargaRLE)
+{
+	Pixmap< uint8_t > image;
+
+	ASSERT_TRUE(FileIO::read(LargeRGB_RLE_Targa, image));
+
+	ASSERT_EQ(image.width(), 1700);
+	ASSERT_EQ(image.height(), 1280);
+	ASSERT_EQ(image.colorCount(), 3);
+}
+
+/* NOTE: Tests writeTargaWithRLE, writeTargaWithoutRLE, targaRLERoundTrip, targaGrayscaleRLE
+ * disabled — FileFormatTarga API changed (setRLECompression/writeFile removed).
+ * These tests need to be rewritten when the new Targa write API is stabilized. */

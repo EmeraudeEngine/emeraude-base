@@ -1,0 +1,76 @@
+/*
+ * src/emeraude_base_config.hpp.in
+ * This file is part of Emeraude-Base
+ *
+ * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
+ *
+ * Emeraude-Base is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * Emeraude-Base is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Emeraude-Base; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ * Complete project and additional information can be found at :
+ * https://github.com/EmeraudeEngine/emeraude-base
+ *
+ * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
+ */
+
+/*
+ * src/base_config.hpp
+ * Configured by CMake — do not edit the generated file.
+ */
+
+#pragma once
+
+/* Stable platform / arch / OS detection (preprocessor only, never regenerated). */
+#include "emeraude_platform.hpp"
+
+#cmakedefine LIBSNDFILE_ENABLED
+
+/* Allow CMake On/Off option values to substitute as C++ booleans. */
+#define ON true
+#define On true
+#define OFF false
+#define Off false
+
+namespace EmEn
+{
+	constexpr auto InternetCheckDomain{"@EMERAUDE_INTERNET_CHECK_DOMAIN@"};
+	constexpr auto DefaultUserAgent{"@PROJECT_NAME@/@PROJECT_VERSION@ (" PLATFORM_TARGETED ")"};
+
+#ifdef DEBUG
+	constexpr bool IsDebug{true};
+	constexpr bool IsRelease{false};
+
+	constexpr bool ObserverDebugEnabled{@EMERAUDE_DEBUG_OBSERVER_PATTERN@};
+	constexpr bool PixelFactoryDebugEnabled{@EMERAUDE_DEBUG_PIXEL_FACTORY@};
+	constexpr bool VertexFactoryDebugEnabled{@EMERAUDE_DEBUG_VERTEX_FACTORY@};
+	constexpr bool WaveFactoryDebugEnabled{@EMERAUDE_DEBUG_WAVE_FACTORY@};
+#else
+	constexpr bool IsDebug{false};
+	constexpr bool IsRelease{true};
+
+	constexpr bool ObserverDebugEnabled{false};
+	constexpr bool PixelFactoryDebugEnabled{false};
+	constexpr bool VertexFactoryDebugEnabled{false};
+	constexpr bool WaveFactoryDebugEnabled{false};
+#endif
+
+	constexpr bool ThreadPoolDebugEnabled{@EMERAUDE_DEBUG_THREAD_POOL@};
+	constexpr unsigned int ThreadPoolDebugEnabledNumThreads{@EMERAUDE_DEBUG_THREAD_POOL_N@};
+	constexpr bool ParallelCollisionDisabled{@EMERAUDE_DISABLE_PARALLEL_COLLISION@};
+}
+
+#undef ON
+#undef On
+#undef OFF
+#undef Off

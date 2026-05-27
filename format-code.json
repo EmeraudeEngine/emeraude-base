@@ -1,0 +1,9 @@
+{
+	"project_name": "Emeraude-Base",
+	"project_url": "https://github.com/EmeraudeEngine/emeraude-base",
+	"author": "Sébastien Léon Claude Christian Bémelmans \"LondNoir\" <londnoir@gmail.com>",
+	"license": "lgpl3",
+	"paths": ["./src"],
+	"extensions": ["h", "hpp", "c", "cpp", "in"],
+	"exclusions": ["txt"]
+}
