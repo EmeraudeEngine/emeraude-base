@@ -32,7 +32,7 @@
 #include <string>
 
 /* Local inclusions for usages. */
-#include "Utility.hpp"
+#include "BaseUtility.hpp"
 
 namespace EmEn::Base::Math
 {

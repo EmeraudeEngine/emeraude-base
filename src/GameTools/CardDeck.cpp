@@ -27,7 +27,7 @@
 #include "CardDeck.hpp"
 
 /* Local inclusions. */
-#include "Utility.hpp"
+#include "BaseUtility.hpp"
 
 namespace EmEn::Base::GameTools
 {

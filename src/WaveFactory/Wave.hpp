@@ -42,7 +42,7 @@
 #include <vector>
 
 /* Local inclusions. */
-#include "Utility.hpp"
+#include "BaseUtility.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::WaveFactory

@@ -30,7 +30,7 @@
 /* Local inclusions. */
 #include "Randomizer.hpp"
 #include "String.hpp"
-#include "Utility.hpp"
+#include "BaseUtility.hpp"
 
 using namespace EmEn::Base;
 

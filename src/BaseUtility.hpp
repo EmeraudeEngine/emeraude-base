@@ -1,5 +1,5 @@
 /*
- * src/Utility.hpp
+ * src/BaseUtility.hpp
  * This file is part of Emeraude-Base
  *
  * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>

@@ -37,7 +37,7 @@
 #include "Compression/ZLIB.hpp"
 #include "Randomizer.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
-#include "Utility.hpp"
+#include "BaseUtility.hpp"
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::Compression;

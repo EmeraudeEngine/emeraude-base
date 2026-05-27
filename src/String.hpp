@@ -43,7 +43,7 @@
 #include <vector>
 
 /* Local inclusions. */
-#include "Utility.hpp"
+#include "BaseUtility.hpp"
 
 #if IS_WINDOWS
 #undef min
