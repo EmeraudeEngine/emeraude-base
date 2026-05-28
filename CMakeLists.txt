@@ -63,17 +63,19 @@ option(EMERAUDE_DISABLE_PARALLEL_COLLISION "Disable parallel collision detection
 
 #######################################################################
 ## Build type
-set(CMAKE_CONFIGURATION_TYPES Debug Release RelWithDebInfo)
+set(CMAKE_CONFIGURATION_TYPES Debug Release RelWithDebInfo MinSizeRel)
 
-if ( NOT CMAKE_BUILD_TYPE )
-	if ( MSVC AND MSVC_BUILD_TYPE )
+if ( MSVC )
+	if ( MSVC_BUILD_TYPE )
 		set(CMAKE_BUILD_TYPE ${MSVC_BUILD_TYPE})
-	elseif ( MSVC )
-		message(FATAL_ERROR "[EmeraudeBase] Set -DMSVC_BUILD_TYPE=Debug|Release on Windows.")
 	else ()
-		set(CMAKE_BUILD_TYPE Release)
+		message(FATAL_ERROR "[EmeraudeBase] Set -DMSVC_BUILD_TYPE=Debug|Release|RelWithDebInfo|MinSizeRel on Windows.")
 	endif ()
+elseif ( NOT CMAKE_BUILD_TYPE )
+	set(CMAKE_BUILD_TYPE Release)
 endif ()
+
+message("[EmeraudeBase] Build type : ${CMAKE_BUILD_TYPE}")
 
 if ( PROJECT_IS_TOP_LEVEL )
 	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/$<CONFIG>")
@@ -122,10 +124,7 @@ set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emer
 
 # Download + extract the prebuilt archive when EMERAUDE_EXT_LIBS_PATH is absent.
 # Skipped automatically when it is a symlink (developer pointing at a local build).
-option(EMERAUDE_DL_DEPENDENCIES "Download the prebuilt external dependencies if absent." On)
-if ( EMERAUDE_DL_DEPENDENCIES )
-	include(InstallDependencies)
-endif ()
+include(InstallDependencies)
 
 if ( NOT EXISTS "${EMERAUDE_EXT_LIBS_PATH}" )
 	message(FATAL_ERROR "[EmeraudeBase] Missing external dependencies for this config: ${EMERAUDE_EXT_LIBS_PATH}")
