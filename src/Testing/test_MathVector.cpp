@@ -742,3 +742,17 @@ TYPED_TEST(MathVector, LinearInterpolation)
 		ASSERT_TRUE(nearEqual(mid[Z], TypeParam{5}));
 	}
 }
+
+// ============================================================================
+// NAMED COMPONENT ACCESSORS
+// ============================================================================
+
+TYPED_TEST(MathVector, Vector3NamedAccessors)
+{
+	/* x()/y()/z() accessors should return the matching components */
+	const auto vec = Vector< 3, TypeParam >{TypeParam{1}, TypeParam{2}, TypeParam{3}};
+
+	ASSERT_EQ(vec.x(), TypeParam{1});
+	ASSERT_EQ(vec.y(), TypeParam{2});
+	ASSERT_EQ(vec.z(), TypeParam{3});
+}
