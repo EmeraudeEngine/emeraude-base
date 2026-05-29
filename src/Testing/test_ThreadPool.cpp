@@ -904,6 +904,16 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 {
 	ThreadPool pool;
 
+	/* This is a wall-clock speedup benchmark with no correctness check. It is only
+	 * meaningful with enough hardware threads: on CI runners with few (and shared)
+	 * cores, the memory-bound 4K drawing does not speed up reliably and the parallel
+	 * run can even be marginally slower. Skip there rather than fail the build (and
+	 * avoid wasting minutes of CI time on a benchmark that proves nothing). */
+	if ( pool.threadCount() < 4 )
+	{
+		GTEST_SKIP() << "Speedup benchmark skipped: only " << pool.threadCount() << " worker thread(s) available.";
+	}
+
 	constexpr uint32_t imageWidth = 3840;
 	constexpr uint32_t imageHeight = 2160;
 	constexpr size_t operationCount = 50000;
