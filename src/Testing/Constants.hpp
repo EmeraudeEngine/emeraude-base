@@ -27,13 +27,27 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdint>
 #include <filesystem>
 
 /* NOTE: Source images. */
 static const std::filesystem::path FixedFont{"./assets/fixed-font.tga"};
 static const std::filesystem::path TrueTypeFont{"./assets/Joystick.Bold.ttf"};
 static const std::filesystem::path LargeRGB{"./assets/1200x800-RBG.jpg"};
+
+/* NOTE: ExtraLargeRGB switches between the 1200x800 image (default, keeps the suite
+ * fast) and the heavy 8160x6144 image. Toggle it with the CMake option
+ * EMERAUDE_TESTS_USE_EXTRA_LARGE_RGB (available when the test suite is built). The
+ * matching dimensions are exposed so tests don't hard-code them. */
+#ifdef EMERAUDE_TESTS_USE_EXTRA_LARGE_RGB
 static const std::filesystem::path ExtraLargeRGB{"./assets/8160x6144-RBG.jpg"};
+static constexpr uint32_t ExtraLargeRGB_Width = 8160;
+static constexpr uint32_t ExtraLargeRGB_Height = 6144;
+#else
+static const std::filesystem::path ExtraLargeRGB{LargeRGB};
+static constexpr uint32_t ExtraLargeRGB_Width = 1200;
+static constexpr uint32_t ExtraLargeRGB_Height = 800;
+#endif
 static const std::filesystem::path MediumGrayscale{"./assets/512x512-Grayscale.png"};
 static const std::filesystem::path MediumGrayscaleAlpha{"./assets/512x512-GrayscaleAlpha.png"};
 static const std::filesystem::path MediumPalette{"./assets/512x512-Palette.png"};

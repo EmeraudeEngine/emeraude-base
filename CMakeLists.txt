@@ -331,6 +331,15 @@ if ( EMERAUDE_ENABLE_TESTS )
 	target_compile_options(EmeraudeBaseUnitTests PRIVATE ${EMERAUDE_COMPILE_OPTIONS})
 	target_link_libraries(EmeraudeBaseUnitTests PRIVATE emeraude::base gtest_main)
 
+	# Heavy PixelFactory tests can run against a much larger source image (8160x6144
+	# instead of the default 1200x800). Off by default to keep the suite fast; the
+	# switch (path + expected dimensions) lives in src/Testing/Constants.hpp.
+	option(EMERAUDE_TESTS_USE_EXTRA_LARGE_RGB "Use the 8160x6144 image for heavy PixelFactory tests (default 1200x800)." Off)
+
+	if ( EMERAUDE_TESTS_USE_EXTRA_LARGE_RGB )
+		target_compile_definitions(EmeraudeBaseUnitTests PRIVATE EMERAUDE_TESTS_USE_EXTRA_LARGE_RGB)
+	endif ()
+
 	enable_testing()
 	# Tests load fixtures via "./assets/…" — run them from resources/ where those live.
 	gtest_discover_tests(EmeraudeBaseUnitTests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources)
