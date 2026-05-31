@@ -66,18 +66,18 @@ These emerged from the audit and matter for sequencing:
 ### Module: vertex
 - **Target/kind/deps:** `emeraude::base::vertex` — OBJECT, no ext deps. Status TODO. ~22k LOC, header-only (1 `.cpp`).
 - **Test files:** none.
-- **Overall:** Broad read paths (ee3d/OBJ/STL/MDx), real write for ee3d/OBJ/STL, intentional read-only MDx; large procedural ShapeGenerator suite. Entire surface untested; MDx reader trusts header counts/offsets without bounds checks.
+- **Overall:** Broad read paths (ee3d/OBJ/STL/MDx), real write for ee3d/OBJ/STL, intentional read-only MDx; large procedural ShapeGenerator suite. ✅ **A.2: all four file-format parsers hardened** (`test_VertexFactoryFileFormats.cpp`, 16 tests). The shared Tier-1 vuln — untrusted count → `resize`/`reserve`/`vector(n)` with no validation → `length_error`/`terminate`/OOM under `-fno-exceptions` — is closed everywhere. Procedural generators (ShapeGenerator/Decimator/Processor/Grid) remain untested (not untrusted-input; lower priority).
 
 | Promised capability | Source | Real state | Gap | "Utility blinded" criterion |
 |---|---|---|---|---|
-| Read geometry by extension (ee3d/obj/stl/mdl/md2/md3/md5mesh) | `FileIO.hpp` read() | Delivered, per-format dispatch | A | each format reads expected vertex/triangle counts |
+| Read geometry by extension (ee3d/obj/stl/mdl/md2/md3/md5mesh) | `FileIO.hpp` read() | Delivered, per-format dispatch; ✅ A.2 cerr→Logging | A | each format reads expected vertex/triangle counts |
 | Write geometry by extension | `FileIO.hpp` write() | ee3d/obj/stl real; MDx→false | A (ee3d/obj/stl) | round-trip write→read reproduces shape |
-| Native ee3d read+write (magic/version/precision guards) | `FileFormatNative.hpp` | Delivered with guards | A | byte-exact ee3d round-trip |
+| Native ee3d read+write (magic/version/precision guards) | `FileFormatNative.hpp` | ✅ Delivered + A.2: counts validated against remaining stream bytes (overflow-safe) before resize; cerr→Logging | ✅ | byte-exact ee3d round-trip; hostile counts rejected |
 | StreamIO (in-memory) — native only | `StreamIO.hpp:51` | Hardwired to ee3d; **owner ruled: full parity required** | **B** | obj/stl/native all round-trip in-memory |
-| MDx read (MDL/MD2/MD3 binary + MD5 text) | `FileFormatMDx.hpp` | 🐞 allocates vectors from untrusted `header.num_*`, seeks untrusted `offset_*`, **no size validation** → OOM/OOB on malformed input | A | truncated/hostile MD2/MD3 fails gracefully, no OOM/OOB/crash |
+| MDx read (MDL/MD2/MD3 binary + MD5 text) | `FileFormatMDx.hpp` | ✅ FIXED (read-only legacy, kept deliberately for nostalgic models). Uniform `exceedsStream(file, count)` guard at all 20 allocation sites (`vector(n)` + `resize`) — any count above the stream size cancels the load. `skinwidth*skinheight` int-overflow fixed (computed in uint64 + guarded). Goal per owner: never crash the engine; cancel on bad input. | ✅ | hostile MDL/MD2/MD3 cancels the load, no OOM/crash |
 | MDx write | `FileFormatMDx::writeStream` | Intentional stub (returns false, logged) | none — **owner ruled: assumed limitation, document it** | writeStream returns false, stream untouched |
 | STL ASCII/binary auto-detect | `FileFormatSTL::isAscii` | Heuristic; binary file starting with "solid" misdetected | A | binary STL with "solid" in header parsed as binary |
-| OBJ read+write | `FileFormatOBJ.hpp` | Delivered; write has no vt/vn dedup (per-vertex 1:1) | A | OBJ write→read reproduces pos/UV/normal; opens in a viewer |
+| OBJ read+write | `FileFormatOBJ.hpp` | ✅ A.2: face indices bounds-checked before `m_v/m_vt/m_vn.at()` (a face referencing a missing vertex was `out_of_range`→terminate under `-fno-exceptions`); cerr/cout→Logging. Counts are line-derived (no alloc DoS). Write still has no vt/vn dedup (per-vertex 1:1) | A (write dedup) | bad face index cancels the load, no crash; write→read reproduces pos/UV/normal |
 | Procedural shapes (~40 generators) | `ShapeGenerator.hpp` | Large, apparently complete | A | sphere/cuboid have valid manifold topology + correct counts |
 | Mesh decimation (QEM) | `ShapeDecimator.hpp` | Implemented | A | decimate to N% reduces tris ~N%, preserves silhouette |
 | Shape processing (hole fill, split, assemble, X-ray, triangles) | `ShapeProcessor/Splitter/Assembler`, `TriangleGenerator.hpp:87` FIXME, `ShapeBuilder.hpp:636` FIXME | Implemented + 2 open FIXMEs | A | hole-fill closes a known holed mesh; X-ray count matches |

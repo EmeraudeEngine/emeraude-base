@@ -29,11 +29,13 @@
 /* STL inclusions. */
 #include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <string>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+
+/* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::VertexFactory
 {
@@ -63,7 +65,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] readStream(), stream is not open !\n";
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), stream is not open !");
 
 					return false;
 				}
@@ -73,7 +75,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.read(header, 32) )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] readStream(), unable to read header !\n";
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), unable to read header !");
 
 					return false;
 				}
@@ -81,7 +83,7 @@ namespace EmEn::Base::VertexFactory
 				/* Check Magic "EE3D_V1" (8 bytes including null) */
 				if ( std::string(header, 7) != Magic )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] readStream(), invalid magic !\n";
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), invalid magic !");
 
 					return false;
 				}
@@ -92,7 +94,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( version != 1 )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] readStream(), unsupported version " << version << " !\n";
+					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " !");
 
 					return false;
 				}
@@ -103,7 +105,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( vPrecision != sizeof(vertex_data_t) || iPrecision != sizeof(index_data_t) )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] readStream(), precision mismatch !\n";
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), precision mismatch !");
 
 					return false;
 				}
@@ -113,7 +115,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.read(counts, 3 * sizeof(uint64_t)) )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] readStream(), unable to read metadata !\n";
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), unable to read metadata !");
 
 					return false;
 				}
@@ -122,7 +124,54 @@ namespace EmEn::Base::VertexFactory
 				const uint64_t triangleCount = counts[1];
 				const uint64_t colorCount = counts[2];
 
-				/* 3. Resize Geometry */
+				/* 3. Validate counts against the remaining stream bytes BEFORE any resize().
+				 * On hostile/corrupt input an unvalidated 64-bit count would request a
+				 * multi-exabyte allocation (std::length_error -> std::terminate under
+				 * -fno-exceptions). The 56-byte header+metadata were read successfully, so the
+				 * stream holds at least that many bytes. Division-based bounds avoid integer
+				 * overflow in count * elementSize. */
+				constexpr uint64_t headerBytes = 32 + (3 * sizeof(uint64_t));
+				const uint64_t streamSize = stream.size();
+
+				if ( streamSize < headerBytes )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), stream smaller than its own header !");
+
+					return false;
+				}
+
+				uint64_t remaining = streamSize - headerBytes;
+
+				constexpr uint64_t vertexSize = sizeof(ShapeVertex< vertex_data_t >);
+				constexpr uint64_t triangleSize = sizeof(ShapeTriangle< vertex_data_t, index_data_t >);
+				constexpr uint64_t colorSize = sizeof(Math::Vector< 4, vertex_data_t >);
+
+				if ( vertexCount > remaining / vertexSize )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), vertex count exceeds the stream size !");
+
+					return false;
+				}
+
+				remaining -= vertexCount * vertexSize;
+
+				if ( triangleCount > remaining / triangleSize )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), triangle count exceeds the stream size !");
+
+					return false;
+				}
+
+				remaining -= triangleCount * triangleSize;
+
+				if ( colorCount > remaining / colorSize )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), color count exceeds the stream size !");
+
+					return false;
+				}
+
+				/* 4. Resize Geometry (counts now proven to fit). */
 				auto & vertices = geometry.vertices();
 				auto & triangles = geometry.triangles();
 				auto & colors = geometry.vertexColors();
@@ -131,12 +180,12 @@ namespace EmEn::Base::VertexFactory
 				triangles.resize(triangleCount);
 				colors.resize(colorCount);
 
-				/* 4. Read Data Blobs */
+				/* 5. Read Data Blobs */
 				if ( vertexCount > 0 )
 				{
 					if ( !stream.read(vertices.data(), vertexCount * sizeof(ShapeVertex< vertex_data_t >)) )
 					{
-						std::cerr << "[VertexFactory::FileFormatNative] readStream(), failed to read vertices !\n";
+						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertices !");
 
 						return false;
 					}
@@ -146,7 +195,7 @@ namespace EmEn::Base::VertexFactory
 				{
 					if ( !stream.read(triangles.data(), triangleCount * sizeof(ShapeTriangle< vertex_data_t, index_data_t >)) )
 					{
-						std::cerr << "[VertexFactory::FileFormatNative] readStream(), failed to read triangles !\n";
+						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read triangles !");
 
 						return false;
 					}
@@ -156,7 +205,7 @@ namespace EmEn::Base::VertexFactory
 				{
 					if ( !stream.read(colors.data(), colorCount * sizeof(Math::Vector< 4, vertex_data_t >)) )
 					{
-						std::cerr << "[VertexFactory::FileFormatNative] readStream(), failed to read vertex colors !\n";
+						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertex colors !");
 
 						return false;
 					}
@@ -172,14 +221,14 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( !geometry.isValid() )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] writeStream(), geometry is invalid !\n";
+					Logging::error("VertexFactory::FileFormatNative", "writeStream(), geometry is invalid !");
 
 					return false;
 				}
 
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[VertexFactory::FileFormatNative] writeStream(), stream is not open !\n";
+					Logging::error("VertexFactory::FileFormatNative", "writeStream(), stream is not open !");
 
 					return false;
 				}

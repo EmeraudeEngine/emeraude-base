@@ -29,8 +29,8 @@
 /* STL inclusions. */
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
-#include <iostream>
 #include <istream>
 #include <sstream>
 #include <string>
@@ -38,6 +38,9 @@
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+
+/* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "Animation/Joint.hpp"
@@ -73,7 +76,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[VertexFactory::FileFormatMDx] readStream(), stream is not open !\n";
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), stream is not open !");
 
 					return false;
 				}
@@ -83,7 +86,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.read(buffer.data(), dataSize) )
 				{
-					std::cerr << "[VertexFactory::FileFormatMDx] readStream(), failed to read stream data !\n";
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), failed to read stream data !");
 
 					return false;
 				}
@@ -124,7 +127,7 @@ namespace EmEn::Base::VertexFactory
 					return this->loadMD5(input, result);
 				}
 
-				std::cerr << "[VertexFactory::FileFormatMDx] readStream(), unknown format !\n";
+				Logging::error("VertexFactory::FileFormatMDx", "readStream(), unknown format !");
 
 				return false;
 			}
@@ -134,7 +137,7 @@ namespace EmEn::Base::VertexFactory
 			bool
 			writeStream (IO::ByteStream & /*stream*/, const Shape< vertex_data_t, index_data_t > & /*geometry*/, const WriteOptions & /*writeOptions*/) const noexcept override
 			{
-				std::cerr << "[VertexFactory::FileFormatMDx] writeStream(), the engine is read-only for ID Tech 3D file format.\n";
+				Logging::error("VertexFactory::FileFormatMDx", "writeStream(), the engine is read-only for ID Tech 3D file format.");
 
 				return false;
 			}
@@ -143,6 +146,23 @@ namespace EmEn::Base::VertexFactory
 
 			/** @brief Scale factor to convert idTech unit system to engine units. idTech models are ~100x too large. */
 			static constexpr auto IDTechUnitScale = static_cast< vertex_data_t >(0.01);
+
+			/* Coarse upper bound for these read-only legacy formats (MDL/MD2/MD3/MD5): a stream of
+			 * N bytes cannot legitimately describe more than N elements (each is >= 1 byte on disk).
+			 * Rejecting counts above the stream size kills the huge-allocation DoS (std::length_error
+			 * -> std::terminate under -fno-exceptions) on hostile/corrupt input. The goal is solely to
+			 * never crash the engine: on a bad count we cancel the load. Stream position is preserved. */
+			static
+			bool
+			exceedsStream (std::istream & file, uint64_t count) noexcept
+			{
+				const auto current = file.tellg();
+				file.seekg(0, std::ios::end);
+				const auto end = file.tellg();
+				file.seekg(current);
+
+				return current < 0 || end < 0 || count > static_cast< uint64_t >(end);
+			}
 
 			// =========================================================================================================
 			// MDL Section
@@ -254,14 +274,51 @@ namespace EmEn::Base::VertexFactory
 				mdl_header_t header;
 				file.read(reinterpret_cast< char * >(&header), sizeof(mdl_header_t));
 
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_skins)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), skin count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< mdl_skin_t > skins(header.num_skins);
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_verts)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), texcoord count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< mdl_texCoord_t > textureCoordinates(header.num_verts);
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_tris)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), triangle count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< mdl_triangle_t > triangles(header.num_tris);
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_frames)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), frame count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< mdl_frame_t > frames(header.num_frames);
 
 				for ( auto & skin : skins )
 				{
-					skin.data.resize(header.skinwidth * header.skinheight);
+					const uint64_t skinSize = static_cast< uint64_t >(static_cast< uint32_t >(header.skinwidth)) * static_cast< uint64_t >(static_cast< uint32_t >(header.skinheight));
+					
+					if ( FileFormatMDx::exceedsStream(file, skinSize) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), skin size exceeds the stream size !");
+					
+						return false;
+					}
+					
+					skin.data.resize(skinSize);
 					file.read(reinterpret_cast< char * >(&skin.group), sizeof(int));
 					file.read(reinterpret_cast< char * >(skin.data.data()), sizeof(unsigned char) * header.skinwidth * header.skinheight);
 				}
@@ -271,6 +328,13 @@ namespace EmEn::Base::VertexFactory
 
 				for ( auto & frame : frames )
 				{
+					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_verts)) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), vertex count exceeds the stream size !");
+					
+						return false;
+					}
+					
 					frame.frame.verts.resize(header.num_verts);
 					file.read(reinterpret_cast< char * >(&frame.type), sizeof(int));
 					file.read(reinterpret_cast< char * >(&frame.frame.bboxmin), sizeof(mdl_vertex_t));
@@ -384,8 +448,29 @@ namespace EmEn::Base::VertexFactory
 				md2_header_t header;
 				file.read(reinterpret_cast< char * >(&header), sizeof(md2_header_t));
 
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_st)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), texcoord count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< md2_texCoord_t > textureCoordinates(header.num_st);
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_tris)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), triangle count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< md2_triangle_t > triangles(header.num_tris);
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_frames)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), frame count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< md2_frame_t > frames(header.num_frames);
 
 				file.seekg(header.offset_st, std::ios::beg);
@@ -398,6 +483,13 @@ namespace EmEn::Base::VertexFactory
 
 				for ( auto & frame : frames )
 				{
+					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_vertices)) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMD2(), vertex count exceeds the stream size !");
+					
+						return false;
+					}
+					
 					frame.verts.resize(header.num_vertices);
 					file.read(reinterpret_cast< char * >(&frame.scale), sizeof(md2_vec3_t));
 					file.read(reinterpret_cast< char * >(&frame.translate), sizeof(md2_vec3_t));
@@ -530,6 +622,13 @@ namespace EmEn::Base::VertexFactory
 				int totalTriangles = 0;
 				int currentSurfaceOffset = header.offset_surfaces;
 				
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_surfaces)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), surface count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< md3_surface_t > surfaces(header.num_surfaces);
 				
 				for ( int surfaceIndex = 0; surfaceIndex < header.num_surfaces; ++surfaceIndex)
@@ -555,8 +654,29 @@ namespace EmEn::Base::VertexFactory
 					const md3_surface_t surf = surfaces[surfaceIndex];
 
 					// Read data for this surface
+					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(surf.num_triangles)) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "readStream(), triangle count exceeds the stream size !");
+					
+						return false;
+					}
+					
 					std::vector< md3_triangle_t > tris(surf.num_triangles);
+					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(surf.num_verts)) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "readStream(), vertex count exceeds the stream size !");
+					
+						return false;
+					}
+					
 					std::vector< md3_vertex_t > verts(surf.num_verts);
+					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(surf.num_verts)) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "readStream(), texcoord count exceeds the stream size !");
+					
+						return false;
+					}
+					
 					std::vector< md3_texCoord_t > uvs(surf.num_verts);
 
 					// Triangles
@@ -769,6 +889,13 @@ namespace EmEn::Base::VertexFactory
 					}
 					else if ( line.find("joints {") != std::string::npos )
 					{
+						if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(numJoints)) )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), joint count exceeds the stream size !");
+						
+							return false;
+						}
+						
 						joints.resize(numJoints);
 						for ( int i = 0; i < numJoints; ++i )
 						{
@@ -805,6 +932,13 @@ namespace EmEn::Base::VertexFactory
 							{
 								int num; std::stringstream(line) >> line >> num;
 
+								if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(num)) )
+								{
+									Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), vertex count exceeds the stream size !");
+								
+									return false;
+								}
+								
 								mesh.verts.resize(num);
 
 								for ( int i = 0; i < num; ++i )
@@ -820,6 +954,13 @@ namespace EmEn::Base::VertexFactory
 							{
 								int num; std::stringstream(line) >> line >> num;
 
+								if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(num)) )
+								{
+									Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), triangle count exceeds the stream size !");
+								
+									return false;
+								}
+								
 								mesh.tris.resize(num);
 
 								for ( int i = 0; i < num; ++i )
@@ -834,6 +975,13 @@ namespace EmEn::Base::VertexFactory
 							else if ( line.find("numweights") != std::string::npos )
 							{
 								int num; std::stringstream(line) >> line >> num;
+								if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(num)) )
+								{
+									Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), weight count exceeds the stream size !");
+								
+									return false;
+								}
+								
 								mesh.weights.resize(num);
 
 								for ( int i = 0; i < num; ++i )
@@ -979,6 +1127,13 @@ namespace EmEn::Base::VertexFactory
 						{
 							/* More than 4 weights: pick the 4 largest by bias. */
 							struct WeightEntry { int jointIndex; float bias; };
+							if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(vert.countWeight)) )
+							{
+								Logging::error("VertexFactory::FileFormatMDx", "readStream(), weight count exceeds the stream size !");
+							
+								return false;
+							}
+							
 							std::vector< WeightEntry > allWeights(vert.countWeight);
 
 							for ( int w = 0; w < vert.countWeight; ++w )
@@ -1047,6 +1202,13 @@ namespace EmEn::Base::VertexFactory
 
 				/* ---- Phase 5: Build Skin and attach to Shape ---- */
 				/* MD5 uses direct joint indexing (skin-local == skeleton-global). */
+				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(jointCount)) )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "readStream(), joint-index count exceeds the stream size !");
+				
+					return false;
+				}
+				
 				std::vector< int32_t > skinJointIndices(jointCount);
 				for ( size_t i = 0; i < jointCount; ++i )
 				{

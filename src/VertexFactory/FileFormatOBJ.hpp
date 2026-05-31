@@ -36,7 +36,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <iostream>
+#include <istream>
 #include <set>
 #include <sstream>
 #include <string>
@@ -46,6 +46,9 @@
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+
+/* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "Math/Vector.hpp"
@@ -151,7 +154,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[VertexFactory::FileFormatOBJ] readStream(), stream is not open !\n";
+					Logging::error("VertexFactory::FileFormatOBJ", "readStream(), stream is not open !");
 
 					return false;
 				}
@@ -163,7 +166,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.read(buffer.data(), dataSize) )
 				{
-					std::cerr << "[VertexFactory::FileFormatOBJ] readStream(), failed to read stream data !\n";
+					Logging::error("VertexFactory::FileFormatOBJ", "readStream(), failed to read stream data !");
 
 					return false;
 				}
@@ -174,7 +177,7 @@ namespace EmEn::Base::VertexFactory
 				{
 					if ( !this->analyseFileContent(input) )
 					{
-						std::cerr << "[VertexFactory::FileFormatOBJ] readStream(), step 1 'Reserving space' has failed !\n";
+						Logging::error("VertexFactory::FileFormatOBJ", "readStream(), step 1 'Reserving space' has failed !");
 
 						return false;
 					}
@@ -347,7 +350,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( !geometry.isValid() )
 				{
-					std::cerr << "[VertexFactory::FileFormatOBJ] writeStream(), geometry is invalid !\n";
+					Logging::error("VertexFactory::FileFormatOBJ", "writeStream(), geometry is invalid !");
 
 					return false;
 				}
@@ -545,7 +548,7 @@ namespace EmEn::Base::VertexFactory
 
 						if ( vertexCount < 3 )
 						{
-							std::cerr << "FileFormatOBJ::analyseFileContent(), this OBJ loader requires at least 3 vertices per face (got " << vertexCount << ") !" << '\n';
+							Logging::error("VertexFactory::FileFormatOBJ", std::string{"analyseFileContent(), this OBJ loader requires at least 3 vertices per face (got "} + std::to_string(vertexCount) + ") !");
 
 							return false;
 						}
@@ -557,24 +560,19 @@ namespace EmEn::Base::VertexFactory
 
 				if constexpr ( VertexFactoryDebugEnabled )
 				{
-					std::cout <<
-						"[DEBUG:VERTEX_FACTORY] File Parsing - First pass result." "\n" <<
-						"\t" "Vertices : " << positionCount << "\n"
-						"\t" "Texture Coordinates : " << textureCoordinatesCount << "\n"
-						"\t" "Normals : " << normalCount << "\n"
-						"\t" "Faces : " << m_faceCount << "\n\n";
+					Logging::debug("VertexFactory::FileFormatOBJ", std::string{"First pass: "} + std::to_string(positionCount) + " vertices, " + std::to_string(textureCoordinatesCount) + " texture coordinates, " + std::to_string(normalCount) + " normals, " + std::to_string(m_faceCount) + " faces.");
 				}
 
 				if ( positionCount == 0 )
 				{
-					std::cerr << "FileFormatOBJ::analyseFileContent(), there is no vertex definition in the OBJ file. Aborting." "\n";
+					Logging::error("VertexFactory::FileFormatOBJ", "analyseFileContent(), there is no vertex definition in the OBJ file. Aborting.");
 
 					return false;
 				}
 
 				if ( m_faceCount == 0 )
 				{
-					std::cerr << "FileFormatOBJ::analyseFileContent(), there is no face definition in the OBJ file. Aborting." "\n";
+					Logging::error("VertexFactory::FileFormatOBJ", "analyseFileContent(), there is no face definition in the OBJ file. Aborting.");
 
 					return false;
 				}
@@ -666,6 +664,13 @@ namespace EmEn::Base::VertexFactory
 
 								/* NOTE: Convert OBJ index to vector index. */
 								const auto vIndex = faceIndices.at(realFaceVertexIndex).vIndex() - 1;
+								if ( vIndex >= m_v.size() || vIndex >= vertices.size() )
+								{
+									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
+
+									return false;
+								}
+
 
 								/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
 								vertices.at(vIndex).setPosition(m_v.at(vIndex));
@@ -781,6 +786,13 @@ namespace EmEn::Base::VertexFactory
 
 									default:
 										return false;
+								}
+
+								if ( vIndex >= m_v.size() || geometryVertexIndex >= vertices.size() || ( hasNormal && vnIndex >= m_vn.size() ) )
+								{
+									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
+
+									return false;
 								}
 
 								if ( writtenIndexes.contains(geometryVertexIndex) )
@@ -924,6 +936,13 @@ namespace EmEn::Base::VertexFactory
 
 									default:
 										return false;
+								}
+
+								if ( vIndex >= m_v.size() || geometryVertexIndex >= vertices.size() || ( hasTexCoord && vtIndex >= m_vt.size() ) )
+								{
+									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
+
+									return false;
 								}
 
 								if ( writtenIndexes.contains(geometryVertexIndex) )
@@ -1075,6 +1094,13 @@ namespace EmEn::Base::VertexFactory
 									case PredominantAttributes::VT :
 										geometryVertexIndex = hasTexCoord ? vtIndex : vIndex;
 										break;
+								}
+
+								if ( vIndex >= m_v.size() || geometryVertexIndex >= vertices.size() || ( hasNormal && vnIndex >= m_vn.size() ) || ( hasTexCoord && vtIndex >= m_vt.size() ) )
+								{
+									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
+
+									return false;
 								}
 
 								if ( writtenIndexes.contains(geometryVertexIndex) )
@@ -1385,7 +1411,7 @@ namespace EmEn::Base::VertexFactory
 				/* Skip "f " prefix. */
 				if ( line.size() < 3 || line[0] != 'f' || line[1] != ' ' )
 				{
-					std::cerr << "FileFormatOBJ::extractFaceIndices(), invalid face line format: '" << fLine << "'" "\n";
+					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), invalid face line format: '"} + fLine + "'");
 
 					return false;
 				}
@@ -1424,7 +1450,7 @@ namespace EmEn::Base::VertexFactory
 
 					if ( !parseFaceToken(token, vIndex, vtIndex, vnIndex) )
 					{
-						std::cerr << "FileFormatOBJ::extractFaceIndices(), failed to parse face token '" << token << "' in line: '" << fLine << "'" "\n";
+						Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), failed to parse face token '"} + std::string{token} + "' in line: '" + fLine + "'");
 
 						return false;
 					}
@@ -1441,7 +1467,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( faceIndices.size() < 3 )
 				{
-					std::cerr << "FileFormatOBJ::extractFaceIndices(), face must have at least 3 vertices, got " << faceIndices.size() << ": '" << fLine << "'" "\n";
+					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), face must have at least 3 vertices, got "} + std::to_string(faceIndices.size()) + ": '" + fLine + "'");
 
 					return false;
 				}

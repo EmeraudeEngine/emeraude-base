@@ -28,14 +28,17 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+
+/* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "Math/Vector.hpp"
@@ -72,7 +75,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[VertexFactory::FileFormatSTL] readStream(), stream is not open !\n";
+					Logging::error("VertexFactory::FileFormatSTL", "readStream(), stream is not open !");
 					return false;
 				}
 
@@ -80,7 +83,7 @@ namespace EmEn::Base::VertexFactory
 				std::string buffer(dataSize, '\0');
 				if ( !stream.read(buffer.data(), dataSize) )
 				{
-					std::cerr << "[VertexFactory::FileFormatSTL] readStream(), failed to read stream data !\n";
+					Logging::error("VertexFactory::FileFormatSTL", "readStream(), failed to read stream data !");
 					return false;
 				}
 
@@ -101,7 +104,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( !geometry.isValid() )
 				{
-					std::cerr << "[VertexFactory::FileFormatSTL] writeStream(), geometry is invalid !\n";
+					Logging::error("VertexFactory::FileFormatSTL", "writeStream(), geometry is invalid !");
 					return false;
 				}
 
@@ -170,7 +173,7 @@ namespace EmEn::Base::VertexFactory
 				 * - Ideally we check file size vs expected binary size: 80 + 4 + (50 * triangle_count)
 				 */
 
-				char header[6]; // "solid" + 1
+				char header[6] = {0}; // "solid" + 1
 				file.read(header, 5);
 				header[5] = '\0';
 
@@ -267,7 +270,7 @@ namespace EmEn::Base::VertexFactory
 						{
 							/* "facet normal ni nj nk"
 							 * scan after "facet normal" */
-							float nx, ny, nz;
+							float nx = 0.0F, ny = 0.0F, nz = 0.0F;
 							sscanf(currentLine.c_str() + first + 12, "%f %f %f", &nx, &ny, &nz);
 
 							normal = {nx, ny, nz};
@@ -275,7 +278,7 @@ namespace EmEn::Base::VertexFactory
 						}
 						else if ( currentLine.compare(first, 6, "vertex") == 0 )
 						{
-							float x, y, z;
+							float x = 0.0F, y = 0.0F, z = 0.0F;
 							sscanf(currentLine.c_str() + first + 6, "%f %f %f", &x, &y, &z);
 
 							ShapeVertex< vertex_data_t > v;
@@ -329,9 +332,34 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
+				/* Validate triangleCount against the remaining bytes (each binary triangle is
+				 * exactly 50 bytes) BEFORE reserve(), so a hostile count cannot request a huge
+				 * allocation. Division avoids integer overflow. */
+				const auto dataStart = file.tellg();
+				file.seekg(0, std::ios::end);
+				const auto dataEnd = file.tellg();
+				file.seekg(dataStart);
+
+				if ( dataStart < 0 || dataEnd < dataStart )
+				{
+					Logging::error("VertexFactory::FileFormatSTL", "readBinary(), invalid stream state !");
+
+					return false;
+				}
+
+				constexpr uint64_t triangleBytes = 50;
+				const uint64_t remaining = static_cast< uint64_t >(dataEnd - dataStart);
+
+				if ( triangleCount > remaining / triangleBytes )
+				{
+					Logging::error("VertexFactory::FileFormatSTL", "readBinary(), triangle count exceeds the stream size !");
+
+					return false;
+				}
+
 				return geometry.build([&file, triangleCount] (std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
 					/* Optimize allocation */
-					vertices.reserve(triangleCount * 3);
+					vertices.reserve(static_cast< std::size_t >(triangleCount) * 3);
 					triangles.reserve(triangleCount);
 
 					for ( uint32_t i = 0; i < triangleCount; ++i )

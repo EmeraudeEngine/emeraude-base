@@ -27,10 +27,11 @@
 #pragma once
 
 /* STL inclusions. */
-#include <iostream>
+#include <string>
 #include <type_traits>
 
 /* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 #include "FileFormatMDx.hpp"
 #include "FileFormatNative.hpp"
 #include "FileFormatOBJ.hpp"
@@ -57,7 +58,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 	{
 		if ( !IO::fileExists(filepath) )
 		{
-			std::cerr << "[VertexFactory::FileIO] read(), the file '" << filepath << "' doesn't exist !\n";
+			Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + filepath.string() + "\' doesn't exist !");
 
 			return false;
 		}
@@ -66,7 +67,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "[VertexFactory::FileIO] read(), unable to open '" << filepath << "' !\n";
+			Logging::error("VertexFactory::FileIO", std::string{"read(), unable to open \'"} + filepath.string() + "\' !");
 
 			return false;
 		}
@@ -101,7 +102,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 			return fileFormat.readStream(stream, result, readOptions);
 		}
 
-		std::cerr << "[VertexFactory::FileIO] read(), the file '" << filepath << "' format is not handled !\n";
+		Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + filepath.string() + "\' format is not handled !");
 
 		return false;
 	}
@@ -124,7 +125,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 	{
 		if ( IO::fileExists(filepath) && !overwrite )
 		{
-			std::cerr << "[VertexFactory::FileIO] write(), the file '" << filepath << "' already exists !\n";
+			Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + filepath.string() + "\' already exists !");
 
 			return false;
 		}
@@ -133,7 +134,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "[VertexFactory::FileIO] write(), unable to open '" << filepath << "' for writing !\n";
+			Logging::error("VertexFactory::FileIO", std::string{"write(), unable to open \'"} + filepath.string() + "\' for writing !");
 
 			return false;
 		}
@@ -168,7 +169,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 			return fileFormat.writeStream(stream, shape, writeOptions);
 		}
 
-		std::cerr << "[VertexFactory::FileIO] write(), the file '" << filepath << "' format is not handled !\n";
+		Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + filepath.string() + "\' format is not handled !");
 
 		return false;
 	}
