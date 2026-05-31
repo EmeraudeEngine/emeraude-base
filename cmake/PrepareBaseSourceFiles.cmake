@@ -45,6 +45,7 @@ set(EMERAUDE_BASE_SOURCES
 set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/main.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FastJSON.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Hash.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_IO.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_LineFormula.cpp
