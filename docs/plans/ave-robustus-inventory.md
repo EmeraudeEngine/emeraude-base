@@ -240,7 +240,7 @@ These emerged from the audit and matter for sequencing:
 | Promised capability | Source | Real state | Gap | "Utility blinded" criterion |
 |---|---|---|---|---|
 | Uptime / UNIX-timestamp helpers | `Time.hpp:44-93` | Implemented; doc says "nanoseconds" but returns µs | A | monotonic, ordered s≤ms≤µs; doc fixed |
-| `Elapsed::{CPUTime,RealTime}` | `Elapsed/*` | 🐞 CPUTime stores `clock()` ticks as ns → wrong by CLOCKS_PER_SEC | A + 🐞 | known sleep/busy-loop yields plausible duration |
+| `Elapsed::{CPUTime,RealTime}` | `Elapsed/*` | ✅ **CPUTime FIXED (A.0)**: real ns via `Time::processCPUTimeNanoseconds()` (clock_gettime / GetProcessTimes), protected virtual seam, deterministic test. RealTime still 0 tests. | A (RealTime) | known sleep/busy-loop yields plausible duration |
 | RAII scope timers + threshold-print | `ScopeRealTime/ScopeCPUTime/PrintScope*` | Implemented; 0 tests | A | scope accumulates into referenced duration |
 | `TimedEvent` threaded timer | `TimedEvent.hpp:51` | `std::thread`/`condition_variable`; non-trivial concurrency; 0 tests | A | callback fires after granularity; once self-stops; clean join |
 | `EventTrait` timer registry | `EventTrait.hpp:365` | 🐞 `resetTimer` calls non-existent `resetTop()` → won't compile if instantiated | **B** (broken) | `resetTimer` compiles + works |

@@ -27,19 +27,23 @@
 #pragma once
 
 /* STL inclusions. */
-#include <ctime>
+#include <cstdint>
 
 /* Local inclusions for inheritances. */
 #include "Abstract.hpp"
 
+/* Local inclusions for usages. */
+#include "../Time.hpp"
+
 namespace EmEn::Base::Time::Elapsed
 {
 	/**
-	 * @brief Gets the duration in CPU time between two point in milliseconds.
-	 * @note The internal precision is set to nanoseconds.
+	 * @brief Gets the duration in CPU time between two points.
+	 * @note Internal precision is nanoseconds, sourced from the real process CPU clock
+	 * (POSIX clock_gettime(CLOCK_PROCESS_CPUTIME_ID) / Windows GetProcessTimes).
 	 * @extends EmEn::Base::Time::Elapsed::Abstract
 	 */
-	class CPUTime final : public Abstract
+	class CPUTime : public Abstract
 	{
 		public:
 
@@ -52,18 +56,33 @@ namespace EmEn::Base::Time::Elapsed
 			void
 			start () noexcept override
 			{
-				m_startTime = std::clock();
+				m_startTime = this->currentCPUNanoseconds();
 			}
 
 			/** @copydoc EmEn::Base::Time::Elapsed::Abstract::stop() */
 			void
 			stop () noexcept override
 			{
-				this->setDuration(std::clock() - m_startTime);
+				this->setDuration(this->currentCPUNanoseconds() - m_startTime);
+			}
+
+		protected:
+
+			/**
+			 * @brief Returns the current process CPU time in nanoseconds.
+			 * @note Virtual seam: overridable so a test can inject a deterministic clock.
+			 * @return uint64_t
+			 */
+			[[nodiscard]]
+			virtual
+			uint64_t
+			currentCPUNanoseconds () const noexcept
+			{
+				return processCPUTimeNanoseconds();
 			}
 
 		private:
 
-			std::clock_t m_startTime{};
+			uint64_t m_startTime{0};
 	};
 }

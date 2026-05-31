@@ -34,6 +34,7 @@ set(EMERAUDE_BASE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/Abstract.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/CPUTime.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Time.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/TokenFormatter.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Variant.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/TreeGenerator.cpp
@@ -63,6 +64,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_StaticVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_String.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ThreadPool.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Time.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_TokenFormatter.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Version.cpp
 )

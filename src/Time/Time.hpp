@@ -91,4 +91,14 @@ namespace EmEn::Base::Time
 	{
 		return (std::stringstream{} << UNIXTimestamp()).str();
 	}
+
+	/**
+	 * @brief Returns the process CPU time consumed so far, in nanoseconds.
+	 * @note Sums user + kernel CPU time of the whole process. Platform-specific
+	 * (POSIX clock_gettime(CLOCK_PROCESS_CPUTIME_ID) / Windows GetProcessTimes);
+	 * returns 0 if the platform clock query fails.
+	 * @return uint64_t
+	 */
+	[[nodiscard]]
+	uint64_t processCPUTimeNanoseconds () noexcept;
 }
