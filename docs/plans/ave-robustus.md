@@ -242,7 +242,7 @@ Long-term, multi-session plan: this table is the institutional memory of where w
 | Phase | State | Notes |
 |-------|-------|-------|
 | Phase 0 — Intent Contract inventory | ✅ done | full inventory in [`ave-robustus-inventory.md`](ave-robustus-inventory.md); 4 new owner decisions surfaced |
-| A.0 — Error contract + abort policy + compile-breakers (w/ tests) | ⬜ not started | abort-on-error forbidden; fix `EventTrait::resetTimer`, `CPUTime` unit error |
+| A.0 — Error contract + abort policy + compile-breakers (w/ tests) | 🟦 in progress | compile-breakers DONE: CPUTime ns fix + full EventTrait repair (was entirely uncompiled), tested, suite 1654 green. Error contract doctrine + abort policy + `error-handling.md` still pending. |
 | A.1 — Tooling | ⬜ not started | |
 | A.2 — Test safety net | ⬜ not started | |
 | A.3 — I/O boundary hardening | ⬜ not started | |

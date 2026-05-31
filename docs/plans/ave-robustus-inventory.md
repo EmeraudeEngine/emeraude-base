@@ -243,7 +243,7 @@ These emerged from the audit and matter for sequencing:
 | `Elapsed::{CPUTime,RealTime}` | `Elapsed/*` | ✅ **CPUTime FIXED (A.0)**: real ns via `Time::processCPUTimeNanoseconds()` (clock_gettime / GetProcessTimes), protected virtual seam, deterministic test. RealTime still 0 tests. | A (RealTime) | known sleep/busy-loop yields plausible duration |
 | RAII scope timers + threshold-print | `ScopeRealTime/ScopeCPUTime/PrintScope*` | Implemented; 0 tests | A | scope accumulates into referenced duration |
 | `TimedEvent` threaded timer | `TimedEvent.hpp:51` | `std::thread`/`condition_variable`; non-trivial concurrency; 0 tests | A | callback fires after granularity; once self-stops; clean join |
-| `EventTrait` timer registry | `EventTrait.hpp:365` | 🐞 `resetTimer` calls non-existent `resetTop()` → won't compile if instantiated | **B** (broken) | `resetTimer` compiles + works |
+| `EventTrait` timer registry | `EventTrait.hpp` | ✅ **FIXED (A.0)**: the whole class was dead code (template never instantiated → never compiled). `withTimer` was `const` (broke every mutating op); 5 methods returned `void` from a `bool` signature; `resetTimer` called non-existent `resetTop()`. All repaired + full lifecycle test. | none (tested) | `resetTimer` compiles + works |
 | `Statistics::{CPUTime,RealTime}` (rolling avg, EPS) | `Statistics/*` | Implemented ring-buffer; 0 tests | A | known sequence → asserted avg/EPS |
 | `Precision` enum / `TimerID` | `Types.hpp` | Defined; 0 tests | A | Precision switch branches in PrintScope |
 

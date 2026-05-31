@@ -147,6 +147,8 @@ namespace EmEn::Base::Time
 			{
 				return this->withTimer(timerID, [granularity] (auto * timer) {
 					timer->setGranularity(granularity);
+
+					return true;
 				});
 			}
 
@@ -160,6 +162,8 @@ namespace EmEn::Base::Time
 			{
 				return this->withTimer(timerID, [] (auto * timer) {
 					timer->start();
+
+					return true;
 				});
 			}
 
@@ -173,6 +177,8 @@ namespace EmEn::Base::Time
 			{
 				return this->withTimer(timerID, [] (auto * timer) {
 					timer->stop();
+
+					return true;
 				});
 			}
 
@@ -199,6 +205,8 @@ namespace EmEn::Base::Time
 			{
 				return this->withTimer(timerID, [] (auto * timer) {
 					timer->pause();
+
+					return true;
 				});
 			}
 
@@ -212,6 +220,8 @@ namespace EmEn::Base::Time
 			{
 				return this->withTimer(timerID, [] (auto * timer) {
 					timer->resume();
+
+					return true;
 				});
 			}
 
@@ -329,13 +339,13 @@ namespace EmEn::Base::Time
 			 */
 			template< typename function_t >
 			std::invoke_result_t< function_t, TimedEvent< rep_t, period_t > * >
-			withTimer (TimerID timerID, function_t function) const noexcept
+			withTimer (TimerID timerID, function_t function) noexcept
 			{
 				const std::lock_guard< std::mutex > lock{m_eventsAccess};
 
 				const auto timerIt = m_events.find(timerID);
 
-				if ( timerIt == m_events.cend() )
+				if ( timerIt == m_events.end() )
 				{
 					using ReturnType = std::invoke_result_t< function_t, TimedEvent< rep_t, period_t > * >;
 
@@ -362,7 +372,7 @@ namespace EmEn::Base::Time
 			resetTimer (TimerID timerID) noexcept
 			{
 				this->withTimer(timerID, [] (auto * timer) {
-					timer->resetTop();
+					timer->reset();
 				});
 			}
 

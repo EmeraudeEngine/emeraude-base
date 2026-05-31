@@ -28,6 +28,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <utility>
@@ -35,10 +36,73 @@
 
 /* Local inclusions. */
 #include "Time/Time.hpp"
+#include "Time/EventTrait.hpp"
 #include "Time/Elapsed/CPUTime.hpp"
 
 namespace EmEn::Base::Time
 {
+	namespace
+	{
+		/* EventTrait is a trait: its constructor and resetTimer() are protected.
+		 * This subclass makes it instantiable and exposes resetTimer() for testing. */
+		class TestableEventTrait final : public EventTrait<>
+		{
+			public:
+
+				using EventTrait<>::resetTimer;
+		};
+	}
+
+	/*
+	 * Exercises the whole withTimer-based timer API. Before the fix, withTimer was
+	 * declared const, so every mutating call (start/stop/pause/resume/setGranularity/
+	 * reset) failed to compile — hidden because nothing ever instantiated EventTrait.
+	 * State flags are set synchronously under the timer mutex, so the assertions are
+	 * deterministic regardless of thread scheduling; the granularity is huge so the
+	 * callback never fires during the test (no race, no flakiness).
+	 */
+	TEST(TimeEventTrait, fullTimerLifecycle)
+	{
+		TestableEventTrait events;
+
+		std::atomic< int > fired{0};
+		const auto callback = [&fired] (TimerID) {
+			fired.fetch_add(1, std::memory_order_relaxed);
+
+			return false;
+		};
+
+		const auto timerID = events.createTimer(callback, 3'600'000U /* 1 h */, false, false);
+		ASSERT_NE(timerID, 0U);
+		EXPECT_FALSE(events.isTimerStarted(timerID));
+
+		/* Mutating ops return true when the timer is found (intent of @return bool). */
+		EXPECT_TRUE(events.startTimer(timerID));
+		EXPECT_TRUE(events.isTimerStarted(timerID));
+
+		EXPECT_TRUE(events.pauseTimer(timerID));
+		EXPECT_TRUE(events.isTimerPaused(timerID));
+
+		EXPECT_TRUE(events.resumeTimer(timerID));
+		EXPECT_TRUE(events.isTimerStarted(timerID));
+		EXPECT_FALSE(events.isTimerPaused(timerID));
+
+		EXPECT_TRUE(events.setTimerGranularity(timerID, 7'200'000U));
+		events.resetTimer(timerID);              // the original compile-breaker (resetTop → reset)
+
+		/* Unknown id → withTimer default → false / safe no-op. */
+		EXPECT_FALSE(events.startTimer(999999));
+		events.resetTimer(999999);
+
+		EXPECT_TRUE(events.stopTimer(timerID));
+		EXPECT_FALSE(events.isTimerStarted(timerID));
+
+		events.destroyTimers();                  // joins the timer thread cleanly
+
+		/* Huge granularity → the callback must never have fired. */
+		EXPECT_EQ(fired.load(std::memory_order_relaxed), 0);
+	}
+
 	namespace
 	{
 		/**
