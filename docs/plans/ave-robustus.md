@@ -264,7 +264,7 @@ Long-term, multi-session plan: this table is the institutional memory of where w
 | Phase | State | Notes |
 |-------|-------|-------|
 | Phase 0 — Intent Contract inventory | ✅ done | full inventory in [`ave-robustus-inventory.md`](ave-robustus-inventory.md); 4 new owner decisions surfaced |
-| A.0 — Error contract + abort policy + compile-breakers (w/ tests) | 🟦 in progress | compile-breakers DONE: CPUTime ns fix + full EventTrait repair (was entirely uncompiled), tested, suite 1654 green. Error contract doctrine + abort policy + `error-handling.md` still pending. |
+| A.0 — Error contract + abort policy + compile-breakers (w/ tests) | ✅ done | compile-breakers (CPUTime, EventTrait); logging architecture (Severity→base, Logging hook, Tracer sink); StaticVector death-tests; `docs/error-handling.md`. Suite 1660 green; cascade builds. cerr→hook migration deferred to A.2/A.3. |
 | A.1 — Tooling | ⬜ not started | |
 | A.2 — Test safety net | ⬜ not started | |
 | A.3 — I/O boundary hardening | ⬜ not started | |
