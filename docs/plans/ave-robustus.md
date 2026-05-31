@@ -139,6 +139,25 @@ folded into A.2/A.3, each fixed alongside the test that proves it.
 - *Deliverable:* an "Error Contract" section here + `docs/error-handling.md`; compile-breakers fixed **with tests**.
 - *Exit:* doctrine written, build green, the up-front fixes covered by tests. (Exhaustive hidden-`throw` audit happens in A.3.)
 
+> [!IMPORTANT]
+> **A.0 doctrine — decided design (2026-05-31, owner-ruled):**
+> - **Fallible ops:** hybrid — `bool` for void-fallible, `std::optional<T>` for value-or-failure
+>   (codify the existing convention; no new `Expected` type during consolidation; C++20).
+> - **Abort policy:** never `abort`/`terminate` on runtime/input error → propagate; `abort`/`assert`
+>   only for programmer-contract violations, Debug-only.
+> - **Diagnostics → shared logging, NOT a new silo.** The engine already has a rich `Tracer`
+>   service with `Sink = std::function<void(Severity, const char* tag, std::string_view)>`.
+>   Plan: (1) descend the `Severity` enum (Debug/Info/Success/Warning/Error/Fatal + to_string)
+>   into **base** as `EmEn::Base::Severity` (engine `CoreTypes.hpp` re-exports via `using`);
+>   (2) base gets a thin `src/Logging/` hook with a settable sink matching `Tracer::Sink`,
+>   default → `cerr`; (3) the engine `Tracer` registers itself as base's sink in `earlySetup`.
+>   → one `Severity`, no duplication, base stays engine-agnostic, base logs flow through Tracer.
+> - **Rule:** no new raw `std::cerr` in base; the 65 existing sites migrate to the hook
+>   progressively (per module, during A.2/A.3), not in one diff.
+> - **`throw` audit:** the only real `throw`s are 8 in `StaticVector.hpp` (capacity/bounds =
+>   programmer-contract violations → `terminate` under `-fno-exceptions`). Owner ruled: fix in
+>   A.0 (assert Debug + defined Release behaviour, with tests).
+
 ### A.1 — Tooling (infrastructure; fixes nothing yet)
 Stand up a `Debug-san` build (ASan + UBSan), extend `_FORTIFY_SOURCE` / stack-protector to
 Debug, a libFuzzer harness skeleton, a CI gate.
