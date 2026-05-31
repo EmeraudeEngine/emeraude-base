@@ -33,10 +33,13 @@
 #include <concepts>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <ranges>
+#include <string>
 #include <string_view>
 #include <vector>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -313,7 +316,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			std::cerr << "fileGetContents(), unable to read " << filepath << " file." "\n";
+			Logging::error("IO", "fileGetContents: cannot open " + filepath.string());
 
 			return false;
 		}
@@ -323,20 +326,20 @@ namespace EmEn::Base::IO
 
 		if ( bytes < 0 ) [[unlikely]]
 		{
-			std::cerr << "fileGetContents(), unable to get the size of " << filepath << " file." "\n";
+			Logging::error("IO", "fileGetContents: cannot read the size of " + filepath.string());
 
 			return false;
 		}
 
 		file.seekg(0, std::ifstream::beg);
 
-		content.resize(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((static_cast< size_t >(bytes) / sizeof(data_t))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) + (static_cast< size_t >(bytes) % sizeof(data_t) ? 1U : 0U));
+		content.resize((static_cast< size_t >(bytes) / sizeof(data_t)) + (static_cast< size_t >(bytes) % sizeof(data_t) != 0 ? 1U : 0U));
 
 		file.read(reinterpret_cast< char * >(content.data()), bytes);
 
 		if ( !file ) [[unlikely]]
 		{
-			std::cerr << "fileGetContents(), error reading " << filepath << " file." "\n";
+			Logging::error("IO", "fileGetContents: read error on " + filepath.string());
 
 			return false;
 		}
@@ -380,7 +383,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			std::cerr << "filePutContents(), unable to write into " << filepath << " file." "\n";
+			Logging::error("IO", "filePutContents: cannot open " + filepath.string() + " for writing");
 
 			return false;
 		}
@@ -389,7 +392,7 @@ namespace EmEn::Base::IO
 
 		if ( !file ) [[unlikely]]
 		{
-			std::cerr << "filePutContents(), error writing to " << filepath << " file." "\n";
+			Logging::error("IO", "filePutContents: write error on " + filepath.string());
 
 			return false;
 		}

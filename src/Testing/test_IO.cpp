@@ -33,12 +33,16 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <string>
 #include <system_error>
 #include <vector>
 
 /* Local inclusions. */
 #include "IO/FileStream.hpp"
+#include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Logging.hpp"
+#include "Logging/Severity.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -250,5 +254,77 @@ namespace EmEn::Base::IO
 			EXPECT_EQ(value, source[2]);
 		}
 		removeQuietly(path);
+	}
+
+	TEST(IOFileUtils, putGetContentsRoundTrip)
+	{
+		const auto path = tempFile("emeraude_base_io_putget.bin");
+		removeQuietly(path);
+
+		const std::vector< uint8_t > source{0x01, 0x02, 0x03, 0x04, 0x05};
+		EXPECT_TRUE(filePutContents(path, source));
+		EXPECT_TRUE(fileExists(path));
+		EXPECT_EQ(filesize(path), source.size());
+
+		std::vector< uint8_t > readBack;
+		EXPECT_TRUE(fileGetContents(path, readBack));
+		EXPECT_EQ(readBack, source);
+
+		removeQuietly(path);
+	}
+
+	TEST(IOFileUtils, getContentsMissingFileFails)
+	{
+		const auto path = tempFile("emeraude_base_io_missing.bin");
+		removeQuietly(path);
+		EXPECT_FALSE(fileExists(path));
+
+		std::vector< uint8_t > content;
+		EXPECT_FALSE(fileGetContents(path, content));
+	}
+
+	TEST(IOFileUtils, getContentsRoundsUpPartialElements)
+	{
+		const auto path = tempFile("emeraude_base_io_partial.bin");
+		removeQuietly(path);
+
+		const std::vector< uint8_t > fiveBytes{0xAA, 0xBB, 0xCC, 0xDD, 0xEE};
+		EXPECT_TRUE(filePutContents(path, fiveBytes));
+
+		/* 5 bytes / sizeof(uint32_t)=4 -> ceil = 2 words (the partial-element rounding). */
+		std::vector< uint32_t > asWords;
+		EXPECT_TRUE(fileGetContents(path, asWords));
+		EXPECT_EQ(asWords.size(), 2U);
+
+		removeQuietly(path);
+	}
+
+	TEST(IOFileUtils, errorsReachTheLoggingHook)
+	{
+		/* Proves the cerr -> Logging migration: a failed read must reach the sink. */
+		Severity captured{Severity::Debug};
+		std::string capturedTag;
+		std::string capturedMessage;
+		int calls{0};
+
+		Logging::setSink([&] (Severity severity, const char * tag, std::string_view message) {
+			captured = severity;
+			capturedTag = tag != nullptr ? tag : "";
+			capturedMessage = std::string{message};
+			++calls;
+		});
+
+		const auto path = tempFile("emeraude_base_io_missing_for_log.bin");
+		removeQuietly(path);
+
+		std::vector< uint8_t > content;
+		EXPECT_FALSE(fileGetContents(path, content));
+
+		Logging::setSink(nullptr); /* reset before asserting (the lambda captures locals) */
+
+		EXPECT_GE(calls, 1);
+		EXPECT_EQ(captured, Severity::Error);
+		EXPECT_EQ(capturedTag, "IO");
+		EXPECT_NE(capturedMessage.find("fileGetContents"), std::string::npos);
 	}
 }

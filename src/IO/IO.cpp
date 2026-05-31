@@ -31,6 +31,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <iostream>
 
 /* Third-party inclusions. */
 #if IS_LINUX || IS_MACOS
