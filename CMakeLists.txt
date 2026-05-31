@@ -45,6 +45,7 @@ option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point." Off)
 option(EMERAUDE_ENABLE_PCH "Enable precompiled headers." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suite(s)." Off)
+option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus A.1)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
@@ -197,6 +198,12 @@ elseif ( APPLE )
 		-Wno-unknown-pragmas -Wno-unused-parameter -Wno-unused-private-field
 		-Wno-nullability-extension -Wno-nullability-completeness
 		-Wno-gnu-zero-variadic-macro-arguments
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-omit-frame-pointer>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fstack-protector-strong>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-O1>
 		CACHE STRING "Project-wide compile options (macOS)." FORCE
 	)
 elseif ( UNIX )
@@ -223,6 +230,12 @@ elseif ( UNIX )
 		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror>
 		-Wformat -Wformat-security
 		-Wno-unknown-pragmas -Wno-unused-parameter
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-omit-frame-pointer>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fstack-protector-strong>
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-O1>
 		CACHE STRING "Project-wide compile options (Linux)." FORCE
 	)
 endif ()
@@ -268,6 +281,13 @@ target_link_directories(emeraude_base PUBLIC ${EMERAUDE_EXT_LIBS_LIB_DIR})
 
 target_compile_definitions(emeraude_base PUBLIC ${EMERAUDE_COMPILE_DEFINITIONS})
 target_compile_options(emeraude_base PUBLIC ${EMERAUDE_COMPILE_OPTIONS})
+target_link_options(emeraude_base PUBLIC
+	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
+	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
+)
+if ( EMERAUDE_ENABLE_SANITIZERS )
+	message(STATUS "[EmeraudeBase] Sanitizers ENABLED: ASan + UBSan (-O1, halt-on-error). Incompatible with _FORTIFY_SOURCE (omitted).")
+endif ()
 
 target_link_libraries(emeraude_base PUBLIC emeraude::base::platform)
 

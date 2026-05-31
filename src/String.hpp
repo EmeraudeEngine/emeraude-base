@@ -716,7 +716,12 @@ namespace EmEn::Base::String
 		std::vector< data_t > recoveredData;
 		recoveredData.resize(source.size() / sizeof(data_t));
 
-		std::memcpy(recoveredData.data(), source.data(), source.size());
+		if ( !recoveredData.empty() )
+		{
+			/* Skip when empty: memcpy with a null pointer is UB even at size 0. Copy only
+			 * whole elements (capacity), guarding a non-multiple source size from overflow. */
+			std::memcpy(recoveredData.data(), source.data(), recoveredData.size() * sizeof(data_t));
+		}
 
 		return recoveredData;
 	}
