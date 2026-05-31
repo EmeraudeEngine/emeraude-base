@@ -639,4 +639,46 @@ namespace EmEn::Base
 		ASSERT_EQ(vec[1].value, 5);
 		ASSERT_EQ(LifetimeTracker::destructor_calls, 3);
 	}
+
+	/*
+	 * Safety-contract death tests (Ave robustus A.0). Under -fno-exceptions the
+	 * throwing paths are compiled out and capacity / bounds violations std::abort().
+	 * These lock that fail-fast contract, which was previously untested. The suite is
+	 * named *DeathTest so GoogleTest runs it before the threaded suites.
+	 */
+	TEST(StaticVectorDeathTest, atOutOfRangeAborts)
+	{
+		using Vector = StaticVector< int, 4 >;
+
+		Vector vector;
+		vector.emplace_back(1);
+
+		EXPECT_DEATH((void)vector.at(5), ".*");
+	}
+
+	TEST(StaticVectorDeathTest, constructorCountExceedingCapacityAborts)
+	{
+		using Vector = StaticVector< int, 4 >;
+
+		EXPECT_DEATH({ Vector vector(5); (void)vector; }, ".*");
+	}
+
+	TEST(StaticVectorDeathTest, resizeBeyondCapacityAborts)
+	{
+		using Vector = StaticVector< int, 4 >;
+
+		EXPECT_DEATH({ Vector vector; vector.resize(5); }, ".*");
+	}
+
+	TEST(StaticVectorDeathTest, emplaceBackBeyondCapacityAborts)
+	{
+		using Vector = StaticVector< int, 2 >;
+
+		EXPECT_DEATH({
+			Vector vector;
+			vector.emplace_back(1);
+			vector.emplace_back(2);
+			vector.emplace_back(3);
+		}, "Capacity");
+	}
 }

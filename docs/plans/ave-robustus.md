@@ -154,9 +154,12 @@ folded into A.2/A.3, each fixed alongside the test that proves it.
 >   → one `Severity`, no duplication, base stays engine-agnostic, base logs flow through Tracer.
 > - **Rule:** no new raw `std::cerr` in base; the 65 existing sites migrate to the hook
 >   progressively (per module, during A.2/A.3), not in one diff.
-> - **`throw` audit:** the only real `throw`s are 8 in `StaticVector.hpp` (capacity/bounds =
->   programmer-contract violations → `terminate` under `-fno-exceptions`). Owner ruled: fix in
->   A.0 (assert Debug + defined Release behaviour, with tests).
+> - **`throw` audit (CORRECTED 2026-05-31):** the audit flagged 8 `throw`s in `StaticVector.hpp`,
+>   but they are **exception-build-only** — each sits under `#if defined(__cpp_exceptions)` with an
+>   `#else std::abort()` branch. Under `-fno-exceptions` (base default) capacity/bounds violations
+>   abort (defined programmer-contract behaviour) — **NOT terminate-bombs** (the subagent audit was
+>   wrong: it saw `throw` and missed the dual `#if/#else` impls). Nothing to fix; the fail-fast
+>   contract (previously untested) is now locked with `StaticVectorDeathTest` death-tests.
 
 ### A.1 — Tooling (infrastructure; fixes nothing yet)
 Stand up a `Debug-san` build (ASan + UBSan), extend `_FORTIFY_SOURCE` / stack-protector to
