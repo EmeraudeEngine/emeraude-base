@@ -25,6 +25,7 @@
  */
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -904,20 +905,19 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 {
 	ThreadPool pool;
 
-	/* This is a wall-clock speedup benchmark with no correctness check. It is only
-	 * meaningful with enough hardware threads: on CI runners with few (and shared)
-	 * cores, the memory-bound 4K drawing does not speed up reliably and the parallel
-	 * run can even be marginally slower. Skip there rather than fail the build (and
-	 * avoid wasting minutes of CI time on a benchmark that proves nothing). */
-	if ( pool.threadCount() < 4 )
-	{
-		GTEST_SKIP() << "Speedup benchmark skipped: only " << pool.threadCount() << " worker thread(s) available.";
-	}
-
-	constexpr uint32_t imageWidth = 3840;
-	constexpr uint32_t imageHeight = 2160;
-	constexpr size_t operationCount = 50000;
-	constexpr size_t iterationCount = 100;
+	/* Reduced from a pure 4K / 50k-op / 100-iter wall-clock benchmark (~37s) to a lighter
+	 * workload with TWO guarantees:
+	 *  - CORRECTNESS (hard, deterministic): every iteration draws the same operations onto a
+	 *    fresh image, so each parallel result must equal the sequential reference exactly.
+	 *    This proves parallelFor runs every unit of work correctly and race-free.
+	 *  - SPEEDUP (soft, the original intent): asserted only with enough hardware threads, with
+	 *    a conservative margin below the real ratio so measurement noise cannot make it flaky.
+	 * Correctness runs everywhere (useful even on a single core); only the speedup is gated. */
+	constexpr uint32_t imageWidth = 1920;
+	constexpr uint32_t imageHeight = 1080;
+	constexpr size_t operationCount = 15000;
+	constexpr size_t iterationCount = 64;
+	constexpr double minSpeedup = 1.5;
 
 	/* Seed for reproducible random generation. */
 	std::mt19937 rng{42}; // NOLINT(cert-msc32-c, cert-msc51-cpp)
@@ -927,7 +927,6 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 	std::uniform_real_distribution< float > distColor{0.0F, 1.0F};
 	std::uniform_int_distribution< int > distOperation{0, 2}; /* 0: segment, 1: circle, 2: square */
 
-	/* Pre-generate random drawing operations. */
 	struct DrawOperation
 	{
 		int type;
@@ -953,7 +952,6 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 		operations.push_back(op);
 	}
 
-	/* Lambda to execute all drawing operations on a processor. */
 	auto executeOperations = [&operations] (Processor< uint8_t > & processor)
 	{
 		for ( const auto & op : operations )
@@ -961,26 +959,15 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 			switch ( op.type )
 			{
 				case 0 : /* Segment */
-					processor.drawSegment(
-						Vector< 2, int32_t >{op.x1, op.y1},
-						Vector< 2, int32_t >{op.x2, op.y2},
-						op.color
-					);
+					processor.drawSegment(Vector< 2, int32_t >{op.x1, op.y1}, Vector< 2, int32_t >{op.x2, op.y2}, op.color);
 					break;
 
 				case 1 : /* Circle */
-					processor.drawCircle(
-						Vector< 2, int32_t >{op.x1, op.y1},
-						op.radius,
-						op.color
-					);
+					processor.drawCircle(Vector< 2, int32_t >{op.x1, op.y1}, op.radius, op.color);
 					break;
 
 				case 2 : /* Square */
-					processor.drawSquare(
-						Space2D::AARectangle< int32_t >{op.x1, op.y1, std::abs(op.x2 - op.x1) + 1, std::abs(op.y2 - op.y1) + 1},
-						op.color
-					);
+					processor.drawSquare(Space2D::AARectangle< int32_t >{op.x1, op.y1, std::abs(op.x2 - op.x1) + 1, std::abs(op.y2 - op.y1) + 1}, op.color);
 					break;
 
 				default :
@@ -989,9 +976,15 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 		}
 	};
 
-	/* ======================================================================
-	 * Sequential execution: 100 iterations in a classic loop
-	 * ====================================================================== */
+	/* Deterministic reference image (one sequential draw). Read-only afterwards. */
+	Pixmap< uint8_t > reference{imageWidth, imageHeight};
+	{
+		Processor< uint8_t > processor{reference};
+		executeOperations(processor);
+	}
+	const std::vector< uint8_t > & referenceData = reference.data();
+
+	/* Sequential timing baseline. */
 	std::chrono::microseconds sequentialDuration{};
 	{
 		const auto start = std::chrono::high_resolution_clock::now();
@@ -1004,38 +997,47 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 			executeOperations(processor);
 		}
 
-		const auto end = std::chrono::high_resolution_clock::now();
-		sequentialDuration = std::chrono::duration_cast< std::chrono::microseconds >(end - start);
+		sequentialDuration = std::chrono::duration_cast< std::chrono::microseconds >(std::chrono::high_resolution_clock::now() - start);
 	}
 
-	/* ======================================================================
-	 * Parallel execution: 100 iterations using parallelFor
-	 * ====================================================================== */
+	/* Parallel execution. Each iteration writes its own slot in `differs` (no data race);
+	 * `referenceData` is only read concurrently. */
+	std::vector< char > differs(iterationCount, 0);
 	std::chrono::microseconds parallelDuration{};
 	{
 		const auto start = std::chrono::high_resolution_clock::now();
 
-		pool.parallelFor(size_t{0}, iterationCount, [&] (size_t) {
+		pool.parallelFor(size_t{0}, iterationCount, [&] (size_t index) {
 			Pixmap< uint8_t > image{imageWidth, imageHeight};
 			Processor< uint8_t > processor{image};
 
 			executeOperations(processor);
+
+			differs[index] = image.data() == referenceData ? char{0} : char{1};
 		});
 
-		const auto end = std::chrono::high_resolution_clock::now();
-		parallelDuration = std::chrono::duration_cast< std::chrono::microseconds >(end - start);
+		parallelDuration = std::chrono::duration_cast< std::chrono::microseconds >(std::chrono::high_resolution_clock::now() - start);
 	}
 
-	/* Print results for information. */
+	/* CORRECTNESS (hard): every parallel iteration matches the sequential reference. */
+	const auto mismatchCount = std::count(differs.begin(), differs.end(), char{1});
+	EXPECT_EQ(mismatchCount, 0) << mismatchCount << " parallel iteration(s) produced a pixmap differing from the sequential reference.";
+
+	/* SPEEDUP (soft, informational + asserted with a margin only on enough threads). */
 	const auto sequentialMs = static_cast< double >(sequentialDuration.count()) / 1000.0;
 	const auto parallelMs = static_cast< double >(parallelDuration.count()) / 1000.0;
-	const auto speedup = sequentialMs / parallelMs;
-	const auto timeGainPercent = ((sequentialMs - parallelMs) / sequentialMs) * 100.0;
+	const auto speedup = parallelMs > 0.0 ? sequentialMs / parallelMs : 0.0;
 
 	std::cout << "[		  ] Sequential: " << sequentialMs << " ms\n";
 	std::cout << "[		  ] Parallel:   " << parallelMs << " ms (" << pool.threadCount() << " threads)\n";
-	std::cout << "[		  ] Speedup:	" << speedup << "x | Time saved: " << timeGainPercent << "%\n";
+	std::cout << "[		  ] Speedup:	" << speedup << "x\n";
 
-	/* The parallel version should be faster than sequential. */
-	EXPECT_LT(parallelDuration.count(), sequentialDuration.count());
+	if ( pool.threadCount() >= 4 )
+	{
+		EXPECT_GT(speedup, minSpeedup) << "Parallel run did not reach the expected speedup (" << minSpeedup << "x) with " << pool.threadCount() << " threads.";
+	}
+	else
+	{
+		std::cout << "[		  ] Speedup not asserted: only " << pool.threadCount() << " worker thread(s).\n";
+	}
 }
