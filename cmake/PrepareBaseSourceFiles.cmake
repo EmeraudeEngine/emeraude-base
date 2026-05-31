@@ -19,6 +19,7 @@ set(EMERAUDE_BASE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipReader.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipWriter.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/KVParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Logging/Logging.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp
@@ -46,6 +47,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Hash.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_LineFormula.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Logging.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathBasics.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathCartesianFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathMatrix.cpp
