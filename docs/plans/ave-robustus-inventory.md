@@ -12,7 +12,7 @@
 
 | Tier | Modules | Why |
 |------|---------|-----|
-| **1 — untrusted-input parsing** | network, vertex, wave, io, compression, pixel, core (FastJSON/KVParser) | Hostile/malformed input reaches these; 0 or happy-path-only tests. The robustness front line. |
+| **1 — untrusted-input parsing** | network, vertex, wave, io, compression, pixel, core (FastJSON/INIParser) | Hostile/malformed input reaches these; 0 or happy-path-only tests. The robustness front line. |
 | **2 — untested logic** | math (spline/OBB peripherals), algorithms, animation, time, hash, gametools, debug | Implemented, plausible, but unverified; several carry concrete latent bugs. |
 | **3 — done-ish** | platform | CMake split done; only minor doc/compiler-detection gaps. |
 
@@ -29,8 +29,8 @@ These emerged from the audit and matter for sequencing:
    (close by correcting the claim)**, NOT a missing feature. Corrects seed finding #2.
 3. **Real correctness bugs found** (not mere fragility) — see the per-module "🐞" rows:
    `Time::Elapsed::CPUTime` unit error; `Time::EventTrait::resetTimer` calls non-existent
-   `resetTop()`; `Debug::Statistics` ns timer ignores `tv_sec`; `KVParser::getLineType`
-   misclassifies values with `#`/`[`/`@`; `ZLIB::compressString` passes level into chunkSize;
+   `resetTop()`; `Debug::Statistics` ns timer ignores `tv_sec`; `INIParser::getLineType`
+   (was `KVParser`) misclassifies a line whose key contains `#`/`[`/`@`; `ZLIB::compressString` passes level into chunkSize;
    `LZMA::decompressString` leaks on error; `Query::operator<<` emits spurious entries;
    `Hash::Types` enum advertises SHA1 (no impl) and omits SHA512 (implemented);
    `Animation` CubicSpline mode undeliverable (no tangent storage); `PerlinNoise::grad()`
@@ -154,13 +154,13 @@ These emerged from the audit and matter for sequencing:
 ### Module: core (flat src root)
 - **Target/kind/deps:** `emeraude::base::core` — OBJECT (FastJSON/Variant transitively pull jsoncpp + Math + Color). Status TODO.
 - **Test files:** `test_String/ThreadPool/TokenFormatter/ObserverPattern/NodeTrait/Version/StaticVector`.
-- **Overall:** Tested cluster solid. Concern: both untrusted-input parsers (FastJSON, KVParser) and the 20-type Variant ship with 0 tests; KVParser has a real classification bug.
+- **Overall:** Tested cluster solid. Both untrusted-input parsers now covered: FastJSON ✅ (A.2) and INIParser ✅ (A.2, classification bug fixed + renamed from KVParser). Remaining concern: the 20-type Variant ships with 0 tests.
 
 | Promised capability | Source | Real state | Gap | "Utility blinded" criterion |
 |---|---|---|---|---|
 | Fast JSON parse + typed extraction | `FastJSON.hpp/.cpp` | Robust *by config* (jsoncpp strict, exceptions off, optional returns); **0 tests** | A | untrusted/malformed JSON accept/reject pinned |
-| INI-style KV config (sections, `#`,`@`) | `KVParser.hpp/.cpp` | 🐞 `getLineType` returns on first special char → value with `#`/`[`/`@` misclassified, key dropped; 0 tests | A + 🐞 | config with `#`/`[`/`@` in values keeps keys |
-| `KVVariable` typed conversion | `KVParser.hpp` | Delivered; untested | A | bool/int/float/empty edge cases |
+| INI-style config (sections, `#`,`@`) | `INIParser.hpp/.cpp` (was `KVParser`) | ✅ FIXED + 8 tests. Real bug was narrower than first stated: values with `#`/`[`/`@` *after* `=` already worked; the break was a special char in the **key before `=`** (e.g. `arr[0] = 5`) — `getLineType` returned on the first special char anywhere → misclassified, key dropped (`[` even forged a spurious section). Now classifies by the **first non-whitespace char**. Class renamed → `INIParser`/`INISection`/`INIVariable`. | ✅ | key with `[`/`#`/`@` kept as a definition; markers only at line start act as section/comment/header |
+| `INIVariable` typed conversion | `INIParser.hpp` | ✅ covered (asInteger/asBoolean/asFloat/asDouble/asString + isUndefined in `test_INIParser.cpp`) | ✅ | bool/int/float/empty edge cases |
 | 20-type Variant (exception-free `as*`) | `Variant.hpp/.cpp` | `std::get_if`-based, type/index invariant; **0 tests** | A | type/index invariant + mismatch paths |
 | Source code annotation/formatting | `SourceCodeParser.hpp/.cpp` | Delivered; 0 tests | A | comment stripping / line math on edge input |
 | Cross-platform file timestamps | `FileTimestamps.hpp/.cpp` | Delivered w/ platform caveats; 0 tests | A | platform-conditional fetch paths |

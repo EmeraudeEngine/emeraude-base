@@ -266,7 +266,7 @@ Long-term, multi-session plan: this table is the institutional memory of where w
 | Phase 0 — Intent Contract inventory | ✅ done | full inventory in [`ave-robustus-inventory.md`](ave-robustus-inventory.md); 4 new owner decisions surfaced |
 | A.0 — Error contract + abort policy + compile-breakers (w/ tests) | ✅ done | compile-breakers (CPUTime, EventTrait); logging architecture (Severity→base, Logging hook, Tracer sink); StaticVector death-tests; `docs/error-handling.md`. Suite 1660 green; cascade builds. cerr→hook migration deferred to A.2/A.3. |
 | A.1 — Tooling | ✅ done | `EMERAUDE_ENABLE_SANITIZERS` (ASan+UBSan, -O1, halt-on-error, +stack-protector; no FORTIFY — ASan conflict). Suite 1660/1660 green under sanitizers; found+fixed 1 UB (`deserializeVector`). Manual gate (no CI yet). Fuzzing deferred to A.3 (g++ has no libFuzzer). |
-| A.2 — Test safety net | ⬜ not started | |
+| A.2 — Test safety net | 🟦 in progress | Per-module characterization + fixes (each fix shipped with a failing→passing test): Time, Logging, IO (MemoryStream overflow), FastJSON (nesting-depth pre-guard), StaticVector death-tests, **INIParser** (`getLineType` classification bug fixed + class renamed KVParser/KVSection/KVVariable → INIParser/INISection/INIVariable). Suite **1689/1689** green in Release **and** under ASan/UBSan. Remaining: Variant, VertexFactory, WaveFactory parsers. |
 | A.3 — I/O boundary hardening | ⬜ not started | |
 | A.4 — Memory/resource/arithmetic | ⬜ not started | |
 | A.5 — Performance (measured) | ⬜ not started | benchmark-gated; runs last |

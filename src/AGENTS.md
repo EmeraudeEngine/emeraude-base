@@ -129,7 +129,7 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - **Strings**: String manipulation
 - **TokenFormatter**: Case style detection and conversion (camelCase, snake_case, PascalCase, etc.)
 - **ThreadPool**: High-performance thread pool
-- **KVParser**: INI-style file parsing (sections, key-values)
+- **INIParser**: INI-style file parsing (sections, key-values)
 - **SourceCodeParser**: Source code parsing with annotations and formatting
 
 ### Integrated External Dependencies
@@ -198,7 +198,7 @@ ctest -R Libs
 - `FlagTrait.hpp` - Flag management
 - `NamableTrait.hpp` - Naming trait
 - `TokenFormatter.hpp` - Case detection/conversion (zero-allocation design)
-- `KVParser.hpp` - INI-style parser (KVVariable, KVSection, KVParser)
+- `INIParser.hpp` - INI-style parser (INIVariable, INISection, INIParser)
 - `SourceCodeParser.hpp` - Source code parser with annotations
 
 ### I/O Foundation
@@ -301,10 +301,10 @@ std::string_view name = TokenFormatter::styleName(style);  // "camelCase"
 - Only output methods allocate (with `reserve()`)
 - See: `TokenFormatter.hpp:MaxWords`, `TokenFormatter.hpp:MaxTokenLength`
 
-### KVParser for INI Files
+### INIParser for INI Files
 ```cpp
 // Read configuration file
-KVParser parser;
+INIParser parser;
 if (parser.read("config.ini")) {
     // Access section (creates if not exists)
     auto& graphics = parser.section("Graphics");
@@ -322,10 +322,10 @@ if (parser.read("config.ini")) {
 }
 
 // Write configuration
-KVParser config;
-config.section("main").addVariable("version", KVVariable{"1.0"});
-config.section("Graphics").addVariable("width", KVVariable{1920});
-config.section("Graphics").addVariable("fullscreen", KVVariable{true});
+INIParser config;
+config.section("main").addVariable("version", INIVariable{"1.0"});
+config.section("Graphics").addVariable("width", INIVariable{1920});
+config.section("Graphics").addVariable("fullscreen", INIVariable{true});
 config.write("output.ini");
 ```
 
@@ -339,10 +339,16 @@ another_key = 123
 @ Header lines (ignored)
 ```
 
+> Line type is decided by the **first non-whitespace character**: a line *starting* with
+> `[`/`#`/`@` is a section/comment/header; any other line containing `=` is a definition.
+> So a key may legitimately contain `[`, `#` or `@` (e.g. `arr[0] = 5`) — markers only act
+> as such at the start of a line. Values are taken verbatim after the first `=` (no inline
+> comment stripping).
+
 **Code references:**
-- `KVParser.hpp:KVVariable` - Variable with type conversions (bool, int, float, double, string)
-- `KVParser.hpp:KVSection` - Named variable collection
-- `KVParser.hpp:KVParser` - Main parser with sections
+- `INIParser.hpp:INIVariable` - Variable with type conversions (bool, int, float, double, string)
+- `INIParser.hpp:INISection` - Named variable collection
+- `INIParser.hpp:INIParser` - Main parser with sections
 - Uses `std::filesystem::path` for file operations (C++17+)
 - Uses `std::string_view` for read-only parameters
 

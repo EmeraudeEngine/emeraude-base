@@ -1,5 +1,5 @@
 /*
- * src/KVParser.cpp
+ * src/INIParser.cpp
  * This file is part of Emeraude-Base
  *
  * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
@@ -24,7 +24,7 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
-#include "KVParser.hpp"
+#include "INIParser.hpp"
 
 /* STL inclusions. */
 #include <fstream>
@@ -32,7 +32,7 @@
 namespace EmEn::Base
 {
 	void
-	KVSection::write (std::ofstream & file) const noexcept
+	INISection::write (std::ofstream & file) const noexcept
 	{
 		for ( const auto & [name, variable] : m_variables )
 		{
@@ -41,7 +41,7 @@ namespace EmEn::Base
 	}
 
 	std::string
-	KVParser::parseSectionTitle (std::string_view line) noexcept
+	INIParser::parseSectionTitle (std::string_view line) noexcept
 	{
 		const auto start = line.find_first_of('[');
 		const auto end = line.find_last_of(']');
@@ -54,41 +54,51 @@ namespace EmEn::Base
 		return {};
 	}
 
-	KVParser::LineType
-	KVParser::getLineType (std::string_view line) noexcept
+	INIParser::LineType
+	INIParser::getLineType (std::string_view line) noexcept
 	{
-		for ( const auto character : line )
+		/* Classify by the FIRST non-whitespace character: only a line that *starts* with a
+		 * marker is a header/comment/section. Any other line containing '=' is a definition,
+		 * so a key may legitimately contain '[', '#' or '@' (e.g. "arr[0] = 5") without being
+		 * misclassified and silently dropped. */
+		const auto firstPosition = line.find_first_not_of(" \t\r\n\f\v");
+
+		if ( firstPosition == std::string_view::npos )
 		{
-			switch ( character )
-			{
-				case '@' :
-					return LineType::Headers;
+			return LineType::None;
+		}
 
-				case '[' :
-					return LineType::SectionTitle;
+		switch ( line[firstPosition] )
+		{
+			case '@' :
+				return LineType::Headers;
 
-				case '#' :
-					return LineType::Comment;
+			case '[' :
+				return LineType::SectionTitle;
 
-				case '=' :
-					return LineType::Definition;
+			case '#' :
+				return LineType::Comment;
 
-				default :
-					break;
-			}
+			default :
+				break;
+		}
+
+		if ( line.find('=') != std::string_view::npos )
+		{
+			return LineType::Definition;
 		}
 
 		return LineType::None;
 	}
 
-	KVSection &
-	KVParser::section (std::string_view label) noexcept
+	INISection &
+	INIParser::section (std::string_view label) noexcept
 	{
 		return m_sections.try_emplace(std::string{label}).first->second;
 	}
 
 	bool
-	KVParser::read (const std::filesystem::path & filepath) noexcept
+	INIParser::read (const std::filesystem::path & filepath) noexcept
 	{
 		std::ifstream file{filepath};
 
@@ -105,10 +115,10 @@ namespace EmEn::Base
 		/* Parse all lines. */
 		while ( std::getline(file, line) )
 		{
-			switch ( KVParser::getLineType(line) )
+			switch ( INIParser::getLineType(line) )
 			{
 				case LineType::SectionTitle :
-					if ( auto sectionName = KVParser::parseSectionTitle(line); !sectionName.empty() )
+					if ( auto sectionName = INIParser::parseSectionTitle(line); !sectionName.empty() )
 					{
 						currentSection = &this->section(sectionName);
 					}
@@ -120,7 +130,7 @@ namespace EmEn::Base
 						auto key = String::trim(line.substr(0, equalSignPosition));
 						auto value = String::trim(line.substr(equalSignPosition + 1));
 
-						currentSection->addVariable(key, KVVariable{value});
+						currentSection->addVariable(key, INIVariable{value});
 					}
 					break;
 
@@ -135,7 +145,7 @@ namespace EmEn::Base
 	}
 
 	bool
-	KVParser::write (const std::filesystem::path & filepath) const noexcept
+	INIParser::write (const std::filesystem::path & filepath) const noexcept
 	{
 		std::ofstream file{filepath, std::ios::out | std::ios::trunc};
 

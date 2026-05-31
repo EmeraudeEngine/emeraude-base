@@ -18,7 +18,7 @@ set(EMERAUDE_BASE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/IO.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipReader.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipWriter.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/KVParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/INIParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Logging/Logging.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
@@ -47,6 +47,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FastJSON.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Hash.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_INIParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_IO.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_LineFormula.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Logging.cpp

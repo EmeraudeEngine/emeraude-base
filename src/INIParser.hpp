@@ -1,5 +1,5 @@
 /*
- * src/KVParser.hpp
+ * src/INIParser.hpp
  * This file is part of Emeraude-Base
  *
  * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
@@ -40,10 +40,10 @@
 namespace EmEn::Base
 {
 	/**
-	 * @class KVVariable
+	 * @class INIVariable
 	 * @brief Represents a single key-value variable with type conversion capabilities.
 	 *
-	 * KVVariable is a flexible container that stores a value as a string internally
+	 * INIVariable is a flexible container that stores a value as a string internally
 	 * but provides convenient conversion methods to various primitive types (bool, int,
 	 * float, double). Variables can be in an undefined state, which is useful for
 	 * distinguishing between missing and explicitly set values in configuration files.
@@ -54,28 +54,28 @@ namespace EmEn::Base
 	 * @note Numeric conversions use the String::toNumber utility and will return 0 for
 	 * invalid string representations.
 	 *
-	 * @see KVSection, KVParser
+	 * @see INISection, INIParser
 	 * @version 0.8.38
 	 */
-	class KVVariable final
+	class INIVariable final
 	{
 		public:
 
 			/**
-			 * @brief Constructs an undefined KVVariable.
+			 * @brief Constructs an undefined INIVariable.
 			 *
 			 * Creates a variable in an undefined state with an empty internal value.
 			 * Use isUndefined() to check if a variable was explicitly set.
 			 */
-			KVVariable () noexcept = default;
+			INIVariable () noexcept = default;
 
 			/**
-			 * @brief Constructs a KVVariable from a string value.
+			 * @brief Constructs a INIVariable from a string value.
 			 *
 			 * @param value The string value to store.
 			 */
 			explicit
-			KVVariable (std::string value) noexcept
+			INIVariable (std::string value) noexcept
 				: m_value(std::move(value)),
 				m_undefined(false)
 			{
@@ -83,14 +83,14 @@ namespace EmEn::Base
 			}
 
 			/**
-			 * @brief Constructs a KVVariable from a boolean value.
+			 * @brief Constructs a INIVariable from a boolean value.
 			 *
 			 * Stores the boolean as "1" (true) or "0" (false).
 			 *
 			 * @param value The boolean value to store.
 			 */
 			explicit
-			KVVariable (bool value) noexcept
+			INIVariable (bool value) noexcept
 				: m_value(value ? "1" : "0"),
 				m_undefined(false)
 			{
@@ -98,12 +98,12 @@ namespace EmEn::Base
 			}
 
 			/**
-			 * @brief Constructs a KVVariable from an integer value.
+			 * @brief Constructs a INIVariable from an integer value.
 			 *
 			 * @param value The integer value to store as a string.
 			 */
 			explicit
-			KVVariable (int value) noexcept
+			INIVariable (int value) noexcept
 				: m_value(std::to_string(value)),
 				m_undefined(false)
 			{
@@ -111,12 +111,12 @@ namespace EmEn::Base
 			}
 
 			/**
-			 * @brief Constructs a KVVariable from a float value.
+			 * @brief Constructs a INIVariable from a float value.
 			 *
 			 * @param value The float value to store as a string.
 			 */
 			explicit
-			KVVariable (float value) noexcept
+			INIVariable (float value) noexcept
 				: m_value(std::to_string(value)),
 				m_undefined(false)
 			{
@@ -124,12 +124,12 @@ namespace EmEn::Base
 			}
 
 			/**
-			 * @brief Constructs a KVVariable from a double value.
+			 * @brief Constructs a INIVariable from a double value.
 			 *
 			 * @param value The double value to store as a string.
 			 */
 			explicit
-			KVVariable (double value) noexcept
+			INIVariable (double value) noexcept
 				: m_value(std::to_string(value)),
 				m_undefined(false)
 			{
@@ -231,28 +231,28 @@ namespace EmEn::Base
 	};
 
 	/**
-	 * @class KVSection
+	 * @class INISection
 	 * @brief Represents a section in a key-value configuration file containing multiple variables.
 	 *
-	 * KVSection manages a collection of KVVariable objects indexed by string keys.
+	 * INISection manages a collection of INIVariable objects indexed by string keys.
 	 * In INI-style configuration files, sections appear as [SectionName] headers followed
 	 * by key=value pairs. Each section maintains its own namespace of variable names.
 	 *
 	 * Variables are stored in a std::map, providing ordered iteration and efficient lookup.
-	 * Attempting to retrieve a non-existent variable returns an undefined KVVariable rather
+	 * Attempting to retrieve a non-existent variable returns an undefined INIVariable rather
 	 * than throwing an exception.
 	 *
-	 * @see KVVariable, KVParser
+	 * @see INIVariable, INIParser
 	 * @version 0.8.38
 	 */
-	class KVSection final
+	class INISection final
 	{
 		public:
 
 			/**
-			 * @brief Constructs an empty KVSection.
+			 * @brief Constructs an empty INISection.
 			 */
-			KVSection () noexcept = default;
+			INISection () noexcept = default;
 
 			/**
 			 * @brief Adds or updates a variable in the section.
@@ -260,10 +260,10 @@ namespace EmEn::Base
 			 * If a variable with the same key already exists, it will be replaced.
 			 *
 			 * @param key The variable name/key.
-			 * @param variable The KVVariable to store.
+			 * @param variable The INIVariable to store.
 			 */
 			void
-			addVariable (std::string_view key, const KVVariable & variable) noexcept
+			addVariable (std::string_view key, const INIVariable & variable) noexcept
 			{
 				m_variables[std::string{key}] = variable;
 			}
@@ -273,10 +273,10 @@ namespace EmEn::Base
 			 *
 			 * Provides read-only access to the internal map of all variables.
 			 *
-			 * @return Const reference to the map of variable names to KVVariable objects.
+			 * @return Const reference to the map of variable names to INIVariable objects.
 			 */
 			[[nodiscard]]
-			const std::map< std::string, KVVariable > &
+			const std::map< std::string, INIVariable > &
 			variables () const noexcept
 			{
 				return m_variables;
@@ -285,14 +285,14 @@ namespace EmEn::Base
 			/**
 			 * @brief Retrieves a specific variable by key.
 			 *
-			 * Returns an undefined KVVariable if the key does not exist, rather than throwing
-			 * an exception. Use KVVariable::isUndefined() to check if the variable was found.
+			 * Returns an undefined INIVariable if the key does not exist, rather than throwing
+			 * an exception. Use INIVariable::isUndefined() to check if the variable was found.
 			 *
 			 * @param key The variable name to look up.
-			 * @return The KVVariable associated with the key, or an undefined KVVariable if not found.
+			 * @return The INIVariable associated with the key, or an undefined INIVariable if not found.
 			 */
 			[[nodiscard]]
-			KVVariable
+			INIVariable
 			variable (std::string_view key) const noexcept
 			{
 				if ( const auto variableIt = m_variables.find(std::string{key}); variableIt != m_variables.cend() )
@@ -307,7 +307,7 @@ namespace EmEn::Base
 			 * @brief Writes the section's variables to an output file stream.
 			 *
 			 * Outputs all variables in the format "key = value\n". Section headers are not
-			 * written by this method; that responsibility belongs to KVParser::write().
+			 * written by this method; that responsibility belongs to INIParser::write().
 			 *
 			 * @param file The output file stream to write to.
 			 */
@@ -315,14 +315,14 @@ namespace EmEn::Base
 
 		private:
 
-			std::map< std::string, KVVariable > m_variables;
+			std::map< std::string, INIVariable > m_variables;
 	};
 
 	/**
-	 * @class KVParser
+	 * @class INIParser
 	 * @brief Parses and manages INI-style key-value configuration files organized by sections.
 	 *
-	 * KVParser provides functionality to read and write configuration files in a simple
+	 * INIParser provides functionality to read and write configuration files in a simple
 	 * INI-like format. Files are organized into sections (denoted by [SectionName]) with
 	 * key=value pairs under each section. The parser automatically creates a default "main"
 	 * section for any key-value pairs that appear before the first section header.
@@ -338,7 +338,7 @@ namespace EmEn::Base
 	 * and values, ensuring clean data storage.
 	 *
 	 * @code
-	 * KVParser parser;
+	 * INIParser parser;
 	 * if (parser.read("config.ini")) {
 	 *	 auto& section = parser.section("Graphics");
 	 *	 int width = section.variable("width").asInteger();
@@ -349,27 +349,27 @@ namespace EmEn::Base
 	 * @note All methods are noexcept and use return values to indicate success/failure
 	 * rather than throwing exceptions.
 	 *
-	 * @see KVSection, KVVariable
+	 * @see INISection, INIVariable
 	 * @version 0.8.38
 	 */
-	class KVParser final
+	class INIParser final
 	{
 		public:
 
 			/**
-			 * @brief Constructs an empty KVParser with no sections.
+			 * @brief Constructs an empty INIParser with no sections.
 			 */
-			KVParser () noexcept = default;
+			INIParser () noexcept = default;
 
 			/**
 			 * @brief Returns a mutable reference to all sections.
 			 *
 			 * Provides direct access to the internal section map for iteration or modification.
 			 *
-			 * @return Reference to the map of section names to KVSection objects.
+			 * @return Reference to the map of section names to INISection objects.
 			 */
 			[[nodiscard]]
-			std::map< std::string, KVSection > &
+			std::map< std::string, INISection > &
 			sections () noexcept
 			{
 				return m_sections;
@@ -380,10 +380,10 @@ namespace EmEn::Base
 			 *
 			 * Provides const access to the internal section map for read-only iteration.
 			 *
-			 * @return Const reference to the map of section names to KVSection objects.
+			 * @return Const reference to the map of section names to INISection objects.
 			 */
 			[[nodiscard]]
-			const std::map< std::string, KVSection > &
+			const std::map< std::string, INISection > &
 			sections () const noexcept
 			{
 				return m_sections;
@@ -397,10 +397,10 @@ namespace EmEn::Base
 			 * This method never fails and always returns a valid section reference.
 			 *
 			 * @param label The name of the section to retrieve or create.
-			 * @return Reference to the requested KVSection.
+			 * @return Reference to the requested INISection.
 			 */
 			[[nodiscard]]
-			KVSection & section (std::string_view label) noexcept;
+			INISection & section (std::string_view label) noexcept;
 
 			/**
 			 * @brief Reads and parses a key-value configuration file.
@@ -490,6 +490,6 @@ namespace EmEn::Base
 			 */
 			static LineType getLineType (std::string_view line) noexcept;
 
-			std::map< std::string, KVSection > m_sections;
+			std::map< std::string, INISection > m_sections;
 	};
 }
