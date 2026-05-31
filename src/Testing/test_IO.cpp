@@ -31,10 +31,13 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <limits>
+#include <system_error>
 #include <vector>
 
 /* Local inclusions. */
+#include "IO/FileStream.hpp"
 #include "IO/MemoryStream.hpp"
 
 namespace EmEn::Base::IO
@@ -127,5 +130,125 @@ namespace EmEn::Base::IO
 		volatile size_t overflowSize = std::numeric_limits< size_t >::max();
 		const uint8_t source{0x00};
 		EXPECT_FALSE(writer.write(&source, overflowSize));
+	}
+
+	namespace
+	{
+		/* noexcept filesystem helpers (the throwing overloads would terminate under -fno-exceptions). */
+		std::filesystem::path
+		tempFile (const char * name) noexcept
+		{
+			std::error_code errorCode;
+
+			return std::filesystem::temp_directory_path(errorCode) / name;
+		}
+
+		void
+		removeQuietly (const std::filesystem::path & path) noexcept
+		{
+			std::error_code errorCode;
+
+			std::filesystem::remove(path, errorCode);
+		}
+	}
+
+	TEST(IOFileStream, writeThenReadRoundTrip)
+	{
+		const auto path = tempFile("emeraude_base_fs_roundtrip.bin");
+		removeQuietly(path);
+
+		const std::array< uint8_t, 4 > source{0xDE, 0xAD, 0xBE, 0xEF};
+		{
+			FileStream writer{path, FileStream::Mode::Write};
+			ASSERT_TRUE(writer.isOpen());
+			EXPECT_TRUE(writer.write(source.data(), source.size()));
+		}
+		{
+			FileStream reader{path, FileStream::Mode::Read};
+			ASSERT_TRUE(reader.isOpen());
+			EXPECT_EQ(reader.size(), source.size());
+
+			std::array< uint8_t, 4 > destination{};
+			EXPECT_TRUE(reader.read(destination.data(), destination.size()));
+			EXPECT_EQ(source, destination);
+		}
+		removeQuietly(path);
+	}
+
+	TEST(IOFileStream, openMissingFileFails)
+	{
+		const auto path = tempFile("emeraude_base_fs_missing.bin");
+		removeQuietly(path);
+
+		FileStream reader{path, FileStream::Mode::Read};
+		EXPECT_FALSE(reader.isOpen());
+
+		uint8_t value{};
+		EXPECT_FALSE(reader.read(&value, 1));
+	}
+
+	TEST(IOFileStream, readPastEndFails)
+	{
+		const auto path = tempFile("emeraude_base_fs_pastend.bin");
+		removeQuietly(path);
+
+		const std::array< uint8_t, 4 > source{1, 2, 3, 4};
+		{
+			FileStream writer{path, FileStream::Mode::Write};
+			ASSERT_TRUE(writer.write(source.data(), source.size()));
+		}
+		{
+			FileStream reader{path, FileStream::Mode::Read};
+			ASSERT_TRUE(reader.isOpen());
+
+			std::array< uint8_t, 8 > destination{};
+			EXPECT_FALSE(reader.read(destination.data(), destination.size())); /* only 4 bytes exist */
+		}
+		removeQuietly(path);
+	}
+
+	TEST(IOFileStream, modeEnforcement)
+	{
+		const auto path = tempFile("emeraude_base_fs_mode.bin");
+		removeQuietly(path);
+
+		{
+			FileStream writer{path, FileStream::Mode::Write};
+			ASSERT_TRUE(writer.isOpen());
+
+			uint8_t value{};
+			EXPECT_FALSE(writer.read(&value, 1)); /* read on a write-mode stream */
+		}
+		{
+			FileStream reader{path, FileStream::Mode::Read};
+			ASSERT_TRUE(reader.isOpen());
+
+			const uint8_t value{0x42};
+			EXPECT_FALSE(reader.write(&value, 1)); /* write on a read-mode stream */
+		}
+		removeQuietly(path);
+	}
+
+	TEST(IOFileStream, seekAndTell)
+	{
+		const auto path = tempFile("emeraude_base_fs_seek.bin");
+		removeQuietly(path);
+
+		const std::array< uint8_t, 4 > source{0x10, 0x20, 0x30, 0x40};
+		{
+			FileStream writer{path, FileStream::Mode::Write};
+			ASSERT_TRUE(writer.write(source.data(), source.size()));
+		}
+		{
+			FileStream reader{path, FileStream::Mode::Read};
+			ASSERT_TRUE(reader.isOpen());
+			EXPECT_EQ(reader.seek(2, 0), 2);
+			EXPECT_EQ(reader.tell(), 2);
+
+			uint8_t value{};
+			EXPECT_TRUE(reader.read(&value, 1));
+			EXPECT_EQ(value, source[2]);
+		}
+		removeQuietly(path);
 	}
 }
