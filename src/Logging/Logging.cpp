@@ -39,7 +39,10 @@ namespace EmEn::Base::Logging
 		void
 		defaultSink (Severity severity, const char * tag, std::string_view message) noexcept
 		{
-			std::cerr << '[' << (tag != nullptr ? tag : "") << "] (" << to_cstring(severity) << ") " << message << '\n';
+			/* Warning/Error/Fatal -> stderr; Debug/Info/Success -> stdout. */
+			std::ostream & stream = (severity == Severity::Warning || severity == Severity::Error || severity == Severity::Fatal) ? std::cerr : std::cout;
+
+			stream << '[' << (tag != nullptr ? tag : "") << "] (" << to_cstring(severity) << ") " << message << '\n';
 		}
 
 		/* Function-local statics (no globally-accessible mutable state, no static

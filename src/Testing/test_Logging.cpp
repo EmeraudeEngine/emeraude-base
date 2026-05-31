@@ -69,18 +69,29 @@ namespace EmEn::Base
 		Logging::setSink(nullptr);
 	}
 
-	TEST(Logging, defaultSinkWritesToCerr)
+	TEST(Logging, defaultSinkSplitsStdoutStderr)
 	{
 		Logging::setSink(nullptr);
 
-		std::stringstream buffer;
-		auto * previous = std::cerr.rdbuf(buffer.rdbuf());
-		Logging::log(Severity::Info, "Boot", "ready");
-		std::cerr.rdbuf(previous);
+		std::stringstream outBuffer;
+		std::stringstream errBuffer;
+		auto * previousOut = std::cout.rdbuf(outBuffer.rdbuf());
+		auto * previousErr = std::cerr.rdbuf(errBuffer.rdbuf());
 
-		const auto output = buffer.str();
-		EXPECT_NE(output.find("Boot"), std::string::npos);
-		EXPECT_NE(output.find("ready"), std::string::npos);
-		EXPECT_NE(output.find("Info"), std::string::npos);
+		Logging::log(Severity::Info, "Boot", "ready");     /* -> stdout */
+		Logging::log(Severity::Error, "Disk", "failure");  /* -> stderr */
+
+		std::cout.rdbuf(previousOut);
+		std::cerr.rdbuf(previousErr);
+
+		const auto out = outBuffer.str();
+		const auto err = errBuffer.str();
+
+		/* Info -> stdout only. */
+		EXPECT_NE(out.find("ready"), std::string::npos);
+		EXPECT_EQ(err.find("ready"), std::string::npos);
+		/* Error -> stderr only. */
+		EXPECT_NE(err.find("failure"), std::string::npos);
+		EXPECT_EQ(out.find("failure"), std::string::npos);
 	}
 }

@@ -53,7 +53,8 @@ namespace EmEn::Base::Logging
 
 	/**
 	 * @brief Emits a diagnostic message through the current sink.
-	 * @note Thread-safe. With no installed sink, writes to std::cerr.
+	 * @note Thread-safe. With no installed sink, routes by severity to std::cout
+	 * (Debug/Info/Success) or std::cerr (Warning/Error/Fatal).
 	 * @param severity The message severity.
 	 * @param tag A short category tag (must outlive the call; usually a string literal).
 	 * @param message The message body.

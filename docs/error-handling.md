@@ -99,7 +99,8 @@ Logging::error("VertexFactory", "MD3 header claims more triangles than the strea
 Logging::log(Severity::Warning, "WaveFactory", message);
 ```
 
-- The sink defaults to `std::cerr`; when the **engine Tracer** is running it registers itself
+- The default sink splits by severity — Debug/Info/Success → `std::cout`, Warning/Error/Fatal
+  → `std::cerr`; when the **engine Tracer** is running it registers itself
   as the sink, so base diagnostics flow into the Tracer (files, colour, tag filtering)
   automatically — base stays engine-agnostic.
 - **No new raw `std::cerr`/`std::cout`** in base. The legacy raw-`cerr` sites migrate to the
