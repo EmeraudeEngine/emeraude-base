@@ -27,272 +27,150 @@
 #include "Variant.hpp"
 
 /* STL inclusions. */
-#include <iostream>
+#include <ostream>
+#include <string>
 #include <type_traits>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base
 {
 	using namespace Math;
 	using namespace PixelFactory;
 
-	int8_t
-	Variant::asInteger8 () const noexcept
+	template< typename T >
+	T
+	Variant::as (const char * requested) const noexcept
 	{
-		if ( const auto * p = std::get_if< int8_t >(&m_data) )
+		if ( const auto * p = std::get_if< T >(&m_data) )
 		{
 			return *p;
 		}
 
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'int8_t' !" "\n";
+		Logging::error("Variant", std::string{"requested '"} + requested + "' but the variant holds '" + to_cstring(type()) + "'.");
 
-		return 0;
+		return T{};
+	}
+
+	int8_t
+	Variant::asInteger8 () const noexcept
+	{
+		return this->as< int8_t >(Integer8String);
 	}
 
 	uint8_t
 	Variant::asUnsignedInteger8 () const noexcept
 	{
-		if ( const auto * p = std::get_if< uint8_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'uint8_t' !" "\n";
-
-		return 0;
+		return this->as< uint8_t >(UnsignedInteger8String);
 	}
 
 	int16_t
 	Variant::asInteger16 () const noexcept
 	{
-		if ( const auto * p = std::get_if< int16_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'int16_t' !" "\n";
-
-		return 0;
+		return this->as< int16_t >(Integer16String);
 	}
 
 	uint16_t
 	Variant::asUnsignedInteger16 () const noexcept
 	{
-		if ( const auto * p = std::get_if< uint16_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'uint16_t' !" "\n";
-
-		return 0;
+		return this->as< uint16_t >(UnsignedInteger16String);
 	}
 
 	int32_t
 	Variant::asInteger32 () const noexcept
 	{
-		if ( const auto * p = std::get_if< int32_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'int32_t' !" "\n";
-
-		return 0;
+		return this->as< int32_t >(Integer32String);
 	}
 
 	uint32_t
 	Variant::asUnsignedInteger32 () const noexcept
 	{
-		if ( const auto * p = std::get_if< uint32_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'uint32_t' !" "\n";
-
-		return 0;
+		return this->as< uint32_t >(UnsignedInteger32String);
 	}
 
 	int64_t
 	Variant::asInteger64 () const noexcept
 	{
-		if ( const auto * p = std::get_if< int64_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'int64_t' !" "\n";
-
-		return 0;
+		return this->as< int64_t >(Integer64String);
 	}
 
 	uint64_t
 	Variant::asUnsignedInteger64 () const noexcept
 	{
-		if ( const auto * p = std::get_if< uint64_t >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'uint64_t' !" "\n";
-
-		return 0;
+		return this->as< uint64_t >(UnsignedInteger64String);
 	}
 
 	float
 	Variant::asFloat () const noexcept
 	{
-		if ( const auto * p = std::get_if< float >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'float' !" "\n";
-
-		return 0.0F;
+		return this->as< float >(FloatString);
 	}
 
 	double
 	Variant::asDouble () const noexcept
 	{
-		if ( const auto * p = std::get_if< double >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'double' !" "\n";
-
-		return 0.0;
+		return this->as< double >(DoubleString);
 	}
 
 	long double
 	Variant::asLongDouble () const noexcept
 	{
-		if ( const auto * p = std::get_if< long double >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'long double' !" "\n";
-
-		return 0.0L;
+		return this->as< long double >(LongDoubleString);
 	}
 
 	bool
 	Variant::asBool () const noexcept
 	{
-		if ( const auto * p = std::get_if< bool >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'bool' !" "\n";
-
-		return false;
+		return this->as< bool >(BooleanString);
 	}
 
 	Vector2F
 	Variant::asVector2Float () const noexcept
 	{
-		if ( const auto * p = std::get_if< Vector2F >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Vector2F' !" "\n";
-
-		return {};
+		return this->as< Vector2F >(Vector2FloatString);
 	}
 
 	Vector3F
 	Variant::asVector3Float () const noexcept
 	{
-		if ( const auto * p = std::get_if< Vector3F >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Vector3F' !" "\n";
-
-		return {};
+		return this->as< Vector3F >(Vector3FloatString);
 	}
 
 	Vector4F
 	Variant::asVector4Float () const noexcept
 	{
-		if ( const auto * p = std::get_if< Vector4F >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Vector4F' !" "\n";
-
-		return {};
+		return this->as< Vector4F >(Vector4FloatString);
 	}
 
 	Matrix2F
 	Variant::asMatrix2Float () const noexcept
 	{
-		if ( const auto * p = std::get_if< Matrix2F >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Matrix2F' !" "\n";
-
-		return {};
+		return this->as< Matrix2F >(Matrix2FloatString);
 	}
 
 	Matrix3F
 	Variant::asMatrix3Float () const noexcept
 	{
-		if ( const auto * p = std::get_if< Matrix3F >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Matrix3F' !" "\n";
-
-		return {};
+		return this->as< Matrix3F >(Matrix3FloatString);
 	}
 
 	Matrix4F
 	Variant::asMatrix4Float () const noexcept
 	{
-		if ( const auto * p = std::get_if< Matrix4F >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Matrix4F' !" "\n";
-
-		return {};
+		return this->as< Matrix4F >(Matrix4FloatString);
 	}
 
 	CartesianFrameF
 	Variant::asCartesianFrameFloat () const noexcept
 	{
-		if ( const auto * p = std::get_if< CartesianFrameF >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'CoordinatesF' !" "\n";
-
-		return {};
+		return this->as< CartesianFrameF >(CartesianFrameString);
 	}
 
 	ColorF
 	Variant::asColor () const noexcept
 	{
-		if ( const auto * p = std::get_if< ColorF >(&m_data) )
-		{
-			return *p;
-		}
-
-		std::cerr << "This Variant(" << to_cstring(type()) << ") is not a 'Color' !" "\n";
-
-		return {};
+		return this->as< ColorF >(ColorString);
 	}
 
 	std::ostream &

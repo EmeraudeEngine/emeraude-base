@@ -581,6 +581,22 @@ namespace EmEn::Base
 		private:
 
 			/**
+			 * @brief Exception-free typed extraction helper shared by every `asXxx()` accessor.
+			 *
+			 * Returns the held value when the active alternative is `T`; otherwise logs a
+			 * type-mismatch error (caller-contract violation) and returns a value-initialised
+			 * `T{}`. Never throws, never aborts, never dereferences a null alternative — so it
+			 * is safe under `-fno-exceptions`. Defined in the translation unit and instantiated
+			 * by the public accessors.
+			 *
+			 * @tparam T The alternative type to extract.
+			 * @param requested Human-readable name of the requested type, for the error message.
+			 * @return The held value, or `T{}` on type mismatch.
+			 */
+			template< typename T >
+			T as (const char * requested) const noexcept;
+
+			/**
 			 * @brief Writes a human-readable representation of the variant to an output stream.
 			 *
 			 * Uses `std::visit` to stream the active value directly. When the variant is null,

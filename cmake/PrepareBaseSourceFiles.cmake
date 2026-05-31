@@ -71,5 +71,6 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ThreadPool.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Time.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_TokenFormatter.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Variant.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Version.cpp
 )
