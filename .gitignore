@@ -20,3 +20,6 @@ cmake-build-*
 .claude/settings.local.json
 .claude-build-debug/
 .claude-build-release/
+
+# Temporary tests resources
+resources/assets/tmp_*
