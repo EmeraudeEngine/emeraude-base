@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <cstddef>
 #include <cstring>
+#include <limits>
 #include <vector>
 
 /* Local inclusions for inheritances. */
@@ -84,7 +85,8 @@ namespace EmEn::Base::IO
 			bool
 			read (void * data, size_t size) noexcept override
 			{
-				if ( m_readData == nullptr || m_position + size > m_dataSize )
+				/* Overflow-safe: m_position + size could wrap. m_position <= m_dataSize is an invariant. */
+			if ( m_readData == nullptr || m_position > m_dataSize || size > m_dataSize - m_position )
 				{
 					return false;
 				}
@@ -105,7 +107,13 @@ namespace EmEn::Base::IO
 					return false;
 				}
 
-				const auto endPos = m_writePosition + size;
+				/* Reject a size that would overflow the write position (untrusted-input guard). */
+			if ( size > std::numeric_limits< size_t >::max() - m_writePosition )
+			{
+				return false;
+			}
+
+			const auto endPos = m_writePosition + size;
 
 				/* Extend buffer if writing past current size. */
 				if ( endPos > m_writeBuffer->size() )
