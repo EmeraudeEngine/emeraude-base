@@ -151,8 +151,9 @@ namespace EmEn::Base::Animation
 							std::string name;
 							hs >> name;
 
-							/* Remove quotes from joint name. */
-							if ( name.front() == '"' && name.back() == '"' )
+							/* Remove quotes from joint name (guard against an empty/one-char token from a
+							 * truncated file: front()/back() on an empty string is UB). */
+							if ( name.size() >= 2 && name.front() == '"' && name.back() == '"' )
 							{
 								name = name.substr(1, name.size() - 2);
 							}

@@ -83,7 +83,10 @@ namespace EmEn::Base::FastJSON
 					case '{' :
 						++depth;
 
-						if ( depth > limit )
+						/* jsoncpp's CharReader throws RuntimeError when depth REACHES stackLimit (not just
+						 * beyond it); under -fno-exceptions that terminates. Reject at the limit so the
+						 * throwing path is never reached (found by the JSON-SFX fuzzer, Ave robustus! A.3). */
+						if ( depth >= limit )
 						{
 							return true;
 						}

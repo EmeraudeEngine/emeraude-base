@@ -105,7 +105,7 @@ namespace EmEn::Base::FastJSON
 	std::optional< Json::Value >
 	getArray (const Json::Value & parentNode, const char * key) noexcept
 	{
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -141,7 +141,7 @@ namespace EmEn::Base::FastJSON
 	std::optional< Json::Value >
 	getObject (const Json::Value & parentNode, const char * key) noexcept
 	{
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -178,7 +178,7 @@ namespace EmEn::Base::FastJSON
 	std::optional< value_t >
 	getValue (const Json::Value & parentNode, const char * key) noexcept requires (std::is_arithmetic_v< value_t >)
 	{
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -253,7 +253,7 @@ namespace EmEn::Base::FastJSON
 	std::optional< value_t >
 	getValue (const Json::Value & parentNode, const char * key) requires (std::is_same_v< value_t, std::string >)
 	{
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -342,7 +342,7 @@ namespace EmEn::Base::FastJSON
 	{
 		using Traits = Math::VectorTraits< value_t >;
 
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -383,7 +383,7 @@ namespace EmEn::Base::FastJSON
 
 		constexpr size_t element_count = Traits::dim * Traits::dim;
 
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -422,7 +422,7 @@ namespace EmEn::Base::FastJSON
 	{
 		using precision_t = typename PixelFactory::ColorTraits< value_t >::precision;
 
-		if ( !parentNode.isMember(key) )
+		if ( !parentNode.isObject() || !parentNode.isMember(key) )
 		{
 			if constexpr ( IsDebug )
 			{
@@ -474,7 +474,7 @@ namespace EmEn::Base::FastJSON
 	std::optional< std::string >
 	getValidatedStringValue (const Json::Value & data, std::string_view key, const std::array< std::string_view, dim_t > & possibleValues) requires (dim_t > 0)
 	{
-		if ( const std::string keyString{key}; data.isMember(keyString) )
+		if ( const std::string keyString{key}; data.isObject() && data.isMember(keyString) )
 		{
 			if ( const auto & node = data[keyString]; node.isString() )
 			{

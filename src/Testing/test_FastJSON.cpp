@@ -125,8 +125,41 @@ namespace EmEn::Base::FastJSON
 		EXPECT_FALSE(getRootFromString(deep, 16, true).has_value());
 	}
 
+	TEST(FastJSON, nestingExactlyAtStackLimitIsRejectedNotThrown)
+	{
+		/* Regression (Ave robustus! A.3 — JSON-SFX fuzzer): jsoncpp's CharReader THROWS
+		 * Json::RuntimeError when nesting depth REACHES stackLimit, which is std::terminate
+		 * under -fno-exceptions. The pre-guard must reject at the limit, not only beyond it.
+		 * Depth == limit was the crashing boundary (16 '[' at the default stackLimit of 16). */
+		EXPECT_FALSE(getRootFromString(std::string(16, '['), 16, true).has_value());
+		EXPECT_FALSE(getRootFromString(std::string(64, '['), 64, true).has_value());
+		/* A document strictly under the limit still parses (sanity: the guard is not too eager). */
+		EXPECT_TRUE(getRootFromString(R"({"a":{"b":{"c":1}}})", 16, true).has_value());
+	}
+
 	TEST(FastJSON, missingFileReturnsNullopt)
 	{
 		EXPECT_FALSE(getRootFromFile("/nonexistent/emeraude_base_fastjson_test.json", 16, true).has_value());
+	}
+
+	TEST(FastJSON, nonObjectNodeAccessorsAreSafe)
+	{
+		/* Regression (Ave robustus! A.3 — found by the JSON-SFX libFuzzer target): jsoncpp's
+		 * isMember()/operator[] THROW Json::LogicError on a non-object value, which is
+		 * std::terminate under -fno-exceptions. A top-level JSON array reaching getValue() was
+		 * the crash. Every FastJSON key accessor must treat a non-object node as "no such key"
+		 * and return nullopt, never reach jsoncpp's throwing path. */
+		const Json::Value scalar{42};
+		EXPECT_FALSE(getValue< int32_t >(scalar, "x").has_value());
+		EXPECT_FALSE(getValue< std::string >(scalar, "x").has_value());
+		EXPECT_FALSE(getArray(scalar, "x").has_value());
+		EXPECT_FALSE(getObject(scalar, "x").has_value());
+
+		Json::Value array{Json::arrayValue};
+		array.append(1);
+		array.append(2);
+		EXPECT_FALSE(getValue< int32_t >(array, "x").has_value());
+		EXPECT_FALSE(getArray(array, "x").has_value());
+		EXPECT_FALSE(getObject(array, "x").has_value());
 	}
 }

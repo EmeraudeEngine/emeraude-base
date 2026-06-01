@@ -1,0 +1,11 @@
+# Generated fuzzing artifacts — never tracked. Sources (fuzz_*.cpp), the build script,
+# the README and this file are the only tracked entries under fuzzing/.
+build/
+corpus/
+
+# libFuzzer crash / failure reproducers (written to the run directory).
+crash-*
+leak-*
+timeout-*
+oom-*
+slow-unit-*
