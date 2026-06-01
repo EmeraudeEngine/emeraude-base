@@ -51,5 +51,3 @@ else ()
 		m
 	)
 endif ()
-
-set(LIBSNDFILE_ENABLED On)

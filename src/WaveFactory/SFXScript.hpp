@@ -33,6 +33,7 @@
 
 /* Local inclusions. */
 #include "FastJSON.hpp"
+#include "Logging/Logging.hpp"
 #include "Synthesizer.hpp"
 
 namespace EmEn::Base::WaveFactory
@@ -106,7 +107,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !root.has_value() )
 				{
-					std::cerr << "[SFXScript] Failed to parse JSON file: " << filepath << "\n";
+					Logging::error("SFXScript", std::string{"Failed to parse JSON file: "} + filepath.string());
 
 					return false;
 				}
@@ -127,7 +128,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !root.has_value() )
 				{
-					std::cerr << "[SFXScript] Failed to parse JSON string !\n";
+					Logging::error("SFXScript", "Failed to parse JSON string !");
 
 					return false;
 				}
@@ -185,7 +186,19 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !durationMs.has_value() )
 				{
-					std::cerr << "[SFXScript] Missing 'duration' field (in milliseconds) !\n";
+					Logging::error("SFXScript", "Missing 'duration' field (in milliseconds) !");
+
+					return false;
+				}
+
+				/* Cap the requested duration. sampleCount below drives one full Synthesizer buffer
+				 * allocation per track; an unbounded duration from the (untrusted) JSON would turn
+				 * that allocation into an OOM -> std::terminate under -fno-exceptions. */
+				constexpr uint32_t MaxDurationMs = 30 * 60 * 1000; /* 30 minutes. */
+
+				if ( durationMs.value() > MaxDurationMs )
+				{
+					Logging::error("SFXScript", std::string{"processScript(), 'duration' exceeds the "} + std::to_string(MaxDurationMs) + " ms limit !");
 
 					return false;
 				}
@@ -196,7 +209,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( channels == Channels::Invalid )
 				{
-					std::cerr << "[SFXScript] Invalid channel count: " << channelCount << " (only 1 or 2 supported) !\n";
+					Logging::error("SFXScript", std::string{"Invalid channel count: "} + std::to_string(channelCount) + " (only 1 or 2 supported) !");
 
 					return false;
 				}
@@ -206,14 +219,14 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !tracks.has_value() )
 				{
-					std::cerr << "[SFXScript] Missing 'tracks' array !\n";
+					Logging::error("SFXScript", "Missing 'tracks' array !");
 
 					return false;
 				}
 
 				if ( tracks.value().size() != channelCount )
 				{
-					std::cerr << "[SFXScript] Track count (" << tracks.value().size() << ") doesn't match channel count (" << channelCount << ") !\n";
+					Logging::error("SFXScript", std::string{"Track count ("} + std::to_string(tracks.value().size()) + ") doesn't match channel count (" + std::to_string(channelCount) + ") !");
 
 					return false;
 				}
@@ -234,7 +247,7 @@ namespace EmEn::Base::WaveFactory
 
 					if ( !this->processTrack(trackWaves[trackIndex], trackData, sampleCount, sampleRate) )
 					{
-						std::cerr << "[SFXScript] Failed to process track " << trackIndex << " !\n";
+						Logging::error("SFXScript", std::string{"Failed to process track "} + std::to_string(trackIndex) + " !");
 
 						return false;
 					}
@@ -257,7 +270,7 @@ namespace EmEn::Base::WaveFactory
 				/* Initialize the final wave with proper channel count. */
 				if ( !m_wave.initialize(sampleCount, channels, m_frequency) )
 				{
-					std::cerr << "[SFXScript] Failed to initialize output wave !\n";
+					Logging::error("SFXScript", "Failed to initialize output wave !");
 
 					return false;
 				}
@@ -379,7 +392,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !type.has_value() )
 				{
-					std::cerr << "[SFXScript] Instruction missing 'type' field !\n";
+					Logging::error("SFXScript", "Instruction missing 'type' field !");
 
 					return false;
 				}
@@ -672,7 +685,7 @@ namespace EmEn::Base::WaveFactory
 					return synth.reverse();
 				}
 
-				std::cerr << "[SFXScript] Unknown instruction type: " << typeStr << "\n";
+				Logging::error("SFXScript", std::string{"Unknown instruction type: "} + typeStr);
 
 				return false;
 			}

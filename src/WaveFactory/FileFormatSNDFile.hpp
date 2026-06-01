@@ -32,15 +32,17 @@
 /* STL inclusions. */
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include <type_traits>
 
 /* Third-party inclusions. */
-#ifdef LIBSNDFILE_ENABLED
 #include "sndfile.h"
-#endif
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+
+/* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "Types.hpp"
@@ -67,7 +69,7 @@ namespace EmEn::Base::WaveFactory
 			bool
 			readStream (IO::ByteStream & /*stream*/, Wave< precision_t > & /*wave*/, const ReadOptions & /*options*/) noexcept override
 			{
-				std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), precision format not handled !\n";
+				Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), precision format not handled !");
 
 				return false;
 			}
@@ -77,13 +79,11 @@ namespace EmEn::Base::WaveFactory
 			bool
 			writeStream (IO::ByteStream & /*stream*/, const Wave< precision_t > & /*wave*/, const WriteOptions & /*options*/) const noexcept override
 			{
-				std::cerr << "[WaveFactory::FileFormatSNDFile] writeStream(), precision format not handled !\n";
+				Logging::error("WaveFactory::FileFormatSNDFile", "writeStream(), precision format not handled !");
 
 				return false;
 			}
 	};
-
-#ifdef LIBSNDFILE_ENABLED
 
 	/**
 	 * @brief Virtual I/O callbacks for libsndfile using ByteStream.
@@ -160,7 +160,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), stream is not open !\n";
+					Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), stream is not open !");
 
 					return false;
 				}
@@ -184,7 +184,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( file == nullptr )
 				{
-					std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), unable to open audio stream !\n";
+					Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), unable to open audio stream !");
 
 					return false;
 				}
@@ -204,14 +204,30 @@ namespace EmEn::Base::WaveFactory
 
 				if ( channels == Channels::Invalid )
 				{
-					std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), invalid channels !\n";
+					Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), invalid channels !");
 
 					isDataValid = false;
 				}
 
 				if ( frequency == Frequency::Invalid )
 				{
-					std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), invalid frequency !\n";
+					Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), invalid frequency !");
+
+					isDataValid = false;
+				}
+
+				/* Defensive bound on the decode buffer size. libsndfile fills soundFileInfos.frames
+				 * from the (untrusted) file header; for VBR formats (Ogg/Vorbis) it is only an
+				 * *estimate*. A crafted file can announce an enormous frame count, turning the float
+				 * decode buffer allocation below into an OOM -> std::terminate under -fno-exceptions.
+				 * Reject anything beyond a generous absolute ceiling (cancel the load, never crash).
+				 * Written division-first to stay overflow-safe (channels is 1 or 2 when valid). */
+				constexpr size_t MaxDecodedSamples = static_cast< size_t >(512) * 1024 * 1024; /* 512 M float samples => 2 GiB buffer. */
+
+				if ( soundFileInfos.frames < 0 || soundFileInfos.channels <= 0 ||
+					static_cast< size_t >(soundFileInfos.frames) > MaxDecodedSamples / static_cast< size_t >(soundFileInfos.channels) )
+				{
+					Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), declared frame count is out of the supported range !");
 
 					isDataValid = false;
 				}
@@ -247,7 +263,7 @@ namespace EmEn::Base::WaveFactory
 
 						if ( actualRead <= 0 )
 						{
-							std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), libsndfile returned no frames: " << sf_strerror(file) << "\n";
+							Logging::error("WaveFactory::FileFormatSNDFile", std::string{"readStream(), libsndfile returned no frames: "} + sf_strerror(file));
 
 							isDataValid = false;
 						}
@@ -282,7 +298,7 @@ namespace EmEn::Base::WaveFactory
 					}
 					else
 					{
-						std::cerr << "[WaveFactory::FileFormatSNDFile] readStream(), unable to allocate memory !\n";
+						Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), unable to allocate memory !");
 
 						isDataValid = false;
 					}
@@ -300,7 +316,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[WaveFactory::FileFormatSNDFile] writeStream(), stream is not open !\n";
+					Logging::error("WaveFactory::FileFormatSNDFile", "writeStream(), stream is not open !");
 
 					return false;
 				}
@@ -338,17 +354,26 @@ namespace EmEn::Base::WaveFactory
 
 				if ( file == nullptr )
 				{
-					std::cerr << "[WaveFactory::FileFormatSNDFile] writeStream(), unable to open audio stream for writing !\n";
+					Logging::error("WaveFactory::FileFormatSNDFile", "writeStream(), unable to open audio stream for writing !");
 
 					return false;
 				}
 
-				sf_writef_short(file, wave.data().data(), static_cast< sf_count_t >(wave.sampleCount()));
+				const auto framesToWrite = static_cast< sf_count_t >(wave.sampleCount());
+				const auto framesWritten = sf_writef_short(file, wave.data().data(), framesToWrite);
+
+				if ( framesWritten != framesToWrite )
+				{
+					Logging::error("WaveFactory::FileFormatSNDFile", std::string{"writeStream(), short write ("} + std::to_string(framesWritten) + "/" + std::to_string(framesToWrite) + " frames): " + sf_strerror(file));
+
+					sf_close(file);
+
+					return false;
+				}
 
 				sf_close(file);
 
 				return true;
 			}
 	};
-#endif
 }

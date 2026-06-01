@@ -23,3 +23,4 @@ else ()
 		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/libsamplerate.a)
 	endif ()
 endif ()
+

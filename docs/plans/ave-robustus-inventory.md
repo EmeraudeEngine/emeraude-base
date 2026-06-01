@@ -87,6 +87,7 @@ These emerged from the audit and matter for sequencing:
 - **Target/kind/deps:** `emeraude::base::wave` — OBJECT, deps sndfile/samplerate/TinySoundFont. Status TODO. ~7.4k LOC, mostly header-only.
 - **Test files:** none.
 - **Overall:** Feature-rich (50+ DSP ops, full MIDI parser + SF2 renderer), but the entire untrusted-input surface (libsndfile virtual I/O, 1720-line MIDI parser, JSON SFX) has 0 tests.
+- **A.2 STATUS (done):** untrusted-input surface hardened + 14 tests (`test_WaveFactoryFileFormats.cpp`), green in Release and under ASan/UBSan. Fixed: MIDI `division==0` (UB), MIDI `trackCount` reserve clamp, libsndfile VBR `frames` decode-buffer bound, `sf_writef_short` short-write check (🐞), JSON SFX duration cap. cerr→Logging across the parsers + `Processor::resample`. The `*_ENABLED` compile guards were removed (deps always present); TinySoundFont impl is host-owned (base tests compile it via `Testing/TinySoundFontImpl.cpp`). Processor/Synthesizer characterization (the 28 `return false` paths) remains deferred — not an untrusted-input surface.
 
 | Promised capability | Source | Real state | Gap | "Utility blinded" criterion |
 |---|---|---|---|---|

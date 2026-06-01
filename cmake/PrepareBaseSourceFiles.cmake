@@ -43,6 +43,8 @@ set(EMERAUDE_BASE_SOURCES
 )
 
 set(EMERAUDE_BASE_TEST_SOURCES
+	# TinySoundFont implementation, compiled into the test binary only (see the file header).
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/TinySoundFontImpl.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/main.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FastJSON.cpp
@@ -74,4 +76,5 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Variant.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Version.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryFileFormats.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryFileFormats.cpp
 )

@@ -37,6 +37,7 @@
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 #include "SFXScript.hpp"
 #include "Wave.hpp"
 
@@ -63,7 +64,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[WaveFactory::FileFormatJSON] readStream(), stream is not open !\n";
+					Logging::error("WaveFactory::FileFormatJSON", "readStream(), stream is not open !");
 
 					return false;
 				}
@@ -75,7 +76,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !stream.read(jsonString.data(), dataSize) )
 				{
-					std::cerr << "[WaveFactory::FileFormatJSON] readStream(), failed to read stream data !\n";
+					Logging::error("WaveFactory::FileFormatJSON", "readStream(), failed to read stream data !");
 
 					return false;
 				}
@@ -84,7 +85,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !script.generateFromString(jsonString) )
 				{
-					std::cerr << "[WaveFactory::FileFormatJSON] readStream(), failed to generate audio from JSON data !\n";
+					Logging::error("WaveFactory::FileFormatJSON", "readStream(), failed to generate audio from JSON data !");
 
 					return false;
 				}
@@ -99,7 +100,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				/* NOTE: Writing a wave back to JSON would require reverse-engineering the synthesis,
 				 * which is not practical. This format is read-only. */
-				std::cerr << "[WaveFactory::FileFormatJSON] writeStream() is not supported ! JSON format is read-only.\n";
+				Logging::error("WaveFactory::FileFormatJSON", "writeStream() is not supported ! JSON format is read-only.");
 
 				return false;
 			}

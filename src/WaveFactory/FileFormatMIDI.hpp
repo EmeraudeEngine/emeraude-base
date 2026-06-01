@@ -47,11 +47,10 @@
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "Logging/Logging.hpp"
 #include "Processor.hpp"
 #include "Synthesizer.hpp"
 #include "Wave.hpp"
-
-/* TinySoundFont inclusion for SoundFont rendering. */
 
 namespace EmEn::Base::WaveFactory
 {
@@ -76,7 +75,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !stream.isOpen() )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] readStream(), stream is not open !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "readStream(), stream is not open !");
 
 					return false;
 				}
@@ -92,7 +91,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !stream.read(buffer.data(), dataSize) )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] readStream(), failed to read stream data !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "readStream(), failed to read stream data !");
 
 					return false;
 				}
@@ -128,7 +127,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				/* NOTE: Converting audio back to MIDI would require pitch detection and note segmentation,
 				 * which is beyond the scope of this basic implementation. */
-				std::cerr << "[WaveFactory::FileFormatMIDI] writeStream() is not supported ! MIDI format is read-only.\n";
+				Logging::error("WaveFactory::FileFormatMIDI", "writeStream() is not supported ! MIDI format is read-only.");
 
 				return false;
 			}
@@ -246,7 +245,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !this->parseHeader(input, header) )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] processIStream(), invalid MIDI header !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "processIStream(), invalid MIDI header !");
 
 					return false;
 				}
@@ -257,15 +256,20 @@ namespace EmEn::Base::WaveFactory
 				std::vector< TempoEvent > tempoEvents;
 				std::array< ChannelState, 16 > channelStates{};
 
-				notes.reserve(header.trackCount * 100);
-				controlEvents.reserve(header.trackCount * 50);
+				/* Reserve hints derive from the untrusted track count (uint16, up to 65535). Clamp
+				 * them so a malformed header cannot trigger a large speculative allocation before the
+				 * per-track parse (which fails fast on a missing MTrk chunk) gets a chance to run. */
+				const size_t reserveTracks = std::min< size_t >(header.trackCount, 256);
+
+				notes.reserve(reserveTracks * 100);
+				controlEvents.reserve(reserveTracks * 50);
 				tempoEvents.reserve(16);
 
 				for ( uint16_t trackIndex = 0; trackIndex < header.trackCount; ++trackIndex )
 				{
 					if ( !this->parseTrack(input, notes, controlEvents, tempoEvents, channelStates, trackIndex) )
 					{
-						std::cerr << "[WaveFactory::FileFormatMIDI] processIStream(), failed to parse track " << trackIndex << " !\n";
+						Logging::error("WaveFactory::FileFormatMIDI", std::string{"processIStream(), failed to parse track "} + std::to_string(trackIndex) + " !");
 
 						return false;
 					}
@@ -284,7 +288,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( notes.empty() )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] processIStream(), no notes found !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "processIStream(), no notes found !");
 
 					return false;
 				}
@@ -297,7 +301,7 @@ namespace EmEn::Base::WaveFactory
 				/* Render notes to wave. */
 				if ( !this->renderToWave(wave, notes, controlEvents, tempoEvents, header, channelStates) )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] processIStream(), failed to render audio !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "processIStream(), failed to render audio !");
 
 					return false;
 				}
@@ -389,7 +393,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( length != 6 )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] parseHeader(), unexpected header length: " << length << " !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", std::string{"parseHeader(), unexpected header length: "} + std::to_string(length) + " !");
 
 					return false;
 				}
@@ -402,7 +406,17 @@ namespace EmEn::Base::WaveFactory
 				/* Check for SMPTE time division (not supported). */
 				if ( header.division & 0x8000 )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] parseHeader(), SMPTE time division not supported !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "parseHeader(), SMPTE time division not supported !");
+
+					return false;
+				}
+
+				/* A zero division (ticks-per-quarter-note) is malformed: it is the divisor in the
+				 * tick->sample tempo conversion. Left unchecked it yields +inf and the cast to a
+				 * uint32_t sample count is undefined behaviour. Reject it — cancel the load. */
+				if ( header.division == 0 )
+				{
+					Logging::error("WaveFactory::FileFormatMIDI", "parseHeader(), zero time division is invalid !");
 
 					return false;
 				}
@@ -1092,14 +1106,14 @@ namespace EmEn::Base::WaveFactory
 
 				if ( totalSamples > maxSamples )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] renderWithSoundfont(), MIDI duration exceeds " << MaxDurationSeconds << "s limit, clamping.\n";
+					Logging::warning("WaveFactory::FileFormatMIDI", std::string{"renderWithSoundfont(), MIDI duration exceeds "} + std::to_string(MaxDurationSeconds) + "s limit, clamping.");
 					totalSamples = maxSamples;
 				}
 
 				/* Initialize the wave as stereo. */
 				if ( !wave.initialize(totalSamples, Channels::Stereo, m_frequency) )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] renderWithSoundfont(), failed to initialize wave !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "renderWithSoundfont(), failed to initialize wave !");
 
 					return false;
 				}
@@ -1456,7 +1470,7 @@ namespace EmEn::Base::WaveFactory
 				/* Initialize the wave as stereo. */
 				if ( !wave.initialize(totalSamples, Channels::Stereo, m_frequency) )
 				{
-					std::cerr << "[WaveFactory::FileFormatMIDI] renderToWave(), failed to initialize wave !\n";
+					Logging::error("WaveFactory::FileFormatMIDI", "renderToWave(), failed to initialize wave !");
 
 					return false;
 				}

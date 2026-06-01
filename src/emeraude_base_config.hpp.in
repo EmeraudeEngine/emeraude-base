@@ -34,7 +34,6 @@
 /* Stable platform / arch / OS detection (preprocessor only, never regenerated). */
 #include "emeraude_platform.hpp"
 
-#cmakedefine LIBSNDFILE_ENABLED
 
 /* Allow CMake On/Off option values to substitute as C++ booleans. */
 #define ON true

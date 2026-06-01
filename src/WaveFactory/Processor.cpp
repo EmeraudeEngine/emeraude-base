@@ -36,6 +36,7 @@
 #include <iostream>
 #include <limits>
 #include <random>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -43,6 +44,7 @@
 #include <samplerate.h>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::WaveFactory
@@ -100,14 +102,14 @@ namespace EmEn::Base::WaveFactory
 	{
 		if ( !m_wave.isValid() )
 		{
-			std::cerr << "Processor::resample(), no wave to resample !" "\n";
+			Logging::error("WaveFactory::Processor", "resample(), no wave to resample !");
 
 			return false;
 		}
 
 		if ( m_wave.frequency() == frequency )
 		{
-			std::cout << "Processor::resample(), the frequency is already at " << static_cast< int >(frequency) << " Hz !" "\n";
+			Logging::info("WaveFactory::Processor", std::string{"resample(), the frequency is already at "} + std::to_string(static_cast< int >(frequency)) + " Hz !");
 
 			return true;
 		}
@@ -135,7 +137,7 @@ namespace EmEn::Base::WaveFactory
 
 		if ( error > 0 )
 		{
-			std::cerr << src_strerror(error) << "\n";
+			Logging::error("WaveFactory::Processor", src_strerror(error));
 
 			return false;
 		}
