@@ -87,6 +87,33 @@ validated**. Before using a read value:
 - On any inconsistency: fail per §2 (return `false`/`nullopt` + diagnostic), never UB, never
   OOM, never crash.
 
+### 5.1 C-library error callbacks — `setjmp`/`longjmp` (sanctioned)
+
+Some third-party C decoders report a fatal error by invoking a caller-supplied callback that
+**must not return** — if it returns, the library calls `abort()`/`exit()` and kills the process:
+
+- **libpng**: a returning error handler triggers `PNG_ABORT()` → `abort()`.
+- **libjpeg(-turbo)**: the default `error_exit` calls `exit()`.
+
+Catching these without C++ exceptions requires `setjmp`/`longjmp` — it is the library-sanctioned
+mechanism and is **allowed here** (it is the only way to honour §4's "never crash on input error"
+for these decoders). Pattern: arm `setjmp` in the read/write function, make the error callback
+`longjmp` back, and on the non-zero return free the library handle and fail per §2.
+
+`setjmp`/`longjmp` interact badly with C++ automatic objects — respect these rules:
+
+- A non-`volatile` local **modified between `setjmp` and the `longjmp`** has an indeterminate
+  value afterwards. Keep any value the error branch reads **set before `setjmp`** (or split into
+  multiple `setjmp` phases). Variables passed **by value** to a C call across the `setjmp` also
+  trip GCC's `-Wclobbered` — consume them before arming `setjmp`.
+- A `longjmp` does **not** run destructors of objects declared **after** the `setjmp` in the same
+  scope → they leak. Declare RAII locals (e.g. a `std::vector` of row pointers) **before** the
+  `setjmp`, and fill them before arming it so they are neither skipped nor clobbered.
+
+`FileFormatPNG` (two phases: header, then image) and `FileFormatJpeg` (custom `jpeg_error_mgr`)
+implement this; see their `fuzz_png` / `fuzz_jpeg` regression history in
+[`/fuzzing/README.md`](../fuzzing/README.md).
+
 ## 6. Diagnostics — the Logging hook
 
 Base does **not** own `stderr`. All diagnostics go through **`EmEn::Base::Logging`**

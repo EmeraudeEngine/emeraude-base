@@ -65,6 +65,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NodeTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ObserverPattern.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryColor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmap.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmapFormat.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryProcessor.cpp

@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <istream>
@@ -360,6 +361,13 @@ namespace EmEn::Base::VertexFactory
 				ShapeBuilder builder{geometry, options};
 				builder.beginConstruction(ConstructionMode::Triangles);
 
+				if ( frames.empty() )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), no frame to build the geometry from !");
+
+					return false;
+				}
+
 				const int frameIndex = 0; // Default to first frame
 
 				for ( uint32_t triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++ )
@@ -367,9 +375,28 @@ namespace EmEn::Base::VertexFactory
 					/* Reverse vertex order (2,1,0) to fix winding. */
 					for ( int vertexIndex = 2; vertexIndex >= 0; vertexIndex-- )
 					{
-						const auto & vertex = frames[frameIndex].frame.verts[triangles[triangleIndex].vertex[vertexIndex]];
+						const auto vertexRef = triangles[triangleIndex].vertex[vertexIndex];
+
+						/* Index comes straight from the file: bound it against the declared vertex count
+						 * before dereferencing (fuzz_mdx class of bug: OOB read / SEGV on hostile MDL). */
+						if ( vertexRef < 0 || vertexRef >= header.num_verts )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), triangle vertex index out of range !");
+
+							return false;
+						}
+
+						const auto & vertex = frames[frameIndex].frame.verts[vertexRef];
+
+						if ( static_cast< std::size_t >(vertex.normalIndex) >= s_anorms.size() )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), normal index out of range !");
+
+							return false;
+						}
+
 						const auto & normal = s_anorms[vertex.normalIndex];
-						const auto & textureCoordinate = textureCoordinates[triangles[triangleIndex].vertex[vertexIndex]];
+						const auto & textureCoordinate = textureCoordinates[vertexRef];
 
 						auto s = static_cast< vertex_data_t >(textureCoordinate.s);
 						auto t = static_cast< vertex_data_t >(textureCoordinate.t);
@@ -513,6 +540,13 @@ namespace EmEn::Base::VertexFactory
 				ShapeBuilder builder{geometry, options};
 				builder.beginConstruction(ConstructionMode::Triangles);
 
+				if ( frames.empty() )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMD2(), no frame to build the geometry from !");
+
+					return false;
+				}
+
 				const int frameIndex = 0;
 
 				for ( uint32_t triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++ )
@@ -520,10 +554,30 @@ namespace EmEn::Base::VertexFactory
 					/* Reverse vertex order (2,1,0) to fix winding. */
 					for ( int vertexIndex = 2; vertexIndex >= 0; vertexIndex-- )
 					{
+						const auto vertexRef = triangles[triangleIndex].vertex[vertexIndex];
+						const auto texCoordRef = triangles[triangleIndex].st[vertexIndex];
+
+						/* Indices come straight from the file: bound them against the declared table sizes
+						 * before dereferencing (fuzz_mdx: OOB read / SEGV on hostile MD2). */
+						if ( vertexRef >= header.num_vertices || texCoordRef >= header.num_st )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMD2(), triangle vertex/texcoord index out of range !");
+
+							return false;
+						}
+
 						const auto & frame = frames[frameIndex];
-						const auto & vertex = frame.verts[triangles[triangleIndex].vertex[vertexIndex]];
+						const auto & vertex = frame.verts[vertexRef];
+
+						if ( static_cast< std::size_t >(vertex.normalIndex) >= s_anorms.size() )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMD2(), normal index out of range !");
+
+							return false;
+						}
+
 						const auto & normal = s_anorms[vertex.normalIndex];
-						const auto & textureCoordinate = textureCoordinates[triangles[triangleIndex].st[vertexIndex]];
+						const auto & textureCoordinate = textureCoordinates[texCoordRef];
 
 						/* Combined transform: Y/Z swap + negation + rotation -90° Y = (Y, -Z, X) */
 						builder.setPosition(
@@ -619,8 +673,11 @@ namespace EmEn::Base::VertexFactory
 				geometry.clear();
 				
 				// Count total size to reserve
-				int totalTriangles = 0;
-				int currentSurfaceOffset = header.offset_surfaces;
+				uint64_t totalTriangles = 0;
+				/* 64-bit: surface offsets come from the file and accumulate; summing them as int
+				 * overflows on hostile input (signed overflow = UB, found by fuzz_mdx). std::streamoff
+				 * is 64-bit, so seekg() takes the widened value directly. */
+				int64_t currentSurfaceOffset = header.offset_surfaces;
 				
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_surfaces)) )
 				{
@@ -635,8 +692,33 @@ namespace EmEn::Base::VertexFactory
 				{
 					file.seekg(currentSurfaceOffset, std::ios::beg);
 					file.read(reinterpret_cast< char * >(&surfaces[surfaceIndex]), sizeof(md3_surface_t));
-					totalTriangles += surfaces[surfaceIndex].num_triangles;
+
+					/* num_triangles is untrusted: reject a negative or stream-exceeding count, and keep the
+					 * running total bounded so the reserveData() below cannot request gigabytes (fuzz_mdx OOM). */
+					if ( surfaces[surfaceIndex].num_triangles < 0 )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMD3(), negative triangle count !");
+
+						return false;
+					}
+
+					totalTriangles += static_cast< uint64_t >(surfaces[surfaceIndex].num_triangles);
+
+					if ( FileFormatMDx::exceedsStream(file, totalTriangles) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMD3(), triangle total exceeds the stream size !");
+
+						return false;
+					}
+
 					currentSurfaceOffset += surfaces[surfaceIndex].offset_end;
+				}
+
+				if ( totalTriangles == 0 )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMD3(), no triangle to build the geometry from !");
+
+					return false;
 				}
 
 				geometry.reserveData(static_cast< uint32_t >(totalTriangles) * 3, static_cast< uint32_t >(totalTriangles) * 3, 0U, static_cast< uint32_t >(totalTriangles));
@@ -700,6 +782,15 @@ namespace EmEn::Base::VertexFactory
 						for ( int k = 2; k >= 0; --k )
 						{
 							const int idx = tri.indexes[k];
+
+							/* Index from the file: bound it against the surface vertex count (fuzz_mdx: OOB / SEGV on hostile MD3). */
+							if ( idx < 0 || idx >= surf.num_verts )
+							{
+								Logging::error("VertexFactory::FileFormatMDx", "loadMD3(), triangle vertex index out of range !");
+
+								return false;
+							}
+
 							const auto & v = verts[idx];
 							const auto & uv = uvs[idx];
 
@@ -1000,7 +1091,63 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				/* ---- Phase 2: Build Skeleton in engine coordinates ---- */
-				const auto jointCount = static_cast< size_t >(numJoints);
+				/* Derive the joint count from the vector actually parsed, NOT from the declared
+				 * numJoints header: a file that declares "numJoints N" but omits the "joints {" block
+				 * leaves joints empty while numJoints > 0, so indexing joints[i] up to numJoints would
+				 * dereference an empty vector (fuzz_mdx null-deref at loadMD5). */
+				const auto jointCount = joints.size();
+
+				/* Validate every cross-reference parsed from the (untrusted) MD5 text BEFORE building: joint
+				 * parents, per-vertex weight ranges, weight->joint indices and triangle->vertex indices. An
+				 * out-of-range reference would index an empty/short vector (fuzz_mdx: null-deref / OOB in
+				 * loadMD5). On any inconsistency the load is cancelled. */
+				for ( size_t i = 0; i < jointCount; ++i )
+				{
+					const int parent = joints[i].parent;
+
+					if ( parent != Animation::NoParent && ( parent < 0 || static_cast< size_t >(parent) >= jointCount ) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), joint parent index out of range !");
+
+						return false;
+					}
+				}
+
+				for ( const auto & mesh : meshes )
+				{
+					for ( const auto & weight : mesh.weights )
+					{
+						if ( weight.jointIndex < 0 || static_cast< size_t >(weight.jointIndex) >= jointCount )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), weight joint index out of range !");
+
+							return false;
+						}
+					}
+
+					for ( const auto & vert : mesh.verts )
+					{
+						if ( vert.startWeight < 0 || vert.countWeight < 0 || static_cast< size_t >(vert.startWeight) + static_cast< size_t >(vert.countWeight) > mesh.weights.size() )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), vertex weight range out of bounds !");
+
+							return false;
+						}
+					}
+
+					for ( const auto & tri : mesh.tris )
+					{
+						for ( const int index : tri )
+						{
+							if ( index < 0 || static_cast< size_t >(index) >= mesh.verts.size() )
+							{
+								Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), triangle vertex index out of range !");
+
+								return false;
+							}
+						}
+					}
+				}
 
 				/* Compute world-space transforms for each joint in engine coordinates. */
 				std::vector< Math::Matrix< 4, vertex_data_t > > jointWorldTransforms(jointCount);

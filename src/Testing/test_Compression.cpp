@@ -108,6 +108,53 @@ TEST(Compression, LZMAStringBasic)
 	ASSERT_EQ(source, recovered);
 }
 
+/*
+ * Regression — Ave robustus! A.3 (fuzz_compression).
+ * LZMA::decompressString() allocated decoder state via lzma_stream_decoder() but only released
+ * it on the success path, leaking on every malformed/truncated input. Decompressing hostile
+ * bytes must cancel the load (return false) AND free the decoder (verified under LeakSanitizer).
+ */
+TEST(Compression, LZMADecompressMalformedInputNoLeak)
+{
+	std::string recovered;
+
+	/* Single garbage byte — the 1-byte reproducer found by the fuzzer. */
+	ASSERT_FALSE(LZMA::decompressString(std::string{"\x00", 1}, recovered));
+
+	/* Arbitrary non-LZMA payload. */
+	ASSERT_FALSE(LZMA::decompressString("not a valid xz stream", recovered));
+
+	/* A valid header followed by truncated/corrupt body: compress, then keep only a prefix. */
+	const auto source = createSource(64UL);
+	std::string compressed;
+	ASSERT_TRUE(LZMA::compressString(source, compressed));
+	ASSERT_GT(compressed.size(), 8U);
+	ASSERT_FALSE(LZMA::decompressString(compressed.substr(0, compressed.size() / 2), recovered));
+}
+
+/*
+ * Regression — Ave robustus! A.3 (fuzz_compression).
+ * ZLIB::decompressStream() read an untrusted uncompressed-size header and resize()d the
+ * destination to it, so a tiny input could request a multi-GB buffer (OOM). A chunk that claims
+ * a huge decompressed size must be rejected (returns false) without the giant allocation.
+ */
+TEST(Compression, ZLIBDecompressImplausibleSizeRejected)
+{
+	const size_t hugeBaseSize = static_cast< size_t >(1) << 31;  // 2 GB, far above the cap
+	const size_t compressedSize = 4;
+
+	std::string chunk;
+	chunk.resize(2 * sizeof(size_t) + compressedSize, '\0');
+	std::memcpy(chunk.data(), &hugeBaseSize, sizeof(size_t));
+	std::memcpy(chunk.data() + sizeof(size_t), &compressedSize, sizeof(size_t));
+
+	std::string recovered;
+	ASSERT_FALSE(ZLIB::decompressString(chunk, recovered));
+
+	/* A truncated header (fewer bytes than one chunk size field) must also be rejected. */
+	ASSERT_FALSE(ZLIB::decompressString(std::string{"\x05", 1}, recovered));
+}
+
 TEST(Compression, LZMAStringMT)
 {
 	const auto source = createSource(2048UL);

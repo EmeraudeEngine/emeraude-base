@@ -40,6 +40,7 @@
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
+#include "Logging/Logging.hpp"
 #include "Processor.hpp"
 
 namespace EmEn::Base::PixelFactory
@@ -91,10 +92,48 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !stream.read(ptr.at(i), size.at(i)) )
 					{
-						std::cerr << "FileFormatTarga::readStream(), unable to read the Targa header !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read the Targa header !");
 
 						return false;
 					}
+				}
+
+				/* Guard the declared dimensions against the stream payload BEFORE allocating the pixmap.
+				 * width/height are 16-bit, so an unvalidated header can request width*height*channels up
+				 * to ~17 GB (found by fuzz_targa: a 25-byte file declaring 65535x65535 -> OOM). Even a
+				 * maximally RLE-compressed Targa expands by at most ~128:1, so a pixel count exceeding the
+				 * remaining bytes by more than that factor cannot be backed by this stream -> cancel the load. */
+				{
+					constexpr uint64_t headerBytes = 18;
+					constexpr uint64_t maxRLEExpansion = 128;
+
+					const uint64_t streamSize = stream.size();
+
+					if ( streamSize < headerBytes )
+					{
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), stream smaller than its own header !");
+
+						return false;
+					}
+
+					const uint64_t pixelCount = static_cast< uint64_t >(fileHeader.width) * static_cast< uint64_t >(fileHeader.height);
+					const uint64_t payloadBytes = streamSize - headerBytes;
+
+					if ( fileHeader.width == 0 || fileHeader.height == 0 || pixelCount > payloadBytes * maxRLEExpansion )
+					{
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), declared dimensions exceed the stream payload !");
+
+						return false;
+					}
+				}
+
+				/* Pixel depth must be 8/16/24/32 bits: bytesPerPixel (imagePixelSize/8) feeds a 4-byte stack
+				 * pixel buffer in the decode loop, so a larger value overflows the stack (fuzz_targa). */
+				if ( fileHeader.imagePixelSize != 8 && fileHeader.imagePixelSize != 16 && fileHeader.imagePixelSize != 24 && fileHeader.imagePixelSize != 32 )
+				{
+					Logging::error("PixelFactory::FileFormatTarga", "readStream(), unsupported pixel depth !");
+
+					return false;
 				}
 
 				if constexpr ( PixelFactoryDebugEnabled )
@@ -151,12 +190,12 @@ namespace EmEn::Base::PixelFactory
 
 					case 32 :
 					case 33 :
-						std::cerr << "FileFormatTarga::readStream(), unhandled type of Targa file !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), unhandled type of Targa file !");
 						break;
 
 					case 0 :
 					default:
-						std::cerr << "FileFormatTarga::readStream(), no pixel data !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), no pixel data !");
 
 						return false;
 				}
@@ -174,7 +213,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( !stream.read(identification.data(), fileHeader.idCharCount) )
 					{
-						std::cerr << "FileFormatTarga::readStream(), unable to read the Targa identification !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read the Targa identification !");
 
 						return false;
 					}
@@ -194,7 +233,7 @@ namespace EmEn::Base::PixelFactory
 
 						if ( !stream.read(&packetHeader, 1) )
 						{
-							std::cerr << "FileFormatTarga::readStream(), unable to read RLE packet header !" "\n";
+							Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read RLE packet header !");
 
 							return false;
 						}
@@ -208,7 +247,7 @@ namespace EmEn::Base::PixelFactory
 
 							if ( !stream.read(pixel.data(), bytesPerPixel) )
 							{
-								std::cerr << "FileFormatTarga::readStream(), unable to read RLE pixel data !" "\n";
+								Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read RLE pixel data !");
 
 								return false;
 							}
@@ -231,7 +270,7 @@ namespace EmEn::Base::PixelFactory
 
 								if ( !stream.read(pixel.data(), bytesPerPixel) )
 								{
-									std::cerr << "FileFormatTarga::readStream(), unable to read raw pixel data !" "\n";
+									Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read raw pixel data !");
 
 									return false;
 								}
@@ -250,7 +289,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !stream.read(pixmap.data().data(), pixmap.bytes()) )
 					{
-						std::cerr << "FileFormatTarga::readStream(), unable to read the Targa data !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read the Targa data !");
 
 						return false;
 					}

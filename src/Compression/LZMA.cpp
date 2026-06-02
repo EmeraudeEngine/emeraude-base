@@ -29,8 +29,8 @@
 /* Project configuration. */
 #include "emeraude_base_config.hpp"
 
-/* STL inclusions. */
-#include <iostream>
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 /* Third-party inclusions. */
 #include "lzma.h"
@@ -58,7 +58,7 @@ namespace EmEn::Base::Compression::LZMA
 
 		if ( outputCode != LZMA_OK )
 		{
-			std::cerr << "Unable to init a LZMA compression !" "\n";
+			Logging::error("Compression::LZMA", "compressString(), unable to initialize the LZMA compression !");
 
 			return false;
 		}
@@ -85,6 +85,23 @@ namespace EmEn::Base::Compression::LZMA
 			return false;
 		}
 
+		/* RAII guard: lzma_stream_decoder() allocates internal decoder state that MUST be
+		 * released on every exit path. The original code only freed it on the success path,
+		 * leaking the state on every malformed/truncated input (found by fuzz_compression). */
+		struct StreamGuard
+		{
+			explicit StreamGuard (lzma_stream * ptr) noexcept : stream{ptr} {}
+
+			StreamGuard (const StreamGuard &) = delete;
+			StreamGuard (StreamGuard &&) = delete;
+			StreamGuard & operator= (const StreamGuard &) = delete;
+			StreamGuard & operator= (StreamGuard &&) = delete;
+
+			~StreamGuard () { lzma_end(stream); }
+
+			lzma_stream * stream;
+		} const guard{&stream};
+
 		size_t avail0 = output.size();
 		stream.next_in = reinterpret_cast< const uint8_t * >(input.data());
 		stream.avail_in = input.size();
@@ -105,8 +122,6 @@ namespace EmEn::Base::Compression::LZMA
 				}
 
 				output.resize(resultUsed);
-
-				lzma_end(&stream);
 
 				return true;
 			}

@@ -2,6 +2,7 @@
 # the README and this file are the only tracked entries under fuzzing/.
 build/
 corpus/
+repro/
 
 # libFuzzer crash / failure reproducers (written to the run directory).
 crash-*

@@ -29,8 +29,8 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <csetjmp>
 #include <cstdint>
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -39,6 +39,7 @@
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
@@ -83,19 +84,24 @@ namespace EmEn::Base::PixelFactory
 				/* Read signature and check it. */
 				if ( !stream.read(signature.data(), sizeof(signature)) )
 				{
-					std::cerr << "FileFormatPNG::readStream(), unable to read the PNG signature !" "\n";
+					Logging::error("PixelFactory::FileFormatPNG", "readStream(), unable to read the PNG signature !");
 
 					return false;
 				}
 
 				if ( !png_check_sig(signature.data(), sizeof(signature)) )
 				{
-					std::cerr << "FileFormatPNG::readStream(), data is not a PNG stream !" "\n";
+					Logging::error("PixelFactory::FileFormatPNG", "readStream(), data is not a PNG stream !");
 
 					return false;
 				}
 
-				/* Error context for capturing libPNG errors without using setjmp/longjmp. */
+				/* libPNG reports a fatal error by calling pngErrorCallback which, per the libPNG contract,
+				 * must not return (a returning handler triggers PNG_ABORT() -> abort()). The callback longjmps
+				 * back to the setjmp() armed below; without it any malformed chunk aborts the process (fuzz_png).
+				 * The read is split into a header phase and an image phase so the only RAII local the image
+				 * phase needs (rowPointers) is filled BEFORE its setjmp is armed and never modified afterwards,
+				 * keeping setjmp/longjmp free of skipped destructors and indeterminate objects. */
 				PNGErrorContext errorContext{};
 
 				auto * png = png_create_read_struct(PNG_LIBPNG_VER_STRING, &errorContext, pngErrorCallback, pngWarningCallback);
@@ -114,6 +120,19 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
+				/* Declared up-front so a longjmp from the image phase unwinds it normally. */
+				std::vector< png_bytep > rowPointers;
+
+				/* Phase 1 — header. */
+				if ( setjmp(png_jmpbuf(png)) )
+				{
+					Logging::error("PixelFactory::FileFormatPNG", std::string{"readStream(), PNG header error: "} + errorContext.errorMessage);
+
+					png_destroy_read_struct(&png, &pngInfo, nullptr);
+
+					return false;
+				}
+
 				/* Setup PNG for reading from ByteStream. */
 				png_set_read_fn(png, &stream, customReadFunction);
 
@@ -121,15 +140,6 @@ namespace EmEn::Base::PixelFactory
 				png_set_sig_bytes(png, sizeof(signature));
 
 				png_read_info(png, pngInfo);
-
-				if ( errorContext.hasError )
-				{
-					std::cerr << "FileFormatPNG::readStream(), PNG read failed: " << errorContext.errorMessage << "\n";
-
-					png_destroy_read_struct(&png, &pngInfo, nullptr);
-
-					return false;
-				}
 
 				const auto width = png_get_image_width(png, pngInfo);
 				const auto height = png_get_image_height(png, pngInfo);
@@ -213,7 +223,7 @@ namespace EmEn::Base::PixelFactory
 						break;
 
 					default:
-						std::cerr << "FileFormatPNG::readStream(), unhandled format !" "\n";
+						Logging::error("PixelFactory::FileFormatPNG", "readStream(), unhandled format !");
 
 						png_destroy_read_struct(&png, &pngInfo, nullptr);
 
@@ -230,8 +240,9 @@ namespace EmEn::Base::PixelFactory
 				/* Update info structure to apply transformations. */
 				png_read_update_info(png, pngInfo);
 
-				/* Set up row pointers for canonical top-left origin. */
-				std::vector< png_bytep > rowPointers(pixmap.height(), nullptr);
+				/* Set up row pointers for canonical top-left origin. Filled here, before the image-phase
+				 * setjmp is armed, so rowPointers is never modified after that setjmp. */
+				rowPointers.resize(pixmap.height(), nullptr);
 				auto & buffer = pixmap.data();
 
 				for ( size_t yIndex = 0; yIndex < pixmap.height(); ++yIndex )
@@ -241,22 +252,23 @@ namespace EmEn::Base::PixelFactory
 					rowPointers.at(yIndex) = static_cast< png_bytep >(buffer.data() + offset);
 				}
 
-				png_read_image(png, rowPointers.data());
-
-				if ( errorContext.hasError )
+				/* Phase 2 — image. A corrupt IDAT longjmps here; rowPointers unwinds normally. */
+				if ( setjmp(png_jmpbuf(png)) )
 				{
-					std::cerr << "FileFormatPNG::readStream(), PNG read failed: " << errorContext.errorMessage << "\n";
+					Logging::error("PixelFactory::FileFormatPNG", std::string{"readStream(), PNG image error: "} + errorContext.errorMessage);
 
 					png_destroy_read_struct(&png, &pngInfo, nullptr);
 
 					return false;
 				}
 
+				png_read_image(png, rowPointers.data());
+
 				png_read_end(png, nullptr);
 
 				png_destroy_read_struct(&png, &pngInfo, nullptr);
 
-				return !errorContext.hasError;
+				return true;
 			}
 
 			/** @copydoc EmEn::Base::PixelFactory::FileFormatInterface::writeStream() */
@@ -266,7 +278,7 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( !pixmap.isValid() )
 				{
-					std::cerr << "FileFormatPNG::writeStream(), pixmap parameter is invalid !" "\n";
+					Logging::error("PixelFactory::FileFormatPNG", "writeStream(), pixmap parameter is invalid !");
 
 					return false;
 				}
@@ -293,12 +305,14 @@ namespace EmEn::Base::PixelFactory
 						break;
 
 					default:
-						std::cerr << "FileFormatPNG::writeStream(), invalid color count !" "\n";
+						Logging::error("PixelFactory::FileFormatPNG", "writeStream(), invalid color count !");
 
 						return false;
 				}
 
-				/* Error context for capturing libPNG errors without using setjmp/longjmp. */
+				/* pngErrorCallback longjmps on a fatal libPNG error (a returning handler aborts the process),
+				 * so the write path must arm setjmp too. Split into a setup phase and a write phase so the only
+				 * RAII local (rowPointers) is filled before the write-phase setjmp and never modified after it. */
 				PNGErrorContext errorContext{};
 
 				auto * png = png_create_write_struct(PNG_LIBPNG_VER_STRING, &errorContext, pngErrorCallback, pngWarningCallback);
@@ -313,6 +327,19 @@ namespace EmEn::Base::PixelFactory
 				if ( pngInfo == nullptr )
 				{
 					png_destroy_write_struct(&png, nullptr);
+
+					return false;
+				}
+
+				/* Declared up-front so a longjmp from the write phase unwinds it normally. */
+				std::vector< png_bytep > rowPointers;
+
+				/* Phase 1 — setup (IHDR / compression / filters). */
+				if ( setjmp(png_jmpbuf(png)) )
+				{
+					Logging::error("PixelFactory::FileFormatPNG", std::string{"writeStream(), PNG setup error: "} + errorContext.errorMessage);
+
+					png_destroy_write_struct(&png, &pngInfo);
 
 					return false;
 				}
@@ -368,8 +395,8 @@ namespace EmEn::Base::PixelFactory
 
 				png_set_filter(png, 0, pngFilter);
 
-				/* Prepare row pointers with optional Y-axis inversion. */
-				std::vector< png_bytep > rowPointers{pixmap.height(), nullptr};
+				/* Prepare row pointers with optional Y-axis inversion (filled before the write-phase setjmp). */
+				rowPointers.resize(pixmap.height(), nullptr);
 
 				for ( size_t yIndex = 0; yIndex < pixmap.height(); ++yIndex )
 				{
@@ -383,16 +410,20 @@ namespace EmEn::Base::PixelFactory
 				png_set_write_fn(png, &stream, customWriteFunction, nullptr);
 
 				png_set_rows(png, pngInfo, rowPointers.data());
-				png_write_png(png, pngInfo, PNG_TRANSFORM_IDENTITY, nullptr);
 
-				png_destroy_write_struct(&png, &pngInfo);
-
-				if ( errorContext.hasError )
+				/* Phase 2 — write. */
+				if ( setjmp(png_jmpbuf(png)) )
 				{
-					std::cerr << "FileFormatPNG::writeStream(), PNG write failed: " << errorContext.errorMessage << "\n";
+					Logging::error("PixelFactory::FileFormatPNG", std::string{"writeStream(), PNG write error: "} + errorContext.errorMessage);
+
+					png_destroy_write_struct(&png, &pngInfo);
 
 					return false;
 				}
+
+				png_write_png(png, pngInfo, PNG_TRANSFORM_IDENTITY, nullptr);
+
+				png_destroy_write_struct(&png, &pngInfo);
 
 				return true;
 			}
@@ -410,13 +441,17 @@ namespace EmEn::Base::PixelFactory
 					errorContext->hasError = true;
 					errorContext->errorMessage = message;
 				}
+
+				/* A libPNG error handler MUST NOT return: doing so triggers PNG_ABORT() -> abort().
+				 * Jump back to the setjmp() armed by the caller so the load/save is cancelled cleanly. */
+				png_longjmp(pngPtr, 1);
 			}
 
 			static
 			void
 			pngWarningCallback (png_structp /* pngPtr */, png_const_charp message) noexcept
 			{
-				std::cerr << "PNG warning: " << message << "\n";
+				Logging::warning("PixelFactory::FileFormatPNG", message);
 			}
 
 			/**

@@ -38,17 +38,24 @@ INCLUDES=(
 	-I dependencies/tinysoundfont
 )
 
-# Audio/codec chain + jsoncpp, ordered dependents-before-dependencies for the static linker.
-# Over-linking is harmless: unreferenced archive members are dropped.
+# Audio/codec chain + image codecs + compression + jsoncpp, ordered dependents-before-dependencies
+# for the static linker (e.g. libpng before libz). Over-linking is harmless: unreferenced archive
+# members are dropped, so a single shared link line serves every target.
 EXT_LINK=(
 	-L "${EXT_LIBS_PATH}/lib"
 	-lsamplerate -lsndfile -lFLAC -lvorbisenc -lvorbis -lopus -lmpg123 -lmp3lame -logg
-	-ljsoncpp -lm
+	-lpng -ljpeg -llzma
+	-ljsoncpp -lz -lm
 )
 
 FLAGS=(-std=c++20 -fno-exceptions -g -O1 -fsanitize=fuzzer,address,undefined)
 
-TARGETS=(fuzz_midi fuzz_obj fuzz_wav fuzz_json_sfx)
+TARGETS=(
+	fuzz_midi fuzz_obj fuzz_wav fuzz_json_sfx
+	fuzz_png fuzz_jpeg fuzz_targa
+	fuzz_native fuzz_stl fuzz_mdx
+	fuzz_compression fuzz_ini
+)
 
 mkdir -p "${OUT_DIR}"
 

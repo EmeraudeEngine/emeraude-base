@@ -33,8 +33,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <csetjmp>
 #include <cstdlib>
 #include <iostream>
+#include <string>
 #include <vector>
 
 /* Third-party inclusions. */
@@ -42,6 +44,7 @@
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
+#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
@@ -86,7 +89,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( totalSize == 0 )
 					{
-						std::cerr << "FileFormatJpeg::readStream(), empty stream !" "\n";
+						Logging::error("PixelFactory::FileFormatJpeg", "readStream(), empty stream !");
 
 						return false;
 					}
@@ -95,7 +98,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( !stream.read(inputBuffer.data(), totalSize) )
 					{
-						std::cerr << "FileFormatJpeg::readStream(), failed to read stream data !" "\n";
+						Logging::error("PixelFactory::FileFormatJpeg", "readStream(), failed to read stream data !");
 
 						return false;
 					}
@@ -105,13 +108,27 @@ namespace EmEn::Base::PixelFactory
 				}
 
 				jpeg_decompress_struct info{};
-				jpeg_error_mgr error{};
+				ErrorManager error{};
 
-				info.err = jpeg_std_error(&error);
+				info.err = jpeg_std_error(&error.pub);
+				error.pub.error_exit = errorExit;
 
 				jpeg_create_decompress(&info);
 
 				jpeg_mem_src(&info, sourcePtr, sourceSize);
+
+				/* libjpeg's default error_exit calls exit() on malformed input (fuzz_jpeg). errorExit longjmps
+				 * here instead. The setjmp is placed AFTER jpeg_mem_src so sourcePtr/sourceSize (passed by value)
+				 * are fully consumed before it and cannot be clobbered by the longjmp (-Wclobbered). inputBuffer,
+				 * which backs sourcePtr, is filled before the setjmp and never modified afterwards. */
+				if ( setjmp(error.escape) )
+				{
+					Logging::error("PixelFactory::FileFormatJpeg", std::string{"readStream(), "} + error.message);
+
+					jpeg_destroy_decompress(&info);
+
+					return false;
+				}
 
 				jpeg_read_header(&info, 1);
 				jpeg_start_decompress(&info);
@@ -177,28 +194,40 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( !pixmap.isValid() )
 				{
-					std::cerr << "FileFormatJpeg::writeStream(), pixmap parameter is invalid !" "\n";
+					Logging::error("PixelFactory::FileFormatJpeg", "writeStream(), pixmap parameter is invalid !");
 
 					return false;
 				}
 
 				if ( pixmap.colorCount() != 3 && pixmap.colorCount() != 1 )
 				{
-					std::cerr << "FileFormatJpeg::writeStream(), only rgb and grayscale format is supported for now !" "\n";
+					Logging::error("PixelFactory::FileFormatJpeg", "writeStream(), only rgb and grayscale format is supported for now !");
 
 					return false;
 				}
 
 				jpeg_compress_struct info{};
-				jpeg_error_mgr error{};
+				ErrorManager error{};
 
-				info.err = jpeg_std_error(&error);
+				info.err = jpeg_std_error(&error.pub);
+				error.pub.error_exit = errorExit;
 
 				jpeg_create_compress(&info);
 
 				/* Use memory destination, write to stream afterwards. */
 				unsigned char * outBuffer = nullptr;
 				unsigned long outSize = 0;
+
+				/* Route fatal libjpeg errors through longjmp instead of exit(); free the libjpeg buffer here. */
+				if ( setjmp(error.escape) )
+				{
+					Logging::error("PixelFactory::FileFormatJpeg", std::string{"writeStream(), "} + error.message);
+
+					jpeg_destroy_compress(&info);
+					free(outBuffer);
+
+					return false;
+				}
 
 				jpeg_mem_dest(&info, &outBuffer, &outSize);
 
@@ -220,7 +249,7 @@ namespace EmEn::Base::PixelFactory
 						break;
 
 					default:
-						std::cerr << "FileFormatJpeg::writeStream(), unhandled format !" "\n";
+						Logging::error("PixelFactory::FileFormatJpeg", "writeStream(), unhandled format !");
 
 						jpeg_destroy_compress(&info);
 						free(outBuffer);
@@ -322,6 +351,29 @@ namespace EmEn::Base::PixelFactory
 				free(outBuffer);
 
 				return result;
+			}
+
+		private:
+
+			/* libjpeg reports fatal errors via error_exit, whose default implementation calls exit().
+			 * This manager (jpeg_error_mgr MUST stay the first member for the libjpeg cast) replaces it
+			 * with a longjmp so malformed input cancels the operation instead of killing the process. */
+			struct ErrorManager
+			{
+				jpeg_error_mgr pub;
+				std::jmp_buf escape;
+				char message[JMSG_LENGTH_MAX];
+			};
+
+			static
+			void
+			errorExit (j_common_ptr cinfo) noexcept
+			{
+				auto * manager = reinterpret_cast< ErrorManager * >(cinfo->err);
+
+				(*cinfo->err->format_message)(cinfo, manager->message);
+
+				std::longjmp(manager->escape, 1);
 			}
 	};
 }

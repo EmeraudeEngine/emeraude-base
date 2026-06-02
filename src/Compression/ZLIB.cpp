@@ -31,6 +31,10 @@
 
 /* STL inclusions. */
 #include <iostream>
+#include <string>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 /* Third-party inclusions. */
 #include <zlib.h>
@@ -47,7 +51,7 @@ namespace EmEn::Base::Compression::ZLIB
 
 		if ( finalPosition <= 0 )
 		{
-			std::cerr << "compressStream(), nothing to compress !" "\n";
+			Logging::error("Compression::ZLIB", "compressStream(), nothing to compress !");
 
 			return 0;
 		}
@@ -103,7 +107,7 @@ namespace EmEn::Base::Compression::ZLIB
 
 			if ( error > 0 )
 			{
-				std::cerr << "compressStream(), " << zError(error) << "\n";
+				Logging::error("Compression::ZLIB", std::string{"compressStream(), "} + zError(error));
 
 				return 0;
 			}
@@ -165,6 +169,20 @@ namespace EmEn::Base::Compression::ZLIB
 
 			sourceStream.read(reinterpret_cast< char * >(&compressedSize), sizeof(size_t));
 
+			/* Validate the untrusted chunk sizes BEFORE allocating: an unchecked baseSize lets a few
+			 * input bytes request a multi-GB destination buffer (fuzz_compression OOM). Require both reads
+			 * to have succeeded, bound both sizes to a sane cap, and reject a decompressed size beyond
+			 * zlib's maximum expansion of the compressed payload. */
+			constexpr uLongf MaxChunkBytes = 1UL << 30;   /* 1 GB */
+			constexpr uLongf MaxZlibRatio = 1032;          /* deflate theoretical max expansion */
+
+			if ( !sourceStream || compressedSize == 0 || compressedSize > MaxChunkBytes || baseSize > MaxChunkBytes || baseSize > compressedSize * MaxZlibRatio )
+			{
+				Logging::error("Compression::ZLIB", "decompressStream(), implausible or unreadable chunk sizes !");
+
+				return false;
+			}
+
 			/* Resize both of buffer before writing into. */
 			source.resize(compressedSize);
 			destination.resize(baseSize);
@@ -177,9 +195,9 @@ namespace EmEn::Base::Compression::ZLIB
 				auto * dest = reinterpret_cast< Bytef * >(destination.data());
 				const auto * src = reinterpret_cast< const Bytef * >(source.c_str());
 
-				if ( uncompress(dest, &baseSize, src, compressedSize) > 0 )
+				if ( uncompress(dest, &baseSize, src, compressedSize) != Z_OK )
 				{
-					std::cerr << "decompressStream(), unable to uncompress stream." "\n";
+					Logging::error("Compression::ZLIB", "decompressStream(), unable to uncompress stream.");
 
 					return false;
 				}
@@ -191,13 +209,13 @@ namespace EmEn::Base::Compression::ZLIB
 			}
 			else
 			{
-				std::cerr << "decompressStream(), unable to read compressed stream." "\n";
+				Logging::error("Compression::ZLIB", "decompressStream(), unable to read compressed stream.");
 
 				return false;
 			}
 		}
 
-		std::cerr << "decompressStream(), stream seems broken." "\n";
+		Logging::error("Compression::ZLIB", "decompressStream(), stream seems broken.");
 
 		return false;
 	}
