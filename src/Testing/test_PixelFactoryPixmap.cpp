@@ -27,6 +27,10 @@
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
+/* STL inclusions. */
+#include <array>
+#include <vector>
+
 /* Local inclusions. */
 #include "Constants.hpp"
 #include "PixelFactory/FileIO.hpp"
@@ -411,4 +415,40 @@ TEST(PixelFactoryPixmap, noiseGeneration)
 
 		ASSERT_TRUE(FileIO::write(image, {"./assets/tmp_1024x1024-perlinNoiseGray.png"}, true));
 	}
+}
+
+TEST(PixelFactoryPixmap, addAlphaChannelGrayscale)
+{
+	/* Ave robustus! (A.5): regression for the Grayscale-case fall-through (former OOB read + wrong
+	 * output). 2x1 grayscale -> GrayscaleAlpha, each gray followed by the requested alpha. */
+	const std::array< uint8_t, 2 > grayData{10, 20};
+	Pixmap< uint8_t > image{2, 1, ChannelMode::Grayscale, grayData};
+
+	ASSERT_TRUE(image.addAlphaChannel(255));
+	EXPECT_EQ(image.channelMode(), ChannelMode::GrayscaleAlpha);
+	EXPECT_EQ(image.colorCount(), 2);
+	EXPECT_EQ(image.data(), (std::vector< uint8_t >{10, 255, 20, 255}));
+}
+
+TEST(PixelFactoryPixmap, addAlphaChannelRGB)
+{
+	/* 2x1 RGB -> RGBA, each triplet followed by the requested alpha (copy-free in-place expand). */
+	const std::array< uint8_t, 6 > rgbData{1, 2, 3, 4, 5, 6};
+	Pixmap< uint8_t > image{2, 1, ChannelMode::RGB, rgbData};
+
+	ASSERT_TRUE(image.addAlphaChannel(128));
+	EXPECT_EQ(image.channelMode(), ChannelMode::RGBA);
+	EXPECT_EQ(image.colorCount(), 4);
+	EXPECT_EQ(image.data(), (std::vector< uint8_t >{1, 2, 3, 128, 4, 5, 6, 128}));
+}
+
+TEST(PixelFactoryPixmap, addAlphaChannelAlreadyHasAlpha)
+{
+	/* RGBA / GrayscaleAlpha already carry alpha: addAlphaChannel must be a no-op success. */
+	const std::array< uint8_t, 8 > rgbaData{1, 2, 3, 4, 5, 6, 7, 8};
+	Pixmap< uint8_t > image{2, 1, ChannelMode::RGBA, rgbaData};
+
+	ASSERT_TRUE(image.addAlphaChannel(0));
+	EXPECT_EQ(image.channelMode(), ChannelMode::RGBA);
+	EXPECT_EQ(image.data(), (std::vector< uint8_t >{1, 2, 3, 4, 5, 6, 7, 8}));
 }

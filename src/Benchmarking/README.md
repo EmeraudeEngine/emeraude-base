@@ -68,4 +68,19 @@ the sub-millisecond workloads (thread-dispatch overhead dominates); the medians 
 > **Measurement hygiene:** run the benchmark with **no concurrent build/load** — a parallel
 > `-j$(nproc)` cascade build running alongside inflated the serial (single-thread) medians ~3×.
 
-Next A.5 targets: `mirrorY` block-copy and the `Pixmap` whole-buffer-copy marker.
+### `Processor::mirror` — Y-axis (horizontal flip), block-copy + parallelized 2026-06-02
+
+`mirrorY` was rewritten as a channel-mode-agnostic per-pixel block copy (`memcpy` of `stride`
+elements) dispatched over rows on the optional `ThreadPool`. Median of 8, no concurrent load.
+
+| Workload | Serial | ThreadPool | Speedup |
+|----------|-------:|-----------:|--------:|
+| 3840×2160 RGBA | 11.7 ms | 4.08 ms | ×2.9 |
+
+Mirror is a pure copy (memory-bandwidth bound), so the parallel ceiling is much lower than the
+arithmetic resizes — bandwidth saturates well before all cores are busy. ×2.9 is the realistic
+gain here, not a shortfall.
+
+`Pixmap::addAlphaChannel` was also reworked to expand the buffer in place (no whole-buffer copy;
+this also fixed a Grayscale-case fall-through bug) — a correctness + allocation win, not a
+throughput benchmark, so it is covered by unit tests rather than a bench here.

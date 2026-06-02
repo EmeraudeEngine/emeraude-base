@@ -1344,7 +1344,7 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			bool
-			mirror (const Pixmap< pixel_data_t, dimension_t > & source, Pixmap< pixel_data_t, dimension_t > & destination, MirrorMode mode) noexcept
+			mirror (const Pixmap< pixel_data_t, dimension_t > & source, Pixmap< pixel_data_t, dimension_t > & destination, MirrorMode mode, ThreadPool * pool = nullptr) noexcept
 			{
 				if ( !source.isValid() )
 				{
@@ -1364,7 +1364,7 @@ namespace EmEn::Base::PixelFactory
 						return true;
 
 					case MirrorMode::Y :
-						return Processor::mirrorY(source, destination);
+						return Processor::mirrorY(source, destination, pool);
 
 					case MirrorMode::Both :
 						return Processor::mirrorBoth(source, destination);
@@ -1382,11 +1382,11 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			Pixmap< pixel_data_t, dimension_t >
-			mirror (const Pixmap< pixel_data_t, dimension_t > & source, MirrorMode mode) noexcept
+			mirror (const Pixmap< pixel_data_t, dimension_t > & source, MirrorMode mode, ThreadPool * pool = nullptr) noexcept
 			{
 				Pixmap< pixel_data_t, dimension_t > output;
 
-				if ( !Processor::mirror(source, output, mode) )
+				if ( !Processor::mirror(source, output, mode, pool) )
 				{
 					return {};
 				}
@@ -2794,94 +2794,49 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Mirrors the pixmap in Y-Axis.
-			 * @todo Can be optimize with bloc copy (first attempt failed).
+			 * @brief Mirrors the pixmap in Y-Axis (horizontal flip).
 			 * @param source A reference to the input pixmap.
 			 * @param output A reference to the output pixmap.
+			 * @param pool An optional thread pool to spread the rows across. Default nullptr (serial).
 			 * @return bool
 			 */
 			[[nodiscard]]
 			static
 			bool
-			mirrorY (const Pixmap< pixel_data_t, dimension_t > & source, Pixmap< pixel_data_t, dimension_t > & output) noexcept
+			mirrorY (const Pixmap< pixel_data_t, dimension_t > & source, Pixmap< pixel_data_t, dimension_t > & output, ThreadPool * pool = nullptr) noexcept
 			{
 				const auto rowCount = source.height();
 				const auto width = source.width();
-				const auto stride = source.colorCount();
+				const auto stride = static_cast< size_t >(source.colorCount());
 
 				auto & data = output.data();
 				const auto & baseData = source.data();
 
-				switch ( source.channelMode() )
+				/* Ave robustus! (A.5): reverse each row by copying whole pixels (stride elements at a time) —
+				 * a channel-mode-agnostic block copy. Rows are independent → optional ThreadPool dispatch;
+				 * the serial path is byte-identical, the parallel path race-free. */
+				const auto processRow = [&] (size_t row) noexcept {
+					const auto rowOffset = row * width * stride;
+
+					for ( size_t rowPixel = 0; rowPixel < width; rowPixel++ )
+					{
+						const auto pixel = rowOffset + (rowPixel * stride);
+						const auto invertedPixel = rowOffset + ((width - (rowPixel + 1)) * stride);
+
+						std::memcpy(&data[pixel], &baseData[invertedPixel], stride * sizeof(pixel_data_t));
+					}
+				};
+
+				if ( pool != nullptr )
 				{
-					case ChannelMode::Grayscale :
-						for ( auto row = 0U; row < rowCount; row++ )
-						{
-							const auto rowOffset = row * width;
-
-							for ( size_t rowPixel = 0; rowPixel < width; rowPixel++ )
-							{
-								const auto pixel = rowOffset + rowPixel;
-								const auto invertedPixel = rowOffset + (width - (rowPixel + 1));
-
-								data[pixel] = baseData[invertedPixel];
-							}
-						}
-						break;
-
-					case ChannelMode::GrayscaleAlpha :
-						for ( auto row = 0U; row < rowCount; row++ )
-						{
-							const auto rowOffset = row * width * stride;
-
-							for ( size_t rowPixel = 0; rowPixel < width; rowPixel++ )
-							{
-								const auto pixel = rowOffset + (rowPixel * stride);
-								const auto invertedPixel = rowOffset + ((width - (rowPixel + 1)) * stride);
-
-								data[pixel] = baseData[invertedPixel];
-								data[pixel+1] = baseData[invertedPixel+1];
-							}
-						}
-						break;
-
-					case ChannelMode::RGB :
-						for ( auto row = 0U; row < rowCount; row++ )
-						{
-							const auto rowOffset = row * width * stride;
-
-							for ( size_t rowPixel = 0; rowPixel < width; rowPixel++ )
-							{
-								const auto pixel = rowOffset + (rowPixel * stride);
-								const auto invertedPixel = rowOffset + ((width - (rowPixel + 1)) * stride);
-
-								data[pixel] = baseData[invertedPixel];
-								data[pixel+1] = baseData[invertedPixel+1];
-								data[pixel+2] = baseData[invertedPixel+2];
-							}
-						}
-						break;
-
-					case ChannelMode::RGBA :
-						for ( auto row = 0U; row < rowCount; row++ )
-						{
-							const auto rowOffset = row * width * stride;
-
-							for ( size_t rowPixel = 0; rowPixel < width; rowPixel++ )
-							{
-								const auto pixel = rowOffset + (rowPixel * stride);
-								const auto invertedPixel = rowOffset + ((width - (rowPixel + 1)) * stride);
-
-								data[pixel] = baseData[invertedPixel];
-								data[pixel+1] = baseData[invertedPixel+1];
-								data[pixel+2] = baseData[invertedPixel+2];
-								data[pixel+3] = baseData[invertedPixel+3];
-							}
-						}
-						break;
-
-					default:
-						return false;
+					pool->parallelFor(static_cast< size_t >(0), static_cast< size_t >(rowCount), processRow);
+				}
+				else
+				{
+					for ( size_t row = 0; row < rowCount; row++ )
+					{
+						processRow(row);
+					}
 				}
 
 				return true;

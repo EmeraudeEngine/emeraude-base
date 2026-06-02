@@ -985,3 +985,28 @@ TEST(PixelFactoryProcessor, resizeNearestParallelMatchesSerial)
 	ASSERT_EQ(serial.data().size(), parallel.data().size());
 	EXPECT_EQ(serial.data(), parallel.data());
 }
+
+TEST(PixelFactoryProcessor, mirrorYParallelMatchesSerial)
+{
+	/* Ave robustus! (A.5): the ThreadPool path of mirrorY must equal the serial path (race-checked
+	 * under ASan), and mirroring twice must restore the original (it is a real horizontal flip). */
+	Pixmap< uint8_t > source{640, 480, ChannelMode::RGBA};
+
+	auto & data = source.data();
+
+	for ( size_t index = 0; index < data.size(); ++index )
+	{
+		data[index] = static_cast< uint8_t >((index * 2654435761U) >> 24);
+	}
+
+	ThreadPool pool;
+
+	const auto serial = Processor< uint8_t >::mirror(source, MirrorMode::Y, nullptr);
+	const auto parallel = Processor< uint8_t >::mirror(source, MirrorMode::Y, &pool);
+
+	ASSERT_EQ(serial.data().size(), parallel.data().size());
+	EXPECT_EQ(serial.data(), parallel.data());
+
+	const auto twice = Processor< uint8_t >::mirror(parallel, MirrorMode::Y, &pool);
+	EXPECT_EQ(twice.data(), source.data());
+}

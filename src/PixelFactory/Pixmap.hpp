@@ -1953,8 +1953,7 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Adds alpha channel.
-			 * @todo Rework it to avoid whole copy of the pixel buffer.
+			 * @brief Adds an alpha channel to the pixmap, in place.
 			 * @param alphaValue The initial alpha value.
 			 * @param modifyUpdatedRegion Set the updated region. Default true.
 			 * @return bool
@@ -1967,54 +1966,51 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
+				/* Ave robustus! (A.5): expand in place, iterating pixels back-to-front so each source pixel is
+				 * read before the (always higher) destination slot overwrites it — no whole-buffer copy. This
+				 * also fixes the former Grayscale-case fall-through into RGB (OOB read + wrong output). */
+				const auto pixelCount = this->pixelCount();
+
 				switch ( m_channelMode )
 				{
 					case ChannelMode::GrayscaleAlpha :
 					case ChannelMode::RGBA :
+						/* Already has an alpha channel, nothing to do. */
 						return true;
 
 					case ChannelMode::Grayscale :
 					{
-						const auto copy = m_data;
+						m_channelMode = ChannelMode::GrayscaleAlpha;
+						m_data.resize(this->elementCount());
 
-						if ( !this->initialize(m_width, m_height, ChannelMode::GrayscaleAlpha) )
+						for ( size_t pixel = pixelCount; pixel-- > 0; )
 						{
-							return false;
-						}
+							const auto gray = m_data[pixel];
 
-						const auto limit = this->pixelCount();
-
-						size_t dstIndex = 0;
-
-						for ( size_t index = 0; index < limit; index++ )
-						{
-							m_data[dstIndex++] = copy[index];
-							m_data[dstIndex++] = alphaValue;
+							m_data[(pixel * 2)] = gray;
+							m_data[(pixel * 2) + 1] = alphaValue;
 						}
 					}
+						break;
 
 					case ChannelMode::RGB :
 					{
-						const auto copy = m_data;
+						m_channelMode = ChannelMode::RGBA;
+						m_data.resize(this->elementCount());
 
-						if ( !this->initialize(m_width, m_height, ChannelMode::RGBA) )
+						for ( size_t pixel = pixelCount; pixel-- > 0; )
 						{
-							return false;
-						}
+							const auto red = m_data[(pixel * 3)];
+							const auto green = m_data[(pixel * 3) + 1];
+							const auto blue = m_data[(pixel * 3) + 2];
 
-						const auto limit = this->pixelCount();
-
-						size_t srcIndex = 0;
-						size_t dstIndex = 0;
-
-						for ( size_t index = 0; index < limit; index++ )
-						{
-							m_data[dstIndex++] = copy[srcIndex++];
-							m_data[dstIndex++] = copy[srcIndex++];
-							m_data[dstIndex++] = copy[srcIndex++];
-							m_data[dstIndex++] = alphaValue;
+							m_data[(pixel * 4)] = red;
+							m_data[(pixel * 4) + 1] = green;
+							m_data[(pixel * 4) + 2] = blue;
+							m_data[(pixel * 4) + 3] = alphaValue;
 						}
 					}
+						break;
 				}
 
 				if ( modifyUpdatedRegion )
