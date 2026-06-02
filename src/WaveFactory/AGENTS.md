@@ -187,12 +187,13 @@ WaveFactory::FileIO::read("music.mid", wave, options);
 ### Memory Buffer I/O (StreamIO)
 
 ```cpp
-// Read audio from memory buffer (libsndfile formats only: WAV, FLAC, OGG)
+// Read from a memory buffer — the format is explicit (a buffer carries no file extension).
+// SoundFileFormat::Audio = libsndfile (WAV/FLAC/OGG/…); MIDI and JSON are also reachable (read-only).
 std::vector<std::byte> audioData = /* ... loaded from network, archive, etc. */;
 Wave<int16_t> wave;
-WaveFactory::StreamIO::read(audioData, wave);
+WaveFactory::StreamIO::read(audioData, WaveFactory::SoundFileFormat::Audio, wave);
 
-// Write audio to memory buffer
+// Write audio to memory buffer (libsndfile is the only writable format)
 std::vector<std::byte> output;
 WaveFactory::WriteOptions writeOpts;
 writeOpts.format = WaveFactory::AudioFormat::FLAC;

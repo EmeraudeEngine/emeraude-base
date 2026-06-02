@@ -36,6 +36,18 @@
 namespace EmEn::Base::VertexFactory
 {
 	/**
+	 * @brief The geometry file format. Used by StreamIO to select the handler when no file
+	 * extension is available (FileIO infers it from the extension instead).
+	 */
+	enum class FileFormatType : uint8_t
+	{
+		Native,  /**< Native ee3d binary. */
+		OBJ,     /**< Wavefront OBJ (text). */
+		STL,     /**< Stereolithography. */
+		MDx      /**< id Tech MDL/MD2/MD3/MD5 — read-only. */
+	};
+
+	/**
 	 * @brief Options for reading/decoding geometry data.
 	 */
 	struct ReadOptions

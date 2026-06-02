@@ -41,6 +41,7 @@
 #include "WaveFactory/FileFormatSNDFile.hpp"
 #include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
+#include "WaveFactory/StreamIO.hpp"
 
 /* These suites pair with the "Ave robustus!" A.2 WaveFactory pass. They exercise the three
  * untrusted-input parsers (libsndfile WAV/FLAC/OGG, the hand-rolled MIDI parser and the JSON
@@ -387,5 +388,30 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+	}
+
+	TEST(WaveFactoryStreamIO, formatParity)
+	{
+		/* Ave robustus! (Axis B): StreamIO read now reaches all three handlers, not just libsndfile. */
+		Wave< int16_t > source;
+		ASSERT_TRUE(source.initialize(8U, Channels::Mono, Frequency::PCM8000Hz));
+
+		/* Audio (libsndfile) round-trip — the only writable format. */
+		std::vector< std::byte > encoded;
+		ASSERT_TRUE(StreamIO::write(source, encoded));
+		EXPECT_FALSE(encoded.empty());
+		Wave< int16_t > audioDecoded;
+		ASSERT_TRUE(StreamIO::read(encoded, SoundFileFormat::Audio, audioDecoded));
+		EXPECT_EQ(audioDecoded.frequency(), Frequency::PCM8000Hz);
+
+		/* MIDI reachable via StreamIO: a valid minimal MIDI decodes. */
+		const auto midiBuffer = makeMidi(0, 1, 480, minimalTrackPayload());
+		Wave< int16_t > midiDecoded;
+		EXPECT_TRUE(StreamIO::read(midiBuffer, SoundFileFormat::MIDI, midiDecoded));
+
+		/* JSON reachable via StreamIO: malformed input is rejected gracefully (dispatch proven). */
+		const std::vector< std::byte > jsonBad(8, std::byte{'{'});
+		Wave< int16_t > jsonDecoded;
+		EXPECT_FALSE(StreamIO::read(jsonBad, SoundFileFormat::JSON, jsonDecoded));
 	}
 }

@@ -87,6 +87,17 @@ namespace EmEn::Base::WaveFactory
 		OGG
 	};
 
+	/**
+	 * @brief The sound container format. Used by StreamIO to select the decode handler when no file
+	 * extension is available (FileIO infers it from the extension instead).
+	 */
+	enum class SoundFileFormat : uint8_t
+	{
+		Audio,  /**< PCM / compressed audio decoded by libsndfile (WAV, FLAC, OGG, …). */
+		MIDI,   /**< Standard MIDI, synthesised through the soundfont — read-only. */
+		JSON    /**< Procedural SFX description — read-only. */
+	};
+
 	struct Chunk
 	{
 		size_t offset{0};

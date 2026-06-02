@@ -20,8 +20,6 @@
  *
  * Complete project and additional information can be found at :
  * https://github.com/EmeraudeEngine/emeraude-base
- *
- * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
 #pragma once
@@ -29,49 +27,79 @@
 /* STL inclusions. */
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <type_traits>
 #include <vector>
 
 /* Local inclusions. */
+#include "FileFormatJSON.hpp"
+#include "FileFormatMIDI.hpp"
 #include "FileFormatSNDFile.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Logging.hpp"
 #include "Wave.hpp"
 
 namespace EmEn::Base::WaveFactory::StreamIO
 {
 	/**
 	 * @brief Decodes audio data from a memory buffer into a wave.
+	 * @note A memory buffer carries no file extension, so the format is selected explicitly. This is
+	 * the StreamIO counterpart of FileIO and reaches the same set of formats (the MIDI and JSON
+	 * handlers use the soundfont / synthesis frequency from the read options).
 	 * @tparam precision_t The sample precision type. Default int16_t.
 	 * @param data A reference to the source byte vector.
+	 * @param format The sound container format to decode as.
 	 * @param wave A reference to the destination wave.
 	 * @param options Read options (synthesis frequency, soundfont, etc.).
 	 * @return bool
-	 * @note Only supports formats handled by libsndfile (WAV, FLAC, OGG, etc.).
-	 * JSON and MIDI are not supported here as they require file-specific context.
 	 */
 	template< typename precision_t = int16_t >
 	[[nodiscard]]
 	bool
-	read (const std::vector< std::byte > & data, Wave< precision_t > & wave, const ReadOptions & options = {}) noexcept
+	read (const std::vector< std::byte > & data, SoundFileFormat format, Wave< precision_t > & wave, const ReadOptions & options = {}) noexcept
 		requires (std::is_arithmetic_v< precision_t >)
 	{
 		if ( data.empty() )
 		{
-			std::cerr << "[WaveFactory::StreamIO] read(), empty input buffer !\n";
+			Logging::error("WaveFactory::StreamIO", "read(), empty input buffer !");
 
 			return false;
 		}
 
 		IO::MemoryStream stream{data};
 
-		FileFormatSNDFile< precision_t > fileFormat;
+		switch ( format )
+		{
+			case SoundFileFormat::Audio :
+			{
+				FileFormatSNDFile< precision_t > fileFormat;
 
-		return fileFormat.readStream(stream, wave, options);
+				return fileFormat.readStream(stream, wave, options);
+			}
+
+			case SoundFileFormat::MIDI :
+			{
+				FileFormatMIDI< precision_t > fileFormat;
+
+				return fileFormat.readStream(stream, wave, options);
+			}
+
+			case SoundFileFormat::JSON :
+			{
+				FileFormatJSON< precision_t > fileFormat;
+
+				return fileFormat.readStream(stream, wave, options);
+			}
+		}
+
+		Logging::error("WaveFactory::StreamIO", "read(), unhandled format !");
+
+		return false;
 	}
 
 	/**
 	 * @brief Encodes a wave into a memory buffer.
+	 * @note Only libsndfile audio is writable (MIDI and JSON are read-only), so write does not take a
+	 * format selector — the output container comes from WriteOptions::format.
 	 * @tparam precision_t The sample precision type. Default int16_t.
 	 * @param wave A reference to the source wave.
 	 * @param output A reference to the destination byte vector. Will be cleared before writing.

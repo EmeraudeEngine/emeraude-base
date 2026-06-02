@@ -42,6 +42,7 @@
 #include "VertexFactory/FileFormatOBJ.hpp"
 #include "VertexFactory/FileFormatSTL.hpp"
 #include "VertexFactory/ShapeLoadResult.hpp"
+#include "VertexFactory/StreamIO.hpp"
 #include "VertexFactory/ShapeTriangle.hpp"
 #include "VertexFactory/ShapeVertex.hpp"
 
@@ -529,5 +530,36 @@ namespace EmEn::Base::VertexFactory
 		Result result;
 		ASSERT_TRUE(format.readStream(stream, result, {}));
 		EXPECT_EQ(result.shape.triangles().size(), 1U);
+	}
+
+	TEST(VertexFactoryStreamIO, formatParity)
+	{
+		/* Ave robustus! (Axis B): StreamIO must reach every format FileIO does. OBJ read gives a shape;
+		 * Native and STL round-trip through the buffer; MDx is read-only but dispatch-reachable. */
+		const auto objBuffer = toBytes("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
+		Result objResult;
+		ASSERT_TRUE(StreamIO::read(objBuffer, FileFormatType::OBJ, objResult));
+		ASSERT_EQ(objResult.shape.triangles().size(), 1U);
+
+		std::vector< std::byte > nativeBuffer;
+		ASSERT_TRUE(StreamIO::write(objResult.shape, FileFormatType::Native, nativeBuffer));
+		EXPECT_FALSE(nativeBuffer.empty());
+		Result nativeResult;
+		ASSERT_TRUE(StreamIO::read(nativeBuffer, FileFormatType::Native, nativeResult));
+		EXPECT_EQ(nativeResult.shape.triangles().size(), 1U);
+
+		std::vector< std::byte > stlBuffer;
+		ASSERT_TRUE(StreamIO::write(objResult.shape, FileFormatType::STL, stlBuffer));
+		EXPECT_FALSE(stlBuffer.empty());
+		Result stlResult;
+		ASSERT_TRUE(StreamIO::read(stlBuffer, FileFormatType::STL, stlResult));
+		EXPECT_GE(stlResult.shape.triangles().size(), 1U);
+
+		/* MDx is read-only: dispatch is reachable, write fails cleanly, garbage read fails cleanly. */
+		const auto mdxGarbage = makeGarbageWithMagic('2');
+		Result mdxResult;
+		EXPECT_FALSE(StreamIO::read(mdxGarbage, FileFormatType::MDx, mdxResult));
+		std::vector< std::byte > mdxBuffer;
+		EXPECT_FALSE(StreamIO::write(objResult.shape, FileFormatType::MDx, mdxBuffer));
 	}
 }
