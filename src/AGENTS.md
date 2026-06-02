@@ -83,7 +83,7 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - **Pixmap**: Image container with `blendPixel()` (assert) and `blendFreePixel()` (bounds-safe)
 - See: `PixelFactory/FileIO.hpp`, `PixelFactory/StreamIO.hpp`
 
-**VertexFactory/** - 3D geometry manipulation (uses unified ByteStream I/O)
+**VertexFactory/** - 3D geometry manipulation (uses unified ByteStream I/O) - See [`@VertexFactory/AGENTS.md`](VertexFactory/AGENTS.md)
 - Procedural mesh generation
 - Geometric transformations
 - Normal, tangent, UV calculations

@@ -26,4 +26,5 @@ Index of the AI-facing documentation for **emeraude-base**.
 
 - [`/src/AGENTS.md`](../src/AGENTS.md) — the foundation modules reference (math, factories,
   I/O, hashing, threading, traits, …). Migrated from the engine's former `src/Libs/AGENTS.md`.
+- [`/src/VertexFactory/AGENTS.md`](../src/VertexFactory/AGENTS.md) — geometry factory details.
 - [`/src/WaveFactory/AGENTS.md`](../src/WaveFactory/AGENTS.md) — audio factory details.
