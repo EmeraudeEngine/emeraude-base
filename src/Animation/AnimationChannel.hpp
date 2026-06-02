@@ -62,6 +62,8 @@ namespace EmEn::Base::Animation
 
 	/**
 	 * @brief A single keyframe for a translation or scale channel.
+	 * @note inTangent/outTangent are only used by ChannelInterpolation::CubicSpline (the GLTF cubic
+	 * sampler, see Math::cubicSplineInterpolation()). They are ignored for Step/Linear.
 	 * @tparam precision_t Floating point type.
 	 */
 	template< typename precision_t = float >
@@ -70,10 +72,14 @@ namespace EmEn::Base::Animation
 	{
 		precision_t time{0};
 		Vector< 3, precision_t > value{};
+		Vector< 3, precision_t > inTangent{};
+		Vector< 3, precision_t > outTangent{};
 	};
 
 	/**
 	 * @brief A single keyframe for a rotation channel.
+	 * @note inTangent/outTangent are only used by ChannelInterpolation::CubicSpline (the GLTF cubic
+	 * sampler). They are ignored for Step/Linear. The cubic result must be normalized.
 	 * @tparam precision_t Floating point type.
 	 */
 	template< typename precision_t = float >
@@ -82,6 +88,8 @@ namespace EmEn::Base::Animation
 	{
 		precision_t time{0};
 		Quaternion< precision_t > value{};
+		Quaternion< precision_t > inTangent{};
+		Quaternion< precision_t > outTangent{};
 	};
 
 	/**

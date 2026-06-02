@@ -527,6 +527,40 @@ namespace EmEn::Base::Math
 	}
 
 	/**
+	 * @brief Performs a GLTF-style cubic spline interpolation with explicit in/out tangents.
+	 * @note This is the cubic Hermite basis used by the GLTF 2.0 animation samplers. The tangents
+	 * are scaled by the segment duration (delta = endTime - startTime), per the specification. For
+	 * quaternion rotations the result must be normalized by the caller.
+	 * @tparam data_t The interpolated value type — scalar, Vector or Quaternion (anything supporting
+	 * data_t + data_t and data_t * scale_number_t).
+	 * @tparam scale_number_t The floating point type for the factor and delta. Default float.
+	 * @param startValue The value at the start keyframe.
+	 * @param startOutTangent The OUT tangent of the start keyframe.
+	 * @param endValue The value at the end keyframe.
+	 * @param endInTangent The IN tangent of the end keyframe.
+	 * @param delta The segment duration (endTime - startTime); scales the tangents.
+	 * @param factor The normalized position within the segment, in [0, 1].
+	 * @return data_t
+	 */
+	template< typename data_t, typename scale_number_t = float >
+	[[nodiscard]]
+	data_t
+	cubicSplineInterpolation (const data_t & startValue, const data_t & startOutTangent, const data_t & endValue, const data_t & endInTangent, scale_number_t delta, scale_number_t factor) noexcept
+		requires (std::is_floating_point_v< scale_number_t >)
+	{
+		const auto factor2 = factor * factor;
+		const auto factor3 = factor2 * factor;
+
+		/* Hermite basis functions (GLTF cubic). */
+		const auto h00 = (static_cast< scale_number_t >(2) * factor3) - (static_cast< scale_number_t >(3) * factor2) + static_cast< scale_number_t >(1);
+		const auto h10 = factor3 - (static_cast< scale_number_t >(2) * factor2) + factor;
+		const auto h01 = (static_cast< scale_number_t >(-2) * factor3) + (static_cast< scale_number_t >(3) * factor2);
+		const auto h11 = factor3 - factor2;
+
+		return (startValue * h00) + (startOutTangent * (h10 * delta)) + (endValue * h01) + (endInTangent * (h11 * delta));
+	}
+
+	/**
 	 * @brief Normalizes a value.
 	 * @tparam input_number_t The type of input number. Default float.
 	 * @tparam output_number_t The type of output number. Default float.
