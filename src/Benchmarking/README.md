@@ -61,6 +61,17 @@ Upscale = 1200×800 → 2400×1600.
 | Cubic | Downscale | 70.3 ms | 6.03 ms | ×11.7 |
 | Cubic | Upscale | 519 ms | 43.1 ms | ×12.0 |
 
+After the cubic gather-hoist refactor (4×4 neighbourhood gathered once per output pixel instead
+of per channel — bit-identical output, fewer `safePixel` calls, flatter inner loop):
+
+| Filter | Workload | Serial | ThreadPool | vs original serial |
+|--------|----------|-------:|-----------:|-------------------:|
+| Cubic | Downscale | 35.4 ms | 2.82 ms | — |
+| Cubic | Upscale | 260 ms | 20.4 ms | ≈×25 (519 → 20.4 ms) |
+
+The hoist alone is ×2.0 serial; stacking the thread pool takes the 1200×800→2400×1600 cubic
+upscale from 519 ms (original scalar serial) to ~20 ms.
+
 Nearest's lower ceiling is expected — it is a pure pixel copy (memory-bandwidth bound),
 not arithmetic-bound like Linear/Cubic. The parallel-path coefficient of variation rises on
 the sub-millisecond workloads (thread-dispatch overhead dominates); the medians stay stable.

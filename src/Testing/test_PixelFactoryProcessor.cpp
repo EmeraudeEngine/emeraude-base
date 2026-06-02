@@ -1033,3 +1033,43 @@ TEST(PixelFactoryProcessor, toGrayscaleParallelMatchesSerial)
 	ASSERT_EQ(serial.data().size(), parallel.data().size());
 	EXPECT_EQ(serial.data(), parallel.data());
 }
+
+TEST(PixelFactoryProcessor, resizeCubicUniformImageStaysUniform)
+{
+	/* Ave robustus! (A.5): cubic interpolation of a constant must stay that constant. Independent
+	 * guard for the gather-hoisting kernel refactor (catches a wrong tap index / channel offset).
+	 * NOTE: only the interior is checked — safePixel() returns Black out of bounds (it is not an
+	 * edge clamp), so the border output pixels legitimately overshoot (Catmull-Rom near the
+	 * constant->Black step). That overshoot is pre-existing behaviour, identical before/after the
+	 * refactor; interior pixels (whose full 4x4 neighbourhood is in bounds) must be exactly 200. */
+	Pixmap< uint8_t > source{16, 16, ChannelMode::RGBA};
+
+	auto & data = source.data();
+
+	for ( auto & value : data )
+	{
+		value = 200;
+	}
+
+	const auto output = Processor< uint8_t >::resize(source, 40, 40, FilteringMode::Cubic);
+
+	ASSERT_EQ(output.width(), 40);
+	ASSERT_EQ(output.height(), 40);
+	ASSERT_EQ(output.channelMode(), ChannelMode::RGBA);
+
+	const auto & outputData = output.data();
+
+	/* Interior region [8,31]^2 maps to a fully in-bounds source neighbourhood for a 16->40 upscale. */
+	for ( size_t y = 8; y <= 31; ++y )
+	{
+		for ( size_t x = 8; x <= 31; ++x )
+		{
+			const auto pixelOffset = ((y * 40) + x) * 4;
+
+			EXPECT_EQ(outputData[pixelOffset], 200);
+			EXPECT_EQ(outputData[pixelOffset + 1], 200);
+			EXPECT_EQ(outputData[pixelOffset + 2], 200);
+			EXPECT_EQ(outputData[pixelOffset + 3], 200);
+		}
+	}
+}

@@ -2647,6 +2647,52 @@ namespace EmEn::Base::PixelFactory
 						const auto xFloor = static_cast< int32_t >(std::floor(realX));
 						const float tX = realX - static_cast< float >(xFloor);
 
+						/* Ave robustus! (A.5): gather the 4x4 neighbourhood ONCE per output pixel (the former kernel
+						 * called safePixel() inside the channel loop — up to numChannels x 16 gathers), then run the
+						 * separable Catmull-Rom per channel on the cached taps. Bit-identical output, far fewer
+						 * gathers, and a flat inner loop the compiler can auto-vectorize. */
+						std::array< std::array< float, 4 >, 16 > taps{};
+
+						for ( int j = 0; j < 4; ++j )
+						{
+							const int currentY = yFloor - 1 + j;
+
+							for ( int i = 0; i < 4; ++i )
+							{
+								const int currentX = xFloor - 1 + i;
+								const auto color = source.safePixel(currentX, currentY);
+								auto & tap = taps[(static_cast< size_t >(j) * 4) + static_cast< size_t >(i)];
+
+								switch ( source.channelMode() )
+								{
+									case ChannelMode::Grayscale :
+										tap[0] = color.red();
+										break;
+
+									case ChannelMode::GrayscaleAlpha :
+										tap[0] = color.red();
+										tap[1] = color.alpha();
+										break;
+
+									case ChannelMode::RGB :
+										tap[0] = color.red();
+										tap[1] = color.green();
+										tap[2] = color.blue();
+										break;
+
+									case ChannelMode::RGBA :
+										tap[0] = color.red();
+										tap[1] = color.green();
+										tap[2] = color.blue();
+										tap[3] = color.alpha();
+										break;
+
+									default :
+										break;
+								}
+							}
+						}
+
 						std::array< float, 4 > interpolatedValues{0.0F, 0.0F, 0.0F, 0.0F};
 
 						for ( size_t channel = 0; channel < numChannels; ++channel )
@@ -2655,65 +2701,11 @@ namespace EmEn::Base::PixelFactory
 
 							for ( int j = 0; j < 4; ++j )
 							{
-								const int currentY = yFloor - 1 + j;
+								const auto rowBase = static_cast< size_t >(j) * 4;
 
-								std::array< float, 4 > pixel{0.0F, 0.0F, 0.0F, 0.0F};
-
-								for ( int i = 0; i < 4; ++i )
-								{
-									const int currentX = xFloor - 1 + i;
-									const auto color = source.safePixel(currentX, currentY);
-
-									switch ( source.channelMode() )
-									{
-										case ChannelMode::Grayscale:
-											pixel[i] = color.red();
-											break;
-
-										case ChannelMode::GrayscaleAlpha:
-											pixel[i] = channel == 0 ? color.red() : color.alpha();
-											break;
-
-										case ChannelMode::RGB:
-											if ( channel == 0 )
-											{
-												pixel[i] = color.red();
-											}
-											else if ( channel == 1 )
-											{
-												pixel[i] = color.green();
-											}
-											else
-											{
-												pixel[i] = color.blue();
-											}
-											break;
-
-										case ChannelMode::RGBA:
-											if ( channel == 0 )
-											{
-												pixel[i] = color.red();
-											}
-											else if ( channel == 1 )
-											{
-												pixel[i] = color.green();
-											}
-											else if ( channel == 2 )
-											{
-												pixel[i] = color.blue();
-											}
-											else
-											{
-												pixel[i] = color.alpha();
-											}
-											break;
-
-										default:
-											break;
-									}
-								}
-
-								intermediate[j] = Math::cubicInterpolationCatmullRom(pixel[0], pixel[1], pixel[2], pixel[3], tX);
+								intermediate[j] = Math::cubicInterpolationCatmullRom(
+									taps[rowBase][channel], taps[rowBase + 1][channel],
+									taps[rowBase + 2][channel], taps[rowBase + 3][channel], tX);
 							}
 
 							interpolatedValues[channel] = Math::cubicInterpolationCatmullRom(intermediate[0], intermediate[1], intermediate[2], intermediate[3], tY);
