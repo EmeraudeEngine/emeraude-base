@@ -36,10 +36,10 @@ in-memory representation they feed into.
 **ShapeGenerator** - Procedural primitives (triangle, quad, cube, sphere, cylinder, cone, …).
 - See: `ShapeGenerator.hpp`
 
-**TriangleGenerator / TreeGenerator / Grid / GridQuad** - Specialized generators
+**TreeGenerator / Grid / GridQuad** - Specialized generators
 - `TreeGenerator` is the only compiled unit (`TreeGenerator.cpp`); the rest are header-only.
 - `Grid` generates 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
-- See: `TriangleGenerator.hpp`, `TreeGenerator.hpp/.cpp`, `Grid.hpp`, `GridQuad.hpp`
+- See: `TreeGenerator.hpp/.cpp`, `Grid.hpp`, `GridQuad.hpp`
 
 ### Processing & Analysis
 
@@ -159,11 +159,12 @@ nothing fancier.* Hardening landed in the A.2 characterization pass and the A.3 
 
 ## Open Axis-B markers (not yet done)
 
-Tracked in `docs/plans/ave-robustus.md` (§6, "Real correctness gaps"):
-- `TriangleGenerator.hpp:87` — `@FIXME Remove internal triangles`.
-- `ShapeBuilder.hpp:636` — `FIXME: Check this` review.
+Tracked in `docs/plans/ave-robustus.md` (§6, "Real correctness gaps"): all resolved.
+- `ShapeBuilder.hpp:636` — `FIXME: Check this` verified correct (TriangleFan vertex shift) + test.
+- `TriangleGenerator` — the unused `generateEnvelope` ("bad algorithm") generator was **removed**
+  as dead code (no caller anywhere); the whole `TriangleGenerator.hpp` is gone.
 - `ShapeDecimator` arithmetic was audited clean in A.4 (`width*height` already 64-bit).
-(The inventory's `OrientedCuboid` marker lives in `Math`, not VertexFactory.)
+(The inventory's `OrientedCuboid` marker lives in `Math`, not VertexFactory — also resolved.)
 
 ## Code References
 
@@ -172,7 +173,7 @@ Tracked in `docs/plans/ave-robustus.md` (§6, "Real correctness gaps"):
 | `Shape.hpp` | Mesh container (vertices, triangles, colors, layers, AABB) |
 | `ShapeVertex.hpp` / `ShapeTriangle.hpp` / `ShapeEdge.hpp` | Mesh primitives |
 | `ShapeBuilder.hpp` / `ShapeBuilderOptions.hpp` | Primary construction API + options |
-| `ShapeGenerator.hpp` / `TriangleGenerator.hpp` / `TreeGenerator.hpp` / `Grid.hpp` | Procedural generators |
+| `ShapeGenerator.hpp` / `TreeGenerator.hpp` / `Grid.hpp` | Procedural generators |
 | `ShapeProcessor.hpp` / `ShapeDecimator.hpp` / `ShapeAssembler.hpp` / `ShapeSplitter.hpp` | Processing |
 | `Silhouette.hpp` / `XRayAnalyzer.hpp` | Analysis |
 | `CapUVMapping.hpp` / `Normal.hpp` / `TextureCoordinates.hpp` | UV / coordinate helpers |
