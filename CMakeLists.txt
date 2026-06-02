@@ -243,9 +243,10 @@ endif ()
 
 #######################################################################
 ## Modules
-# TRANSITION: a single umbrella target (emeraude::base) compiling all of src/.
-# The per-module split (emeraude::base::math INTERFACE, ::io/::pixel/::wave OBJECT, …)
-# is a planned internal refactor — see docs/module-map.md.
+# Per-module targets (Ave robustus! gap #1): every src/ subsystem is its own CMake target,
+# aliased emeraude::base::<name> — header-only modules are INTERFACE libraries, compiled modules
+# are OBJECT libraries aggregated into the emeraude::base umbrella. Consumers link the whole
+# umbrella OR an individual module. See docs/module-map.md.
 # platform (header-only, also usable standalone)
 add_library(emeraude_base_platform INTERFACE)
 target_include_directories(emeraude_base_platform INTERFACE
@@ -254,10 +255,89 @@ target_include_directories(emeraude_base_platform INTERFACE
 )
 add_library(emeraude::base::platform ALIAS emeraude_base_platform)
 
-# umbrella — sources listed explicitly (no globbing); see cmake/PrepareBaseSourceFiles.cmake
+# Shared compile requirements for every base module AND the umbrella: how to compile a base
+# translation unit — own headers, the generated config header, the ext-deps system includes,
+# the C++ standard, the compile definitions/options, the ext lib link directory and the
+# sanitizer link options. Per-module OBJECT libraries link this to compile; the umbrella links
+# it PUBLIC so consumers inherit the include/definition/option usage requirements.
+add_library(emeraude_base_flags INTERFACE)
+target_include_directories(emeraude_base_flags INTERFACE
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+	$<INSTALL_INTERFACE:include>
+)
+target_include_directories(emeraude_base_flags SYSTEM INTERFACE
+	${EMERAUDE_EXT_LIBS_INCLUDE_DIR}
+	${CMAKE_CURRENT_SOURCE_DIR}/dependencies/asio/include
+	${CMAKE_CURRENT_SOURCE_DIR}/dependencies/tinysoundfont
+)
+target_link_directories(emeraude_base_flags INTERFACE ${EMERAUDE_EXT_LIBS_LIB_DIR})
+target_compile_features(emeraude_base_flags INTERFACE cxx_std_${EMERAUDE_CXX_VERSION})
+target_compile_definitions(emeraude_base_flags INTERFACE ${EMERAUDE_COMPILE_DEFINITIONS})
+target_compile_options(emeraude_base_flags INTERFACE ${EMERAUDE_COMPILE_OPTIONS})
+target_link_options(emeraude_base_flags INTERFACE
+	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
+	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
+)
+add_library(emeraude::base::flags ALIAS emeraude_base_flags)
+
+if ( EMERAUDE_ENABLE_SANITIZERS )
+	message(STATUS "[EmeraudeBase] Sanitizers ENABLED: ASan + UBSan (-O1, halt-on-error). Incompatible with _FORTIFY_SOURCE (omitted).")
+endif ()
+
+# Per-module sources (no globbing); see cmake/PrepareBaseSourceFiles.cmake
 include(PrepareBaseSourceFiles)
 
-add_library(emeraude_base ${EMERAUDE_BASE_LIBRARY_TYPE} ${EMERAUDE_BASE_SOURCES})
+# A compiled module: an OBJECT library built with the shared flags, PIC (so it can be aggregated
+# into a SHARED umbrella), aliased emeraude::base::<name>. Inter-module symbol references resolve
+# when the objects are aggregated into the umbrella below; linking a single module OBJECT target
+# standalone may also require its sibling modules.
+function(emeraude_base_object_module name)
+	add_library(emeraude_base_${name} OBJECT ${ARGN})
+	target_link_libraries(emeraude_base_${name} PUBLIC emeraude_base_flags)
+	set_target_properties(emeraude_base_${name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+	add_library(emeraude::base::${name} ALIAS emeraude_base_${name})
+endfunction()
+
+emeraude_base_object_module(core ${EMERAUDE_BASE_CORE_SOURCES})
+emeraude_base_object_module(hash ${EMERAUDE_BASE_HASH_SOURCES})
+emeraude_base_object_module(gametools ${EMERAUDE_BASE_GAMETOOLS_SOURCES})
+emeraude_base_object_module(time ${EMERAUDE_BASE_TIME_SOURCES})
+emeraude_base_object_module(debug ${EMERAUDE_BASE_DEBUG_SOURCES})
+emeraude_base_object_module(compression ${EMERAUDE_BASE_COMPRESSION_SOURCES})
+emeraude_base_object_module(io ${EMERAUDE_BASE_IO_SOURCES})
+emeraude_base_object_module(network ${EMERAUDE_BASE_NETWORK_SOURCES})
+emeraude_base_object_module(vertex ${EMERAUDE_BASE_VERTEX_SOURCES})
+emeraude_base_object_module(wave ${EMERAUDE_BASE_WAVE_SOURCES})
+
+# A header-only module: an INTERFACE library inheriting the shared include paths + standard.
+# (pixel's PNG/JPEG/Freetype headers come from the same ext-deps system include carried by flags.)
+function(emeraude_base_interface_module name)
+	add_library(emeraude_base_${name} INTERFACE)
+	target_link_libraries(emeraude_base_${name} INTERFACE emeraude_base_flags)
+	add_library(emeraude::base::${name} ALIAS emeraude_base_${name})
+endfunction()
+
+emeraude_base_interface_module(math)
+emeraude_base_interface_module(algorithms)
+emeraude_base_interface_module(animation)
+emeraude_base_interface_module(pixel)
+
+# umbrella — aggregates every module's compiled objects (consumers may also link any
+# emeraude::base::<module> directly). flags + platform are PUBLIC so consumers inherit the
+# include/definition/option usage requirements; the ext libraries are linked below (Setup scripts).
+add_library(emeraude_base ${EMERAUDE_BASE_LIBRARY_TYPE} ${EMERAUDE_BASE_SOURCES}
+	$<TARGET_OBJECTS:emeraude_base_core>
+	$<TARGET_OBJECTS:emeraude_base_hash>
+	$<TARGET_OBJECTS:emeraude_base_gametools>
+	$<TARGET_OBJECTS:emeraude_base_time>
+	$<TARGET_OBJECTS:emeraude_base_debug>
+	$<TARGET_OBJECTS:emeraude_base_compression>
+	$<TARGET_OBJECTS:emeraude_base_io>
+	$<TARGET_OBJECTS:emeraude_base_network>
+	$<TARGET_OBJECTS:emeraude_base_vertex>
+	$<TARGET_OBJECTS:emeraude_base_wave>
+)
 add_library(emeraude::base ALIAS emeraude_base)
 
 set_target_properties(emeraude_base PROPERTIES
@@ -268,29 +348,7 @@ set_target_properties(emeraude_base PROPERTIES
 	VERSION ${PROJECT_VERSION}
 )
 
-target_include_directories(emeraude_base PUBLIC
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-	$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
-	$<INSTALL_INTERFACE:include>
-)
-target_include_directories(emeraude_base SYSTEM PUBLIC
-	${EMERAUDE_EXT_LIBS_INCLUDE_DIR}
-	${CMAKE_CURRENT_SOURCE_DIR}/dependencies/asio/include
-	${CMAKE_CURRENT_SOURCE_DIR}/dependencies/tinysoundfont
-)
-target_link_directories(emeraude_base PUBLIC ${EMERAUDE_EXT_LIBS_LIB_DIR})
-
-target_compile_definitions(emeraude_base PUBLIC ${EMERAUDE_COMPILE_DEFINITIONS})
-target_compile_options(emeraude_base PUBLIC ${EMERAUDE_COMPILE_OPTIONS})
-target_link_options(emeraude_base PUBLIC
-	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
-	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
-)
-if ( EMERAUDE_ENABLE_SANITIZERS )
-	message(STATUS "[EmeraudeBase] Sanitizers ENABLED: ASan + UBSan (-O1, halt-on-error). Incompatible with _FORTIFY_SOURCE (omitted).")
-endif ()
-
-target_link_libraries(emeraude_base PUBLIC emeraude::base::platform)
+target_link_libraries(emeraude_base PUBLIC emeraude_base_flags emeraude::base::platform)
 
 # External dependencies — reuse the engine Setup scripts, retargeted to emeraude_base.
 set(TARGET_BINARY_FOR_SETUP emeraude_base)

@@ -1,25 +1,70 @@
 # Explicit source lists for emeraude-base (no globbing — new files must be added here).
 # Mirrors the engine's PrepareEngineSourceFiles.cmake approach.
+#
+# Per-module split (Ave robustus! gap #1): each module's compiled sources live in their own
+# EMERAUDE_BASE_<MODULE>_SOURCES list, built as an OBJECT library (emeraude::base::<module>) and
+# aggregated into the emeraude::base umbrella. Header-only modules (math, algorithms, animation,
+# pixel, platform) have no sources here — they are INTERFACE targets. EMERAUDE_BASE_SOURCES is the
+# not-yet-split remainder (currently empty: every compiled file belongs to a module).
 
-set(EMERAUDE_BASE_SOURCES
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA/Compressor.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA/Decompressor.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/ZLIB.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Debug/Statistics.cpp
+# core — the flat src/ root utilities + the logging hook.
+set(EMERAUDE_BASE_CORE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/FastJSON.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/FileTimestamps.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/GameTools/CardDeck.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/INIParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Logging/Logging.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ObservableTrait.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ObserverTrait.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/SourceCodeParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/String.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/TokenFormatter.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Variant.cpp
+)
+
+# hash module — no external dependency.
+set(EMERAUDE_BASE_HASH_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/CRC32.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/Hash.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/MD5.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/SHA256.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Hash/SHA512.cpp
+)
+
+# gametools module — no external dependency.
+set(EMERAUDE_BASE_GAMETOOLS_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/GameTools/CardDeck.cpp
+)
+
+# time module — no external dependency.
+set(EMERAUDE_BASE_TIME_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/Abstract.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/CPUTime.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Time.cpp
+)
+
+# debug module — no external dependency.
+set(EMERAUDE_BASE_DEBUG_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Debug/Statistics.cpp
+)
+
+# compression module — ZLIB, LZMA.
+set(EMERAUDE_BASE_COMPRESSION_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA/Compressor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/LZMA/Decompressor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Compression/ZLIB.cpp
+)
+
+# io module — libzip.
+set(EMERAUDE_BASE_IO_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/IO.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipReader.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipWriter.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/INIParser.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Logging/Logging.cpp
+)
+
+# network module — ASIO (header-only).
+set(EMERAUDE_BASE_NETWORK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp
@@ -28,19 +73,20 @@ set(EMERAUDE_BASE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Query.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URI.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URIDomain.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/ObservableTrait.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/ObserverTrait.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/SourceCodeParser.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/String.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/Abstract.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Statistics/CPUTime.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Time/Time.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/TokenFormatter.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Variant.cpp
+)
+
+# vertex module — VertexFactory (mostly header-only; one compiled generator).
+set(EMERAUDE_BASE_VERTEX_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/TreeGenerator.cpp
+)
+
+# wave module — sndfile, samplerate, TinySoundFont.
+set(EMERAUDE_BASE_WAVE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/Processor.cpp
 )
+
+# Not-yet-split remainder (every compiled file now belongs to a module above).
+set(EMERAUDE_BASE_SOURCES)
 
 set(EMERAUDE_BASE_TEST_SOURCES
 	# TinySoundFont implementation, compiled into the test binary only (see the file header).
