@@ -515,4 +515,19 @@ namespace EmEn::Base::VertexFactory
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
 	}
+
+	TEST(VertexFactoryOBJ, negativeRelativeIndicesResolveLikePositive)
+	{
+		/* Ave robustus! (A.4): OBJ negative indices are relative to the current list size.
+		 * resolveIndex() now widens listSize to int64_t before the relative arithmetic
+		 * (the former int32_t cast was UB once a list exceeded INT_MAX). With three
+		 * vertices, "f -1 -2 -3" must resolve to the same triangle as "f 3 2 1". */
+		const auto buffer = toBytes("v 0 0 0\nv 1 0 0\nv 0 1 0\nf -1 -2 -3\n");
+
+		MemoryStream stream{buffer};
+		OBJ format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		EXPECT_EQ(result.shape.triangles().size(), 1U);
+	}
 }

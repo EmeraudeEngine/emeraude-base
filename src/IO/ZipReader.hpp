@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -164,7 +165,7 @@ namespace EmEn::Base::IO
 			 */
 			void readArchive () noexcept;
 
-			zip * m_zip{nullptr};
+			std::unique_ptr< zip_t, decltype(&zip_close) > m_zip{nullptr, &zip_close};
 			std::filesystem::path m_filepath;
 			std::vector< std::string > m_entryNames;
 	};

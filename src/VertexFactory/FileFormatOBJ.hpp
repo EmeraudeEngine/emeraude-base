@@ -1390,7 +1390,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( index < 0 )
 				{
-					return static_cast< index_data_t >(static_cast< int32_t >(listSize) + index + 1);
+					return static_cast< index_data_t >(static_cast< int64_t >(listSize) + index + 1);
 				}
 
 				return static_cast< index_data_t >(index);

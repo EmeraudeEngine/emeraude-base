@@ -120,12 +120,7 @@ namespace EmEn::Base::IO
 	void
 	ZipReader::close () noexcept
 	{
-		if ( m_zip != nullptr )
-		{
-			zip_close(m_zip);
-
-			m_zip = nullptr;
-		}
+		m_zip.reset();
 
 		m_entryNames.clear();
 	}
@@ -140,7 +135,7 @@ namespace EmEn::Base::IO
 
 		struct zip_stat stat{};
 		zip_stat_init(&stat);
-		zip_stat(m_zip, entryName.data(), 0, &stat);
+		zip_stat(m_zip.get(), entryName.data(), 0, &stat);
 
 		if ( stat.size == 0 )
 		{
@@ -151,7 +146,7 @@ namespace EmEn::Base::IO
 
 		buffer.resize(stat.size);
 
-		zip_file * compressedFile = zip_fopen(m_zip, entryName.data(), 0);
+		zip_file * compressedFile = zip_fopen(m_zip.get(), entryName.data(), 0);
 		zip_fread(compressedFile, buffer.data(), stat.size);
 		zip_fclose(compressedFile);
 
@@ -278,9 +273,9 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		m_zip = zip_open_from_source(source, 0, &zipError);
+		m_zip.reset(zip_open_from_source(source, 0, &zipError));
 
-		if ( m_zip == nullptr )
+		if ( !m_zip )
 		{
 			std::cerr << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&zipError) << " !" "\n";
 
@@ -294,9 +289,9 @@ namespace EmEn::Base::IO
 #else
 		int errorCode = 0;
 
-		m_zip = zip_open(m_filepath.string().data(), 0, &errorCode);
+		m_zip.reset(zip_open(m_filepath.string().data(), 0, &errorCode));
 
-		if ( m_zip == nullptr )
+		if ( !m_zip )
 		{
 			zip_error_t error;
 			zip_error_init_with_code(&error, errorCode);
@@ -315,13 +310,13 @@ namespace EmEn::Base::IO
 	void
 	ZipReader::readArchive () noexcept
 	{
-		const auto entryCount = zip_get_num_entries(m_zip, 0);
+		const auto entryCount = zip_get_num_entries(m_zip.get(), 0);
 
 		struct zip_stat stat{};
 
 		for ( zip_int64_t index = 0; index < entryCount; index++)
 		{
-			if ( zip_stat_index(m_zip, index, 0, &stat ) == 0 )
+			if ( zip_stat_index(m_zip.get(), index, 0, &stat ) == 0 )
 			{
 				m_entryNames.emplace_back(stat.name);
 			}

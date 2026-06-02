@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <filesystem>
+#include <memory>
 #include <vector>
 
 /* Third-party inclusions. */
@@ -140,7 +141,7 @@ namespace EmEn::Base::IO
 			[[nodiscard]]
 			bool sourceExists (const std::filesystem::path & filepath) const noexcept;
 
-			zip * m_zip{nullptr};
+			std::unique_ptr< zip_t, decltype(&zip_close) > m_zip{nullptr, &zip_close};
 			std::filesystem::path m_filepath;
 			std::vector< std::pair< std::filesystem::path, std::string > > m_sources;
 	};

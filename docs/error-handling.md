@@ -114,6 +114,27 @@ for these decoders). Pattern: arm `setjmp` in the read/write function, make the 
 implement this; see their `fuzz_png` / `fuzz_jpeg` regression history in
 [`/fuzzing/README.md`](../fuzzing/README.md).
 
+### 5.2 Owning resource handles — RAII, never manual `close()` (A.4)
+
+Every owning resource (heap allocation, OS handle, third-party C library handle) lives in an
+**RAII wrapper**, never in a bare owning pointer released by a hand-written `close()`. The
+"zero owning raw pointers" rule is the A.4 exit criterion: a handle that must be freed by a
+discipline ("remember to call `closeArchive()` on every path") is one early-`return` away from
+a leak, and `-fno-exceptions` does not make that discipline any safer.
+
+- A C handle with a free function → `std::unique_ptr<T, decltype(&free_fn)>`. The deleter runs
+  at destruction on **every** path (early return, abandonment, future edits) — no manual call to
+  forget. Example: `IO::ZipReader` / `IO::ZipWriter` hold
+  `std::unique_ptr<zip_t, decltype(&zip_close)> m_zip{nullptr, &zip_close}`; opening is
+  `m_zip.reset(zip_open(...))`, closing is `m_zip.reset()`, and the object becomes move-only for
+  free. The deleter is **not** called on a null pointer, so an abandoned-before-open object is
+  also clean.
+- A handle freed only inside a `setjmp`/`longjmp` error branch is the §5.1 exception: there the
+  free is explicit (the longjmp skips destructors of objects declared after the `setjmp`).
+- The test that proves it: open the resource, **abandon it without the manual close**, let it go
+  out of scope — under ASan the missing leak proves the destructor released it (see
+  `test_ZipArchive.cpp`).
+
 ## 6. Diagnostics — the Logging hook
 
 Base does **not** own `stderr`. All diagnostics go through **`EmEn::Base::Logging`**

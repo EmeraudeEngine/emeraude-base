@@ -321,7 +321,11 @@ namespace EmEn::Base::VertexFactory
 					
 					skin.data.resize(skinSize);
 					file.read(reinterpret_cast< char * >(&skin.group), sizeof(int));
-					file.read(reinterpret_cast< char * >(skin.data.data()), sizeof(unsigned char) * header.skinwidth * header.skinheight);
+					/* Ave robustus! (A.4): read exactly skinSize, the value already validated against the
+					 * stream above (l.313/315) and used to size the buffer. Recomputing skinwidth*skinheight
+					 * here let the read size drift from the allocation; reading the validated size makes the
+					 * two impossible to diverge. */
+					file.read(reinterpret_cast< char * >(skin.data.data()), static_cast< std::streamsize >(skinSize));
 				}
 
 				file.read(reinterpret_cast< char * >(textureCoordinates.data()), sizeof(mdl_texCoord_t) * header.num_verts);

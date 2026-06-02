@@ -145,11 +145,11 @@ namespace EmEn::Base::IO
 			auto & buffer = fileBuffers.back();
 
 			/* Set source. */
-			zip_source * source = zip_source_buffer(m_zip, buffer.data(), buffer.size(), 0);
+			zip_source * source = zip_source_buffer(m_zip.get(), buffer.data(), buffer.size(), 0);
 
 			if ( source == nullptr )
 			{
-				std::cerr << ClassId << " : Failed to create source buffer ! Error : " << zip_strerror(m_zip) << "\n";
+				std::cerr << ClassId << " : Failed to create source buffer ! Error : " << zip_strerror(m_zip.get()) << "\n";
 
 				success = false;
 
@@ -157,9 +157,9 @@ namespace EmEn::Base::IO
 			}
 
 			/* Add the source to archive. */
-			if ( const auto index = zip_file_add(m_zip, entryName.data(), source, ZIP_FL_OVERWRITE); index < 0 )
+			if ( const auto index = zip_file_add(m_zip.get(), entryName.data(), source, ZIP_FL_OVERWRITE); index < 0 )
 			{
-				std::cerr << ClassId << " : Failed to add file to archive ! Error : " << zip_strerror(m_zip) << "\n";
+				std::cerr << ClassId << " : Failed to add file to archive ! Error : " << zip_strerror(m_zip.get()) << "\n";
 
 				success = false;
 
@@ -213,9 +213,9 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		m_zip = zip_open_from_source(source, ZIP_CREATE, &zipError);
+		m_zip.reset(zip_open_from_source(source, ZIP_CREATE, &zipError));
 
-		if ( m_zip == nullptr )
+		if ( !m_zip )
 		{
 			std::cerr << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&zipError) << " !" "\n";
 
@@ -229,9 +229,9 @@ namespace EmEn::Base::IO
 #else
 		int errorCode = 0;
 
-		m_zip = zip_open(m_filepath.string().data(), ZIP_CREATE, &errorCode);
+		m_zip.reset(zip_open(m_filepath.string().data(), ZIP_CREATE, &errorCode));
 
-		if ( m_zip == nullptr )
+		if ( !m_zip )
 		{
 			zip_error_t error;
 			zip_error_init_with_code(&error, errorCode);
@@ -250,12 +250,7 @@ namespace EmEn::Base::IO
 	void
 	ZipWriter::closeArchive () noexcept
 	{
-		if ( m_zip != nullptr )
-		{
-			zip_close(m_zip);
-
-			m_zip = nullptr;
-		}
+		m_zip.reset();
 
 		m_sources.clear();
 	}
