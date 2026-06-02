@@ -1,5 +1,5 @@
 /*
- * src/Debug/Statistics.hpp
+ * src/Testing/test_Platform.cpp
  * This file is part of Emeraude-Base
  *
  * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
@@ -22,36 +22,27 @@
  * https://github.com/EmeraudeEngine/emeraude-base
  */
 
-#pragma once
+/* Third-party inclusions. */
+#include <gtest/gtest.h>
 
 /* STL inclusions. */
-#include <cstdint>
+#include <string_view>
 
-/* Usage:
- *
- *   const auto timer = EmEn::Base::Debug::begin_timer();
- *   // ... do work ...
- *   const uint64_t elapsedNs = EmEn::Base::Debug::terminate_timer(timer);
- */
+/* Local inclusions. */
+#include "emeraude_platform.hpp"
 
-namespace EmEn::Base::Debug
+using namespace EmEn;
+
+/* Ave robustus! (Axis B): compiler-identity detection — PLATFORM_COMPILER + version, previously
+ * missing from the platform header. */
+TEST(Platform, compilerIdentity)
 {
-	/**
-	 * @brief Starts a process-CPU-time timer.
-	 * @note Cross-platform — delegates to Time::processCPUTimeNanoseconds()
-	 * (POSIX clock_gettime(CLOCK_PROCESS_CPUTIME_ID) / Windows GetProcessTimes).
-	 * @return uint64_t The start stamp in nanoseconds.
-	 */
-	[[nodiscard]]
-	uint64_t begin_timer () noexcept;
+	const std::string_view compiler{PlatformCompiler};
 
-	/**
-	 * @brief Ends a timer started with begin_timer().
-	 * @note Returns the full nanosecond delta (no second-boundary truncation, unlike the
-	 * former Linux-only tv_nsec-only implementation).
-	 * @param start_time The stamp returned by begin_timer().
-	 * @return uint64_t The process CPU time elapsed since start_time, in nanoseconds.
-	 */
-	[[nodiscard]]
-	uint64_t terminate_timer (uint64_t start_time) noexcept;
+	EXPECT_TRUE(compiler == "GCC" || compiler == "Clang" || compiler == "MSVC");
+
+	/* The build had to come from a real compiler, so the major version is at least 1. */
+	EXPECT_GT(PlatformCompilerVersionMajor, 0);
+	EXPECT_GE(PlatformCompilerVersionMinor, 0);
+	EXPECT_GE(PlatformCompilerVersionPatch, 0);
 }

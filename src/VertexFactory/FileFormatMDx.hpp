@@ -55,6 +55,8 @@ namespace EmEn::Base::VertexFactory
 {
 	/**
 	 * @brief Unified 3D format loader for ID Tech engines (MDL, MD2, MD3, MD5).
+	 * @note Read-only by design: these are third-party *import* formats, so writeStream() always
+	 * fails (returns false). This is a deliberate boundary, not a missing feature.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @extends EmEn::Base::VertexFactory::FileFormatInterface

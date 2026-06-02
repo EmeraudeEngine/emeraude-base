@@ -47,6 +47,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/TinySoundFontImpl.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/main.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Debug.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FastJSON.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Hash.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_INIParser.cpp
@@ -64,6 +65,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NodeTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ObserverPattern.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Platform.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryColor.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmap.cpp

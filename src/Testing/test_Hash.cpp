@@ -29,6 +29,7 @@
 
 /* Local inclusions. */
 #include "Hash/Hash.hpp"
+#include "Hash/Types.hpp"
 
 using namespace EmEn::Base;
 
@@ -45,4 +46,29 @@ TEST(Hash, sha256)
 TEST(Hash, sha512)
 {
 	ASSERT_EQ(Hash::sha512("TestString"), "69dfd91314578f7f329939a7ea6be4497e6fe3909b9c8f308fe711d29d4340d90d77b7fdf359b7d0dbeed940665274f7ca514cd067895fdf59de0cf142b62336");
+}
+
+TEST(Hash, sha512KnownAnswer)
+{
+	/* Ave robustus! (Axis B): FIPS-180-4 known-answer vectors, not just a custom string. */
+	ASSERT_EQ(Hash::sha512("abc"),
+		"ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f");
+	ASSERT_EQ(Hash::sha512(""),
+		"cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+}
+
+TEST(Hash, typeEnumRoundTrip)
+{
+	/* Ave robustus! (Axis B): the HashType enum must match the implemented algorithms — SHA512 is
+	 * now exposed (it was implemented but absent), and the never-implemented SHA1 was removed.
+	 * Round-trip: to_HashType(to_string(x)) == x for every value. */
+	for ( const auto value : {Hash::HashType::Undefined, Hash::HashType::CRC32, Hash::HashType::MD5, Hash::HashType::SHA256, Hash::HashType::SHA512} )
+	{
+		EXPECT_EQ(Hash::to_HashType(Hash::to_string(value)), value);
+	}
+
+	EXPECT_EQ(Hash::to_string(Hash::HashType::SHA512), "SHA512");
+
+	/* SHA1 was advertised without an implementation — it must no longer resolve. */
+	EXPECT_EQ(Hash::to_HashType("SHA1"), Hash::HashType::Undefined);
 }

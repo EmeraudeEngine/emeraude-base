@@ -1,5 +1,5 @@
 /*
- * src/Debug/Statistics.hpp
+ * src/Testing/test_Debug.cpp
  * This file is part of Emeraude-Base
  *
  * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
@@ -22,36 +22,33 @@
  * https://github.com/EmeraudeEngine/emeraude-base
  */
 
-#pragma once
+/* Third-party inclusions. */
+#include <gtest/gtest.h>
 
 /* STL inclusions. */
 #include <cstdint>
 
-/* Usage:
- *
- *   const auto timer = EmEn::Base::Debug::begin_timer();
- *   // ... do work ...
- *   const uint64_t elapsedNs = EmEn::Base::Debug::terminate_timer(timer);
- */
+/* Local inclusions. */
+#include "Debug/Statistics.hpp"
 
-namespace EmEn::Base::Debug
+using namespace EmEn::Base;
+
+/* Ave robustus! (Axis B): the Debug ns timer was Linux-only (link errors elsewhere) and subtracted
+ * tv_nsec only (wrong across a 1s boundary). It now delegates to Time::processCPUTimeNanoseconds()
+ * — cross-platform and full-nanosecond. A measurable amount of CPU work must yield a non-zero delta. */
+TEST(DebugStatistics, timerMeasuresBusyWork)
 {
-	/**
-	 * @brief Starts a process-CPU-time timer.
-	 * @note Cross-platform — delegates to Time::processCPUTimeNanoseconds()
-	 * (POSIX clock_gettime(CLOCK_PROCESS_CPUTIME_ID) / Windows GetProcessTimes).
-	 * @return uint64_t The start stamp in nanoseconds.
-	 */
-	[[nodiscard]]
-	uint64_t begin_timer () noexcept;
+	const auto start = Debug::begin_timer();
 
-	/**
-	 * @brief Ends a timer started with begin_timer().
-	 * @note Returns the full nanosecond delta (no second-boundary truncation, unlike the
-	 * former Linux-only tv_nsec-only implementation).
-	 * @param start_time The stamp returned by begin_timer().
-	 * @return uint64_t The process CPU time elapsed since start_time, in nanoseconds.
-	 */
-	[[nodiscard]]
-	uint64_t terminate_timer (uint64_t start_time) noexcept;
+	/* Busy work (volatile sink so it is not optimised away) to accrue real process CPU time. */
+	volatile uint64_t sink = 0;
+
+	for ( uint64_t i = 0; i < 50000000ULL; ++i )
+	{
+		sink = sink + (i * 2654435761ULL);
+	}
+
+	const auto elapsed = Debug::terminate_timer(start);
+
+	EXPECT_GT(elapsed, 0U);
 }

@@ -32,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <system_error>
@@ -327,4 +328,35 @@ namespace EmEn::Base::IO
 		EXPECT_EQ(capturedTag, "IO");
 		EXPECT_NE(capturedMessage.find("fileGetContents"), std::string::npos);
 	}
+}
+
+TEST(IOFileUtils, permissionsOnRealFile)
+{
+	/* Ave robustus! (Axis B): readable/writable were untested; the Windows AccessCheck path is real
+	 * (docs corrected). Here on POSIX: a freshly written file is readable & writable; a missing path
+	 * and the empty path are neither. */
+	std::error_code errorCode;
+	const auto dir = std::filesystem::temp_directory_path(errorCode) / "emeraude_io_perms";
+	std::filesystem::remove_all(dir, errorCode);
+	std::filesystem::create_directories(dir, errorCode);
+
+	const auto file = dir / "file.txt";
+	{
+		std::ofstream out{file, std::ios::binary | std::ios::trunc};
+		out << "data";
+	}
+
+	EXPECT_TRUE(EmEn::Base::IO::readable(file));
+	EXPECT_TRUE(EmEn::Base::IO::writable(file));
+
+	const auto missing = dir / "does-not-exist.txt";
+	EXPECT_FALSE(EmEn::Base::IO::readable(missing));
+	EXPECT_FALSE(EmEn::Base::IO::writable(missing));
+	EXPECT_FALSE(EmEn::Base::IO::executable(missing));
+
+	EXPECT_FALSE(EmEn::Base::IO::readable(std::filesystem::path{}));
+	EXPECT_FALSE(EmEn::Base::IO::writable(std::filesystem::path{}));
+	EXPECT_FALSE(EmEn::Base::IO::executable(std::filesystem::path{}));
+
+	std::filesystem::remove_all(dir, errorCode);
 }

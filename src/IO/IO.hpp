@@ -201,9 +201,8 @@ namespace EmEn::Base::IO
 	 *
 	 * @param path Path to check for read permission.
 	 * @return True if the path is readable by the application, false otherwise.
-	 * @note Returns false if the path is empty. On Linux/macOS, uses access() with R_OK.
-	 * @warning Windows implementation always returns true (permission check not implemented).
-	 * @todo Implement proper permission checking for Windows platform.
+	 * @note Returns false if the path is empty. On Linux/macOS, uses access() with R_OK;
+	 * on Windows, an AccessCheck against the file's security descriptor (GENERIC_READ).
 	 * @see writable, executable
 	 */
 	[[nodiscard]]
@@ -216,9 +215,8 @@ namespace EmEn::Base::IO
 	 *
 	 * @param path Path to check for write permission.
 	 * @return True if the path is writable by the application, false otherwise.
-	 * @note Returns false if the path is empty. On Linux/macOS, uses access() with W_OK.
-	 * @warning Windows implementation always returns true (permission check not implemented).
-	 * @todo Implement proper permission checking for Windows platform.
+	 * @note Returns false if the path is empty. On Linux/macOS, uses access() with W_OK;
+	 * on Windows, an AccessCheck against the file's security descriptor (GENERIC_WRITE).
 	 * @see readable, executable
 	 */
 	[[nodiscard]]
@@ -231,9 +229,8 @@ namespace EmEn::Base::IO
 	 *
 	 * @param path Path to check for execute permission.
 	 * @return True if the path is executable by the application, false otherwise.
-	 * @note Returns false if the path is empty. On Linux/macOS, uses access() with X_OK.
-	 * @warning Windows implementation always returns true (permission check not implemented).
-	 * @todo Implement proper permission checking for Windows platform.
+	 * @note Returns false if the path is empty. On Linux/macOS, uses access() with X_OK;
+	 * on Windows, an AccessCheck against the file's security descriptor (GENERIC_EXECUTE).
 	 * @see readable, writable
 	 */
 	[[nodiscard]]

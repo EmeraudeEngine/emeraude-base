@@ -1073,3 +1073,47 @@ TEST(PixelFactoryProcessor, resizeCubicUniformImageStaysUniform)
 		}
 	}
 }
+
+TEST(PixelFactoryProcessor, coloredStencilRespectsMask)
+{
+	/* Ave robustus! (Axis B): the colored-source stencil was a `return false` stub. Stencil semantics:
+	 * grayscale mask = coverage, white passes, black blocks. Left half white -> filled with red;
+	 * right half black -> left untouched. */
+	Pixmap< uint8_t > mask{4, 2, ChannelMode::Grayscale};
+
+	{
+		auto & maskData = mask.data();
+		const uint8_t pattern[8] = {255, 255, 0, 0, 255, 255, 0, 0};
+
+		for ( size_t index = 0; index < maskData.size(); ++index )
+		{
+			maskData[index] = pattern[index];
+		}
+	}
+
+	/* Force a known all-zero base (a fresh RGBA pixmap initialises alpha to opaque, not 0). */
+	Pixmap< uint8_t > target{4, 2, ChannelMode::RGBA};
+
+	for ( auto & value : target.data() )
+	{
+		value = 0;
+	}
+
+	Processor< uint8_t > processor{target};
+
+	ASSERT_TRUE(processor.stencil(Red, Math::Space2D::AARectangle< uint32_t >{0, 0, 4, 2}, mask, DrawPixelMode::Replace));
+
+	const auto & data = target.data();
+
+	/* (col 0, row 0): white mask -> red written. */
+	EXPECT_EQ(data[0], 255);
+	EXPECT_EQ(data[1], 0);
+	EXPECT_EQ(data[2], 0);
+	EXPECT_EQ(data[3], 255);
+
+	/* (col 2, row 0): black mask -> untouched (still zero). */
+	EXPECT_EQ(data[8], 0);
+	EXPECT_EQ(data[9], 0);
+	EXPECT_EQ(data[10], 0);
+	EXPECT_EQ(data[11], 0);
+}

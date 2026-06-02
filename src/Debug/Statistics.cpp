@@ -20,34 +20,27 @@
  *
  * Complete project and additional information can be found at :
  * https://github.com/EmeraudeEngine/emeraude-base
- *
- * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
-/* Project configuration. */
-#include "emeraude_platform.hpp"
+#include "Statistics.hpp"
 
-#if IS_LINUX
+/* Local inclusions. */
+#include "Time/Time.hpp"
 
-extern "C"
+namespace EmEn::Base::Debug
 {
-	#include "Statistics.hpp"
-
-	void
-	begin_timer (timespec * start_time) noexcept
+	uint64_t
+	begin_timer () noexcept
 	{
-		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, start_time);
+		return Time::processCPUTimeNanoseconds();
 	}
 
-	long
-	terminate_timer (timespec start_time) noexcept
+	uint64_t
+	terminate_timer (uint64_t start_time) noexcept
 	{
-		timespec end_time{};
+		const auto now = Time::processCPUTimeNanoseconds();
 
-		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-
-		return end_time.tv_nsec - start_time.tv_nsec;
+		/* Process CPU time is monotonic; guard the rare query-failure case (returns 0). */
+		return now >= start_time ? now - start_time : 0;
 	}
 }
-
-#endif

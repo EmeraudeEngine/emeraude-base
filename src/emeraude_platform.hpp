@@ -107,6 +107,26 @@
 
 #define PLATFORM_TARGETED OS_NAME "-" PLATFORM_PRECISION "-" PLATFORM_ARCH
 
+/* Compiler identity. Clang is tested BEFORE GCC because Clang also defines __GNUC__. */
+#if defined(__clang__)
+	#define PLATFORM_COMPILER "Clang"
+	#define PLATFORM_COMPILER_VERSION_MAJOR __clang_major__
+	#define PLATFORM_COMPILER_VERSION_MINOR __clang_minor__
+	#define PLATFORM_COMPILER_VERSION_PATCH __clang_patchlevel__
+#elif defined(__GNUC__)
+	#define PLATFORM_COMPILER "GCC"
+	#define PLATFORM_COMPILER_VERSION_MAJOR __GNUC__
+	#define PLATFORM_COMPILER_VERSION_MINOR __GNUC_MINOR__
+	#define PLATFORM_COMPILER_VERSION_PATCH __GNUC_PATCHLEVEL__
+#elif defined(_MSC_VER)
+	#define PLATFORM_COMPILER "MSVC"
+	#define PLATFORM_COMPILER_VERSION_MAJOR (_MSC_VER / 100)
+	#define PLATFORM_COMPILER_VERSION_MINOR (_MSC_VER % 100)
+	#define PLATFORM_COMPILER_VERSION_PATCH 0
+#else
+	#error "Unsupported compiler !"
+#endif
+
 /* NOTE: Code will use the GCC macro for printing function signature. */
 #ifdef _MSC_VER
 	#define __PRETTY_FUNCTION__ __FUNCSIG__
@@ -128,4 +148,9 @@ namespace EmEn
 	constexpr bool IsWindows{IS_WINDOWS};
 	constexpr bool IsMacOS{IS_MACOS};
 	constexpr auto OSName{OS_NAME};
+
+	constexpr auto PlatformCompiler{PLATFORM_COMPILER};
+	constexpr int PlatformCompilerVersionMajor{PLATFORM_COMPILER_VERSION_MAJOR};
+	constexpr int PlatformCompilerVersionMinor{PLATFORM_COMPILER_VERSION_MINOR};
+	constexpr int PlatformCompilerVersionPatch{PLATFORM_COMPILER_VERSION_PATCH};
 }

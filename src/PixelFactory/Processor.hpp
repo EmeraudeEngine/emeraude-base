@@ -993,22 +993,54 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Copies a colored area with a stencil mask to the target pixmap.
+			 * @brief Fills a clipped area of the target pixmap with a solid colour through a stencil mask.
+			 * @note The grayscale mask is the coverage: white passes (the colour is written), black blocks,
+			 * grey blends partially (anti-aliased edges). The mask is sampled from its top-left corner and
+			 * must cover the clip rectangle. With DrawPixelMode::Replace the coverage is used as a pass/block
+			 * gate (any non-zero coverage writes the full colour); with the blend modes it modulates the
+			 * blend opacity, giving smooth edges.
+			 * @warning The mask pixmap must be grayscale and at least as large as the clip.
 			 * @tparam color_data_t The color data type. Default float.
 			 * @param color A reference to a color.
-			 * @param clip A reference to a rectangle.
+			 * @param clip A reference to a rectangle on the target pixmap.
+			 * @param mask A reference to a grayscale pixmap acting as the stencil mask.
 			 * @param mode Set the copy technic. Default: Replace.
-			 * @param mask A reference to a pixmap to act as the stencil mask.
 			 * @param opacity A global opacity. Default 1.0.
 			 * @return bool
 			 */
 			template< typename color_data_t = float >
 			bool
-			stencil (const Color< color_data_t > & /*color*/, const Math::Space2D::AARectangle< dimension_t > & /*clip*/, const Pixmap< pixel_data_t, dimension_t > & /*mask*/, DrawPixelMode /*mode = DrawPixelMode::Replace*/, float /*opacity = 1.0F*/) const noexcept
+			stencil (const Color< color_data_t > & color, const Math::Space2D::AARectangle< dimension_t > & clip, const Pixmap< pixel_data_t, dimension_t > & mask, DrawPixelMode mode = DrawPixelMode::Replace, float opacity = 1.0F) const noexcept
 			{
-				// TODO ...
+				if ( !mask.isValid() || !mask.isGrayScale() || mask.width() < clip.width() || mask.height() < clip.height() || !Processor::checkPixmapClipping(m_target, clip) )
+				{
+					return false;
+				}
 
-				return false;
+				const auto rowPixelCount = clip.width();
+
+				for ( size_t row = 0; row < clip.height(); ++row )
+				{
+					const auto destinationIndex = (((clip.top() + row) * m_target.width()) + clip.left());
+					const auto maskRowIndex = row * mask.width();
+
+					for ( size_t pixel = 0; pixel < rowPixelCount; ++pixel )
+					{
+						const auto coverage = mask.template pixel< color_data_t >(maskRowIndex + pixel).gray();
+
+						/* Black mask texel blocks the copy. */
+						if ( coverage <= static_cast< color_data_t >(0) )
+						{
+							continue;
+						}
+
+						m_target.blendPixel(destinationIndex + pixel, color, mode, static_cast< float >(coverage) * opacity);
+					}
+				}
+
+				m_target.markRectangleUpdated(clip);
+
+				return true;
 			}
 
 			/**

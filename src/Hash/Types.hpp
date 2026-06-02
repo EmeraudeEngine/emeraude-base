@@ -39,15 +39,15 @@ namespace EmEn::Base::Hash
 		Undefined,
 		CRC32,
 		MD5,
-		SHA1,
-		SHA256
+		SHA256,
+		SHA512
 	};
 
 	constexpr auto UndefinedString{"Undefined"};
 	constexpr auto CRC32String{"CRC32"};
 	constexpr auto MD5String{"MD5"};
-	constexpr auto SHA1String{"SHA1"};
 	constexpr auto SHA256String{"SHA256"};
+	constexpr auto SHA512String{"SHA512"};
 
 	/**
 	* @brief Returns a C-String version of the enum value.
@@ -70,11 +70,11 @@ namespace EmEn::Base::Hash
 			case HashType::MD5 :
 				return MD5String;
 
-			case HashType::SHA1 :
-				return SHA1String;
-
 			case HashType::SHA256 :
 				return SHA256String;
+
+			case HashType::SHA512 :
+				return SHA512String;
 		}
 
 		return UndefinedString;
@@ -108,16 +108,16 @@ namespace EmEn::Base::Hash
 			return HashType::MD5;
 		}
 
-		if ( value == SHA1String )
-		{
-			return HashType::SHA1;
-		}
-
 		if ( value == SHA256String )
 		{
 			return HashType::SHA256;
 		}
 
-		return HashType::Undefined;;
+		if ( value == SHA512String )
+		{
+			return HashType::SHA512;
+		}
+
+		return HashType::Undefined;
 	}
 }
