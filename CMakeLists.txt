@@ -46,6 +46,7 @@ option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point.
 option(EMERAUDE_ENABLE_PCH "Enable precompiled headers." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suite(s)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus A.1)." Off)
+option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Ave robustus A.5)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
@@ -364,4 +365,37 @@ if ( EMERAUDE_ENABLE_TESTS )
 	enable_testing()
 	# Tests load fixtures via "./assets/…" — run them from resources/ where those live.
 	gtest_discover_tests(EmeraudeBaseUnitTests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources)
+endif ()
+
+#######################################################################
+## Benchmarks
+# "Ave robustus!" A.5 — performance is benchmark-gated: no optimization lands without a
+# before/after measurement proving the gain. Google Benchmark is a test-only dependency
+# (like gtest), built into a separate EmeraudeBaseBenchmarks target. OFF by default and
+# NEVER part of the ctest correctness pass (benchmarks are slow and run on demand).
+# Build it in Release for trustworthy numbers (a Debug build of the benchmark lib warns).
+if ( EMERAUDE_ENABLE_BENCHMARKS )
+	message(STATUS "[EmeraudeBase] Google Benchmark suite enabled (EmeraudeBaseBenchmarks).")
+
+	include(FetchContent)
+
+	# Pull only the library — skip its own tests, install rules and gtest dependency.
+	set(BENCHMARK_ENABLE_TESTING Off CACHE BOOL "" FORCE)
+	set(BENCHMARK_ENABLE_GTEST_TESTS Off CACHE BOOL "" FORCE)
+	set(BENCHMARK_ENABLE_INSTALL Off CACHE BOOL "" FORCE)
+	set(BENCHMARK_INSTALL_DOCS Off CACHE BOOL "" FORCE)
+
+	FetchContent_Declare(googlebenchmark GIT_REPOSITORY https://github.com/google/benchmark.git GIT_TAG v1.9.1)
+	FetchContent_MakeAvailable(googlebenchmark)
+
+	add_executable(EmeraudeBaseBenchmarks ${EMERAUDE_BASE_BENCHMARK_SOURCES})
+
+	set_target_properties(EmeraudeBaseBenchmarks PROPERTIES
+		C_STANDARD ${EMERAUDE_C_VERSION} C_STANDARD_REQUIRED On C_EXTENSIONS Off
+		CXX_STANDARD ${EMERAUDE_CXX_VERSION} CXX_STANDARD_REQUIRED On CXX_EXTENSIONS Off
+	)
+
+	target_compile_definitions(EmeraudeBaseBenchmarks PRIVATE ${EMERAUDE_COMPILE_DEFINITIONS})
+	target_compile_options(EmeraudeBaseBenchmarks PRIVATE ${EMERAUDE_COMPILE_OPTIONS})
+	target_link_libraries(EmeraudeBaseBenchmarks PRIVATE emeraude::base benchmark::benchmark benchmark::benchmark_main)
 endif ()

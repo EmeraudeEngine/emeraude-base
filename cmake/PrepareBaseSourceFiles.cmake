@@ -81,3 +81,8 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ZipArchive.cpp
 )
+
+# Ave robustus! A.5 — Google Benchmark sources (EmeraudeBaseBenchmarks target).
+set(EMERAUDE_BASE_BENCHMARK_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Benchmarking/bench_PixelFactoryResize.cpp
+)

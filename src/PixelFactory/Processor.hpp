@@ -41,6 +41,7 @@
 #include "Math/Space2D/Intersections/LineLine.hpp"
 #include "Math/Space2D/Segment.hpp"
 #include "Pixmap.hpp"
+#include "ThreadPool.hpp"
 
 namespace EmEn::Base::PixelFactory
 {
@@ -1022,7 +1023,7 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			bool
-			resize (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & destination, FilteringMode filteringMode = FilteringMode::Linear) noexcept
+			resize (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & destination, FilteringMode filteringMode = FilteringMode::Linear, ThreadPool * pool = nullptr) noexcept
 			{
 				if ( !source.isValid() )
 				{
@@ -1044,15 +1045,15 @@ namespace EmEn::Base::PixelFactory
 				switch ( filteringMode )
 				{
 					case FilteringMode::Cubic :
-						resizeCubic(source, width, height, destination);
+						resizeCubic(source, width, height, destination, pool);
 						break;
 
 					case FilteringMode::Linear :
-						resizeLinear(source, width, height, destination);
+						resizeLinear(source, width, height, destination, pool);
 						break;
 
 					case FilteringMode::Nearest :
-						resizeNearest(source, width, height, destination);
+						resizeNearest(source, width, height, destination, pool);
 						break;
 				}
 
@@ -1070,14 +1071,15 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			bool
-			resize (const Pixmap< pixel_data_t, dimension_t > & source, float ratio, Pixmap< pixel_data_t, dimension_t > & destination, FilteringMode filteringMode = FilteringMode::Linear) noexcept
+			resize (const Pixmap< pixel_data_t, dimension_t > & source, float ratio, Pixmap< pixel_data_t, dimension_t > & destination, FilteringMode filteringMode = FilteringMode::Linear, ThreadPool * pool = nullptr) noexcept
 			{
 				return Processor::resize(
 					source,
 					static_cast< size_t >(source.width() * ratio),
 					static_cast< size_t >(source.height() * ratio),
 					destination,
-					filteringMode
+					filteringMode,
+					pool
 				);
 			}
 
@@ -1092,7 +1094,7 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			Pixmap< pixel_data_t, dimension_t >
-			resize (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, FilteringMode filteringMode = FilteringMode::Linear) noexcept
+			resize (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, FilteringMode filteringMode = FilteringMode::Linear, ThreadPool * pool = nullptr) noexcept
 			{
 				if ( width == source.width() && height == source.height() )
 				{
@@ -1101,7 +1103,7 @@ namespace EmEn::Base::PixelFactory
 
 				Pixmap< pixel_data_t, dimension_t > output;
 
-				if ( !Processor::resize(source, width, height, output, filteringMode) )
+				if ( !Processor::resize(source, width, height, output, filteringMode, pool) )
 				{
 					return {};
 				}
@@ -1119,13 +1121,14 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			Pixmap< pixel_data_t, dimension_t >
-			resize (const Pixmap< pixel_data_t, dimension_t > & source, float ratio, FilteringMode filteringMode = FilteringMode::Linear) noexcept
+			resize (const Pixmap< pixel_data_t, dimension_t > & source, float ratio, FilteringMode filteringMode = FilteringMode::Linear, ThreadPool * pool = nullptr) noexcept
 			{
 				return Processor::resize(
 					source,
 					static_cast< size_t >(source.width() * ratio),
 					static_cast< size_t >(source.height() * ratio),
-					filteringMode
+					filteringMode,
+					pool
 				);
 			}
 
@@ -2411,7 +2414,7 @@ namespace EmEn::Base::PixelFactory
 			 */
 			static
 			void
-			resizeNearest (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & target) noexcept
+			resizeNearest (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & target, ThreadPool * pool = nullptr) noexcept
 			{
 				const auto colorCount = source.colorCount();
 				const auto xRatio = static_cast< float >(source.width() - 1) / static_cast< float >(width);
@@ -2420,11 +2423,12 @@ namespace EmEn::Base::PixelFactory
 				const auto & sourceData = source.data();
 				auto & targetData = target.data();
 
-				size_t dstIndex = 0;
+				/* Ave robustus! (A.5): per-row work, independent across rows (dstIndex derived from the
+				 * destination row, not a shared counter) → runs on the optional ThreadPool; serial path
+				 * byte-identical, parallel race-free. */
+				const auto processRow = [&] (size_t destinationY) noexcept {
+					size_t dstIndex = destinationY * static_cast< size_t >(width) * static_cast< size_t >(colorCount);
 
-				/* Y (row) on the destination */
-				for ( size_t destinationY = 0; destinationY < height; destinationY++ )
-				{
 					const auto sourceY = static_cast< size_t >(std::round(yRatio * static_cast< float >(destinationY)));
 					const auto sourceRowIndex = sourceY * source.width() * colorCount;
 
@@ -2462,6 +2466,18 @@ namespace EmEn::Base::PixelFactory
 								break;
 						}
 					}
+				};
+
+				if ( pool != nullptr )
+				{
+					pool->parallelFor(static_cast< size_t >(0), static_cast< size_t >(height), processRow);
+				}
+				else
+				{
+					for ( size_t destinationY = 0; destinationY < height; destinationY++ )
+					{
+						processRow(destinationY);
+					}
 				}
 			}
 
@@ -2476,7 +2492,7 @@ namespace EmEn::Base::PixelFactory
 			 */
 			static
 			void
-			resizeLinear (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & target) noexcept
+			resizeLinear (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & target, ThreadPool * pool = nullptr) noexcept
 			{
 				const auto colorCount = source.colorCount();
 				const auto xRatio = static_cast< float >(source.width() - 1) / static_cast< float >(width);
@@ -2485,11 +2501,11 @@ namespace EmEn::Base::PixelFactory
 				const auto & sourceData = source.data();
 				auto & targetData = target.data();
 
-				size_t dstIndex = 0;
+				/* Ave robustus! (A.5): per-row work, independent across rows (dstIndex derived from y, not a
+				 * shared counter) → runs on the optional ThreadPool; serial path byte-identical, race-free. */
+				const auto processRow = [&] (size_t y) noexcept {
+					size_t dstIndex = y * static_cast< size_t >(width) * static_cast< size_t >(colorCount);
 
-				/* Y (row) on the destination */
-				for ( size_t y = 0; y < height; y++ )
-				{
 					const auto realY = yRatio * static_cast< float >(y);
 
 					const auto yFloor = static_cast< size_t >(std::floor(realY));
@@ -2545,6 +2561,18 @@ namespace EmEn::Base::PixelFactory
 								break;
 						}
 					}
+				};
+
+				if ( pool != nullptr )
+				{
+					pool->parallelFor(static_cast< size_t >(0), static_cast< size_t >(height), processRow);
+				}
+				else
+				{
+					for ( size_t y = 0; y < height; y++ )
+					{
+						processRow(y);
+					}
 				}
 			}
 
@@ -2581,19 +2609,21 @@ namespace EmEn::Base::PixelFactory
 			 */
 			static
 			void
-			resizeCubic (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & target) noexcept
+			resizeCubic (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & target, ThreadPool * pool = nullptr) noexcept
 			{
 				const auto colorCount = source.colorCount();
+				const auto numChannels = static_cast< size_t >(colorCount);
 				const auto xRatio = static_cast< float >(source.width() - 1) / static_cast< float >(width);
 				const auto yRatio = static_cast< float >(source.height() - 1) / static_cast< float >(height);
 
-				//const auto & sourceData = source.data();
 				auto & targetData = target.data();
 
-				size_t dstIndex = 0;
+				/* Ave robustus! (A.5): per-row work, independent across rows so it can run on the optional
+				 * ThreadPool. dstIndex is derived from y (not a shared counter) — the serial path stays
+				 * byte-identical to the former loop, the parallel path is race-free. */
+				const auto processRow = [&] (size_t y) noexcept {
+					size_t dstIndex = y * static_cast< size_t >(width) * numChannels;
 
-				for ( size_t y = 0; y < height; ++y )
-				{
 					const float realY = yRatio * static_cast< float >(y);
 					const auto yFloor = static_cast< int32_t >(std::floor(realY));
 					const float tY = realY - static_cast< float >(yFloor);
@@ -2605,8 +2635,6 @@ namespace EmEn::Base::PixelFactory
 						const float tX = realX - static_cast< float >(xFloor);
 
 						std::array< float, 4 > interpolatedValues{0.0F, 0.0F, 0.0F, 0.0F};
-
-						const auto numChannels = static_cast< size_t >(colorCount);
 
 						for ( size_t channel = 0; channel < numChannels; ++channel )
 						{
@@ -2705,6 +2733,18 @@ namespace EmEn::Base::PixelFactory
 							default:
 								break;
 						}
+					}
+				};
+
+				if ( pool != nullptr )
+				{
+					pool->parallelFor(static_cast< size_t >(0), static_cast< size_t >(height), processRow);
+				}
+				else
+				{
+					for ( size_t y = 0; y < height; ++y )
+					{
+						processRow(y);
 					}
 				}
 			}

@@ -31,6 +31,8 @@
 #include "Constants.hpp"
 #include "PixelFactory/FileIO.hpp"
 #include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Processor.hpp"
+#include "ThreadPool.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 
 using namespace EmEn::Base;
@@ -911,4 +913,75 @@ TEST(PixelFactoryProcessor, removeAlphaChannel)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, {"./assets/tmp_removeAlphaChannel.png"}, true));
+}
+
+TEST(PixelFactoryProcessor, resizeCubicParallelMatchesSerial)
+{
+	/* Ave robustus! (A.5): the ThreadPool path of resizeCubic must produce byte-identical output to
+	 * the serial path. This is the correctness guarantee that lets the parallelization land; it is
+	 * also the race detector under ASan/UBSan. RGBA exercises all four channels. */
+	Pixmap< uint8_t > source{640, 480, ChannelMode::RGBA};
+
+	auto & data = source.data();
+
+	for ( size_t index = 0; index < data.size(); ++index )
+	{
+		data[index] = static_cast< uint8_t >((index * 2654435761U) >> 24);
+	}
+
+	ThreadPool pool;
+
+	const auto serial = Processor< uint8_t >::resize(source, 1280, 960, FilteringMode::Cubic, nullptr);
+	const auto parallel = Processor< uint8_t >::resize(source, 1280, 960, FilteringMode::Cubic, &pool);
+
+	ASSERT_EQ(serial.width(), parallel.width());
+	ASSERT_EQ(serial.height(), parallel.height());
+	ASSERT_EQ(serial.data().size(), parallel.data().size());
+	EXPECT_EQ(serial.data(), parallel.data());
+}
+
+TEST(PixelFactoryProcessor, resizeLinearParallelMatchesSerial)
+{
+	/* Ave robustus! (A.5): FilteringMode::Linear ThreadPool path must equal the serial path (race-checked under ASan). */
+	Pixmap< uint8_t > source{640, 480, ChannelMode::RGBA};
+
+	auto & data = source.data();
+
+	for ( size_t index = 0; index < data.size(); ++index )
+	{
+		data[index] = static_cast< uint8_t >((index * 2654435761U) >> 24);
+	}
+
+	ThreadPool pool;
+
+	const auto serial = Processor< uint8_t >::resize(source, 1280, 960, FilteringMode::Linear, nullptr);
+	const auto parallel = Processor< uint8_t >::resize(source, 1280, 960, FilteringMode::Linear, &pool);
+
+	ASSERT_EQ(serial.width(), parallel.width());
+	ASSERT_EQ(serial.height(), parallel.height());
+	ASSERT_EQ(serial.data().size(), parallel.data().size());
+	EXPECT_EQ(serial.data(), parallel.data());
+}
+
+TEST(PixelFactoryProcessor, resizeNearestParallelMatchesSerial)
+{
+	/* Ave robustus! (A.5): FilteringMode::Nearest ThreadPool path must equal the serial path (race-checked under ASan). */
+	Pixmap< uint8_t > source{640, 480, ChannelMode::RGBA};
+
+	auto & data = source.data();
+
+	for ( size_t index = 0; index < data.size(); ++index )
+	{
+		data[index] = static_cast< uint8_t >((index * 2654435761U) >> 24);
+	}
+
+	ThreadPool pool;
+
+	const auto serial = Processor< uint8_t >::resize(source, 1280, 960, FilteringMode::Nearest, nullptr);
+	const auto parallel = Processor< uint8_t >::resize(source, 1280, 960, FilteringMode::Nearest, &pool);
+
+	ASSERT_EQ(serial.width(), parallel.width());
+	ASSERT_EQ(serial.height(), parallel.height());
+	ASSERT_EQ(serial.data().size(), parallel.data().size());
+	EXPECT_EQ(serial.data(), parallel.data());
 }
