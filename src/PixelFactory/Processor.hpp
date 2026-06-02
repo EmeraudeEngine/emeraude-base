@@ -1065,6 +1065,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param height The new height.
 			 * @param destination A writable reference to a pixmap.
 			 * @param filteringMode The filtering mode to apply during the resize. Default linear.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return bool
 			 */
 			[[nodiscard]]
@@ -1113,6 +1114,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param ratio The scale ratio.
 			 * @param destination A reference to a writable pixmap.
 			 * @param filteringMode The filtering mode to apply during the resize. Default linear.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return bool
 			 */
 			[[nodiscard]]
@@ -1136,6 +1138,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param width The new width.
 			 * @param height The new height.
 			 * @param filteringMode The filtering mode to apply during the resize. Default linear.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
 			[[nodiscard]]
@@ -1163,6 +1166,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param source A reference to a pixmap.
 			 * @param ratio The scale ratio.
 			 * @param filteringMode The filtering mode to apply during the resize. Default linear.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
 			[[nodiscard]]
@@ -1386,6 +1390,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param source A reference to a pixmap.
 			 * @param destination A writable reference to a pixmap.
 			 * @param mode The mirror mode desired.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return bool
 			 */
 			[[nodiscard]]
@@ -1424,6 +1429,7 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Returns a mirrored pixmap on X axis, Y axis or both axes.
 			 * @param source A reference to a pixmap.
 			 * @param mode The mirror mode desired.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
 			[[nodiscard]]
@@ -2092,6 +2098,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param source A reference to a pixmap.
 			 * @param mode The conversion mode. Default LumaRec709.
 			 * @param option Additional parameter for specific mode. Default 0.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
 			[[nodiscard]]
@@ -2470,6 +2477,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param width The new width.
 			 * @param height The new height.
 			 * @param target A writable reference to a pixmap.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return void
 			 */
 			static
@@ -2548,6 +2556,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param width The new width.
 			 * @param height The new height.
 			 * @param target A writable reference to a pixmap.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return void
 			 */
 			static
@@ -2665,6 +2674,7 @@ namespace EmEn::Base::PixelFactory
 			 * @param width The new width.
 			 * @param height The new height.
 			 * @param target A writable reference to a pixmap.
+			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return void
 			 */
 			static
