@@ -112,7 +112,7 @@ for these decoders). Pattern: arm `setjmp` in the read/write function, make the 
 
 `FileFormatPNG` (two phases: header, then image) and `FileFormatJpeg` (custom `jpeg_error_mgr`)
 implement this; see their `fuzz_png` / `fuzz_jpeg` regression history in
-[`/fuzzing/README.md`](../fuzzing/README.md).
+[`/src/Fuzzing/README.md`](../src/Fuzzing/README.md).
 
 ### 5.2 Owning resource handles — RAII, never manual `close()` (A.4)
 

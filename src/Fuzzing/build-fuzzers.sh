@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# fuzzing/build-fuzzers.sh — build the emeraude-base libFuzzer targets (Ave robustus! A.3).
+# src/Fuzzing/build-fuzzers.sh — build the emeraude-base libFuzzer targets (Ave robustus! A.3).
 #
 # libFuzzer needs clang + the clang_rt runtimes (Debian: libclang-rt-<ver>-dev). The base
 # library itself stays a normal g++ build; each fuzz target is a standalone clang executable
@@ -11,16 +11,16 @@
 # Prerequisites: a configured emeraude-base build dir providing the generated config header
 # and the static library. Defaults to .claude-build-debug; override with BASE_BUILD_DIR.
 #
-# Usage:   fuzzing/build-fuzzers.sh
-#          BASE_BUILD_DIR=.claude-build-release fuzzing/build-fuzzers.sh
+# Usage:   src/Fuzzing/build-fuzzers.sh
+#          BASE_BUILD_DIR=.claude-build-release src/Fuzzing/build-fuzzers.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
 CXX="${CXX:-clang++}"
 BASE_BUILD_DIR="${BASE_BUILD_DIR:-.claude-build-debug}"
-OUT_DIR="fuzzing/build"
+OUT_DIR="src/Fuzzing/build"
 
 # Resolve the ext-deps root and the static library produced by the base build.
 EXT_LIBS_PATH="$(sed -n 's/^EMERAUDE_EXT_LIBS_PATH:PATH=//p' "${BASE_BUILD_DIR}/CMakeCache.txt")"
@@ -62,7 +62,7 @@ mkdir -p "${OUT_DIR}"
 for target in "${TARGETS[@]}"; do
 	echo "==> building ${target}"
 	"${CXX}" "${FLAGS[@]}" "${INCLUDES[@]}" \
-		"fuzzing/${target}.cpp" \
+		"src/Fuzzing/${target}.cpp" \
 		"${STATIC_LIB}" \
 		"${EXT_LINK[@]}" \
 		-o "${OUT_DIR}/${target}"

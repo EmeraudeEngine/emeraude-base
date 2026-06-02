@@ -1,5 +1,5 @@
 # Generated fuzzing artifacts — never tracked. Sources (fuzz_*.cpp), the build script,
-# the README and this file are the only tracked entries under fuzzing/.
+# the README and this file are the only tracked entries under src/Fuzzing/.
 build/
 corpus/
 repro/

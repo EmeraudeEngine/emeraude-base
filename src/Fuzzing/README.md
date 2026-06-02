@@ -35,8 +35,8 @@ provide it; the SF2 render path is odr-used by `renderToWave()`).
 ## Build & run
 
 ```sh
-fuzzing/build-fuzzers.sh                       # builds every target into fuzzing/build/
-ASAN_OPTIONS=detect_leaks=1 fuzzing/build/fuzz_midi fuzzing/build/fuzz_midi.corpus -max_total_time=60
+src/Fuzzing/build-fuzzers.sh                       # builds every target into src/Fuzzing/build/
+ASAN_OPTIONS=detect_leaks=1 src/Fuzzing/build/fuzz_midi src/Fuzzing/build/fuzz_midi.corpus -max_total_time=60
 ```
 
 Targets:
@@ -57,7 +57,7 @@ Targets:
 | `fuzz_ini`        | `INIParser` (via a per-process temp file)           |
 
 A crash writes a `crash-<hash>` reproducer in the run directory; replay it with
-`fuzzing/build/<target> crash-<hash>` to get the full sanitizer stack. Reproducers, the `build/`
+`src/Fuzzing/build/<target> crash-<hash>` to get the full sanitizer stack. Reproducers, the `build/`
 directory and accumulated corpora are git-ignored (see `.gitignore`).
 
 ## Findings
