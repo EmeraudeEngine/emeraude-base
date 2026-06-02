@@ -2050,7 +2050,7 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			static
 			Pixmap< pixel_data_t, dimension_t >
-			toGrayscale (const Pixmap< pixel_data_t, dimension_t > & source, GrayscaleConversionMode mode = GrayscaleConversionMode::Average, int option = 0) noexcept
+			toGrayscale (const Pixmap< pixel_data_t, dimension_t > & source, GrayscaleConversionMode mode = GrayscaleConversionMode::Average, int option = 0, ThreadPool * pool = nullptr) noexcept
 			{
 				if ( !source.isValid() )
 				{
@@ -2064,10 +2064,11 @@ namespace EmEn::Base::PixelFactory
 
 				Pixmap< pixel_data_t, dimension_t > output{source.width(), source.height(), ChannelMode::Grayscale};
 
-				const auto pixelCount = source.pixelCount();
+				const auto pixelCount = static_cast< size_t >(source.pixelCount());
 
-				for ( size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++ )
-				{
+				/* Ave robustus! (A.5): per-pixel luminance is independent → optional ThreadPool. source.pixel()
+				 * reads are const/concurrent-safe; output.pixelPointer(i) writes are index-local, race-free. */
+				const auto processPixel = [&] (size_t pixelIndex) noexcept {
 					if constexpr ( std::is_floating_point_v< pixel_data_t > )
 					{
 						*output.pixelPointer(pixelIndex) = source.pixel(pixelIndex).luminance(mode, option);
@@ -2075,6 +2076,18 @@ namespace EmEn::Base::PixelFactory
 					else
 					{
 						*output.pixelPointer(pixelIndex) = source.pixel(pixelIndex).template luminanceInteger< pixel_data_t >(mode, option);
+					}
+				};
+
+				if ( pool != nullptr )
+				{
+					pool->parallelFor(static_cast< size_t >(0), pixelCount, processPixel);
+				}
+				else
+				{
+					for ( size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++ )
+					{
+						processPixel(pixelIndex);
 					}
 				}
 

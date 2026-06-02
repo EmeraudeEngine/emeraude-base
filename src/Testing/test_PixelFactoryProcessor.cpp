@@ -1010,3 +1010,26 @@ TEST(PixelFactoryProcessor, mirrorYParallelMatchesSerial)
 	const auto twice = Processor< uint8_t >::mirror(parallel, MirrorMode::Y, &pool);
 	EXPECT_EQ(twice.data(), source.data());
 }
+
+TEST(PixelFactoryProcessor, toGrayscaleParallelMatchesSerial)
+{
+	/* Ave robustus! (A.5): the ThreadPool path of toGrayscale must equal the serial path (race-checked
+	 * under ASan). Per-pixel luminance, output written via index-local pixelPointer(). */
+	Pixmap< uint8_t > source{640, 480, ChannelMode::RGB};
+
+	auto & data = source.data();
+
+	for ( size_t index = 0; index < data.size(); ++index )
+	{
+		data[index] = static_cast< uint8_t >((index * 2654435761U) >> 24);
+	}
+
+	ThreadPool pool;
+
+	const auto serial = Processor< uint8_t >::toGrayscale(source, GrayscaleConversionMode::LumaRec709, 0, nullptr);
+	const auto parallel = Processor< uint8_t >::toGrayscale(source, GrayscaleConversionMode::LumaRec709, 0, &pool);
+
+	ASSERT_EQ(serial.channelMode(), ChannelMode::Grayscale);
+	ASSERT_EQ(serial.data().size(), parallel.data().size());
+	EXPECT_EQ(serial.data(), parallel.data());
+}

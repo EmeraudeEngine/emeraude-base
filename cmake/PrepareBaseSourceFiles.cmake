@@ -86,4 +86,5 @@ set(EMERAUDE_BASE_TEST_SOURCES
 set(EMERAUDE_BASE_BENCHMARK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Benchmarking/bench_PixelFactoryResize.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Benchmarking/bench_PixelFactoryMirror.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Benchmarking/bench_PixelFactoryConvert.cpp
 )

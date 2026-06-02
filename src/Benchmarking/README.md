@@ -84,3 +84,12 @@ gain here, not a shortfall.
 `Pixmap::addAlphaChannel` was also reworked to expand the buffer in place (no whole-buffer copy;
 this also fixed a Grayscale-case fall-through bug) — a correctness + allocation win, not a
 throughput benchmark, so it is covered by unit tests rather than a bench here.
+
+### `Processor::toGrayscale` — per-pixel luminance, parallelized 2026-06-02
+
+Per-pixel luminance (Color construction + weighted conversion) is arithmetic-bound, so unlike
+the pure copies it scales close to the resizes. Median of 8, no concurrent load.
+
+| Workload | Serial | ThreadPool | Speedup |
+|----------|-------:|-----------:|--------:|
+| 3840×2160 RGB → Grayscale (LumaRec709) | 28.2 ms | 2.47 ms | ×11.4 |
