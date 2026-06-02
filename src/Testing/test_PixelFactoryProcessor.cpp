@@ -1117,3 +1117,82 @@ TEST(PixelFactoryProcessor, coloredStencilRespectsMask)
 	EXPECT_EQ(data[10], 0);
 	EXPECT_EQ(data[11], 0);
 }
+
+TEST(PixelFactoryProcessor, pixmapStencilRespectsMask)
+{
+	/* Ave robustus! (Axis B): the pixmap-source stencil used to ignore its mask (FIXME) and misuse
+	 * blendPixel(index,row,...). It now copies the source through the mask: white passes, black blocks.
+	 * Source = solid red; mask left-white/right-black; target zeroed -> left half red, right untouched. */
+	Pixmap< uint8_t > source{4, 2, ChannelMode::RGBA};
+
+	{
+		auto & sourceData = source.data();
+
+		for ( size_t pixel = 0; pixel < 8; ++pixel )
+		{
+			sourceData[(pixel * 4) + 0] = 255;
+			sourceData[(pixel * 4) + 1] = 0;
+			sourceData[(pixel * 4) + 2] = 0;
+			sourceData[(pixel * 4) + 3] = 255;
+		}
+	}
+
+	Pixmap< uint8_t > mask{4, 2, ChannelMode::Grayscale};
+
+	{
+		auto & maskData = mask.data();
+		const uint8_t pattern[8] = {255, 255, 0, 0, 255, 255, 0, 0};
+
+		for ( size_t index = 0; index < maskData.size(); ++index )
+		{
+			maskData[index] = pattern[index];
+		}
+	}
+
+	const auto checkResult = [] (const Pixmap< uint8_t > & out) {
+		const auto & data = out.data();
+
+		/* (col 0): white mask -> red copied. */
+		EXPECT_EQ(data[0], 255);
+		EXPECT_EQ(data[1], 0);
+		EXPECT_EQ(data[2], 0);
+		EXPECT_EQ(data[3], 255);
+
+		/* (col 2): black mask -> untouched (zero). */
+		EXPECT_EQ(data[8], 0);
+		EXPECT_EQ(data[9], 0);
+		EXPECT_EQ(data[10], 0);
+		EXPECT_EQ(data[11], 0);
+	};
+
+	/* Core overload (explicit source/destination clips). */
+	{
+		Pixmap< uint8_t > target{4, 2, ChannelMode::RGBA};
+
+		for ( auto & value : target.data() )
+		{
+			value = 0;
+		}
+
+		Processor< uint8_t > processor{target};
+
+		ASSERT_TRUE(processor.stencil(source, Math::Space2D::AARectangle< uint32_t >{0, 0, 4, 2}, Math::Space2D::AARectangle< uint32_t >{0, 0, 4, 2}, mask, DrawPixelMode::Replace));
+		checkResult(target);
+	}
+
+	/* Convenience overload (full source -> clip); also forces instantiation of the formerly
+	 * uncompilable forwarding call. */
+	{
+		Pixmap< uint8_t > target{4, 2, ChannelMode::RGBA};
+
+		for ( auto & value : target.data() )
+		{
+			value = 0;
+		}
+
+		Processor< uint8_t > processor{target};
+
+		ASSERT_TRUE(processor.stencil(source, Math::Space2D::AARectangle< uint32_t >{0, 0, 4, 2}, mask, DrawPixelMode::Replace, 1.0F));
+		checkResult(target);
+	}
+}

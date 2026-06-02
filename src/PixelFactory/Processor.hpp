@@ -936,21 +936,28 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Copies with a stencil mask a clipped area of the source pixmap to a clipped area of the target pixmap.
-			 * @note The source pixmap will be used from the top-left corner.
-			 * @warning The mask pixmap must be grayscale.
+			 * @brief Copies a clipped area of the source pixmap to a clipped area of the target pixmap through a stencil mask.
+			 * @note The grayscale mask is the coverage (sampled from its top-left corner): white passes (the
+			 * source pixel is copied), black blocks, grey blends partially (anti-aliased edges). With
+			 * DrawPixelMode::Replace any non-zero coverage copies the source pixel as-is; the blend modes
+			 * modulate the blend opacity by the coverage.
+			 * @warning The mask must be grayscale and the source and mask must both cover the destination clip.
 			 * @param source A reference to a source pixmap.
 			 * @param sourceClip A reference to a rectangle on the source pixmap.
 			 * @param destinationClip A reference to a rectangle on the target pixmap.
-			 * @param mask A reference to a pixmap to act as the stencil mask.
+			 * @param mask A reference to a grayscale pixmap to act as the stencil mask.
 			 * @param mode Set the copy technic. Default: Replace.
+			 * @param opacity A global opacity. Default 1.0.
 			 * @return bool
 			 */
-			[[nodiscard]] 
+			[[nodiscard]]
 			bool
-			stencil (const Pixmap< pixel_data_t, dimension_t > & source, Math::Space2D::AARectangle< dimension_t > sourceClip, Math::Space2D::AARectangle< dimension_t > destinationClip, const Pixmap< pixel_data_t, dimension_t > & mask, DrawPixelMode mode = DrawPixelMode::Replace) const noexcept
+			stencil (const Pixmap< pixel_data_t, dimension_t > & source, Math::Space2D::AARectangle< dimension_t > sourceClip, Math::Space2D::AARectangle< dimension_t > destinationClip, const Pixmap< pixel_data_t, dimension_t > & mask, DrawPixelMode mode = DrawPixelMode::Replace, float opacity = 1.0F) const noexcept
 			{
-				if ( !mask.isValid() || !mask.isGrayScale() || (!Processor::checkPixmapClipping(source, sourceClip) && !Processor::checkPixmapClipping(m_target, destinationClip)) )
+				if ( !mask.isValid() || !mask.isGrayScale() ||
+					!Processor::checkPixmapClipping(source, sourceClip) || !Processor::checkPixmapClipping(m_target, destinationClip) ||
+					sourceClip.width() < destinationClip.width() || sourceClip.height() < destinationClip.height() ||
+					mask.width() < destinationClip.width() || mask.height() < destinationClip.height() )
 				{
 					return false;
 				}
@@ -961,11 +968,19 @@ namespace EmEn::Base::PixelFactory
 				{
 					const auto sourceIndex = (((sourceClip.top() + row) * source.width()) + sourceClip.left());
 					const auto destinationIndex = (((destinationClip.top() + row) * m_target.width()) + destinationClip.left());
+					const auto maskRowIndex = row * mask.width();
 
-					/* FIXME: Check the value of the mask. */
 					for ( size_t pixel = 0; pixel < rowPixelCount; ++pixel )
 					{
-						m_target.blendPixel(destinationIndex + pixel, row, source.pixel(sourceIndex + pixel, row), mode);
+						/* Grayscale mask = coverage: white passes, black blocks, grey blends. */
+						const auto coverage = mask.pixel(maskRowIndex + pixel).gray();
+
+						if ( coverage <= static_cast< decltype(coverage) >(0) )
+						{
+							continue;
+						}
+
+						m_target.blendPixel(destinationIndex + pixel, source.pixel(sourceIndex + pixel), mode, static_cast< float >(coverage) * opacity);
 					}
 				}
 
