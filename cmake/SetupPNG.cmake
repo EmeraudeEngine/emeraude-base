@@ -19,13 +19,13 @@ else ()
 
 	if ( MSVC )
 		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PUBLIC
-			debug "${LOCAL_LIB_DIR}/lib/libpng16_staticd.lib"
-			optimized "${LOCAL_LIB_DIR}/lib/libpng16_static.lib"
+			debug "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16_staticd.lib"
+			optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16_static.lib"
 		)
 	else ()
 		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-			debug "${LOCAL_LIB_DIR}/lib/libpng16d.a"
-			optimized "${LOCAL_LIB_DIR}/lib/libpng16.a"
+			debug "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16d.a"
+			optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16.a"
 		)
 	endif ()
 endif ()

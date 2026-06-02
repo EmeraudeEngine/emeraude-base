@@ -14,14 +14,14 @@ if ( MSVC )
 	# mpg123-targets.cmake declares this as INTERFACE_LINK_LIBRARIES, but
 	# since we link mpg123.lib by path we must add shlwapi.lib here too.
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-		${LOCAL_LIB_DIR}/lib/sndfile.lib
-		${LOCAL_LIB_DIR}/lib/FLAC.lib
-		${LOCAL_LIB_DIR}/lib/vorbisenc.lib
-		${LOCAL_LIB_DIR}/lib/vorbis.lib
-		${LOCAL_LIB_DIR}/lib/opus.lib
-		${LOCAL_LIB_DIR}/lib/mpg123.lib
-		${LOCAL_LIB_DIR}/lib/mp3lame.lib
-		${LOCAL_LIB_DIR}/lib/ogg.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/sndfile.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/FLAC.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/vorbisenc.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/vorbis.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/opus.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/mpg123.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/mp3lame.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/ogg.lib
 		shlwapi.lib
 	)
 elseif ( EMERAUDE_USE_SYSTEM_LIBS )
@@ -40,14 +40,14 @@ else ()
 	message("Enabling SNDFile library from local source ...")
 
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-		${LOCAL_LIB_DIR}/lib/libsndfile.a
-		${LOCAL_LIB_DIR}/lib/libFLAC.a
-		${LOCAL_LIB_DIR}/lib/libvorbisenc.a
-		${LOCAL_LIB_DIR}/lib/libvorbis.a
-		${LOCAL_LIB_DIR}/lib/libopus.a
-		${LOCAL_LIB_DIR}/lib/libmpg123.a
-		${LOCAL_LIB_DIR}/lib/libmp3lame.a
-		${LOCAL_LIB_DIR}/lib/libogg.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libsndfile.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libFLAC.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libvorbisenc.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libvorbis.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libopus.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libmpg123.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libmp3lame.a
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libogg.a
 		m
 	)
 endif ()

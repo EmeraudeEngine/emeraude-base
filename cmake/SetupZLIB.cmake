@@ -19,12 +19,10 @@ else ()
 
 	if ( MSVC )
 		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PUBLIC
-			debug "${LOCAL_LIB_DIR}/lib/zlibstaticd.lib" # Change to 'zsd' when new version of zlib will be released
-			optimized "${LOCAL_LIB_DIR}/lib/zlibstatic.lib" # Change to 'zs' when new version of zlib will be released
+			debug "${EMERAUDE_EXT_LIBS_PATH}/lib/zlibstaticd.lib"
+			optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/zlibstatic.lib"
 		)
 	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-			"${LOCAL_LIB_DIR}/lib/libz.a" # Change to 'z' when new version of zlib will be released
-		)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE "${EMERAUDE_EXT_LIBS_PATH}/lib/libz.a")
 	endif ()
 endif ()

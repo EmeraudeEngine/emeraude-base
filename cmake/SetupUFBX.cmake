@@ -4,7 +4,7 @@ endif ()
 
 message("Enabling ufbx FBX parsing library from local precompiled source ...")
 
-find_package(ufbx CONFIG REQUIRED PATHS ${LOCAL_LIB_DIR} NO_DEFAULT_PATH)
+find_package(ufbx CONFIG REQUIRED PATHS ${EMERAUDE_EXT_LIBS_PATH} NO_DEFAULT_PATH)
 
-# Headers are at ${LOCAL_LIB_DIR}/include/ufbx/, included via the imported target.
+# Headers are at ${EMERAUDE_EXT_LIBS_PATH}/include/ufbx/, included via the imported target.
 target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ufbx::ufbx)

@@ -18,9 +18,9 @@ else ()
 	message("Enabling SampleRate library from local source ...")
 
 	if ( MSVC )
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/samplerate.lib)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/samplerate.lib)
 	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/libsamplerate.a)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libsamplerate.a)
 	endif ()
 endif ()
 

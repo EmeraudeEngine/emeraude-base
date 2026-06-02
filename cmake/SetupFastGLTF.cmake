@@ -4,15 +4,13 @@ endif ()
 
 message("Enabling FastGLTF library from local precompiled source ...")
 
-# NOTE: Headers are already included via ${LOCAL_LIB_DIR}/include in the main CMakeLists.txt
+# NOTE: Headers are already included via ${EMERAUDE_EXT_LIBS_PATH}/include in the main CMakeLists.txt
 
 if ( MSVC )
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-		debug "${LOCAL_LIB_DIR}/lib/fastgltf.lib"
-		optimized "${LOCAL_LIB_DIR}/lib/fastgltf.lib"
+		debug "${EMERAUDE_EXT_LIBS_PATH}/lib/fastgltf.lib"
+		optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/fastgltf.lib"
 	)
 else ()
-	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-		"${LOCAL_LIB_DIR}/lib/libfastgltf.a"
-	)
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE "${EMERAUDE_EXT_LIBS_PATH}/lib/libfastgltf.a")
 endif ()

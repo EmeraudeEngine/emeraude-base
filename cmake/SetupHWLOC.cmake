@@ -18,9 +18,9 @@ else ()
 	message("Enabling HWLOC library from local source ...")
 
 	if ( MSVC )
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/hwloc.lib)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/hwloc.lib)
 	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/libhwloc.a)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libhwloc.a)
 
 		if ( APPLE )
 			target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE "-framework CoreFoundation -framework IOKit")

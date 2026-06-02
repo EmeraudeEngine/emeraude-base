@@ -293,7 +293,7 @@ target_link_libraries(emeraude_base PUBLIC emeraude::base::platform)
 
 # External dependencies — reuse the engine Setup scripts, retargeted to emeraude_base.
 set(TARGET_BINARY_FOR_SETUP emeraude_base)
-set(LOCAL_LIB_DIR ${EMERAUDE_EXT_LIBS_PATH})
+
 include(SetupJsonCpp)
 include(SetupFreetype)
 include(SetupZIP)
@@ -312,6 +312,7 @@ include(SetupThreads)
 if ( EMERAUDE_ENABLE_OPENMP AND NOT APPLE )
 	include(SetupOpenMP)
 endif ()
+
 unset(TARGET_BINARY_FOR_SETUP)
 
 # emeraude_base_config.hpp — generated after SetupSndFile so LIBSNDFILE_ENABLED is resolved.

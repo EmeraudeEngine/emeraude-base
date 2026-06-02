@@ -18,9 +18,9 @@ else ()
 	message("Enabling TagLib library from local source ...")
 
 	if ( MSVC )
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/tag.lib)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/tag.lib)
 	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${LOCAL_LIB_DIR}/lib/libtag.a)
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libtag.a)
 	endif ()
 
 	target_compile_definitions(${TARGET_BINARY_FOR_SETUP} PRIVATE TAGLIB_STATIC)

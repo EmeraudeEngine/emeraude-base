@@ -15,7 +15,7 @@ else ()
 
 	message("Enabling FreeType library from local source ...")
 
-	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC "${LOCAL_LIB_DIR}/include/freetype2")
+	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC "${EMERAUDE_EXT_LIBS_PATH}/include/freetype2")
 
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
 		debug freetyped
