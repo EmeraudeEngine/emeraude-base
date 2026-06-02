@@ -104,9 +104,6 @@ namespace EmEn::Base::Math
 				m_normals[PositiveZ] = Vector< 3, data_t >::normal(m_vertices[PositiveXPositiveYPositiveZ], m_vertices[NegativeXPositiveYPositiveZ], m_vertices[NegativeXNegativeYPositiveZ]);
 				m_normals[NegativeZ] = Vector< 3, data_t >::normal(m_vertices[NegativeXPositiveYNegativeZ], m_vertices[PositiveXPositiveYNegativeZ], m_vertices[PositiveXNegativeYNegativeZ]);
 
-				m_width = cuboid.width();
-				m_height = cuboid.height();
-				m_depth = cuboid.depth();
 
 				return true;
 			}
@@ -290,7 +287,7 @@ namespace EmEn::Base::Math
 			data_t
 			width () const noexcept
 			{
-				return m_width;
+				return (m_vertices[PositiveXPositiveYPositiveZ] - m_vertices[NegativeXPositiveYPositiveZ]).length();
 			}
 
 			/**
@@ -301,7 +298,7 @@ namespace EmEn::Base::Math
 			data_t
 			height () const noexcept
 			{
-				return m_height;
+				return (m_vertices[PositiveXPositiveYPositiveZ] - m_vertices[PositiveXNegativeYPositiveZ]).length();
 			}
 
 			/**
@@ -312,7 +309,7 @@ namespace EmEn::Base::Math
 			data_t
 			depth () const noexcept
 			{
-				return m_depth;
+				return (m_vertices[PositiveXPositiveYPositiveZ] - m_vertices[PositiveXPositiveYNegativeZ]).length();
 			}
 
 		private:
@@ -389,10 +386,6 @@ namespace EmEn::Base::Math
 
 			VertexArray m_vertices{};
 			NormalArray m_normals{};
-			/* FIXME : Extract these from vertices ! */
-			data_t m_width{0};
-			data_t m_height{0};
-			data_t m_depth{0};
 	};
 
 	/**

@@ -59,6 +59,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathBasics.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathCartesianFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathMatrix.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathOrientedCuboid.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathQuaternion.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace2D.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace3D.cpp
@@ -81,6 +82,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Variant.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Version.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryFileFormats.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryShapeBuilder.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ZipArchive.cpp
 )

@@ -633,7 +633,8 @@ namespace EmEn::Base::VertexFactory
 						case ConstructionMode::TriangleFan :
 							m_triangleVertexIndex = 2;
 
-							/* FIXME: Check this. */
+							/* Fan: vertex [0] (the fan origin) stays fixed; [1] takes the just-emitted last
+							 * vertex, so the next triangle is (origin, previous-last, new). */
 							m_triangleVertices[1] = m_triangleVertices[2];
 							m_triangleTextureCoordinates[1] = m_triangleTextureCoordinates[2];
 							m_triangleVertexColors[1] = m_triangleVertexColors[2];
