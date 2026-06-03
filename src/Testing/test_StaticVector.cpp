@@ -641,11 +641,50 @@ namespace EmEn::Base
 	}
 
 	/*
-	 * Safety-contract death tests (Ave robustus A.0). Under -fno-exceptions the
-	 * throwing paths are compiled out and capacity / bounds violations std::abort().
-	 * These lock that fail-fast contract, which was previously untested. The suite is
-	 * named *DeathTest so GoogleTest runs it before the threaded suites.
+	 * Safety-contract tests (Ave robustus A.0). The contract is dual: under
+	 * -fno-exceptions the throwing paths are compiled out and capacity / bounds
+	 * violations std::abort() (locked by death tests below), while with exceptions
+	 * enabled the same violations throw (locked by the EXPECT_THROW variants).
+	 * The death suite is named *DeathTest so GoogleTest runs it before the
+	 * threaded suites.
 	 */
+#if defined(__cpp_exceptions)
+	TEST(StaticVectorSafetyContractTest, atOutOfRangeThrows)
+	{
+		using Vector = StaticVector< int, 4 >;
+
+		Vector vector;
+		vector.emplace_back(1);
+
+		EXPECT_THROW((void)vector.at(5), std::out_of_range);
+	}
+
+	TEST(StaticVectorSafetyContractTest, constructorCountExceedingCapacityThrows)
+	{
+		using Vector = StaticVector< int, 4 >;
+
+		EXPECT_THROW({ Vector vector(5); (void)vector; }, std::length_error);
+	}
+
+	TEST(StaticVectorSafetyContractTest, resizeBeyondCapacityThrows)
+	{
+		using Vector = StaticVector< int, 4 >;
+
+		EXPECT_THROW({ Vector vector; vector.resize(5); }, std::length_error);
+	}
+
+	TEST(StaticVectorSafetyContractTest, emplaceBackBeyondCapacityThrows)
+	{
+		using Vector = StaticVector< int, 2 >;
+
+		EXPECT_THROW({
+			Vector vector;
+			vector.emplace_back(1);
+			vector.emplace_back(2);
+			vector.emplace_back(3);
+		}, std::length_error);
+	}
+#else
 	TEST(StaticVectorDeathTest, atOutOfRangeAborts)
 	{
 		using Vector = StaticVector< int, 4 >;
@@ -681,4 +720,5 @@ namespace EmEn::Base
 			vector.emplace_back(3);
 		}, "Capacity");
 	}
+#endif
 }
