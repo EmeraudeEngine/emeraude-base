@@ -201,24 +201,28 @@ namespace EmEn::Base::FastJSON
 		{
 			if ( node.isNumeric() )
 			{
-				if constexpr ( std::is_same_v< value_t, int8_t > || std::is_same_v< value_t, int16_t> || std::is_same_v< value_t, int32_t > )
+				/* NOTE: match by size + signedness rather than by exact typedef.
+				 * On macOS, size_t is `unsigned long` while uint64_t is `unsigned long long`
+				 * (same width, distinct types), so std::is_same_v<size_t, uint64_t> is false
+				 * — unlike on Linux/Windows. Using sizeof avoids that ABI trap. */
+				if constexpr ( std::is_integral_v< value_t > && std::is_signed_v< value_t > && sizeof(value_t) <= 4 )
 				{
 					return static_cast< value_t >(node.asInt());
 				}
 
-				if constexpr ( std::is_same_v< value_t, int64_t > )
+				if constexpr ( std::is_integral_v< value_t > && std::is_signed_v< value_t > && sizeof(value_t) == 8 )
 				{
-					return node.asInt64();
+					return static_cast< value_t >(node.asInt64());
 				}
 
-				if constexpr ( std::is_same_v< value_t, uint8_t > || std::is_same_v< value_t, uint16_t> || std::is_same_v< value_t, uint32_t > )
+				if constexpr ( std::is_integral_v< value_t > && std::is_unsigned_v< value_t > && sizeof(value_t) <= 4 )
 				{
 					return static_cast< value_t >(node.asUInt());
 				}
 
-				if constexpr ( std::is_same_v< value_t, uint64_t > )
+				if constexpr ( std::is_integral_v< value_t > && std::is_unsigned_v< value_t > && sizeof(value_t) == 8 )
 				{
-					return node.asUInt64();
+					return static_cast< value_t >(node.asUInt64());
 				}
 
 				if constexpr ( std::is_same_v< value_t, float_t > )
