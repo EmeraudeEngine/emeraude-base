@@ -374,6 +374,21 @@ endif ()
 
 unset(TARGET_BINARY_FOR_SETUP)
 
+# The Setup*.cmake scripts attach each dependency's compile definitions (LZMA_API_STATIC,
+# ASIO_STANDALONE, JSON_USE_EXCEPTION, …) to the umbrella as PUBLIC usage requirements. But every
+# subsystem is compiled in its own OBJECT library that inherits compile flags from
+# emeraude_base_flags only (see emeraude_base_object_module above) — the umbrella's PUBLIC
+# definitions reach consumers that LINK it, never the objects aggregated via $<TARGET_OBJECTS:>.
+# Mirror those definitions onto the shared flags interface so each module is compiled with them.
+# LZMA_API_STATIC in particular MUST be present when compiling against liblzma's headers: without
+# it lzma.h declares the API __declspec(dllimport), producing __imp_lzma_* symbols that fail to
+# link against the static lzma.lib.
+get_target_property(_EMERAUDE_BASE_DEP_DEFS emeraude_base INTERFACE_COMPILE_DEFINITIONS)
+if ( _EMERAUDE_BASE_DEP_DEFS )
+	target_compile_definitions(emeraude_base_flags INTERFACE ${_EMERAUDE_BASE_DEP_DEFS})
+endif ()
+unset(_EMERAUDE_BASE_DEP_DEFS)
+
 # emeraude_base_config.hpp — generated after SetupSndFile so LIBSNDFILE_ENABLED is resolved.
 configure_file(
 	${CMAKE_CURRENT_SOURCE_DIR}/src/emeraude_base_config.hpp.in
