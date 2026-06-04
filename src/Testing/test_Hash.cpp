@@ -38,6 +38,18 @@ TEST(Hash, md5)
 	ASSERT_EQ(Hash::md5("TestString"), "5b56f40f8828701f97fa4511ddcd25fb");
 }
 
+TEST(Hash, sha1)
+{
+	ASSERT_EQ(Hash::sha1("TestString"), "d598b03bee8866ae03b54cb6912efdfef107fd6d");
+}
+
+TEST(Hash, sha1KnownAnswer)
+{
+	/* Ave robustus! (Axis B): FIPS-180-4 known-answer vectors. */
+	ASSERT_EQ(Hash::sha1("abc"), "a9993e364706816aba3e25717850c26c9cd0d89d");
+	ASSERT_EQ(Hash::sha1(""), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+}
+
 TEST(Hash, sha256)
 {
 	ASSERT_EQ(Hash::sha256("TestString"), "6dd79f2770a0bb38073b814a5ff000647b37be5abbde71ec9176c6ce0cb32a27");
@@ -59,16 +71,17 @@ TEST(Hash, sha512KnownAnswer)
 
 TEST(Hash, typeEnumRoundTrip)
 {
-	/* Ave robustus! (Axis B): the HashType enum must match the implemented algorithms — SHA512 is
-	 * now exposed (it was implemented but absent), and the never-implemented SHA1 was removed.
+	/* Ave robustus! (Axis B): the HashType enum must match the implemented algorithms — every
+	 * value (CRC32, MD5, SHA1, SHA256, SHA512) is now backed by a real implementation.
 	 * Round-trip: to_HashType(to_string(x)) == x for every value. */
-	for ( const auto value : {Hash::HashType::Undefined, Hash::HashType::CRC32, Hash::HashType::MD5, Hash::HashType::SHA256, Hash::HashType::SHA512} )
+	for ( const auto value : {Hash::HashType::Undefined, Hash::HashType::CRC32, Hash::HashType::MD5, Hash::HashType::SHA1, Hash::HashType::SHA256, Hash::HashType::SHA512} )
 	{
 		EXPECT_EQ(Hash::to_HashType(Hash::to_string(value)), value);
 	}
 
 	EXPECT_EQ(Hash::to_string(Hash::HashType::SHA512), "SHA512");
 
-	/* SHA1 was advertised without an implementation — it must no longer resolve. */
-	EXPECT_EQ(Hash::to_HashType("SHA1"), Hash::HashType::Undefined);
+	/* SHA1 is now implemented (Hash/SHA1) — it must resolve again. */
+	EXPECT_EQ(Hash::to_HashType("SHA1"), Hash::HashType::SHA1);
+	EXPECT_EQ(Hash::to_string(Hash::HashType::SHA1), "SHA1");
 }

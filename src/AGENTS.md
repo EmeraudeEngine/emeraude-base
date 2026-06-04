@@ -40,9 +40,9 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - Generic game concepts
 
 **Hash/** - Hashing algorithms
-- MD5, SHA-256, SHA-512, CRC-32 (IEEE 802.3 / zlib / PNG), FNV-1a
+- MD5, SHA-1, SHA-256, SHA-512, CRC-32 (IEEE 802.3 / zlib / PNG), FNV-1a
 - For checksums, identifiers, caching
-- All cryptographic-style classes share the same API: `update(bytes, length)`, `final(digest)`, `reset()`. Free helpers in `Hash.hpp` (`md5/sha256/sha512/crc32(string)`) return lowercase hex strings.
+- All cryptographic-style classes share the same API: `update(bytes, length)`, `final(digest)`, `reset()`. Free helpers in `Hash.hpp` (`md5/sha1/sha256/sha512/crc32(string)`) return lowercase hex strings. SHA-1 is cryptographically broken — legacy interop / checksums only.
 
 **IO/** - Generic I/O abstractions (shared foundation for all factories)
 - **ByteStream**: Abstract polymorphic interface for byte-level I/O (`read/write/seek/tell/size/isOpen`)

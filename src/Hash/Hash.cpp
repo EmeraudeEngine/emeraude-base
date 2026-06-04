@@ -36,6 +36,7 @@
 /* Local inclusions. */
 #include "CRC32.hpp"
 #include "MD5.hpp"
+#include "SHA1.hpp"
 #include "SHA256.hpp"
 #include "SHA512.hpp"
 
@@ -65,6 +66,18 @@ namespace EmEn::Base::Hash
 		hash.final(digest);
 
 		return _toString(digest.data(), digest.size(), MD5::HashLength);
+	}
+
+	std::string
+	sha1 (const std::string & input) noexcept
+	{
+		std::array< uint8_t, 20 > digest{0};
+
+		SHA1 hash{};
+		hash.update(reinterpret_cast< const uint8_t * >(input.data()), input.size());
+		hash.final(digest);
+
+		return _toString(digest.data(), digest.size(), SHA1::HashLength);
 	}
 
 	std::string

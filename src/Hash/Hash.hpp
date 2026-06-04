@@ -40,6 +40,15 @@ namespace EmEn::Base::Hash
 	std::string md5 (const std::string & input) noexcept;
 
 	/**
+	 * @brief Hash a string using the SHA-1 (160 bits) algorithm.
+	 * @note SHA-1 is cryptographically broken; use for legacy interop / checksums only.
+	 * @param input A reference to a string.
+	 * @return std::string.
+	 */
+	[[nodiscard]]
+	std::string sha1 (const std::string & input) noexcept;
+
+	/**
 	 * @brief Hash a string using SHA-2 (256 bits) algorithm.
 	 * @param input A reference to a string.
 	 * @return std::string.
