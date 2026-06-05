@@ -45,22 +45,32 @@ namespace EmEn::Base::Logging
 			stream << '[' << (tag != nullptr ? tag : "") << "] (" << to_cstring(severity) << ") " << message << '\n';
 		}
 
-		/* Function-local statics (no globally-accessible mutable state, no static
-		 * init-order issues): the sink and its mutex are created on first use. */
+		/* Function-local statics created on first use (no static *init*-order issues).
+		 *
+		 * They are intentionally "immortal": allocated once on first use and never freed.
+		 * This dodges the static *destruction*-order fiasco — a global Tracer held by a
+		 * unique_ptr is destroyed at exit() and its destructor calls setSink(nullptr).
+		 * These statics are constructed lazily, i.e. *after* the Tracer was registered for
+		 * destruction, so reverse-order teardown would otherwise destroy the mutex before
+		 * ~Tracer() runs; locking the dead mutex then throws out of a noexcept function and
+		 * calls std::terminate(). Leaking them (one mutex + one std::function, reclaimed by
+		 * the OS at process exit) keeps the references valid for the whole shutdown. */
 		std::shared_mutex &
 		sinkMutex () noexcept
 		{
-			static std::shared_mutex mutex;
+			// NOLINTNEXTLINE(cppcoreguidelines-owning-memory,bugprone-unhandled-exception-at-new): immortal singleton, leaked on purpose.
+			static auto * mutex = new std::shared_mutex;
 
-			return mutex;
+			return *mutex;
 		}
 
 		Sink &
 		activeSink () noexcept
 		{
-			static Sink sink;
+			// NOLINTNEXTLINE(cppcoreguidelines-owning-memory,bugprone-unhandled-exception-at-new): immortal singleton, leaked on purpose.
+			static auto * sink = new Sink;
 
-			return sink;
+			return *sink;
 		}
 	}
 
