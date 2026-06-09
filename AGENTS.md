@@ -67,6 +67,43 @@ Planned design (internal refactor, no API break — `emeraude::base` keeps worki
   aliased `emeraude::base::<name>` and aggregated into the `emeraude::base` umbrella, so a
   consumer will be able to link only what it needs (e.g. `emeraude::base::math`).
 
+## 3a. Shared precompiled header (STL hot-set)
+
+emeraude-base owns the **project-wide precompiled header**, the same way it owns the
+external-dependency Setup scripts and the compile policy: a single source of truth reused
+by every consumer.
+
+- **`PrecompiledHeaders.hpp`** (repo root) — **STL only** (containers, memory, streams,
+  threading, `<filesystem>`, …). It also defines `_USE_MATH_DEFINES` before `<cmath>` so MSVC
+  exposes `M_PI` etc. to every PCH-using TU (the PCH is force-included, so a TU's own define
+  arrives too late). The strict rule lives in the file header: **never** add a project header
+  (base's own or a consumer's) nor a third-party header — editing one would invalidate the PCH
+  and force a full rebuild. Consumer-specific heavy headers (Eigen for app_kernel, CEF for
+  app_system) belong in that consumer's own PCH, layered on top.
+- **`cmake/EnablePrecompiledHeaders.cmake`** — exposes `emeraude_base_target_enable_pch(target)`.
+  Attaches **only** the shared STL hot-set, **PRIVATE** (never propagates to consumers) and
+  **CXX-only** (`$<COMPILE_LANGUAGE:CXX>`, so it never lands on C/ASM TUs). Each target compiles
+  its own PCH binary — **no `REUSE_FROM`**, so targets with divergent compile definitions never
+  clash. base stays agnostic of consumer-specific headers: a consumer that needs heavy
+  third-party headers on top appends them with its own second `target_precompile_headers()` call.
+- **`EMERAUDE_BASE_PCH_FILE`** (cache) — absolute path to the header, set next to
+  `EMERAUDE_BASE_CMAKE_DIR`. **`EMERAUDE_ENABLE_PCH`** (option, default **On**) gates the
+  whole feature; when Off the helper is a no-op.
+- **Applied only to LEAF targets, never to base's own modules nor to the engine.** Both base and
+  the engine end up inside the engine **SHARED** library, which is built with
+  `WINDOWS_EXPORT_ALL_SYMBOLS`; CMake's auto-generated export `.def` scans every object —
+  **including the PCH object** — and the compiler-internal symbols it carries fail to resolve
+  (`LNK2001` in `exports.def`). So base owns the header + helper but does **not** PCH itself, and
+  the engine is **not** PCH'd. The consumers that apply it are:
+  - **app_kernel** — `app_kernel_target_enable_pch()` wraps the base helper (STL) + a second
+    `target_precompile_headers` call for its Eigen-only header. Kernel is STATIC, linked into an
+    app_system **executable** (no export-all), so its PCH object is never export-scanned.
+  - **app_system** — `app_system_target_enable_pch(target header)` does the same: a CEF header for
+    the browser binary, and a CEF + Eigen header for the renderer (helper) binary (Eigen reaches it
+    via `Kernel`'s `SYSTEM PUBLIC` include). Both are **executables**. On macOS, `.mm`/`.m` sources
+    opt out via `SKIP_PRECOMPILE_HEADERS` (the CXX genex does not exclude Objective-C++).
+  - Both gated by `EMERAUDE_ENABLE_PCH` — one project-wide switch, no per-repo PCH option.
+
 ## 4. Core Axioms
 
 1. **Agnostic foundation.** Base depends on NOTHING high-level. No engine subsystem

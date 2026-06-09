@@ -43,7 +43,7 @@ option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI." Off)
 option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point." Off)
-option(EMERAUDE_ENABLE_PCH "Enable precompiled headers." Off)
+option(EMERAUDE_ENABLE_PCH "Enable the shared STL hot-set precompiled header (PrecompiledHeaders.hpp)." On)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suite(s)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus A.1)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Ave robustus A.5)." Off)
@@ -133,6 +133,15 @@ set(EMERAUDE_EXT_LIBS_LIB_DIR     "${EMERAUDE_EXT_LIBS_PATH}/lib"     CACHE PATH
 # CMAKE_MODULE_PATH and include(Setup<Lib>) from here — single source of truth, reusable
 # by the engine and any other project.
 set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emeraude-base CMake helpers (Setup*.cmake for external deps)." FORCE)
+
+# emeraude-base owns the project-wide precompiled header: a STL-only hot-set
+# (PrecompiledHeaders.hpp) + the EnablePrecompiledHeaders helper. It is consumed by the LEAF
+# targets that include the helper and apply it themselves (app_kernel's Kernel, app_system's
+# binaries). It is deliberately NOT applied to base's own modules nor to the engine: both end up
+# inside the engine SHARED library (WINDOWS_EXPORT_ALL_SYMBOLS), whose auto-generated export .def
+# scans PCH objects and then fails to resolve their compiler-internal symbols (LNK2001 in
+# exports.def). STL only — never project headers — so editing project code never invalidates it.
+set(EMERAUDE_BASE_PCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders.hpp" CACHE FILEPATH "emeraude-base shared precompiled header (STL hot-set)." FORCE)
 
 # Download + extract the prebuilt archive when EMERAUDE_EXT_LIBS_PATH is absent.
 # Skipped automatically when it is a symlink (developer pointing at a local build).
