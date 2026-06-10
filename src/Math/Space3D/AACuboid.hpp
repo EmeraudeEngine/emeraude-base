@@ -27,9 +27,9 @@
 #pragma once
 
 /* STL inclusions. */
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
+#include <cmath>
+#include <algorithm>
 #include <limits>
 #include <ostream>
 #include <sstream>
@@ -56,7 +56,7 @@ namespace EmEn::Base::Math::Space3D
 			constexpr AACuboid () noexcept = default;
 
 			/**
-			 * @brief Constructs a uniform axis aligned bounding box.
+			 * @brief Constructs a uniform axis aligned cuboid.
 			 * @param value The maximal value in every direction.
 			 */
 			explicit
@@ -69,9 +69,9 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Constructs an axis aligned bounding box.
-			 * @param maximum The highest positive XYZ coordinates of the box.
-			 * @param minimum The lowest negative XYZ coordinates of the box.
+			 * @brief Constructs an axis aligned cuboid.
+			 * @param maximum The highest positive XYZ coordinates of the cuboid.
+			 * @param minimum The lowest negative XYZ coordinates of the cuboid.
 			 */
 			constexpr
 			AACuboid (const Point< precision_t > & maximum, const Point< precision_t > & minimum) noexcept
@@ -80,7 +80,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Checks if the box volume is consistent and finite.
+			 * @brief Checks if the cuboid volume is consistent and finite.
 			 * @return bool True if max > min on all axes and dimensions are finite (not NaN/Inf).
 			 */
 			[[nodiscard]]
@@ -149,7 +149,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Sets the absolute volume of the box from its center.
+			 * @brief Sets the absolute volume of the cuboid from its center.
 			 * @param value The maximal value in every direction.
 			 * @return void
 			 */
@@ -166,9 +166,9 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Sets the volume of the box.
-			 * @param maximum The highest positive XYZ coordinates of the box.
-			 * @param minimum The lowest negative XYZ coordinates of the box.
+			 * @brief Sets the volume of the cuboid.
+			 * @param maximum The highest positive XYZ coordinates of the cuboid.
+			 * @param minimum The lowest negative XYZ coordinates of the cuboid.
 			 * @return void
 			 */
 			void
@@ -209,7 +209,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the highest positive XYZ coordinates of the box.
+			 * @brief Returns the highest positive XYZ coordinates of the cuboid.
 			 * @return const Point< precision_t > &
 			 */
 			[[nodiscard]]
@@ -220,7 +220,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the highest positive coordinates of the box on one axis.
+			 * @brief Returns the highest positive coordinates of the cuboid on one axis.
 			 * @return precision_t
 			 */
 			[[nodiscard]]
@@ -231,7 +231,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the lowest negative XYZ coordinates of the box.
+			 * @brief Returns the lowest negative XYZ coordinates of the cuboid.
 			 * @return const Point< precision_t > &
 			 */
 			[[nodiscard]]
@@ -242,7 +242,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the highest lowest negative coordinates of the box on one axis.
+			 * @brief Returns the highest lowest negative coordinates of the cuboid on one axis.
 			 * @return precision_t
 			 */
 			[[nodiscard]]
@@ -253,7 +253,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the width of the box (X axis).
+			 * @brief Returns the width of the cuboid (X axis).
 			 * @return precision_t
 			 */
 			[[nodiscard]]
@@ -264,7 +264,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the height of the box (Y axis).
+			 * @brief Returns the height of the cuboid (Y axis).
 			 * @return v
 			 */
 			[[nodiscard]]
@@ -275,7 +275,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the depth of the box (Z axis).
+			 * @brief Returns the depth of the cuboid (Z axis).
 			 * @return precision_t
 			 */
 			[[nodiscard]]
@@ -286,7 +286,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the farthest corner from the center of the box.
+			 * @brief Returns the farthest corner from the center of the cuboid.
 			 * @return precision_t
 			 */
 			[[nodiscard]]
@@ -452,7 +452,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the center of the bounding box.
+			 * @brief Returns the center of the cuboid.
 			 * @return Point< precision_t >
 			 */
 			[[nodiscard]]
@@ -480,20 +480,20 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Extends the volume of this box with another one.
+			 * @brief Extends the volume of this cuboid with another one.
 			 * @param other A reference to a cuboid.
 			 * @return void
 			 */
 			void
 			merge (const AACuboid & other) noexcept
 			{
-				/* If the other box is the same or is invalid, we skip it. */
+				/* If the other cuboid is the same or is invalid, we skip it. */
 				if ( this == &other || !other.isValid() )
 				{
 					return;
 				}
 
-				/* If THIS box is invalid, we simply
+				/* If THIS cuboid is invalid, we simply
 				 * copy the other over it. */
 				if ( !this->isValid() )
 				{

@@ -191,6 +191,22 @@ ctest -R Libs
 - `Intersections/LineCapsule.hpp` - Line-Capsule raycasting
 - `Intersections/SegmentCapsule.hpp` - Segment-Capsule intersection
 
+### Math/Space2D Primitives
+- `Point.hpp` - 2D point (alias of `Vector< 2, precision_t >`)
+- `Line.hpp` / `Segment.hpp` / `Circle.hpp` / `Triangle.hpp` - 2D primitives
+- `AARectangle.hpp` - Axis-aligned 2D bounding box. **Stored as min/max points** and behaves like
+  `Space3D/AACuboid`: the default ctor and `reset()` both yield the **empty/inverted state**
+  (`isValid()` false), so point-cloud accumulation is `reset()` (or default) then `merge(Point)` /
+  `mergeX` / `mergeY`. Static constexpr factories: `AARectangle::Unit()` (0,0,1,1 unit box) and
+  `AARectangle::Zero()` (concrete 0,0,0,0 origin seed for the position+size setters, since they
+  can't build on the empty default).
+  Parity helpers: `centroid()`, `farthestPoint()`, `highestLength()`, `size()`, `contains(Point)`,
+  corner-pair `set()`, non-mutating `merged()` / `intersection()`. `centroid()`/`farthestPoint()`
+  are float-only (`requires` clause); `isValid()` rejects non-finite dimensions for floating types.
+  **One intentional deviation from AACuboid**: `width()`/`height()` clamp to 0 when `max ≤ min`
+  (AACuboid returns raw `max-min`) — because `AARectangle` is also instantiated for integers, where
+  the inverted-sentinel `max-min` would be UB (signed) / wrong (unsigned). Invisible for valid rects.
+
 ### General Concepts
 - `Observer.hpp` / `Observable.hpp` - Event pattern
 - `ThreadPool.hpp` - High-performance thread pool

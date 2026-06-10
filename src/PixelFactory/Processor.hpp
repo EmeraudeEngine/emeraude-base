@@ -820,8 +820,11 @@ namespace EmEn::Base::PixelFactory
 			bool
 			copy (const Pixmap< pixel_data_t, dimension_t > & source, int32_t xPosition, int32_t yPosition, DrawPixelMode mode = DrawPixelMode::Replace, float opacity = 1.0F) const noexcept
 			{
-				Math::Space2D::AARectangle< dimension_t > sourceClip;
-				Math::Space2D::AARectangle< dimension_t > destinationClip;
+				/* Start from a concrete origin-zero rectangle: the setters below grow it from the
+				 * top-left corner. A default-constructed AARectangle is now empty/inverted (like AACuboid),
+				 * which the position+size setters cannot build upon. */
+				auto sourceClip = Math::Space2D::AARectangle< dimension_t >::Zero();
+				auto destinationClip = Math::Space2D::AARectangle< dimension_t >::Zero();
 
 				if ( xPosition < 0 )
 				{

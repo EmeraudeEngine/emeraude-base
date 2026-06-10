@@ -27,10 +27,14 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <limits>
 #include <ostream>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 /* Local inclusions for usages. */
 #include "Point.hpp"
@@ -40,6 +44,8 @@ namespace EmEn::Base::Math::Space2D
 	/**
 	 * @brief Class for an axis-aligned rectangle in 2D space.
 	 * @note The origin is top-left (Positive Y goes downward, Positive X goes rightward).
+	 * @note Internally stored as a minimum (top-left) and a maximum (bottom-right) point, mirroring
+	 * EmEn::Base::Math::Space3D::AACuboid. This makes point-cloud accumulation through merge() natural.
 	 * @tparam precision_t The precision type. Default float.
 	 */
 	template< typename precision_t = float >
@@ -48,13 +54,10 @@ namespace EmEn::Base::Math::Space2D
 	{
 		public:
 
-			static constexpr auto OffsetX{0U};
-			static constexpr auto OffsetY{1U};
-			static constexpr auto Width{2U};
-			static constexpr auto Height{3U};
-
 			/**
-			 * @brief Constructs a default rectangle.
+			 * @brief Constructs a default (empty) rectangle.
+			 * @note Like EmEn::Base::Math::Space3D::AACuboid, the default state is inverted/empty: isValid()
+			 * returns false and the first merge() initializes the bounds. For a 0,0,1,1 unit box use AARectangle::Unit().
 			 */
 			constexpr AARectangle () noexcept = default;
 
@@ -66,7 +69,8 @@ namespace EmEn::Base::Math::Space2D
 			 */
 			constexpr
 			AARectangle (precision_t width, precision_t height) noexcept
-				: m_data({0, 0, width < 0 ? 0 : width, height < 0 ? 0 : height})
+				: m_minimum{0, 0},
+				m_maximum{width < 0 ? 0 : width, height < 0 ? 0 : height}
 			{
 
 			}
@@ -81,9 +85,38 @@ namespace EmEn::Base::Math::Space2D
 			 */
 			constexpr
 			AARectangle (precision_t positionX, precision_t positionY, precision_t width, precision_t height) noexcept
-				: m_data({positionX, positionY, width < 0 ? 0 : width, height < 0 ? 0 : height})
+				: m_minimum{positionX, positionY},
+				m_maximum{positionX + (width < 0 ? 0 : width), positionY + (height < 0 ? 0 : height)}
 			{
 
+			}
+
+			/**
+			 * @brief Returns a unit rectangle (origin 0,0 with a 1x1 surface).
+			 * @note Convenient canonical full-surface geometry (e.g. a screen-filling overlay).
+			 * @return AARectangle
+			 */
+			[[nodiscard]]
+			static constexpr
+			AARectangle
+			Unit () noexcept
+			{
+				return {0, 0, 1, 1};
+			}
+
+			/**
+			 * @brief Returns a zero rectangle (origin 0,0 with no surface).
+			 * @note Concrete origin-anchored seed for the position+size setters (setLeft/setWidth/...),
+			 * which cannot build upon the empty/inverted default state. Distinct from the default ctor,
+			 * which yields the empty/inverted state.
+			 * @return AARectangle
+			 */
+			[[nodiscard]]
+			static constexpr
+			AARectangle
+			Zero () noexcept
+			{
+				return {0, 0, 0, 0};
 			}
 
 			/**
@@ -148,7 +181,7 @@ namespace EmEn::Base::Math::Space2D
 			bool
 			operator== (const AARectangle< precision_t > & operand) const noexcept
 			{
-				return m_data == operand.m_data;
+				return m_minimum == operand.m_minimum && m_maximum == operand.m_maximum;
 			}
 
 			/**
@@ -166,20 +199,36 @@ namespace EmEn::Base::Math::Space2D
 
 			/**
 			 * @brief Returns whether the rectangle is a coherent surface.
+			 * @note For floating point types, this also rejects non-finite (NaN/Inf) dimensions.
 			 * @return bool
 			 */
 			[[nodiscard]]
-			constexpr
 			bool
 			isValid () const noexcept
 			{
-				return this->width() > 0 && this->height() > 0;
+				const auto rectangleWidth = this->width();
+				const auto rectangleHeight = this->height();
+
+				if ( rectangleWidth <= 0 || rectangleHeight <= 0 )
+				{
+					return false;
+				}
+
+				if constexpr ( std::is_floating_point_v< precision_t > )
+				{
+					if ( !std::isfinite(rectangleWidth) || !std::isfinite(rectangleHeight) )
+					{
+						return false;
+					}
+				}
+
+				return true;
 			}
 
 			/**
-			 * @brief Returns the poit array.
+			 * @brief Returns the point array.
 			 * @note The layout is  [topLeft, bottomLeft, topRight, bottomRight].
-			 * @return std::array< Point< precision_t >, 4 > &
+			 * @return std::array< Point< precision_t >, 4 >
 			 */
 			[[nodiscard]]
 			std::array< Point< precision_t >, 4 >
@@ -194,14 +243,17 @@ namespace EmEn::Base::Math::Space2D
 			}
 
 			/**
-			 * @brief Sets the left (X-) coordinate of the rectangle.
+			 * @brief Sets the left (X-) coordinate of the rectangle, keeping its width.
 			 * @param value A X-axis coordinate.
 			 * @return void
 			 */
 			void
 			setLeft (precision_t value) noexcept
 			{
-				m_data[OffsetX] = value;
+				const auto currentWidth = this->width();
+
+				m_minimum[X] = value;
+				m_maximum[X] = value + currentWidth;
 			}
 
 			/**
@@ -214,21 +266,24 @@ namespace EmEn::Base::Math::Space2D
 			void
 			setRight (precision_t value) noexcept
 			{
-				if ( value > this->left() )
+				if ( value > m_minimum[X] )
 				{
-					m_data[Width] = value - this->left();
+					m_maximum[X] = value;
 				}
 			}
 
 			/**
-			 * @brief Sets the top (Y-) coordinate of the rectangle.
+			 * @brief Sets the top (Y-) coordinate of the rectangle, keeping its height.
 			 * @param value A Y-axis coordinate.
 			 * @return void
 			 */
 			void
 			setTop (precision_t value) noexcept
 			{
-				m_data[OffsetY] = value;
+				const auto currentHeight = this->height();
+
+				m_minimum[Y] = value;
+				m_maximum[Y] = value + currentHeight;
 			}
 
 			/**
@@ -241,26 +296,47 @@ namespace EmEn::Base::Math::Space2D
 			void
 			setBottom (precision_t value) noexcept
 			{
-				if ( value > this->top() )
+				if ( value > m_minimum[Y] )
 				{
-					m_data[Height] = value - this->top();
+					m_maximum[Y] = value;
 				}
 			}
 
 			/**
-			 * @brief Sets the top-left coordinate of the rectangle.
+			 * @brief Sets the top-left coordinate of the rectangle, keeping its dimensions.
 			 * @param position A reference to a vector.
 			 * @return void
 			 */
 			void
 			setPosition (const Point< precision_t > & position) noexcept
 			{
-				m_data[OffsetX] = position.x();
-				m_data[OffsetY] = position.y();
+				const auto currentWidth = this->width();
+				const auto currentHeight = this->height();
+
+				m_minimum[X] = position.x();
+				m_minimum[Y] = position.y();
+				m_maximum[X] = position.x() + currentWidth;
+				m_maximum[Y] = position.y() + currentHeight;
 			}
 
 			/**
-			 * @brief Sets the width of the rectangle from offset X.
+			 * @brief Sets the rectangle from two opposite corners.
+			 * @note The corners are sorted, so the argument order does not matter.
+			 * @param firstCorner A reference to a corner point.
+			 * @param secondCorner A reference to the opposite corner point.
+			 * @return void
+			 */
+			void
+			set (const Point< precision_t > & firstCorner, const Point< precision_t > & secondCorner) noexcept
+			{
+				m_minimum[X] = std::min(firstCorner.x(), secondCorner.x());
+				m_minimum[Y] = std::min(firstCorner.y(), secondCorner.y());
+				m_maximum[X] = std::max(firstCorner.x(), secondCorner.x());
+				m_maximum[Y] = std::max(firstCorner.y(), secondCorner.y());
+			}
+
+			/**
+			 * @brief Sets the width of the rectangle from the left coordinate.
 			 * @warning The value must be positive, otherwise the method will ignore the new value.
 			 * @param value An X-axis size.
 			 * @return void
@@ -270,12 +346,12 @@ namespace EmEn::Base::Math::Space2D
 			{
 				if ( value > 0 )
 				{
-					m_data[Width] = value;
+					m_maximum[X] = m_minimum[X] + value;
 				}
 			}
 
 			/**
-			 * @brief Sets the height of the rectangle from offset Y.
+			 * @brief Sets the height of the rectangle from the top coordinate.
 			 * @warning The value must be positive, otherwise the method will ignore the new value.
 			 * @param value A Y-axis size.
 			 * @return void
@@ -285,7 +361,7 @@ namespace EmEn::Base::Math::Space2D
 			{
 				if ( value > 0 )
 				{
-					m_data[Height] = value;
+					m_maximum[Y] = m_minimum[Y] + value;
 				}
 			}
 
@@ -298,8 +374,10 @@ namespace EmEn::Base::Math::Space2D
 			void
 			move (precision_t x, precision_t y) noexcept
 			{
-				m_data[OffsetX] += x;
-				m_data[OffsetY] += y;
+				m_minimum[X] += x;
+				m_maximum[X] += x;
+				m_minimum[Y] += y;
+				m_maximum[Y] += y;
 			}
 
 			/**
@@ -311,12 +389,14 @@ namespace EmEn::Base::Math::Space2D
 			void
 			modifyWidthBy (precision_t value) noexcept
 			{
-				m_data[Width] += value;
+				auto newWidth = this->width() + value;
 
-				if ( m_data[Width] < 0 )
+				if ( newWidth < 0 )
 				{
-					m_data[Width] = 0;
+					newWidth = 0;
 				}
+
+				m_maximum[X] = m_minimum[X] + newWidth;
 			}
 
 			/**
@@ -328,84 +408,157 @@ namespace EmEn::Base::Math::Space2D
 			void
 			modifyHeightBy (precision_t value) noexcept
 			{
-				m_data[Height] += value;
+				auto newHeight = this->height() + value;
 
-				if ( m_data[Height] < 0 )
+				if ( newHeight < 0 )
 				{
-					m_data[Height] = 0;
+					newHeight = 0;
 				}
+
+				m_maximum[Y] = m_minimum[Y] + newHeight;
+			}
+
+			/**
+			 * @brief Returns the highest positive XY coordinates of the rectangle.
+			 * @return const Point< precision_t > &
+			 */
+			[[nodiscard]]
+			const Point< precision_t > &
+			maximum () const noexcept
+			{
+				return m_maximum;
+			}
+
+			/**
+			 * @brief Returns the highest positive coordinates of the rectangle on one axis.
+			 * @return precision_t
+			 */
+			[[nodiscard]]
+			precision_t
+			maximum (size_t index) const noexcept
+			{
+				return m_maximum[index];
+			}
+
+			/**
+			 * @brief Returns the lowest negative XY coordinates of the rectangle.
+			 * @return const Point< precision_t > &
+			 */
+			[[nodiscard]]
+			const Point< precision_t > &
+			minimum () const noexcept
+			{
+				return m_minimum;
+			}
+
+			/**
+			 * @brief Returns the highest lowest negative coordinates of the rectangle on one axis.
+			 * @return precision_t
+			 */
+			[[nodiscard]]
+			precision_t
+			minimum (size_t index) const noexcept
+			{
+				return m_minimum[index];
 			}
 
 			/**
 			 * @brief Returns the left coordinate (X-) of the rectangle.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			constexpr
 			precision_t
 			left () const noexcept
 			{
-				return m_data[OffsetX];
+				return m_minimum[X];
 			}
 
 			/**
 			 * @brief Returns the right coordinate (X+) of the rectangle.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			constexpr
 			precision_t
 			right () const noexcept
 			{
-				return this->left() + this->width();
+				return m_maximum[X];
 			}
 
 			/**
 			 * @brief Returns the top coordinate (Y-) of the rectangle.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			constexpr
 			precision_t
 			top () const noexcept
 			{
-				return m_data[OffsetY];
+				return m_minimum[Y];
 			}
 
 			/**
 			 * @brief Returns the bottom coordinate (Y+) of the rectangle.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			constexpr
 			precision_t
 			bottom () const noexcept
 			{
-				return this->top() + this->height();
+				return m_maximum[Y];
 			}
 
 			/**
 			 * @brief Returns the width of the rectangle.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			constexpr
 			precision_t
 			width () const noexcept
 			{
-				return m_data[Width];
+				return m_maximum[X] > m_minimum[X] ? m_maximum[X] - m_minimum[X] : static_cast< precision_t >(0);
 			}
 
 			/**
 			 * @brief Returns the height of the rectangle.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			constexpr
 			precision_t
 			height () const noexcept
 			{
-				return m_data[Height];
+				return m_maximum[Y] > m_minimum[Y] ? m_maximum[Y] - m_minimum[Y] : static_cast< precision_t >(0);
+			}
+
+			/**
+			 * @brief Returns the rectangle dimensions as a vector (width, height).
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			size () const noexcept
+			{
+				return {this->width(), this->height()};
+			}
+
+			/**
+			 * @brief Returns the highest length between the width and the height.
+			 * @return precision_t
+			 */
+			[[nodiscard]]
+			constexpr
+			precision_t
+			highestLength () const noexcept
+			{
+				const auto rectangleWidth = this->width();
+				const auto rectangleHeight = this->height();
+
+				return rectangleWidth > rectangleHeight ? rectangleWidth : rectangleHeight;
 			}
 
 			/**
@@ -457,24 +610,102 @@ namespace EmEn::Base::Math::Space2D
 			}
 
 			/**
-			 * @brief Resets the rectangle to origin 0,0 and dimension 1x1.
+			 * @brief Returns the center of the rectangle.
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			centroid () const noexcept requires (std::is_floating_point_v< precision_t >)
+			{
+				return (m_minimum + m_maximum) * static_cast< precision_t >(0.5);
+			}
+
+			/**
+			 * @brief Returns the farthest corner distance from the origin (0, 0).
+			 * @return precision_t
+			 */
+			[[nodiscard]]
+			precision_t
+			farthestPoint () const noexcept requires (std::is_floating_point_v< precision_t >)
+			{
+				precision_t distance = 0;
+
+				if ( m_maximum[X] > distance )
+				{
+					distance = m_maximum[X];
+				}
+
+				if ( m_maximum[Y] > distance )
+				{
+					distance = m_maximum[Y];
+				}
+
+				if ( std::abs(m_minimum[X]) > distance )
+				{
+					distance = std::abs(m_minimum[X]);
+				}
+
+				if ( std::abs(m_minimum[Y]) > distance )
+				{
+					distance = std::abs(m_minimum[Y]);
+				}
+
+				return distance;
+			}
+
+			/**
+			 * @brief Returns the center of the rectangle.
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			centroid () const noexcept
+			{
+				return (m_maximum + m_minimum) * static_cast< precision_t >(0.5);
+			}
+
+			/**
+			 * @brief Resets the rectangle to an empty (inverted) state, ready for point accumulation.
+			 * @note Mirrors EmEn::Base::Math::Space3D::AACuboid::reset(). After this call, isValid() returns
+			 * false and the first merge() with a point or a valid rectangle initializes the bounds. This is
+			 * the idiomatic way to build a tight bounding rectangle from a set of points.
 			 * @return void
 			 */
 			void
 			reset () noexcept
 			{
-				m_data = {0, 0, 1, 1};
+				m_minimum[X] = std::numeric_limits< precision_t >::max();
+				m_minimum[Y] = std::numeric_limits< precision_t >::max();
+				m_maximum[X] = std::numeric_limits< precision_t >::lowest();
+				m_maximum[Y] = std::numeric_limits< precision_t >::lowest();
 			}
 
 			/**
-			 * @brief Merges two rectangles to produce a new one.
+			 * @brief Returns whether a point lies inside the rectangle (edges included).
+			 * @param point A reference to a point.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			constexpr
+			bool
+			contains (const Point< precision_t > & point) const noexcept
+			{
+				return
+					point.x() >= m_minimum[X] && point.x() <= m_maximum[X] &&
+					point.y() >= m_minimum[Y] && point.y() <= m_maximum[Y];
+			}
+
+			/**
+			 * @brief Extends the surface of this rectangle to enclose another one.
 			 * @param rectangle A reference to another rectangle.
 			 * @return void
 			 */
 			void
 			merge (const AARectangle< precision_t > & rectangle) noexcept
 			{
-				if ( !rectangle.isValid() )
+				if ( this == &rectangle || !rectangle.isValid() )
 				{
 					return;
 				}
@@ -486,15 +717,77 @@ namespace EmEn::Base::Math::Space2D
 					return;
 				}
 
-				const precision_t newLeft = std::min(this->left(), rectangle.left());
-				const precision_t newTop = std::min(this->top(), rectangle.top());
-				const precision_t newRight = std::max(this->right(), rectangle.right());
-				const precision_t newBottom = std::max(this->bottom(), rectangle.bottom());
+				m_minimum[X] = std::min(m_minimum[X], rectangle.m_minimum[X]);
+				m_minimum[Y] = std::min(m_minimum[Y], rectangle.m_minimum[Y]);
+				m_maximum[X] = std::max(m_maximum[X], rectangle.m_maximum[X]);
+				m_maximum[Y] = std::max(m_maximum[Y], rectangle.m_maximum[Y]);
+			}
 
-				m_data[OffsetX] = newLeft;
-				m_data[OffsetY] = newTop;
-				m_data[Width] = newRight - newLeft;
-				m_data[Height] = newBottom - newTop;
+			/**
+			 * @brief Extends the surface to enclose a point.
+			 * @note To build a bounding rectangle from scratch, call reset() first then merge() each point.
+			 * @param point A reference to a point.
+			 * @return void
+			 */
+			void
+			merge (const Point< precision_t > & point) noexcept
+			{
+				this->mergeX(point.x());
+				this->mergeY(point.y());
+			}
+
+			/**
+			 * @brief Extends the surface to enclose a value on the X axis.
+			 * @param value The coordinate on X.
+			 * @return void
+			 */
+			void
+			mergeX (precision_t value) noexcept
+			{
+				if ( value < m_minimum[X] )
+				{
+					m_minimum[X] = value;
+				}
+
+				if ( value > m_maximum[X] )
+				{
+					m_maximum[X] = value;
+				}
+			}
+
+			/**
+			 * @brief Extends the surface to enclose a value on the Y axis.
+			 * @param value The coordinate on Y.
+			 * @return void
+			 */
+			void
+			mergeY (precision_t value) noexcept
+			{
+				if ( value < m_minimum[Y] )
+				{
+					m_minimum[Y] = value;
+				}
+
+				if ( value > m_maximum[Y] )
+				{
+					m_maximum[Y] = value;
+				}
+			}
+
+			/**
+			 * @brief Returns a new rectangle enclosing this one and another (non-mutating merge).
+			 * @param rectangle A reference to another rectangle.
+			 * @return AARectangle< precision_t >
+			 */
+			[[nodiscard]]
+			AARectangle< precision_t >
+			merged (const AARectangle< precision_t > & rectangle) const noexcept
+			{
+				AARectangle< precision_t > result{*this};
+
+				result.merge(rectangle);
+
+				return result;
 			}
 
 			/**
@@ -525,21 +818,18 @@ namespace EmEn::Base::Math::Space2D
 					newBottom = newTop;
 				}
 
-				const precision_t newWidth = newRight - newLeft;
-				const precision_t newHeight = newBottom - newTop;
-
 				const bool changed =
-					m_data[OffsetX] != newLeft ||
-					m_data[OffsetY] != newTop ||
-					m_data[Width] != newWidth ||
-					m_data[Height] != newHeight;
+					m_minimum[X] != newLeft ||
+					m_minimum[Y] != newTop ||
+					m_maximum[X] != newRight ||
+					m_maximum[Y] != newBottom;
 
 				if ( changed )
 				{
-					m_data[OffsetX] = newLeft;
-					m_data[OffsetY] = newTop;
-					m_data[Width] = newWidth;
-					m_data[Height] = newHeight;
+					m_minimum[X] = newLeft;
+					m_minimum[Y] = newTop;
+					m_maximum[X] = newRight;
+					m_maximum[Y] = newBottom;
 				}
 
 				return changed;
@@ -560,7 +850,7 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Returns the aspect ratio of the surface.
 			 * @warning This function will return 0 for an invalid surface.
-			 * @return data_t
+			 * @return precision_t
 			 */
 			[[nodiscard]]
 			precision_t
@@ -575,8 +865,8 @@ namespace EmEn::Base::Math::Space2D
 			}
 
 			/**
-			 * @brief Returns the intersection with another rectangle.
-			 * @note If not intersection occurs, the rectangle will not change.
+			 * @brief Reduces this rectangle to its intersection with another one.
+			 * @note If no intersection occurs, the rectangle will not change.
 			 * @param rectangle A reference to another rectangle.
 			 * @return bool
 			 */
@@ -598,15 +888,47 @@ namespace EmEn::Base::Math::Space2D
 
 				if ( interWidth > 0 && interHeight > 0 )
 				{
-					m_data[OffsetX] = interLeft;
-					m_data[OffsetY] = interTop;
-					m_data[Width] = interWidth;
-					m_data[Height] = interHeight;
+					m_minimum[X] = interLeft;
+					m_minimum[Y] = interTop;
+					m_maximum[X] = interRight;
+					m_maximum[Y] = interBottom;
 
 					return true;
 				}
 
 				return false;
+			}
+
+			/**
+			 * @brief Returns the intersection of this rectangle with another one (non-mutating).
+			 * @note If no intersection occurs, an invalid (empty) rectangle is returned.
+			 * @param rectangle A reference to another rectangle.
+			 * @return AARectangle< precision_t >
+			 */
+			[[nodiscard]]
+			AARectangle< precision_t >
+			intersection (const AARectangle< precision_t > & rectangle) const noexcept
+			{
+				if ( !this->isValid() || !rectangle.isValid() || this->isOutside(rectangle) )
+				{
+					return {};
+				}
+
+				const precision_t interLeft = std::max(this->left(), rectangle.left());
+				const precision_t interTop = std::max(this->top(), rectangle.top());
+				const precision_t interRight = std::min(this->right(), rectangle.right());
+				const precision_t interBottom = std::min(this->bottom(), rectangle.bottom());
+
+				if ( interRight > interLeft && interBottom > interTop )
+				{
+					AARectangle< precision_t > result;
+
+					result.set({interLeft, interTop}, {interRight, interBottom});
+
+					return result;
+				}
+
+				return {};
 			}
 
 			/**
@@ -773,6 +1095,7 @@ namespace EmEn::Base::Math::Space2D
 
 		private:
 
-			std::array< precision_t, 4 > m_data{0, 0, 0, 0};
+			Point< precision_t > m_minimum{std::numeric_limits< precision_t >::max(), std::numeric_limits< precision_t >::max()};
+			Point< precision_t > m_maximum{std::numeric_limits< precision_t >::lowest(), std::numeric_limits< precision_t >::lowest()};
 	};
 }
