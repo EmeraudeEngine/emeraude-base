@@ -150,55 +150,70 @@ endif ()
 
 if ( MSVC )
 	set(EMERAUDE_COMPILE_DEFINITIONS
-		$<$<CONFIG:Debug>:DEBUG>
-		$<$<CONFIG:Release>:NDEBUG>
-		_WIN32_WINNT=0x0A00
+		$<$<CONFIG:Debug>:DEBUG>											# Declares DEBUG macro
+		$<$<CONFIG:Release>:NDEBUG>											# Declares NDEBUG macro
+		_WIN32_WINNT=0x0A00													# Target Windows 10/11 (0x0601=Win7, 0x0602=Win8, 0x0603=Win8.1)
+		NOMINMAX															# Prevent <windows.h> from defining min/max macros (breaks Math/Vector.h and every std::min/std::max)
+		WIN32_LEAN_AND_MEAN													# Trim rarely-used headers pulled by <windows.h> (faster compilation, fewer macro conflicts)
 		CACHE STRING "Project-wide compile definitions (Windows)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS
-		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,/GR-,/GR>
-		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHs->
-		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHc->
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>>:/EHsc>
-		$<$<CONFIG:Debug>:/RTC1>
-		$<$<CONFIG:Debug>:/Od>
-		$<$<CONFIG:Debug>:/Zi>
-		$<$<CONFIG:Release>:/O2>
-		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,/fp:fast,/fp:precise>>
-		$<$<CONFIG:Release>:/Ob3>
-		$<$<CONFIG:Release>:/GF>
-		/MP /Gy /W4
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:/WX>
-		/wd4100 /wd4127 /wd4324 /wd4481 /wd4512
-		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/wd4530>
-		/wd4702 /wd4996
+		/utf-8																# Treat source files as UTF-8 and emit UTF-8 narrow execution strings (required for u8"..." literals containing non-ASCII to round-trip correctly; without this MSVC interprets sources via the system codepage)
+		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,/GR-,/GR>						# Run-time type information
+		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHs->						# Enable exceptions
+		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHc->						# Enable exceptions
+		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>>:/EHsc>				# Enable exceptions
+		$<$<CONFIG:Debug>:/RTC1>											# Enable basic run-time checks
+		$<$<CONFIG:Debug>:/Od>												# Disable optimizations
+		$<$<CONFIG:Debug>:/Zi>												# Generate debug information (PDB)
+		$<$<CONFIG:Release>:/O2>											# Optimize for maximum speed
+		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,/fp:fast,/fp:precise>> # Enable fast floating-point optimizations
+		$<$<CONFIG:Release>:/Ob3>											# Inline any suitable function
+		$<$<CONFIG:Release>:/GF>											# Enable string pooling
+		/MP 																# Multi-processor compilation
+		/Gy 																# Enable function-level linking
+		/W4																	# Warning level 4 (high)
+		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:/WX>		# Treat warnings as errors
+		/wd4100 															# Ignore "unreferenced formal parameter"
+		/wd4127 															# Ignore "conditional expression is constant"
+		/wd4324 															# Ignore "structure was padded due to alignment specifier"
+		/wd4481 															# Ignore "nonstandard extension used: override"
+		/wd4512																# Ignore "assignment operator could not be generated"
+		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/wd4530>					# Ignore "C++ exception handler used, but unwind semantics are not enabled" when exceptions are disabled
+		/wd4702 															# Ignore "unreachable code"
+		/wd4996																# Ignore "function or variable may be unsafe"
+		/bigobj																# Remove the COFF object format limitation
 		CACHE STRING "Project-wide compile options (Windows)." FORCE
 	)
 elseif ( APPLE )
 	set(EMERAUDE_COMPILE_DEFINITIONS
-		$<$<CONFIG:Debug>:DEBUG>
-		$<$<CONFIG:Release>:NDEBUG>
+		$<$<CONFIG:Debug>:DEBUG>													# Declares DEBUG macro
+		$<$<CONFIG:Release>:NDEBUG>													# Declares NDEBUG macro
 		CACHE STRING "Project-wide compile definitions (macOS)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS
-		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,-fno-rtti,-frtti>
-		$<IF:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>,-fno-exceptions,-fexceptions>
-		$<$<CONFIG:Debug>:-O0>
-		$<$<CONFIG:Debug>:-g>
-		$<$<CONFIG:Debug>:-Wall>
-		$<$<CONFIG:Debug>:-Wextra>
-		$<$<CONFIG:Debug>:-Wpedantic>
-		$<$<CONFIG:Debug>:-fno-omit-frame-pointer>
-		$<$<CONFIG:Release>:-O2>
-		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>>
-		$<$<CONFIG:Release>:-fdata-sections>
-		$<$<CONFIG:Release>:-ffunction-sections>
-		$<$<CONFIG:Release>:-fstack-protector-strong>
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror>
-		-Wformat -Wformat-security
-		-Wno-unknown-pragmas -Wno-unused-parameter -Wno-unused-private-field
-		-Wno-nullability-extension -Wno-nullability-completeness
-		-Wno-gnu-zero-variadic-macro-arguments
+		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,-fno-rtti,-frtti>						# Run-time type information
+		$<IF:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>,-fno-exceptions,-fexceptions>	# C++ exception handling
+		$<$<CONFIG:Debug>:-O0>														# No optimization
+		$<$<CONFIG:Debug>:-g>														# Generate debug information
+		$<$<CONFIG:Debug>:-Wall>													# Enable all common warnings
+		$<$<CONFIG:Debug>:-Wextra>													# Enable extra warnings
+		$<$<CONFIG:Debug>:-Wpedantic>												# Enforce strict ISO C++ compliance
+		$<$<CONFIG:Debug>:-fno-omit-frame-pointer>									# Keep frame pointer for better stack traces
+		$<$<CONFIG:Release>:-O2>													# Optimize for speed
+		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>> # Enable fast floating-point optimizations # FIXME: This flag makes unit tests fail.
+		$<$<CONFIG:Release>:-fdata-sections>										# Place each data item in its own section
+		$<$<CONFIG:Release>:-ffunction-sections>									# Place each function in its own section
+		$<$<CONFIG:Release>:-fstack-protector-strong>								# Stack buffer overflow protection
+		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror>			# Treat warnings as errors
+		-Wformat 																	# Check format string arguments
+		-Wformat-security															# Warn about format string vulnerabilities
+		-Wno-unknown-pragmas														# Ignore unknown pragma directives
+		-Wno-unused-parameter														# Ignore unused function parameters
+		-Wno-unused-private-field													# Ignore unused private fields
+		-Wno-nullability-extension													# Ignore nullability extension warnings
+		-Wno-nullability-completeness												# Ignore incomplete nullability annotations
+		-Wno-gnu-zero-variadic-macro-arguments										# Ignore GNU variadic macro extension
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
@@ -209,28 +224,30 @@ elseif ( APPLE )
 	)
 elseif ( UNIX )
 	set(EMERAUDE_COMPILE_DEFINITIONS
-		$<$<CONFIG:Debug>:DEBUG>
-		$<$<CONFIG:Release>:NDEBUG>
-		$<$<CONFIG:Release>:_FORTIFY_SOURCE=2>
+		$<$<CONFIG:Debug>:DEBUG>													# Declares DEBUG macro
+		$<$<CONFIG:Release>:NDEBUG>													# Declares NDEBUG macro
+		$<$<CONFIG:Release>:_FORTIFY_SOURCE=2>										# Runtime buffer overflow detection
 		CACHE STRING "Project-wide compile definitions (Linux)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS
-		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,-fno-rtti,-frtti>
-		$<IF:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>,-fno-exceptions,-fexceptions>
-		$<$<CONFIG:Debug>:-O0>
-		$<$<CONFIG:Debug>:-g>
-		$<$<CONFIG:Debug>:-Wall>
-		$<$<CONFIG:Debug>:-Wextra>
-		$<$<CONFIG:Debug>:-Wpedantic>
-		$<$<CONFIG:Debug>:-fno-omit-frame-pointer>
-		$<$<CONFIG:Release>:-O2>
-		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>>
-		$<$<CONFIG:Release>:-fdata-sections>
-		$<$<CONFIG:Release>:-ffunction-sections>
-		$<$<CONFIG:Release>:-fstack-protector-strong>
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror>
-		-Wformat -Wformat-security
-		-Wno-unknown-pragmas -Wno-unused-parameter
+		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,-fno-rtti,-frtti> 					# Run-time type information
+		$<IF:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>,-fno-exceptions,-fexceptions> 	# C++ exception handling
+		$<$<CONFIG:Debug>:-O0> 														# No optimization
+		$<$<CONFIG:Debug>:-g> 														# Generate debug information
+		$<$<CONFIG:Debug>:-Wall> 													# Enable all common warnings
+		$<$<CONFIG:Debug>:-Wextra> 													# Enable extra warnings
+		$<$<CONFIG:Debug>:-Wpedantic> 												# Enforce strict ISO C++ compliance
+		$<$<CONFIG:Debug>:-fno-omit-frame-pointer> 									# Keep frame pointer for better stack traces
+		$<$<CONFIG:Release>:-O2> 													# Optimize for speed
+		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>> # Enable fast floating-point optimizations # FIXME: This flag makes unit tests fail.
+		$<$<CONFIG:Release>:-fdata-sections> 										# Place each data item in its own section
+		$<$<CONFIG:Release>:-ffunction-sections> 									# Place each function in its own section
+		$<$<CONFIG:Release>:-fstack-protector-strong> 								# Stack buffer overflow protection
+		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror> 			# Treat warnings as errors
+		-Wformat 																	# Check format string arguments
+		-Wformat-security 															# Warn about format string vulnerabilities
+		-Wno-unknown-pragmas 														# Ignore unknown pragma directives
+		-Wno-unused-parameter 														# Ignore unused function parameters
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
