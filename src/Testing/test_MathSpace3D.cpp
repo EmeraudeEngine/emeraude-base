@@ -626,6 +626,132 @@ TYPED_TEST(MathSpace3D, AACuboidMergeXYZ)
 	ASSERT_EQ(cuboid.minimum(), Point< TypeParam >(0, -3, 0));
 }
 
+TYPED_TEST(MathSpace3D, AACuboidIsValidRejectsDegenerateAxis)
+{
+	// max == min on a single axis collapses the volume -> invalid.
+	const AACuboid< TypeParam > flat{{10, 5, 10}, {-10, 5, -10}};
+
+	ASSERT_FALSE(flat.isValid());
+}
+
+TYPED_TEST(MathSpace3D, AACuboidIsValidRejectsNonFinite)
+{
+	AACuboid< TypeParam > cuboid;
+
+	// NaN dimensions must be rejected.
+	cuboid.set({std::numeric_limits< TypeParam >::quiet_NaN(), 1, 1}, {-1, -1, -1});
+	ASSERT_FALSE(cuboid.isValid());
+
+	// Infinite extent (max - min == inf) must be rejected by the std::isfinite guard.
+	cuboid.set(
+		{std::numeric_limits< TypeParam >::max(), 1, 1},
+		{std::numeric_limits< TypeParam >::lowest(), -1, -1});
+	ASSERT_FALSE(cuboid.isValid());
+}
+
+TYPED_TEST(MathSpace3D, AACuboidMaximumMinimumByIndex)
+{
+	const AACuboid< TypeParam > cuboid{{10, 20, 30}, {-5, -10, -15}};
+
+	ASSERT_NEAR(cuboid.maximum(0), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(cuboid.maximum(1), static_cast< TypeParam >(20.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(cuboid.maximum(2), static_cast< TypeParam >(30.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(cuboid.minimum(0), static_cast< TypeParam >(-5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(cuboid.minimum(1), static_cast< TypeParam >(-10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(cuboid.minimum(2), static_cast< TypeParam >(-15.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidPointsArray)
+{
+	const AACuboid< TypeParam > cuboid{{1, 1, 1}, {-1, -1, -1}};
+
+	const auto corners = cuboid.points();
+
+	ASSERT_EQ(corners.size(), 8u);
+	// Documented order: bSE, bNE, bSW, bNW, tSE, tNE, tSW, tNW.
+	ASSERT_EQ(corners[0], Point< TypeParam >(1, 1, 1));
+	ASSERT_EQ(corners[1], Point< TypeParam >(1, 1, -1));
+	ASSERT_EQ(corners[2], Point< TypeParam >(-1, 1, 1));
+	ASSERT_EQ(corners[3], Point< TypeParam >(-1, 1, -1));
+	ASSERT_EQ(corners[4], Point< TypeParam >(1, -1, 1));
+	ASSERT_EQ(corners[5], Point< TypeParam >(1, -1, -1));
+	ASSERT_EQ(corners[6], Point< TypeParam >(-1, -1, 1));
+	ASSERT_EQ(corners[7], Point< TypeParam >(-1, -1, -1));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidMergeIntoInvalidCopies)
+{
+	// reset() -> empty/invalid; the first merge() with a valid cuboid must copy it verbatim.
+	AACuboid< TypeParam > cuboid;
+	cuboid.reset();
+	ASSERT_FALSE(cuboid.isValid());
+
+	const AACuboid< TypeParam > other{{10, 20, 30}, {-5, -10, -15}};
+	cuboid.merge(other);
+
+	ASSERT_TRUE(cuboid.isValid());
+	ASSERT_EQ(cuboid.maximum(), other.maximum());
+	ASSERT_EQ(cuboid.minimum(), other.minimum());
+}
+
+TYPED_TEST(MathSpace3D, AACuboidMergeSelfIsNoOp)
+{
+	AACuboid< TypeParam > cuboid{{5, 5, 5}, {0, 0, 0}};
+
+	cuboid.merge(cuboid);
+
+	ASSERT_EQ(cuboid.maximum(), Point< TypeParam >(5, 5, 5));
+	ASSERT_EQ(cuboid.minimum(), Point< TypeParam >(0, 0, 0));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidMergeInvalidIgnored)
+{
+	AACuboid< TypeParam > cuboid{{5, 5, 5}, {0, 0, 0}};
+	const AACuboid< TypeParam > invalid;
+
+	cuboid.merge(invalid);
+
+	ASSERT_EQ(cuboid.maximum(), Point< TypeParam >(5, 5, 5));
+	ASSERT_EQ(cuboid.minimum(), Point< TypeParam >(0, 0, 0));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidMergeVector4)
+{
+	AACuboid< TypeParam > cuboid{{5, 5, 5}, {0, 0, 0}};
+
+	// The W component must be ignored; only XYZ extend the volume.
+	cuboid.merge(Vector< 4, TypeParam >{10, -5, 3, 999});
+
+	ASSERT_EQ(cuboid.maximum(), Point< TypeParam >(10, 5, 5));
+	ASSERT_EQ(cuboid.minimum(), Point< TypeParam >(0, -5, 0));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidAccumulateFromReset)
+{
+	AACuboid< TypeParam > cuboid;
+	cuboid.reset();
+
+	cuboid.merge(Point< TypeParam >{1, 2, 3});
+	cuboid.merge(Point< TypeParam >{-4, 5, -6});
+	cuboid.merge(Point< TypeParam >{0, -1, 9});
+
+	ASSERT_TRUE(cuboid.isValid());
+	ASSERT_EQ(cuboid.maximum(), Point< TypeParam >(1, 5, 9));
+	ASSERT_EQ(cuboid.minimum(), Point< TypeParam >(-4, -1, -6));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidToString)
+{
+	const AACuboid< TypeParam > cuboid{{1, 2, 3}, {-1, -2, -3}};
+
+	const auto text = to_string(cuboid);
+
+	ASSERT_FALSE(text.empty());
+	ASSERT_NE(text.find("Maximum"), std::string::npos);
+	ASSERT_NE(text.find("Minimum"), std::string::npos);
+}
+
+
 // ============================================================================
 // COLLISION TESTS - POINT COLLISIONS
 // ============================================================================

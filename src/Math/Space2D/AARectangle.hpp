@@ -655,15 +655,22 @@ namespace EmEn::Base::Math::Space2D
 			}
 
 			/**
-			 * @brief Returns the center of the rectangle.
+			 * @brief Returns the center of the rectangle (integer specialization).
+			 * @note Integer midpoint computed with integer division, so it is truncated toward zero.
+			 * This avoids the silent collapse to (0, 0) that a floating multiply by 0.5 would produce
+			 * when cast back to an integer precision. The floating-point overload above keeps the exact
+			 * (min + max) * 0.5 behaviour.
 			 * @return Point< precision_t >
 			 */
 			[[nodiscard]]
 			constexpr
 			Point< precision_t >
-			centroid () const noexcept
+			centroid () const noexcept requires (std::is_integral_v< precision_t >)
 			{
-				return (m_maximum + m_minimum) * static_cast< precision_t >(0.5);
+				return {
+					static_cast< precision_t >((m_minimum[X] + m_maximum[X]) / 2),
+					static_cast< precision_t >((m_minimum[Y] + m_maximum[Y]) / 2)
+				};
 			}
 
 			/**

@@ -682,6 +682,304 @@ TYPED_TEST(MathSpace2D, AARectangleMergedNonMutating)
 	ASSERT_NEAR(rect1.width(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
 }
 
+TYPED_TEST(MathSpace2D, AARectangleComparisonOperators)
+{
+	const AARectangle< TypeParam > small{0, 0, 2, 2};            // area 4
+	const AARectangle< TypeParam > large{0, 0, 10, 10};          // area 100
+	const AARectangle< TypeParam > sameAreaAsSmall{0, 0, 4, 1};  // area 4, different geometry
+
+	ASSERT_TRUE(large > small);
+	ASSERT_TRUE(small < large);
+	ASSERT_TRUE(large >= small);
+	ASSERT_TRUE(small <= large);
+
+	// Equal area drives >=/<= but not the strict forms.
+	ASSERT_TRUE(small >= sameAreaAsSmall);
+	ASSERT_TRUE(small <= sameAreaAsSmall);
+	ASSERT_FALSE(small > sameAreaAsSmall);
+	ASSERT_FALSE(small < sameAreaAsSmall);
+
+	// Equality is geometric (min/max), not area-based.
+	ASSERT_TRUE(small == small);
+	ASSERT_FALSE(small == sameAreaAsSmall);
+	ASSERT_TRUE(small != sameAreaAsSmall);
+	ASSERT_FALSE(small != small);
+}
+
+TYPED_TEST(MathSpace2D, AARectangleSetRight)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	rect.setRight(static_cast< TypeParam >(25.0));
+	ASSERT_NEAR(rect.right(), static_cast< TypeParam >(25.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(25.0), static_cast< TypeParam >(1e-5));
+
+	// A right lower than left is rejected by the guard: no change.
+	rect.setRight(static_cast< TypeParam >(-5.0));
+	ASSERT_NEAR(rect.right(), static_cast< TypeParam >(25.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleSetBottom)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	rect.setBottom(static_cast< TypeParam >(30.0));
+	ASSERT_NEAR(rect.bottom(), static_cast< TypeParam >(30.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(30.0), static_cast< TypeParam >(1e-5));
+
+	// A bottom above top is rejected by the guard: no change.
+	rect.setBottom(static_cast< TypeParam >(-5.0));
+	ASSERT_NEAR(rect.bottom(), static_cast< TypeParam >(30.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleSetTopKeepsHeight)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 20};
+
+	rect.setTop(static_cast< TypeParam >(5.0));
+
+	ASSERT_NEAR(rect.top(), static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(20.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.bottom(), static_cast< TypeParam >(25.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleSetLeftKeepsWidth)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 20};
+
+	rect.setLeft(static_cast< TypeParam >(7.0));
+
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(7.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.right(), static_cast< TypeParam >(17.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleSetPositionKeepsDimensions)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 20};
+
+	rect.setPosition(Point< TypeParam >{5, 8});
+
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.top(), static_cast< TypeParam >(8.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(20.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleSetWidthHeightGuards)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	rect.setWidth(static_cast< TypeParam >(50.0));
+	rect.setHeight(static_cast< TypeParam >(40.0));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(50.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(40.0), static_cast< TypeParam >(1e-5));
+
+	// Non-positive sizes are rejected by the guards: no change.
+	rect.setWidth(static_cast< TypeParam >(0.0));
+	rect.setWidth(static_cast< TypeParam >(-3.0));
+	rect.setHeight(static_cast< TypeParam >(-1.0));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(50.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(40.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleMove)
+{
+	AARectangle< TypeParam > rect{10, 20, 30, 40};
+
+	rect.move(static_cast< TypeParam >(5.0), static_cast< TypeParam >(-8.0));
+
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(15.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.top(), static_cast< TypeParam >(12.0), static_cast< TypeParam >(1e-5));
+	// Dimensions are preserved by a translation.
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(30.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(40.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleModifyWidthBy)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	rect.modifyWidthBy(static_cast< TypeParam >(5.0));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(15.0), static_cast< TypeParam >(1e-5));
+
+	// Shrinking past zero clamps to 0, never negative.
+	rect.modifyWidthBy(static_cast< TypeParam >(-100.0));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleModifyHeightBy)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	rect.modifyHeightBy(static_cast< TypeParam >(5.0));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(15.0), static_cast< TypeParam >(1e-5));
+
+	rect.modifyHeightBy(static_cast< TypeParam >(-100.0));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleMaximumMinimumByIndex)
+{
+	const AARectangle< TypeParam > rect{5, 10, 20, 30};
+
+	ASSERT_NEAR(rect.minimum(0), static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.minimum(1), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.maximum(0), static_cast< TypeParam >(25.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.maximum(1), static_cast< TypeParam >(40.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleIsValidRejectsNonFinite)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+	ASSERT_TRUE(rect.isValid());
+
+	// A NaN corner makes the surface degenerate -> invalid.
+	rect.set(Point< TypeParam >{0, 0}, Point< TypeParam >{std::numeric_limits< TypeParam >::quiet_NaN(), 10});
+	ASSERT_FALSE(rect.isValid());
+
+	// An infinite corner keeps width > 0 but non-finite -> rejected by the std::isfinite guard.
+	rect.set(Point< TypeParam >{0, 0}, Point< TypeParam >{std::numeric_limits< TypeParam >::infinity(), 10});
+	ASSERT_FALSE(rect.isValid());
+}
+
+TYPED_TEST(MathSpace2D, AARectangleIsOutsideIsIntersectRect)
+{
+	const AARectangle< TypeParam > rect{0, 0, 10, 10};
+	const AARectangle< TypeParam > overlapping{5, 5, 10, 10};
+	const AARectangle< TypeParam > disjoint{50, 50, 10, 10};
+
+	ASSERT_FALSE(rect.isOutside(overlapping));
+	ASSERT_TRUE(rect.isIntersect(overlapping));
+
+	ASSERT_TRUE(rect.isOutside(disjoint));
+	ASSERT_FALSE(rect.isIntersect(disjoint));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleIsInsideRect)
+{
+	const AARectangle< TypeParam > container{0, 0, 100, 100};
+	const AARectangle< TypeParam > inner{10, 10, 20, 20};
+	const AARectangle< TypeParam > crossing{90, 90, 50, 50};
+
+	ASSERT_TRUE(inner.isInside(container));
+	ASSERT_FALSE(crossing.isInside(container));
+	ASSERT_FALSE(container.isInside(inner));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleOutsideInsideIntersectWH)
+{
+	// Overloads comparing against an origin-anchored (0, 0, width, height) box.
+	const AARectangle< TypeParam > inside{10, 10, 20, 20};
+	ASSERT_TRUE(inside.isInside(static_cast< TypeParam >(100.0), static_cast< TypeParam >(100.0)));
+	ASSERT_FALSE(inside.isOutside(static_cast< TypeParam >(100.0), static_cast< TypeParam >(100.0)));
+	ASSERT_TRUE(inside.isIntersect(static_cast< TypeParam >(100.0), static_cast< TypeParam >(100.0)));
+
+	const AARectangle< TypeParam > beyond{200, 200, 20, 20};
+	ASSERT_TRUE(beyond.isOutside(static_cast< TypeParam >(100.0), static_cast< TypeParam >(100.0)));
+	ASSERT_FALSE(beyond.isIntersect(static_cast< TypeParam >(100.0), static_cast< TypeParam >(100.0)));
+	ASSERT_FALSE(beyond.isInside(static_cast< TypeParam >(100.0), static_cast< TypeParam >(100.0)));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleCropOnOverflowRect)
+{
+	AARectangle< TypeParam > rect{-5, -5, 30, 30}; // spans -5..25
+	const AARectangle< TypeParam > bounds{0, 0, 10, 10};
+
+	const bool changed = rect.cropOnOverflow(bounds);
+
+	ASSERT_TRUE(changed);
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.top(), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.right(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.bottom(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+
+	// Re-cropping against the same bounds is a no-op -> returns false.
+	ASSERT_FALSE(rect.cropOnOverflow(bounds));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleCropOnOverflowWH)
+{
+	AARectangle< TypeParam > rect{5, 5, 100, 100}; // 5..105
+
+	const bool changed = rect.cropOnOverflow(static_cast< TypeParam >(50.0), static_cast< TypeParam >(50.0));
+
+	ASSERT_TRUE(changed);
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.right(), static_cast< TypeParam >(50.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.bottom(), static_cast< TypeParam >(50.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleIntersectMutating)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+	const AARectangle< TypeParam > other{5, 5, 10, 10}; // 5..15
+
+	ASSERT_TRUE(rect.intersect(other));
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.top(), static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.right(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.bottom(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+
+	// A disjoint rectangle leaves the receiver unchanged and returns false.
+	AARectangle< TypeParam > untouched{0, 0, 10, 10};
+	const AARectangle< TypeParam > disjoint{50, 50, 10, 10};
+	ASSERT_FALSE(untouched.intersect(disjoint));
+	ASSERT_NEAR(untouched.right(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(untouched.bottom(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleAspectRatio)
+{
+	const AARectangle< TypeParam > rect{0, 0, 40, 10};
+	ASSERT_NEAR(rect.aspectRatio(), static_cast< TypeParam >(4.0), static_cast< TypeParam >(1e-5));
+
+	// An invalid rectangle yields 0.
+	const AARectangle< TypeParam > invalid;
+	ASSERT_NEAR(invalid.aspectRatio(), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectanglePerimeter)
+{
+	const AARectangle< TypeParam > rect{0, 0, 10, 20};
+
+	ASSERT_NEAR(rect.getPerimeter(), static_cast< TypeParam >(60.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleMergeSelfAndInvalid)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	// Self-merge is a no-op.
+	rect.merge(rect);
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.height(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+
+	// Merging an invalid rectangle is ignored.
+	const AARectangle< TypeParam > invalid;
+	rect.merge(invalid);
+	ASSERT_NEAR(rect.left(), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rect.width(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+
+	// Merging a valid rectangle into an invalid one copies it.
+	AARectangle< TypeParam > empty;
+	empty.merge(rect);
+	ASSERT_TRUE(empty.isValid());
+	ASSERT_NEAR(empty.width(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(empty.height(), static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace2D, AARectangleToString)
+{
+	const AARectangle< TypeParam > rect{0, 0, 10, 20};
+
+	const auto text = to_string(rect);
+
+	ASSERT_FALSE(text.empty());
+	ASSERT_NE(text.find("rectangle"), std::string::npos);
+}
+
+
 // ============================================================================
 // COLLISION TESTS - POINT COLLISIONS
 // ============================================================================
@@ -1948,4 +2246,131 @@ TYPED_TEST(MathSpace2D, CollisionTriangleRectangleMTVSymmetry)
 	// MTV(A, B) should be opposite of MTV(B, A)
 	ASSERT_NEAR(mtv_ab.x(), -mtv_ba.x(), static_cast< TypeParam >(1e-4));
 	ASSERT_NEAR(mtv_ab.y(), -mtv_ba.y(), static_cast< TypeParam >(1e-4));
+}
+
+// ============================================================================
+// AARECTANGLE - INTEGER INSTANTIATION
+// The is_arithmetic_v concept deliberately admits integer rectangles. This suite
+// exercises the integer code path (dimension guards, integer-midpoint centroid)
+// that the float/double suite above cannot reach. farthestPoint() and the
+// floating-point centroid overload are intentionally unavailable for integers and
+// are therefore not exercised here.
+// ============================================================================
+
+using AARectangleIntTypeList = testing::Types< int >;
+
+template< typename >
+struct AARectangleInt
+	: testing::Test
+{
+};
+
+TYPED_TEST_SUITE(AARectangleInt, AARectangleIntTypeList);
+
+TYPED_TEST(AARectangleInt, ConstructAndDimensions)
+{
+	const AARectangle< TypeParam > rect{5, 10, 20, 30};
+
+	ASSERT_TRUE(rect.isValid());
+	ASSERT_EQ(rect.left(), TypeParam{5});
+	ASSERT_EQ(rect.top(), TypeParam{10});
+	ASSERT_EQ(rect.width(), TypeParam{20});
+	ASSERT_EQ(rect.height(), TypeParam{30});
+	ASSERT_EQ(rect.right(), TypeParam{25});
+	ASSERT_EQ(rect.bottom(), TypeParam{40});
+	ASSERT_EQ(rect.getArea(), TypeParam{600});
+	ASSERT_EQ(rect.getPerimeter(), TypeParam{100});
+}
+
+TYPED_TEST(AARectangleInt, NegativeDimensionsClampToZero)
+{
+	const AARectangle< TypeParam > rect{0, 0, -5, -5};
+
+	ASSERT_FALSE(rect.isValid());
+	ASSERT_EQ(rect.width(), TypeParam{0});
+	ASSERT_EQ(rect.height(), TypeParam{0});
+}
+
+TYPED_TEST(AARectangleInt, CentroidIntegerMidpoint)
+{
+	// Even span -> exact midpoint.
+	const AARectangle< TypeParam > even{0, 0, 10, 20};
+	ASSERT_EQ(even.centroid(), Point< TypeParam >(5, 10));
+
+	// Odd span -> integer division truncates (5 / 2 == 2); it must NOT collapse to 0.
+	const AARectangle< TypeParam > odd{0, 0, 5, 5};
+	ASSERT_EQ(odd.centroid(), Point< TypeParam >(2, 2));
+
+	// Offset, odd span.
+	const AARectangle< TypeParam > offset{3, 3, 4, 4}; // 3..7
+	ASSERT_EQ(offset.centroid(), Point< TypeParam >(5, 5));
+}
+
+TYPED_TEST(AARectangleInt, Contains)
+{
+	const AARectangle< TypeParam > rect{0, 0, 10, 10};
+
+	ASSERT_TRUE(rect.contains(Point< TypeParam >{5, 5}));
+	ASSERT_TRUE(rect.contains(Point< TypeParam >{0, 0}));
+	ASSERT_TRUE(rect.contains(Point< TypeParam >{10, 10}));
+	ASSERT_FALSE(rect.contains(Point< TypeParam >{11, 5}));
+}
+
+TYPED_TEST(AARectangleInt, MergePointAndRectangle)
+{
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+	rect.merge(Point< TypeParam >{15, -5});
+	ASSERT_EQ(rect.left(), TypeParam{0});
+	ASSERT_EQ(rect.top(), TypeParam{-5});
+	ASSERT_EQ(rect.right(), TypeParam{15});
+	ASSERT_EQ(rect.bottom(), TypeParam{10});
+
+	AARectangle< TypeParam > acc;
+	ASSERT_FALSE(acc.isValid());
+	acc.merge(AARectangle< TypeParam >{0, 0, 4, 4});
+	ASSERT_TRUE(acc.isValid());
+	ASSERT_EQ(acc.width(), TypeParam{4});
+}
+
+TYPED_TEST(AARectangleInt, SetFromCorners)
+{
+	AARectangle< TypeParam > rect;
+	rect.set(Point< TypeParam >{40, 60}, Point< TypeParam >{10, 20});
+
+	ASSERT_EQ(rect.left(), TypeParam{10});
+	ASSERT_EQ(rect.top(), TypeParam{20});
+	ASSERT_EQ(rect.right(), TypeParam{40});
+	ASSERT_EQ(rect.bottom(), TypeParam{60});
+}
+
+TYPED_TEST(AARectangleInt, Predicates)
+{
+	const AARectangle< TypeParam > rect{0, 0, 10, 10};
+	const AARectangle< TypeParam > overlapping{5, 5, 10, 10};
+	const AARectangle< TypeParam > disjoint{50, 50, 10, 10};
+	const AARectangle< TypeParam > inner{2, 2, 4, 4};
+
+	ASSERT_TRUE(rect.isIntersect(overlapping));
+	ASSERT_FALSE(rect.isIntersect(disjoint));
+	ASSERT_TRUE(rect.isOutside(disjoint));
+	ASSERT_TRUE(inner.isInside(rect));
+}
+
+TYPED_TEST(AARectangleInt, IntersectionAndSetters)
+{
+	const AARectangle< TypeParam > a{0, 0, 10, 10};
+	const AARectangle< TypeParam > b{5, 5, 10, 10};
+
+	const auto overlap = a.intersection(b);
+	ASSERT_TRUE(overlap.isValid());
+	ASSERT_EQ(overlap.left(), TypeParam{5});
+	ASSERT_EQ(overlap.right(), TypeParam{10});
+
+	AARectangle< TypeParam > rect{0, 0, 10, 10};
+	rect.setRight(25);
+	ASSERT_EQ(rect.right(), TypeParam{25});
+	rect.setRight(-5); // guarded, ignored
+	ASSERT_EQ(rect.right(), TypeParam{25});
+	rect.move(5, 5);
+	ASSERT_EQ(rect.left(), TypeParam{5});
 }

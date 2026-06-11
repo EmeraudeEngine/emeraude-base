@@ -12,7 +12,7 @@ list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 # plus resolution of the ext-deps-generator output. Consumable whole (emeraude::base)
 # or per-module (emeraude::base::math, …) by tools that don't need the full engine.
 project(EmeraudeBase
-	VERSION 1.1.2
+	VERSION 1.1.3
 	DESCRIPTION "Foundation library for Emeraude-Engine."
 	HOMEPAGE_URL "https://github.com/EmeraudeEngine/emeraude-base"
 	LANGUAGES C CXX

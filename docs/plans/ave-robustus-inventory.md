@@ -184,6 +184,7 @@ These emerged from the audit and matter for sequencing:
 |---|---|---|---|---|
 | Vector/Matrix/Quaternion/CartesianFrame/TRS | src/AGENTS.md, headers | Delivered + densely tested | none | round-trip identities (covered) |
 | Space2D/3D primitives + collisions + MTV | src/AGENTS.md | Delivered, very dense coverage | none | MTV exactly separates known overlap (covered) |
+| `AACuboid` / `AARectangle` (AABB) | `Space3D/AACuboid.hpp`, `Space2D/AARectangle.hpp` | **Hardened 2026-06-11**: happy-path was dense but guards/branches + ~half the `AARectangle` API were untested. Now cover NaN/Inf `isValid` guards, merge self/invalid/into-invalid, all setters+guards, `isInside/isOutside/isIntersect` (rect + w/h), `crop`/`intersect`/`aspectRatio`/comparisons, + dedicated `AARectangleInt` integer suite. | closed | 🐞 fixed: integer `centroid()` collapsed to `(0,0)` (float `*0.5` → `int`); now truncated integer midpoint, locked by test |
 | Line-vs-primitive intersections (3D) | `Space3D/Intersections/Line*.hpp` | Delivered; 8× `@todo` "duplicate of segment, check dup code" | A (dedup) | infinite-line hit beyond endpoints ≠ segment clone |
 | BezierCurve | `BezierCurve.hpp` (doc names `Bezier.hpp`) | Implemented; **0 tests**; doc/file name mismatch | A | sample known control polygon vs hand-computed |
 | BSpline | `BSpline.hpp` (526 L) | Implemented; **0 tests** (most complex untested header) | A | evaluate vs reference incl. knot continuity |

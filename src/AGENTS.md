@@ -201,8 +201,11 @@ ctest -R Libs
   `AARectangle::Zero()` (concrete 0,0,0,0 origin seed for the position+size setters, since they
   can't build on the empty default).
   Parity helpers: `centroid()`, `farthestPoint()`, `highestLength()`, `size()`, `contains(Point)`,
-  corner-pair `set()`, non-mutating `merged()` / `intersection()`. `centroid()`/`farthestPoint()`
-  are float-only (`requires` clause); `isValid()` rejects non-finite dimensions for floating types.
+  corner-pair `set()`, non-mutating `merged()` / `intersection()`. `farthestPoint()` is float-only
+  (`requires` clause). `centroid()` is `requires`-split per precision: floating returns the exact
+  `(min+max)*0.5`, **integer returns the truncated integer midpoint `(min+max)/2`** (never the silent
+  `(0,0)` collapse a float `*0.5` cast back to `int` would produce). `isValid()` rejects non-finite
+  dimensions for floating types.
   **One intentional deviation from AACuboid**: `width()`/`height()` clamp to 0 when `max ≤ min`
   (AACuboid returns raw `max-min`) — because `AARectangle` is also instantiated for integers, where
   the inverted-sentinel `max-min` would be UB (signed) / wrong (unsigned). Invisible for valid rects.
