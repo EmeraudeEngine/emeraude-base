@@ -2,28 +2,14 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-if ( EMERAUDE_USE_SYSTEM_LIBS )
-	message("Enabling HWLOC library from system ...")
+message("Enabling HWLOC library ...")
 
-	find_package(PkgConfig REQUIRED)
-
-	pkg_check_modules(HWLOC REQUIRED hwloc)
-
-	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC ${HWLOC_INCLUDE_DIRS})
-
-	target_link_directories(${TARGET_BINARY_FOR_SETUP} PUBLIC ${HWLOC_LIBRARY_DIRS})
-
-	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${HWLOC_LIBRARIES})
+if ( MSVC )
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/hwloc.lib)
 else ()
-	message("Enabling HWLOC library from local source ...")
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libhwloc.a)
 
-	if ( MSVC )
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/hwloc.lib)
-	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libhwloc.a)
-
-		if ( APPLE )
-			target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE "-framework CoreFoundation -framework IOKit")
-		endif ()
+	if ( APPLE )
+		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE "-framework CoreFoundation -framework IOKit")
 	endif ()
 endif ()

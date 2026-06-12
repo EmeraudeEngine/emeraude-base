@@ -2,23 +2,10 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-if ( EMERAUDE_USE_SYSTEM_LIBS )
-	message("Enabling bzip2 library from system ...")
+message("Enabling bzip2 library ...")
 
-	# NOTE: https://cmake.org/cmake/help/latest/module/FindBZip2.html
-	find_package(BZip2 REQUIRED)
-
-	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC ${BZIP2_INCLUDE_DIRS})
-
-	target_link_directories(${TARGET_BINARY_FOR_SETUP} PUBLIC ${BZIP2_LIBRARIES})
-
-	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE BZip2::BZip2)
+if ( MSVC )
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/bz2_static.lib)
 else ()
-	message("Enabling bzip2 library from local source ...")
-
-	if ( MSVC )
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/bz2_static.lib)
-	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libbz2_static.a)
-	endif ()
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${EMERAUDE_EXT_LIBS_PATH}/lib/libbz2_static.a)
 endif ()

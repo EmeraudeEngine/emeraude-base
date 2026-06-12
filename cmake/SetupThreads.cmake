@@ -2,7 +2,7 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-message("Enabling Threads library from system ...")
+message("Enabling Threads library ...")
 
 find_package(Threads REQUIRED)
 
@@ -22,6 +22,6 @@ if ( Threads_FOUND )
 	endif ()
 
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE Threads::Threads)
-endif ()
 
-set(THREADS_ENABLED On)
+	set(THREADS_ENABLED On)
+endif ()

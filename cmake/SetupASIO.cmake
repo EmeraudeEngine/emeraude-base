@@ -2,7 +2,7 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-message("Enabling ASIO library (header-only) from local source ...")
+message("Enabling ASIO library (header-only) ...")
 
 set(ASIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/asio/include)
 

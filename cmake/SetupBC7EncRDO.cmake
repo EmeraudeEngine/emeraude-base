@@ -2,7 +2,7 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-message("Enabling bc7enc_rdo BC7 texture compression library from local precompiled source ...")
+message("Enabling bc7enc_rdo BC7 texture compression library ...")
 
 find_package(bc7enc_rdo CONFIG REQUIRED PATHS ${EMERAUDE_EXT_LIBS_PATH} NO_DEFAULT_PATH)
 

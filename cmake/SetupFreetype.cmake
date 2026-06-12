@@ -2,29 +2,17 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-if ( EMERAUDE_USE_SYSTEM_LIBS )
-	message("Enabling FreeType library from system ...")
+message("Enabling FreeType library ...")
 
-	# NOTE: https://cmake.org/cmake/help/latest/module/FindFreetype.html
-	find_package(Freetype REQUIRED)
+target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC "${EMERAUDE_EXT_LIBS_PATH}/include/freetype2")
 
-	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC ${FREETYPE_INCLUDE_DIRS})
-
-	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE Freetype::Freetype)
-else ()
-
-	message("Enabling FreeType library from local source ...")
-
-	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC "${EMERAUDE_EXT_LIBS_PATH}/include/freetype2")
-
-	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-		debug freetyped
-		optimized freetype
-	)
-endif ()
+target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
+	debug freetyped
+	optimized freetype
+)
 
 if ( UNIX AND NOT APPLE )
-	message("Enabling Fontconfig library from system ...")
+	message("Enabling Fontconfig (system) ...")
 
 	find_package(Fontconfig REQUIRED)
 

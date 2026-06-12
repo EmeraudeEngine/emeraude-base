@@ -2,30 +2,16 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-if ( EMERAUDE_USE_SYSTEM_LIBS )
-	message("Enabling LibPNG library from system ...")
+message("Enabling LibPNG library ...")
 
-	find_package(PkgConfig REQUIRED)
-
-	pkg_check_modules(PNG REQUIRED libpng)
-
-	target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC ${PNG_INCLUDE_DIRS})
-
-	target_link_directories(${TARGET_BINARY_FOR_SETUP} PUBLIC ${PNG_LIBRARY_DIRS})
-
-	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE ${PNG_LIBRARIES})
+if ( MSVC )
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PUBLIC
+		debug "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16_staticd.lib"
+		optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16_static.lib"
+	)
 else ()
-	message("Enabling LibPNG library from local source ...")
-
-	if ( MSVC )
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PUBLIC
-			debug "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16_staticd.lib"
-			optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16_static.lib"
-		)
-	else ()
-		target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
-			debug "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16d.a"
-			optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16.a"
-		)
-	endif ()
+	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
+		debug "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16d.a"
+		optimized "${EMERAUDE_EXT_LIBS_PATH}/lib/libpng16.a"
+	)
 endif ()

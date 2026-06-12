@@ -2,7 +2,7 @@ if ( NOT TARGET_BINARY_FOR_SETUP )
 	message(FATAL_ERROR "TARGET_BINARY_FOR_SETUP is not SET !")
 endif ()
 
-message("Enabling OpenMP library from system ...")
+message("Enabling OpenMP library ...")
 
 if ( MSVC )
 	target_compile_options(${TARGET_BINARY_FOR_SETUP} PUBLIC /openmp:experimental)
@@ -20,5 +20,3 @@ else ()
 		set(OPENMP_ENABLED On)
 	endif ()
 endif ()
-
-
