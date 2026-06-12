@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -92,6 +93,55 @@ TEST(ZipArchive, roundTripWriteThenRead)
 	EXPECT_EQ(std::string(buffer.begin(), buffer.end()), payload);
 
 	std::error_code errorCode;
+	std::filesystem::remove_all(dir, errorCode);
+}
+
+TEST(ZipArchive, addDirectoryToSourcesCreatesArchive)
+{
+	const auto dir = freshTempDir("emeraude_zip_directory");
+
+	/* A small directory tree to zip, with a nested sub-directory to exercise the
+	 * recursive walk and the relative-path entry naming. */
+	const auto sourceRoot = dir / "to_zip";
+	std::error_code errorCode;
+	std::filesystem::create_directories(sourceRoot / "nested", errorCode);
+
+	const std::string rootPayload = "Root file payload.";
+	const std::string nestedPayload = "Nested file payload.";
+
+	writeFile(sourceRoot / "root.txt", rootPayload);
+	writeFile(sourceRoot / "nested" / "deep.txt", nestedPayload);
+
+	const auto archive = dir / "archive.zip";
+
+	{
+		ZipWriter writer{archive};
+		ASSERT_TRUE(writer.addDirectoryToSources(sourceRoot));
+		ASSERT_TRUE(writer.create());
+	}
+
+	/* Primary goal: the archive file must have been created on disk. */
+	ASSERT_TRUE(std::filesystem::exists(archive));
+	EXPECT_GT(std::filesystem::file_size(archive, errorCode), 0U);
+	EXPECT_TRUE(ZipReader::isArchiveFile(archive));
+
+	/* Entries are named relative to the directory, with generic '/' separators,
+	 * and the nested file keeps its sub-path. */
+	ZipReader reader{archive};
+	ASSERT_TRUE(reader.open());
+
+	const auto & entries = reader.entries();
+	ASSERT_EQ(entries.size(), 2U);
+	EXPECT_NE(std::ranges::find(entries, "root.txt"), entries.end());
+	EXPECT_NE(std::ranges::find(entries, "nested/deep.txt"), entries.end());
+
+	std::vector< char > buffer;
+	ASSERT_TRUE(reader.extract("root.txt", buffer));
+	EXPECT_EQ(std::string(buffer.begin(), buffer.end()), rootPayload);
+
+	ASSERT_TRUE(reader.extract("nested/deep.txt", buffer));
+	EXPECT_EQ(std::string(buffer.begin(), buffer.end()), nestedPayload);
+
 	std::filesystem::remove_all(dir, errorCode);
 }
 
