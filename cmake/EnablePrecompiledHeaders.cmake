@@ -1,6 +1,6 @@
 # emeraude-base — shared precompiled-header helper.
 #
-# emeraude-base owns the project-wide STL hot-set precompiled header (PrecompiledHeaders.hpp
+# emeraude-base owns the project-wide STL hot-set precompiled header (STLPrecompiledHeaders.hpp
 # at the repo root — STL ONLY, see that file for the strict rule). This module exposes a
 # single helper that attaches it to a target.
 #
@@ -33,13 +33,8 @@ function(emeraude_base_target_enable_pch target)
 	endif ()
 
 	if ( NOT EMERAUDE_BASE_PCH_FILE )
-		message(FATAL_ERROR
-			"[EmeraudeBase] EMERAUDE_BASE_PCH_FILE is not set. Make sure emeraude-base has "
-			"been add_subdirectory'd before calling emeraude_base_target_enable_pch(${target})."
-		)
+		message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_BASE_PCH_FILE is not set. Make sure emeraude-base has been add_subdirectory'd before calling emeraude_base_target_enable_pch(${target}).")
 	endif ()
 
-	target_precompile_headers(${target} PRIVATE
-		"$<$<COMPILE_LANGUAGE:CXX>:${EMERAUDE_BASE_PCH_FILE}>"
-	)
+	target_precompile_headers(${target} PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:${EMERAUDE_BASE_PCH_FILE}>")
 endfunction()

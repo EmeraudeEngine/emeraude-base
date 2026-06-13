@@ -43,10 +43,10 @@ option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI." Off)
 option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point." Off)
-option(EMERAUDE_ENABLE_PCH "Enable the shared STL hot-set precompiled header (PrecompiledHeaders.hpp)." On)
+option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suite(s)." Off)
-option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus A.1)." Off)
-option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Ave robustus A.5)." Off)
+option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus! A.1)." Off)
+option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Ave robustus! A.5)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
@@ -135,13 +135,21 @@ set(EMERAUDE_EXT_LIBS_LIB_DIR     "${EMERAUDE_EXT_LIBS_PATH}/lib"     CACHE PATH
 set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emeraude-base CMake helpers (Setup*.cmake for external deps)." FORCE)
 
 # emeraude-base owns the project-wide precompiled header: a STL-only hot-set
-# (PrecompiledHeaders.hpp) + the EnablePrecompiledHeaders helper. It is consumed by the LEAF
-# targets that include the helper and apply it themselves (app_kernel's Kernel, app_system's
-# binaries). It is deliberately NOT applied to base's own modules nor to the engine: both end up
-# inside the engine SHARED library (WINDOWS_EXPORT_ALL_SYMBOLS), whose auto-generated export .def
-# scans PCH objects and then fails to resolve their compiler-internal symbols (LNK2001 in
-# exports.def). STL only — never project headers — so editing project code never invalidates it.
-set(EMERAUDE_BASE_PCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/PrecompiledHeaders.hpp" CACHE FILEPATH "emeraude-base shared precompiled header (STL hot-set)." FORCE)
+# (STLPrecompiledHeaders.hpp) + the EnablePrecompiledHeaders helper. It is applied across the whole
+# cascade — base's own compiled modules + umbrella, the engine SHARED library, and the leaf
+# executables (projet-alpha, app_kernel's Kernel, app_system's binaries) — by calling
+# emeraude_base_target_enable_pch(<target>) right after each target is declared. STL only — never
+# project headers — so editing project code never invalidates it.
+#
+# WINDOWS CAVEAT (empirically under test): the engine is a SHARED library with
+# WINDOWS_EXPORT_ALL_SYMBOLS ON, whose auto-generated export .def scans the target's input .obj
+# files. It was *assumed* (never reproduced) that the PCH object's compiler-internal symbols would
+# leak into exports.def and fail to link (LNK2001). We now enable the PCH everywhere and verify
+# empirically. IF that link failure actually reproduces on Windows, the correct fix is the real
+# export API (generate_export_header + EMERAUDE_API, dropping WINDOWS_EXPORT_ALL_SYMBOLS) already
+# flagged as a TODO on the engine target — NOT reverting the PCH.
+set(EMERAUDE_BASE_PCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/STLPrecompiledHeaders.hpp" CACHE FILEPATH "emeraude-base shared precompiled header (STL hot-set)." FORCE)
+include(EnablePrecompiledHeaders)
 
 # Download + extract the prebuilt archive when EMERAUDE_EXT_LIBS_PATH is absent.
 # Skipped automatically when it is a symlink (developer pointing at a local build).
@@ -269,7 +277,7 @@ endif ()
 
 #######################################################################
 ## Modules
-# Per-module targets (Ave robustus! gap #1): every src/ subsystem is its own CMake target,
+# Per-module targets ("Ave robustus!" gap #1): every src/ subsystem is its own CMake target,
 # aliased emeraude::base::<name> — header-only modules are INTERFACE libraries, compiled modules
 # are OBJECT libraries aggregated into the emeraude::base umbrella. Consumers link the whole
 # umbrella OR an individual module. See docs/module-map.md.
@@ -322,6 +330,7 @@ function(emeraude_base_object_module name)
 	add_library(emeraude_base_${name} OBJECT ${ARGN})
 	target_link_libraries(emeraude_base_${name} PUBLIC emeraude_base_flags)
 	set_target_properties(emeraude_base_${name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+	emeraude_base_target_enable_pch(emeraude_base_${name})
 	add_library(emeraude::base::${name} ALIAS emeraude_base_${name})
 endfunction()
 
@@ -373,6 +382,9 @@ set_target_properties(emeraude_base PROPERTIES
 	POSITION_INDEPENDENT_CODE ON
 	VERSION ${PROJECT_VERSION}
 )
+
+# Umbrella's own loose sources (${EMERAUDE_BASE_SOURCES}) get the PCH too.
+emeraude_base_target_enable_pch(emeraude_base)
 
 target_link_libraries(emeraude_base PUBLIC emeraude_base_flags emeraude::base::platform)
 
@@ -442,6 +454,7 @@ if ( EMERAUDE_ENABLE_TESTS )
 	FetchContent_MakeAvailable(googletest)
 
 	add_executable(EmeraudeBaseUnitTests ${EMERAUDE_BASE_TEST_SOURCES})
+	emeraude_base_target_enable_pch(EmeraudeBaseUnitTests)
 
 	set_target_properties(EmeraudeBaseUnitTests PROPERTIES
 		C_STANDARD ${EMERAUDE_C_VERSION} C_STANDARD_REQUIRED On C_EXTENSIONS Off
@@ -488,6 +501,7 @@ if ( EMERAUDE_ENABLE_BENCHMARKS )
 	FetchContent_MakeAvailable(googlebenchmark)
 
 	add_executable(EmeraudeBaseBenchmarks ${EMERAUDE_BASE_BENCHMARK_SOURCES})
+	emeraude_base_target_enable_pch(EmeraudeBaseBenchmarks)
 
 	set_target_properties(EmeraudeBaseBenchmarks PROPERTIES
 		C_STANDARD ${EMERAUDE_C_VERSION} C_STANDARD_REQUIRED On C_EXTENSIONS Off

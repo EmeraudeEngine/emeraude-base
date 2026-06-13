@@ -73,7 +73,7 @@ emeraude-base owns the **project-wide precompiled header**, the same way it owns
 external-dependency Setup scripts and the compile policy: a single source of truth reused
 by every consumer.
 
-- **`PrecompiledHeaders.hpp`** (repo root) — **STL only** (containers, memory, streams,
+- **`STLPrecompiledHeaders.hpp`** (repo root) — **STL only** (containers, memory, streams,
   threading, `<filesystem>`, …). It also defines `_USE_MATH_DEFINES` before `<cmath>` so MSVC
   exposes `M_PI` etc. to every PCH-using TU (the PCH is force-included, so a TU's own define
   arrives too late). The strict rule lives in the file header: **never** add a project header
@@ -87,14 +87,25 @@ by every consumer.
   clash. base stays agnostic of consumer-specific headers: a consumer that needs heavy
   third-party headers on top appends them with its own second `target_precompile_headers()` call.
 - **`EMERAUDE_BASE_PCH_FILE`** (cache) — absolute path to the header, set next to
-  `EMERAUDE_BASE_CMAKE_DIR`. **`EMERAUDE_ENABLE_PCH`** (option, default **On**) gates the
+  `EMERAUDE_BASE_CMAKE_DIR`. **`EMERAUDE_ENABLE_PCH`** (option, default **Off**) gates the
   whole feature; when Off the helper is a no-op.
-- **Applied only to LEAF targets, never to base's own modules nor to the engine.** Both base and
-  the engine end up inside the engine **SHARED** library, which is built with
-  `WINDOWS_EXPORT_ALL_SYMBOLS`; CMake's auto-generated export `.def` scans every object —
-  **including the PCH object** — and the compiler-internal symbols it carries fail to resolve
-  (`LNK2001` in `exports.def`). So base owns the header + helper but does **not** PCH itself, and
-  the engine is **not** PCH'd. The consumers that apply it are:
+- **Applied across the whole cascade.** `emeraude_base_target_enable_pch()` is now called right
+  after each target is declared: base's own compiled modules + the `emeraude_base` umbrella + the
+  unit-test / benchmark executables (here), the **engine** SHARED library, and projet-alpha's
+  executable + CEF helper. Plus the external consumers below. One switch, `EMERAUDE_ENABLE_PCH`.
+  - **WINDOWS CAVEAT — empirically under test (Route A).** The engine is a SHARED library built
+    with `WINDOWS_EXPORT_ALL_SYMBOLS`; CMake's auto-generated export `.def` scans every input
+    object — **including the PCH object**. It was *assumed* (never reproduced) that the PCH
+    object's compiler-internal symbols would leak into `exports.def` and fail to resolve
+    (`LNK2001`). We now PCH everywhere and verify empirically. **If** that link failure actually
+    reproduces on Windows, the fix is the real export API (`generate_export_header` + `EMERAUDE_API`,
+    dropping `WINDOWS_EXPORT_ALL_SYMBOLS` — already a TODO on the engine target), **not** reverting
+    the PCH. Linux verified: full cascade builds clean (≈12 % faster in Release) and the 1874-test
+    base suite stays green under PCH.
+  - **GCC false positive.** Enabling the PCH shifts the STL inlining context enough to trip GCC 14's
+    `-Wstringop-overread` on a `std::string` move whose inferred length exceeds the SSO buffer (seen
+    in the engine's `Saphir/LightGenerator.cpp`). Fix at the source — force a heap buffer with
+    `reserve()` — never silence the warning. See engine `docs/caution-points.md`.
   - **app_kernel** — `app_kernel_target_enable_pch()` wraps the base helper (STL) + a second
     `target_precompile_headers` call for its Eigen-only header. Kernel is STATIC, linked into an
     app_system **executable** (no export-all), so its PCH object is never export-scanned.
@@ -102,7 +113,7 @@ by every consumer.
     the browser binary, and a CEF + Eigen header for the renderer (helper) binary (Eigen reaches it
     via `Kernel`'s `SYSTEM PUBLIC` include). Both are **executables**. On macOS, `.mm`/`.m` sources
     opt out via `SKIP_PRECOMPILE_HEADERS` (the CXX genex does not exclude Objective-C++).
-  - Both gated by `EMERAUDE_ENABLE_PCH` — one project-wide switch, no per-repo PCH option.
+  - All gated by `EMERAUDE_ENABLE_PCH` — one project-wide switch, no per-repo PCH option.
 
 ## 4. Core Axioms
 
