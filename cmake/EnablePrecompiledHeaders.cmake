@@ -32,6 +32,19 @@ function(emeraude_base_target_enable_pch target)
 		return ()
 	endif ()
 
+	# WINDOWS/MSVC GUARD (temporary): the engine DLL is exported via WINDOWS_EXPORT_ALL_SYMBOLS,
+	# whose auto-generated exports.def scans every input .obj. A per-target PCH object carries
+	# compiler marker symbols (__@@_PchSym_@00@…) that leak into the .def and break the link
+	# (LNK2001 on a bogus '__'). Until the explicit-export migration is complete (the engine option
+	# EMERAUDE_USE_EXPLICIT_EXPORTS, which drops WINDOWS_EXPORT_ALL_SYMBOLS), the PCH is a no-op on
+	# MSVC so the cascade links. Linux/macOS (symbol-visibility export) are unaffected. Lift this
+	# guard once EMERAUDE_USE_EXPLICIT_EXPORTS is the default. See
+	# emeraude-engine/docs/windows-export-api.md.
+	if ( MSVC AND NOT EMERAUDE_USE_EXPLICIT_EXPORTS )
+		message(STATUS "[EmeraudeBase] PCH disabled on MSVC for '${target}' (WINDOWS_EXPORT_ALL_SYMBOLS + PCH break the DLL link; pending explicit-export migration).")
+		return ()
+	endif ()
+
 	if ( NOT EMERAUDE_BASE_PCH_FILE )
 		message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_BASE_PCH_FILE is not set. Make sure emeraude-base has been add_subdirectory'd before calling emeraude_base_target_enable_pch(${target}).")
 	endif ()

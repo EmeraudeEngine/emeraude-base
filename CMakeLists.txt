@@ -141,13 +141,12 @@ set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emer
 # emeraude_base_target_enable_pch(<target>) right after each target is declared. STL only — never
 # project headers — so editing project code never invalidates it.
 #
-# WINDOWS CAVEAT (empirically under test): the engine is a SHARED library with
-# WINDOWS_EXPORT_ALL_SYMBOLS ON, whose auto-generated export .def scans the target's input .obj
-# files. It was *assumed* (never reproduced) that the PCH object's compiler-internal symbols would
-# leak into exports.def and fail to link (LNK2001). We now enable the PCH everywhere and verify
-# empirically. IF that link failure actually reproduces on Windows, the correct fix is the real
-# export API (generate_export_header + EMERAUDE_API, dropping WINDOWS_EXPORT_ALL_SYMBOLS) already
-# flagged as a TODO on the engine target — NOT reverting the PCH.
+# WINDOWS CAVEAT (CONFIRMED): the engine is a SHARED library; with WINDOWS_EXPORT_ALL_SYMBOLS its
+# auto-generated export .def scans every input .obj. With the PCH enabled, the PCH object's marker
+# symbols (__@@_PchSym_@00@…) leak into exports.def and the link fails (LNK2001 on a bogus '__').
+# This reproduces on MSVC. The fix is the explicit export API (EMERAUDE_API, dropping
+# WINDOWS_EXPORT_ALL_SYMBOLS), gated by the engine's EMERAUDE_USE_EXPLICIT_EXPORTS option — NOT
+# reverting the PCH. Migration guide: emeraude-engine/docs/windows-export-api.md.
 set(EMERAUDE_BASE_PCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/STLPrecompiledHeaders.hpp" CACHE FILEPATH "emeraude-base shared precompiled header (STL hot-set)." FORCE)
 include(EnablePrecompiledHeaders)
 
