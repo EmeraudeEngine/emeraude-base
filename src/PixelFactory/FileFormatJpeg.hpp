@@ -50,6 +50,20 @@
 #include "IO/ByteStream.hpp"
 #include "Pixmap.hpp"
 
+/* MSVC raises C4611 ("interaction between '_setjmp' and C++ object destruction is non-portable") for
+ * any setjmp() in C++ code — even with no destructible object in scope — and /WX turns it into an
+ * error. Here the longjmp resumes at the setjmp() in the same frame and the handler returns normally
+ * (no destructor is skipped); with -fno-exceptions there is no unwinding either, so the warning is a
+ * false positive. The macro suppresses it for the next line on MSVC only; it expands to nothing on
+ * GCC/Clang, which never emit C4611. */
+#ifndef EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
+	#if defined(_MSC_VER)
+		#define EMERAUDE_BASE_SUPPRESS_SETJMP_C4611 __pragma(warning(suppress: 4611))
+	#else
+		#define EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
+	#endif
+#endif
+
 namespace EmEn::Base::PixelFactory
 {
 	/**
@@ -121,6 +135,7 @@ namespace EmEn::Base::PixelFactory
 				 * here instead. The setjmp is placed AFTER jpeg_mem_src so sourcePtr/sourceSize (passed by value)
 				 * are fully consumed before it and cannot be clobbered by the longjmp (-Wclobbered). inputBuffer,
 				 * which backs sourcePtr, is filled before the setjmp and never modified afterwards. */
+				EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 				if ( setjmp(error.escape) )
 				{
 					Logging::error("PixelFactory::FileFormatJpeg", std::string{"readStream(), "} + error.message);
@@ -219,6 +234,7 @@ namespace EmEn::Base::PixelFactory
 				unsigned long outSize = 0;
 
 				/* Route fatal libjpeg errors through longjmp instead of exit(); free the libjpeg buffer here. */
+				EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 				if ( setjmp(error.escape) )
 				{
 					Logging::error("PixelFactory::FileFormatJpeg", std::string{"writeStream(), "} + error.message);

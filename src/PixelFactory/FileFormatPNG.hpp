@@ -46,6 +46,20 @@
 #include "Pixmap.hpp"
 #include "Types.hpp"
 
+/* MSVC raises C4611 ("interaction between '_setjmp' and C++ object destruction is non-portable") for
+ * any setjmp() in C++ code — even with no destructible object in scope — and /WX turns it into an
+ * error. Here the longjmp resumes at the setjmp() in the same frame and the handler returns normally
+ * (no destructor is skipped); with -fno-exceptions there is no unwinding either, so the warning is a
+ * false positive. The macro suppresses it for the next line on MSVC only; it expands to nothing on
+ * GCC/Clang, which never emit C4611. */
+#ifndef EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
+	#if defined(_MSC_VER)
+		#define EMERAUDE_BASE_SUPPRESS_SETJMP_C4611 __pragma(warning(suppress: 4611))
+	#else
+		#define EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
+	#endif
+#endif
+
 namespace EmEn::Base::PixelFactory
 {
 	/**
@@ -124,6 +138,7 @@ namespace EmEn::Base::PixelFactory
 				std::vector< png_bytep > rowPointers;
 
 				/* Phase 1 — header. */
+				EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 				if ( setjmp(png_jmpbuf(png)) )
 				{
 					Logging::error("PixelFactory::FileFormatPNG", std::string{"readStream(), PNG header error: "} + errorContext.errorMessage);
@@ -253,6 +268,7 @@ namespace EmEn::Base::PixelFactory
 				}
 
 				/* Phase 2 — image. A corrupt IDAT longjmps here; rowPointers unwinds normally. */
+				EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 				if ( setjmp(png_jmpbuf(png)) )
 				{
 					Logging::error("PixelFactory::FileFormatPNG", std::string{"readStream(), PNG image error: "} + errorContext.errorMessage);
@@ -335,6 +351,7 @@ namespace EmEn::Base::PixelFactory
 				std::vector< png_bytep > rowPointers;
 
 				/* Phase 1 — setup (IHDR / compression / filters). */
+				EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 				if ( setjmp(png_jmpbuf(png)) )
 				{
 					Logging::error("PixelFactory::FileFormatPNG", std::string{"writeStream(), PNG setup error: "} + errorContext.errorMessage);
@@ -412,6 +429,7 @@ namespace EmEn::Base::PixelFactory
 				png_set_rows(png, pngInfo, rowPointers.data());
 
 				/* Phase 2 — write. */
+				EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 				if ( setjmp(png_jmpbuf(png)) )
 				{
 					Logging::error("PixelFactory::FileFormatPNG", std::string{"writeStream(), PNG write error: "} + errorContext.errorMessage);
