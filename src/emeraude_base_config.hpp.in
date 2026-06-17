@@ -34,7 +34,6 @@
 /* Stable platform / arch / OS detection (preprocessor only, never regenerated). */
 #include "emeraude_platform.hpp"
 
-
 /* Allow CMake On/Off option values to substitute as C++ booleans. */
 #define ON true
 #define On true
@@ -43,6 +42,11 @@
 
 namespace EmEn
 {
+	constexpr unsigned int BaseVersionMajor{@PROJECT_VERSION_MAJOR@};
+	constexpr unsigned int BaseVersionMinor{@PROJECT_VERSION_MINOR@};
+	constexpr unsigned int BaseVersionPatch{@PROJECT_VERSION_PATCH@};
+	constexpr auto BaseVersionString{"@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@"};
+
 	constexpr auto InternetCheckDomain{"@EMERAUDE_INTERNET_CHECK_DOMAIN@"};
 	constexpr auto DefaultUserAgent{"@PROJECT_NAME@/@PROJECT_VERSION@ (" PLATFORM_TARGETED ")"};
 
