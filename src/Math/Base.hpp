@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -773,5 +774,22 @@ namespace EmEn::Base::Math
 		requires (std::is_arithmetic_v< integral_t >)
 	{
 		return value > 0 && (value & (value - 1)) == 0;
+	}
+
+	/**
+	 * @brief Returns the smallest power of two greater than or equal to a value.
+	 * @note Useful for algorithms that require power-of-two sizes (e.g. diamond-square grids):
+	 * snap an arbitrary size up to a valid one instead of rejecting it.
+	 * @param value The value to round up.
+	 * @return The next power of two greater than or equal to value; 1 for 0 or 1.
+	 */
+	template< typename integral_t = uint32_t >
+	[[nodiscard]]
+	static constexpr
+	integral_t
+	nextPowerOfTwo (integral_t value) noexcept
+		requires (std::is_unsigned_v< integral_t >)
+	{
+		return value <= 1 ? integral_t{1} : std::bit_ceil(value);
 	}
 }

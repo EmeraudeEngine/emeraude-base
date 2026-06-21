@@ -62,6 +62,28 @@ TEST(Math, alignCount)
 	EXPECT_EQ(alignCount(640, 256), 3);
 }
 
+TEST(Math, nextPowerOfTwo)
+{
+	/* Already a power of two: returned unchanged. */
+	EXPECT_EQ(nextPowerOfTwo(1U), 1U);
+
+	EXPECT_EQ(nextPowerOfTwo(2U), 2U);
+
+	EXPECT_EQ(nextPowerOfTwo(256U), 256U);
+
+	EXPECT_EQ(nextPowerOfTwo(2048U), 2048U);
+
+	/* Not a power of two: snapped UP to the next one. */
+	EXPECT_EQ(nextPowerOfTwo(3U), 4U);
+
+	EXPECT_EQ(nextPowerOfTwo(127U), 128U);
+
+	EXPECT_EQ(nextPowerOfTwo(2000U), 2048U);
+
+	/* Degenerate input. */
+	EXPECT_EQ(nextPowerOfTwo(0U), 1U);
+}
+
 TEST(Math, timesDivisible)
 {
 	EXPECT_EQ(timesDivisible(33, 2), 0);
