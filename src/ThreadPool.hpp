@@ -444,8 +444,8 @@ namespace EmEn::Base
 					/* Storage: either inline buffer or heap pointer. */
 					union
 					{
-							alignas(std::max_align_t) std::byte m_storage[SmallBufferSize];
-							void * m_heapPtr{nullptr};
+						alignas(std::max_align_t) std::byte m_storage[SmallBufferSize];
+						void * m_heapPtr{nullptr};
 					};
 
 					void (*m_invoke)(Task *){nullptr};
@@ -655,7 +655,7 @@ namespace EmEn::Base
 				size_t count = 0;
 
 				{
-					const std::lock_guard< std::mutex > lock{m_mutex};
+					const std::scoped_lock lock{m_mutex};
 
 					for ( auto it = begin; it != end; ++it )
 					{
@@ -827,9 +827,9 @@ namespace EmEn::Base
 				/* For very small workloads, just run sequentially. */
 				if ( totalIterations <= grainSize || m_workers.size() <= 1 )
 				{
-					for ( index_t i = start; i < end; ++i )
+					for ( index_t index = start; index < end; ++index )
 					{
-						body(i);
+						std::forward< function_t >(body)(index);
 					}
 
 					return;
@@ -863,7 +863,7 @@ namespace EmEn::Base
 							break;
 						}
 
-						const auto chunkStart = static_cast< index_t >(start + ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((chunkIndex * effectiveGrain)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+						const auto chunkStart = static_cast< index_t >(start + (chunkIndex * effectiveGrain));
 						const auto chunkEnd = static_cast< index_t >(std::min(static_cast< size_t >(chunkStart) + effectiveGrain, static_cast< size_t >(end)));
 
 						for ( index_t index = chunkStart; index < chunkEnd; ++index )
