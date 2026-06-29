@@ -817,79 +817,67 @@ namespace EmEn::Base
 			void
 			parallelFor (index_t start, index_t end, function_t && body, size_t grainSize = 1)
 			{
-				if ( start >= end )
-				{
-					return;
-				}
-
-				const auto totalIterations = static_cast< size_t >(end - start);
-
-				/* For very small workloads, just run sequentially. */
-				if ( totalIterations <= grainSize || m_workers.size() <= 1 )
-				{
-					for ( index_t index = start; index < end; ++index )
+				this->parallelForChunks(start, end, [&body] (index_t chunkStart, index_t chunkEnd) {
+					for ( index_t index = chunkStart; index < chunkEnd; ++index )
 					{
-						std::forward< function_t >(body)(index);
+						body(index);
 					}
+				}, grainSize);
+			}
 
-					return;
-				}
-
-				/* Calculate number of chunks based on worker count. */
-				const size_t numWorkers = m_workers.size();
-				const size_t effectiveGrain = std::max(grainSize, totalIterations / (numWorkers * 4));
-				const size_t numChunks = (totalIterations + effectiveGrain - 1) / effectiveGrain;
-
-				/* Use shared_ptr to ensure state lives until all tasks complete. */
-				struct SharedState
-				{
-					std::atomic< size_t > nextChunk{0};
-					std::atomic< size_t > completedTasks{0};
-					size_t totalTasks{0};
-				};
-
-				auto state = std::make_shared< SharedState >();
-				state->totalTasks = numWorkers + 1; /* Workers + calling thread. */
-
-				/* Create worker task. */
-				auto workerTask = [state, &body, start, end, effectiveGrain, numChunks] ()
-				{
-					while ( true )
-					{
-						const size_t chunkIndex = state->nextChunk.fetch_add(1, std::memory_order_relaxed);
-
-						if ( chunkIndex >= numChunks )
-						{
-							break;
-						}
-
-						const auto chunkStart = static_cast< index_t >(start + (chunkIndex * effectiveGrain));
-						const auto chunkEnd = static_cast< index_t >(std::min(static_cast< size_t >(chunkStart) + effectiveGrain, static_cast< size_t >(end)));
-
-						for ( index_t index = chunkStart; index < chunkEnd; ++index )
-						{
-							body(index);
-						}
-					}
-
-					/* Mark this task as fully done (including the break from loop). */
-					state->completedTasks.fetch_add(1, std::memory_order_release);
-				};
-
-				/* Enqueue one task per worker. */
-				for ( size_t index = 0; index < numWorkers; ++index )
-				{
-					this->enqueue(workerTask);
-				}
-
-				/* The calling thread also participates in the work. */
-				workerTask();
-
-				/* Spin-wait for all tasks to complete (not just chunks). */
-				while ( state->completedTasks.load(std::memory_order_acquire) < state->totalTasks )
-				{
-					std::this_thread::yield();
-				}
+			/**
+			 * @brief Executes a callable in parallel over a range of indices, one sub-range per chunk (fork-join pattern).
+			 *
+			 * Range-based overload of parallelFor(). Instead of invoking the body once per
+			 * index, this version invokes it once per chunk with the chunk's half-open
+			 * bounds: body(chunkStart, chunkEnd). The body is responsible for iterating
+			 * over [chunkStart, chunkEnd) itself. This is preferable when the body can
+			 * amortize per-chunk setup (e.g. local accumulators, SIMD over a sub-range)
+			 * or wants to avoid the per-index call overhead.
+			 *
+			 * Shares the same chunking, work-distribution and synchronization strategy as
+			 * the per-index overload: the calling thread participates, chunks are handed
+			 * out via an atomic counter, and the call blocks until every chunk completes.
+			 *
+			 * @tparam index_t Unsigned integer type for indices (e.g., size_t, uint32_t, uint64_t).
+			 * @tparam function_t Callable type that accepts two index_t parameters (start, end).
+			 * @param start First index to process (inclusive).
+			 * @param end Last index (exclusive).
+			 * @param body Callable invoked for each chunk: body(chunkStart, chunkEnd), where
+			 *			 chunkStart is inclusive and chunkEnd exclusive. Must be thread-safe
+			 *			 if it accesses shared data.
+			 * @param grainSize Minimum number of iterations per task chunk (default 1).
+			 *				  Higher values reduce task creation overhead but may cause
+			 *				  load imbalance. Automatically increased for very small workloads.
+			 *
+			 * @pre start < end (if start >= end, returns immediately without executing body).
+			 * @post Every index in [start, end) has been covered by exactly one chunk.
+			 * @note Blocks until all chunks complete (synchronous operation with implicit wait).
+			 * @note Thread-safe: body must be thread-safe for concurrent execution.
+			 * @note Exceptions: If body throws, the exception propagates from parallelFor.
+			 *	   Other chunks may continue executing concurrently.
+			 * @note Sequential fallback: If end-start <= grainSize or threadCount() <= 1,
+			 *	   executes the whole range as a single body(start, end) call.
+			 *
+			 * @code
+			 * ThreadPool pool;
+			 *
+			 * // Sum elements with per-chunk local accumulators.
+			 * std::vector< double > data(100000);
+			 * std::atomic< double > total{0.0};
+			 * pool.parallelFor(size_t{0}, data.size(), [&] (size_t begin, size_t end) {
+			 *	 double local = 0.0;
+			 *	 for ( size_t i = begin; i < end; ++i ) { local += data[i]; }
+			 *	 total.fetch_add(local);
+			 * });
+			 * @endcode
+			 */
+			template< typename index_t, typename function_t >
+			requires std::unsigned_integral< index_t > && std::invocable< function_t, index_t, index_t >
+			void
+			parallelFor (index_t start, index_t end, function_t && body, size_t grainSize = 1)
+			{
+				this->parallelForChunks(start, end, std::forward< function_t >(body), grainSize);
 			}
 
 			/**
@@ -924,6 +912,101 @@ namespace EmEn::Base
 			void wait ();
 
 		private:
+
+			/**
+			 * @brief Internal: shared fork-join driver for both parallelFor() overloads.
+			 *
+			 * Handles range checking, the sequential fallback, chunk sizing, work
+			 * distribution (atomic counter), calling-thread participation and the
+			 * completion spin-wait. @c chunkBody is invoked once per chunk with the
+			 * half-open bounds [chunkStart, chunkEnd). The public per-index overload
+			 * wraps it with a per-index loop; the public range overload forwards its
+			 * body directly.
+			 *
+			 * @tparam index_t Unsigned integer index type.
+			 * @tparam chunk_function_t Callable accepting (index_t chunkStart, index_t chunkEnd).
+			 * @param start First index to process (inclusive).
+			 * @param end Last index (exclusive).
+			 * @param chunkBody Per-chunk callable. Must be thread-safe for concurrent execution.
+			 * @param grainSize Minimum number of iterations per task chunk.
+			 * @warning Calling this from a task already running on this pool deadlocks if the
+			 *			pool is saturated: the spin-wait expects every enqueued worker task to run.
+			 * @note If @c chunkBody throws on a worker thread, the exception escapes the worker
+			 *		 loop and calls std::terminate(); only the calling thread's chunk propagates.
+			 */
+			template< typename index_t, typename chunk_function_t >
+			requires std::unsigned_integral< index_t > && std::invocable< chunk_function_t, index_t, index_t >
+			void
+			parallelForChunks (index_t start, index_t end, chunk_function_t && chunkBody, size_t grainSize)
+			{
+				if ( start >= end )
+				{
+					return;
+				}
+
+				const auto totalIterations = static_cast< size_t >(end - start);
+
+				/* For very small workloads, just run the whole range sequentially. */
+				if ( totalIterations <= grainSize || m_workers.size() <= 1 )
+				{
+					chunkBody(start, end);
+
+					return;
+				}
+
+				/* Calculate number of chunks based on worker count. */
+				const size_t numWorkers = m_workers.size();
+				const size_t effectiveGrain = std::max(grainSize, totalIterations / (numWorkers * 4));
+				const size_t numChunks = (totalIterations + effectiveGrain - 1) / effectiveGrain;
+
+				/* Use shared_ptr to ensure state lives until all tasks complete. */
+				struct SharedState
+				{
+					std::atomic< size_t > nextChunk{0};
+					std::atomic< size_t > completedTasks{0};
+					size_t totalTasks{0};
+				};
+
+				auto state = std::make_shared< SharedState >();
+				state->totalTasks = numWorkers + 1; /* Workers + calling thread. */
+
+				/* Create worker task. */
+				auto workerTask = [state, &chunkBody, start, end, effectiveGrain, numChunks] ()
+				{
+					while ( true )
+					{
+						const size_t chunkIndex = state->nextChunk.fetch_add(1, std::memory_order_relaxed);
+
+						if ( chunkIndex >= numChunks )
+						{
+							break;
+						}
+
+						const auto chunkStart = static_cast< index_t >(start + (chunkIndex * effectiveGrain));
+						const auto chunkEnd = static_cast< index_t >(std::min(static_cast< size_t >(chunkStart) + effectiveGrain, static_cast< size_t >(end)));
+
+						chunkBody(chunkStart, chunkEnd);
+					}
+
+					/* Mark this task as fully done (including the break from loop). */
+					state->completedTasks.fetch_add(1, std::memory_order_release);
+				};
+
+				/* Enqueue one task per worker. */
+				for ( size_t index = 0; index < numWorkers; ++index )
+				{
+					this->enqueue(workerTask);
+				}
+
+				/* The calling thread also participates in the work. */
+				workerTask();
+
+				/* Spin-wait for all tasks to complete (not just chunks). */
+				while ( state->completedTasks.load(std::memory_order_acquire) < state->totalTasks )
+				{
+					std::this_thread::yield();
+				}
+			}
 
 			/**
 			 * @brief Internal: Enqueues a Task object.
