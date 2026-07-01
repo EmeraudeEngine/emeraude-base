@@ -356,6 +356,25 @@ namespace EmEn::Base::String
 	std::string unicodeToUTF8 (unsigned int unicode) noexcept;
 
 	/**
+	 * @brief Encodes a byte buffer to a standard Base64 string (RFC 4648 alphabet, '=' padding).
+	 * @note The input string is treated as a raw byte container (may hold arbitrary binary data).
+	 * @param data A reference to the bytes to encode.
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	std::string encodeBase64 (const std::string & data) noexcept;
+
+	/**
+	 * @brief Decodes a standard Base64 string back to its raw bytes.
+	 * @note Whitespace and other non-alphabet characters are skipped; decoding stops at the first '=' padding.
+	 * The returned string is a raw byte container (may hold arbitrary binary data).
+	 * @param encoded A reference to the Base64-encoded string.
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	std::string decodeBase64 (const std::string & encoded) noexcept;
+
+	/**
 	 * @brief Converts a string into a number.
 	 * @tparam number_t The type of number.
 	 * @warning This function is intended to be used within a number based template.

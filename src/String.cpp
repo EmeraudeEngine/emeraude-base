@@ -28,7 +28,10 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cstring>
+#include <string_view>
 
 namespace EmEn::Base::String
 {
@@ -540,6 +543,110 @@ namespace EmEn::Base::String
 		}
 
 		return utf8;
+	}
+
+	std::string
+	encodeBase64 (const std::string & data) noexcept
+	{
+		static constexpr std::string_view alphabet{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
+
+		std::string output;
+		output.reserve(((data.size() + 2) / 3) * 4);
+
+		const auto size = data.size();
+		size_t i = 0;
+
+		/* Encode the bulk of the input, three bytes at a time into four characters. */
+		while ( i + 2 < size )
+		{
+			const auto b0 = static_cast< unsigned char >(data[i]);
+			const auto b1 = static_cast< unsigned char >(data[i + 1]);
+			const auto b2 = static_cast< unsigned char >(data[i + 2]);
+
+			output += alphabet[b0 >> 2];
+			output += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];
+			output += alphabet[((b1 & 0x0f) << 2) | (b2 >> 6)];
+			output += alphabet[b2 & 0x3f];
+
+			i += 3;
+		}
+
+		/* Handle the 1 or 2 trailing bytes with '=' padding. */
+		if ( const auto remaining = size - i; remaining == 1 )
+		{
+			const auto b0 = static_cast< unsigned char >(data[i]);
+
+			output += alphabet[b0 >> 2];
+			output += alphabet[(b0 & 0x03) << 4];
+			output += '=';
+			output += '=';
+		}
+		else if ( remaining == 2 )
+		{
+			const auto b0 = static_cast< unsigned char >(data[i]);
+			const auto b1 = static_cast< unsigned char >(data[i + 1]);
+
+			output += alphabet[b0 >> 2];
+			output += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];
+			output += alphabet[(b1 & 0x0f) << 2];
+			output += '=';
+		}
+
+		return output;
+	}
+
+	std::string
+	decodeBase64 (const std::string & encoded) noexcept
+	{
+		/* Reverse lookup table: character -> 6-bit value, 0xFF marks a non-alphabet character.
+		 * Built once on first use (thread-safe local static initialization). */
+		static const auto lookup = [] {
+			std::array< uint8_t, 256 > table{};
+			table.fill(0xFF);
+
+			constexpr std::string_view alphabet{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
+
+			for ( size_t index = 0; index < alphabet.size(); ++index )
+			{
+				table[static_cast< unsigned char >(alphabet[index])] = static_cast< uint8_t >(index);
+			}
+
+			return table;
+		}();
+
+		std::string output;
+		output.reserve((encoded.size() / 4) * 3);
+
+		uint32_t buffer = 0;
+		int32_t bits = 0;
+
+		for ( const char character : encoded )
+		{
+			/* Padding marks the end of the meaningful data. */
+			if ( character == '=' )
+			{
+				break;
+			}
+
+			const auto value = lookup[static_cast< unsigned char >(character)];
+
+			/* Skip whitespace / line breaks / any invalid character (tolerant decoding). */
+			if ( value == 0xFF )
+			{
+				continue;
+			}
+
+			buffer = (buffer << 6) | value;
+			bits += 6;
+
+			if ( bits >= 8 )
+			{
+				bits -= 8;
+				output += static_cast< char >((buffer >> bits) & 0xFF);
+			}
+		}
+
+		return output;
 	}
 
 	std::vector< std::string >
