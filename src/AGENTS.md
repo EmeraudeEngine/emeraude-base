@@ -10,10 +10,10 @@ manipulation, image/audio/geometry factories, and external integrations. Consume
 emeraude-engine and by any standalone tool that needs the foundation without the full
 runtime. Everything here lives under the `EmEn::Base` namespace.
 
-## Libs-Specific Rules
+## Base-Specific Rules
 
 ### Philosophy: Critical Agnostic Foundation
-- **Engine foundation**: All systems (Graphics, Physics, Audio, Scenes) use Libs
+- **Engine foundation**: every engine system (Graphics, Physics, Audio, Scenes) builds on Base
 - **Agnostic**: NO dependencies on high-level systems (Scenes, Physics, Graphics, etc.)
 - **Uniformity**: Provide common types and concepts for the entire engine
 - **Reusable**: Generic code, not specific to any use case
@@ -120,7 +120,7 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - Timers
 - Timing helpers via objects and interfaces
 
-**General concepts (Libs/ root)**:
+**General concepts (`src/` root)**:
 - **Observer/Observable**: Event pattern
 - **Versioning**: Version management
 - **JSON**: Fast JSON parsing/writing
@@ -143,16 +143,20 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 ## Development Commands
 
 ```bash
-# Libs tests
-ctest -R Libs
-./test --filter="*Libs*"
+# Build the suite (Release, tests ON, dedicated git-ignored build dir)
+cmake -S . -B .claude-build-release -DCMAKE_BUILD_TYPE=Release -DEMERAUDE_ENABLE_TESTS=On
+cmake --build .claude-build-release --target EmeraudeBaseUnitTests -j$(nproc)
 
-# Tests by category
-./test --filter="*Math*"
-./test --filter="*IO*"
-./test --filter="*ThreadPool*"
-./Release/EmeraudeUnitTests --gtest_filter="TokenFormatter*"
+# Run everything (from the build dir; ctest sets the resources/ fixture working dir)
+cd .claude-build-release && ctest --output-on-failure -j$(nproc)
+
+# Tests by category (from resources/ so fixture paths resolve)
+cd resources && ../.claude-build-release/Release/EmeraudeBaseUnitTests --gtest_filter='MathVector*'
+../.claude-build-release/Release/EmeraudeBaseUnitTests --gtest_filter='ThreadPool*'
+../.claude-build-release/Release/EmeraudeBaseUnitTests --gtest_filter='TokenFormatter*'
 ```
+
+See [`Testing/AGENTS.md`](Testing/AGENTS.md) for conventions and the sanitizer gate.
 
 ## Important Files
 
@@ -443,14 +447,14 @@ class MyUtility
 
 ## Critical Attention Points
 
-- **Engine foundation**: Everything depends on Libs, critical stability
-- **Zero high-level dependencies**: Libs must NEVER include Scenes/Physics/Graphics/etc.
+- **Engine foundation**: everything depends on Base, critical stability
+- **Zero high-level dependencies**: Base must NEVER include engine headers (Scenes/Physics/Graphics/etc.)
 - **Agnostic**: Generic code, not specific to any use case
 - **Uniformity**: Math and PixelFactory types must be used EVERYWHERE — `Vector< 3, float >` for directions/positions, `Color<>` for colors, `Matrix` for transforms, `CartesianFrame` for coordinate systems. Never use raw `float x, y, z` or `float r, g, b` in structs, members, or API signatures when an engine type exists. The only exception is GPU push constant structs that require exact POD memory layout.
 - **Thread-safe**: Consider thread-safety for shared utilities
 - **Performance**: Critical code (used everywhere), optimize if necessary
-- **Documentation**: Document well, many systems depend on Libs
-- **Exhaustive tests**: Bug in Libs affects entire engine
+- **Documentation**: Document well, many systems depend on Base
+- **Exhaustive tests**: a bug in Base affects the entire engine and every standalone consumer
 
 ## Math/Space3D: Capsule Primitive
 
@@ -709,11 +713,11 @@ See: [`docs/coordinate-system.md`](../../docs/coordinate-system.md#winding-conve
 - `VertexFactory/ShapeGenerator.hpp:generateDiamondCutGem()` — Reference brilliant-cut implementation
 - `VertexFactory/ShapeGenerator.hpp:generateEmeraldCutGem()` — Reference step-cut implementation
 - `VertexFactory/ShapeGenerator.hpp:generateRoseCutGem()` — Dome geometry (pavilion-style, dome points +Y)
-- `Graphics/Geometry/ResourceGenerator.hpp` — GPU resource wrappers for all gem generators
+- `Graphics/Geometry/ResourceGenerator.hpp` (emeraude-engine repository) — GPU resource wrappers for all gem generators
 
 ## Unified ByteStream I/O Architecture
 
-All three factories (PixelFactory, WaveFactory, VertexFactory) share a common I/O architecture via `Libs/IO/`.
+All three factories (PixelFactory, WaveFactory, VertexFactory) share a common I/O architecture via `IO/`.
 
 ### Core Abstraction: ByteStream
 
@@ -872,19 +876,24 @@ Bowyer-Watson incremental Delaunay triangulation with constrained boundary:
 
 ### XRayAnalyzer (CPU fallback)
 
-CPU-based volumetric cross-section scanner in `Libs/VertexFactory/XRayAnalyzer.hpp`:
+CPU-based volumetric cross-section scanner in `VertexFactory/XRayAnalyzer.hpp`:
 - Multiple shapes with CartesianFrame positioning
 - Viewpoint-relative bounding box → square output images
 - `prepare()` precomputes transformed triangles + 2D spatial grid (128²)
 - `scan(depth)` per-slice ray-cast with ThreadPool parallelization
 - `scanAll()` single-pass ray-cast + per-slice extraction (1000× faster than per-slice scan)
-- See `Graphics/Compute/XRayAnalyzer` for GPU-accelerated version
+- See `Graphics/Compute/XRayAnalyzer` (emeraude-engine repository) for the GPU-accelerated version
 
 ## Detailed Documentation
 
-Libs is referenced by all systems:
-- @src/Scenes/AGENTS.md - Uses CartesianFrame, GLTF loader uses Animation types
-- @src/Physics/AGENTS.md - Uses Vector, Matrix, collision detection
-- @src/Graphics/AGENTS.md - Uses Math for transformations
-- @src/Audio/AGENTS.md - Uses Math for 3D positioning, WaveFactory for sound processing
-- @src/Animations/AGENTS.md - Consumes Libs/Animation data types for runtime evaluation
+In this repository:
+- [`VertexFactory/AGENTS.md`](VertexFactory/AGENTS.md) — geometry subsystem context
+- [`WaveFactory/AGENTS.md`](WaveFactory/AGENTS.md) — audio subsystem context
+- [`Testing/AGENTS.md`](Testing/AGENTS.md) — unit-test conventions and gates
+- [`../docs/plans/ave-robustus.md`](../docs/plans/ave-robustus.md) — robustness plan and per-fix history
+
+Downstream consumers (their AGENTS networks live in their own repositories):
+- **emeraude-engine** — Scenes (CartesianFrame, Animation types via GLTF), Physics (Vector/Matrix,
+  collision), Graphics (Math transforms), Audio (3D positioning, WaveFactory), Animations
+  (runtime evaluation of `Animation/` data types)
+- **Standalone tools** — any process linking `emeraude::base` without the engine runtime
