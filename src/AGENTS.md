@@ -283,13 +283,17 @@ class Scene : public Observer {
 // Global or local pool
 ThreadPool pool(std::thread::hardware_concurrency());
 
-// Submit tasks
-auto future1 = pool.enqueue([](int x) { return x * 2; }, 42);
-auto future2 = pool.enqueue([](){ loadHeavyResource(); });
+// Fire-and-forget submission. The callable takes NO arguments (capture instead);
+// returns false if the pool is shutting down.
+pool.enqueue([](){ loadHeavyResource(); });
 
-// Wait for results
-int result = future1.get();  // 84
-future2.wait();  // Wait for loading completion
+// Result retrieval goes through enqueueWithResult (std::future; only available
+// in exceptions-enabled builds -- guarded by __cpp_exceptions).
+auto future = pool.enqueueWithResult([]() { return 21 * 2; });
+int result = future.get();  // 42
+
+// Block until every queued and in-progress task finished.
+pool.wait();
 
 // Data-parallel fork-join: parallelFor. The calling thread participates and the
 // call blocks until every chunk completes. Two overloads, selected by body arity:
@@ -319,8 +323,23 @@ pool.parallelFor(size_t{0}, n, body, /*grainSize=*/256);
   and range (`invocable<F,I,I> && !invocable<F,I>`) overloads are mutually exclusive; a body
   invocable with BOTH one and two `index_t` args (e.g. `[](auto...){}`) hits a guard overload that
   fails with a clear `static_assert` — give it a fixed arity.
+- **A grainSize of 0 is treated as 1** (used to be a division by zero on ranges smaller
+  than 4x the worker count).
+- **The completion wait sleeps, it does not spin** (`std::atomic::wait`, futex-style): the
+  calling thread yields its core until the last helper task notifies. One heap allocation
+  per parallelFor call (the shared state); helper tasks are guaranteed to fit Task's small
+  buffer by a `static_assert` (capture = shared_ptr + body reference, 24 bytes).
+- Helpers are capped at `min(numWorkers, numChunks - 1)` -- no worker is woken without a
+  chunk to run (the calling thread takes one share).
+- **Nested parallelFor from a pool task is safe, even on a saturated pool.** Completion is
+  counted per CHUNK, not per helper task: the nested call finishes on its calling thread and
+  helpers that only get scheduled afterwards exit as no-ops. (`wait()` from a pool task can
+  still deadlock -- that note is about `wait()`, not `parallelFor`.)
 - Covered end-to-end: per-index tests + 9 range-overload cases (empty/reversed range, exact-once
-  coverage, chunk-tiling, reduction, offset, grain size, both sequential fallbacks).
+  coverage, chunk-tiling, reduction, offset, grain size, both sequential fallbacks) + the
+  2026-07-02 hardening regressions (zero grain on both overloads, fewer chunks than workers,
+  `isIdle()` in-flight stress, `Task` noexcept-specification static_asserts, over-aligned
+  callable heap fallback).
 
 ### TokenFormatter for Case Conversion
 ```cpp
