@@ -128,7 +128,7 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - **Traits**: Helpers (NamingTrait, etc.)
 - **Strings**: String manipulation
 - **TokenFormatter**: Case style detection and conversion (camelCase, snake_case, PascalCase, etc.)
-- **ThreadPool**: High-performance thread pool
+- **ThreadPool**: High-performance thread pool (`enqueue` + data-parallel `parallelFor`, per-index & range overloads)
 - **INIParser**: INI-style file parsing (sections, key-values)
 - **SourceCodeParser**: Source code parsing with annotations and formatting
 
@@ -290,7 +290,37 @@ auto future2 = pool.enqueue([](){ loadHeavyResource(); });
 // Wait for results
 int result = future1.get();  // 84
 future2.wait();  // Wait for loading completion
+
+// Data-parallel fork-join: parallelFor. The calling thread participates and the
+// call blocks until every chunk completes. Two overloads, selected by body arity:
+
+// (1) per-index — body(index), invoked once per element:
+pool.parallelFor(size_t{0}, data.size(), [&](size_t i) { data[i] = compute(i); });
+
+// (2) range — body(chunkStart, chunkEnd), invoked once per chunk (amortizes
+//     per-chunk setup: local accumulators, SIMD over a sub-range, reductions):
+std::atomic<size_t> total{0};
+pool.parallelFor(size_t{0}, data.size(), [&](size_t begin, size_t end) {
+    size_t local = 0;
+    for ( size_t i = begin; i < end; ++i ) { local += data[i]; }
+    total.fetch_add(local);
+});
+
+// Optional grainSize (min iterations per chunk); small ranges or single-thread
+// pools fall back to one serial body(start, end) call.
+pool.parallelFor(size_t{0}, n, body, /*grainSize=*/256);
 ```
+
+**`parallelFor` contract (enforced — see `src/Testing/test_ThreadPool.cpp`):**
+- **The body must NOT throw.** It runs on worker threads too: a throw on a worker calls
+  `std::terminate()`; a throw on the calling thread abandons the still-running workers whose
+  captured body is destroyed (UB). Report failures through captured state, not exceptions.
+- **Body arity is disambiguated at compile time.** The per-index (`invocable<F,I> && !invocable<F,I,I>`)
+  and range (`invocable<F,I,I> && !invocable<F,I>`) overloads are mutually exclusive; a body
+  invocable with BOTH one and two `index_t` args (e.g. `[](auto...){}`) hits a guard overload that
+  fails with a clear `static_assert` — give it a fixed arity.
+- Covered end-to-end: per-index tests + 9 range-overload cases (empty/reversed range, exact-once
+  coverage, chunk-tiling, reduction, offset, grain size, both sequential fallbacks).
 
 ### TokenFormatter for Case Conversion
 ```cpp
