@@ -235,19 +235,22 @@ ctest -R Libs
 
 ### Math Usage Throughout Engine
 ```cpp
+// Types are templates on dimension/precision: Vector< 3, float >, Matrix< 4, float >,
+// Quaternion< float >. Float aliases exist: Vector3F, Vector4F, Matrix4F, ...
+
 // Graphics uses Math
-Matrix4 projectionMatrix = Math::perspective(fov, aspect, near, far);
-Vector3 cameraPos = camera.cartesianFrame().position();
+const auto projectionMatrix = Matrix4F::perspectiveProjection(fov, aspectRatio, zNear, zFar);
+const Vector3F cameraPos = camera.cartesianFrame().position();
 
 // Physics uses Math
-Vector3 force = mass * acceleration;
-Quaternion rotation = Quaternion::fromEuler(pitch, yaw, roll);
+const Vector3F force = acceleration * mass;
+const Quaternion< float > rotation{angleX, angleY, angleZ}; // Euler angles, radians (setFromEulerAngles).
 
 // Audio uses Math
-Vector3 soundPos = emitter.cartesianFrame().position();
-float distance = (listenerPos - soundPos).length();
+const Vector3F soundPos = emitter.cartesianFrame().position();
+const float distance = (listenerPos - soundPos).length();
 
-// Entire engine unified via Libs/Math
+// The engine and every consumer are unified via EmEn::Base::Math.
 ```
 
 ### Quaternion Rotation Matrix Conventions (CRITICAL)
@@ -420,19 +423,22 @@ another_key = 123
 - Uses `std::filesystem::path` for file operations (C++17+)
 - Uses `std::string_view` for read-only parameters
 
-### Adding a New Lib (Rules)
+### Adding a New Module (Rules)
 ```cpp
-// FORBIDDEN: Depending on high-level systems
-#include "Scenes/Node.hpp"  // NO! Libs does not depend on Scenes
+// FORBIDDEN: Depending on the engine (or any consumer above this library)
+#include "Scenes/Node.hpp"  // NO! emeraude-base never includes engine headers.
 
-// CORRECT: Agnostic and generic
-class MyUtility {
-    // Works without knowing Scenes/Physics/Graphics
-    static Vector3 interpolate(const Vector3& a, const Vector3& b, float t);
+// CORRECT: Agnostic and generic (EmEn::Base namespace, engine types from Math/)
+class MyUtility
+{
+	public:
+
+		// Works without knowing Scenes/Physics/Graphics.
+		[[nodiscard]]
+		static Math::Vector< 3, float > interpolate (const Math::Vector< 3, float > & a, const Math::Vector< 3, float > & b, float factor) noexcept;
 };
 
-// High-level systems use Libs
-#include "MyUtility.hpp"  // Graphics/Scenes/Physics can include Libs
+// The engine (and any standalone consumer) includes base headers, never the reverse.
 ```
 
 ## Critical Attention Points
