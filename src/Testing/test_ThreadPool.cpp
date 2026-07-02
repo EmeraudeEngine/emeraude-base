@@ -31,6 +31,7 @@
 #include <chrono>
 #include <cstddef>
 #include <functional>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <numeric>
@@ -156,6 +157,29 @@ TEST(ThreadPoolTask, MoveAssignmentSelfAssignment)
 	task();
 
 	EXPECT_EQ(value, 42);
+}
+
+TEST(ThreadPoolTask, IsSmallResetOnMoveAndClear)
+{
+	int value = 0;
+	ThreadPool::Task task1{[&value] { value = 1; }};
+
+	EXPECT_TRUE(task1.isSmall());
+
+	/* Regression: moved-from tasks are empty; isSmall() must not report a stale true. */
+	ThreadPool::Task task2{std::move(task1)};
+
+	EXPECT_TRUE(task1.empty());
+	EXPECT_FALSE(task1.isSmall());
+	EXPECT_TRUE(task2.isSmall());
+
+	/* Move assignment resets the source the same way. */
+	ThreadPool::Task task3;
+	task3 = std::move(task2);
+
+	EXPECT_TRUE(task2.empty());
+	EXPECT_FALSE(task2.isSmall());
+	EXPECT_TRUE(task3.isSmall());
 }
 
 TEST(ThreadPoolTask, MoveOnlyCapture)
@@ -1160,6 +1184,30 @@ TEST(ThreadPool, BusyWorkersCount)
 /* ============================================================================
  * Thread safety tests
  * ============================================================================ */
+
+TEST(ThreadPool, TaskCapturesReleasedBeforeWaitReturns)
+{
+	/* Regression stress: worker() used to destroy the executed Task only after
+	 * signaling completion, so wait() could return while a task's captures were
+	 * still alive on the worker thread. The task is now destroyed BEFORE the busy
+	 * count drops, so an idle report guarantees the captures are released. */
+	ThreadPool pool(2);
+	constexpr size_t iterations = 500;
+
+	for ( size_t iteration = 0; iteration < iterations; ++iteration )
+	{
+		auto resource = std::make_shared< std::atomic< int > >(0);
+
+		ASSERT_TRUE(pool.enqueue([resource] {
+			resource->fetch_add(1, std::memory_order_relaxed);
+		}));
+
+		pool.wait();
+
+		EXPECT_EQ(resource.use_count(), 1) << "A worker still held the capture after wait() (iteration " << iteration << ")";
+		EXPECT_EQ(resource->load(), 1);
+	}
+}
 
 TEST(ThreadPool, ConcurrentEnqueue)
 {

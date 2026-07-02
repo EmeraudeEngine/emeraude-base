@@ -209,6 +209,11 @@ namespace EmEn::Base
 				task();
 			}
 
+			/* Destroy the task (and its captured resources) BEFORE signaling
+			 * completion: once wait() reports the pool idle, no capture may still
+			 * be alive on a worker. */
+			task = {};
+
 			/* Decrement busy count and signal completion.
 			 * NOTE: The notification is issued after releasing the mutex, so woken
 			 * waiters do not immediately block on a still-held lock. */

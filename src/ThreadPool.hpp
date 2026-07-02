@@ -29,12 +29,12 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <atomic>
+#include <cassert>
 #include <concepts>
 #include <cstddef>
 #include <deque>
 #include <functional>
 #include <future>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -270,6 +270,7 @@ namespace EmEn::Base
 							other.m_invoke = nullptr;
 							other.m_destroy = nullptr;
 							other.m_move = nullptr;
+							other.m_isSmall = false;
 						}
 					}
 
@@ -297,6 +298,7 @@ namespace EmEn::Base
 								other.m_invoke = nullptr;
 								other.m_destroy = nullptr;
 								other.m_move = nullptr;
+								other.m_isSmall = false;
 							}
 						}
 
@@ -322,19 +324,18 @@ namespace EmEn::Base
 					 * usage in a thread pool context).
 					 *
 					 * @pre empty() must return false (task must contain a callable).
-					 * @note Undefined behavior if called on an empty task.
+					 * @note Invoking an empty task asserts in debug builds and is a safe
+					 *	   no-op in release builds.
 					 * @note Any exceptions thrown by the callable propagate to the caller.
 					 */
 					void
 					operator() ()
 					{
+						assert(m_invoke != nullptr && "Attempted to invoke an empty task!");
+
 						if ( m_invoke != nullptr )
 						{
 							m_invoke(this);
-						}
-						else
-						{
-							std::cerr << "[ThreadPool-Error] Attempted to invoke empty task!\n";
 						}
 					}
 
@@ -365,6 +366,7 @@ namespace EmEn::Base
 					/**
 					 * @brief Checks if the callable is stored inline using Small Buffer Optimization.
 					 * @return True if using inline storage (callable ≤48 bytes), false if heap-allocated.
+					 * @note Always false for an empty task (default-constructed, moved-from or cleared).
 					 * @note Useful for debugging and performance analysis.
 					 */
 					[[nodiscard]]
@@ -389,6 +391,8 @@ namespace EmEn::Base
 							m_destroy = nullptr;
 							m_move = nullptr;
 						}
+
+						m_isSmall = false;
 					}
 
 					/* Type-erased function pointers. */
@@ -630,6 +634,8 @@ namespace EmEn::Base
 			 * @return The number of tasks successfully enqueued (0 if pool is shutting down).
 			 * @note Thread-safe: Can be called concurrently from multiple threads.
 			 * @note All tasks in the range [begin, end) must be valid callables.
+			 * @note The callables are MOVED out of the range: elements in [begin, end)
+			 *	   are left in a valid but unspecified (moved-from) state after the call.
 			 * @note Returns 0 immediately if begin == end or if the pool is stopped.
 			 *
 			 * @code
