@@ -95,13 +95,24 @@ namespace EmEn::Base::Math::Space3D
 					return false;
 				}
 
-				/* Check that every bound is finite (rejects NaN/Inf inputs).
-				 * We test the coordinates individually rather than their difference:
-				 * the default-constructed AABB (lowest/max) is already rejected by the
-				 * consistency check above, and subtracting those bounds would overflow. */
+				/* Check that every bound is finite (rejects NaN/Inf inputs). */
 				if ( !std::isfinite(m_maximum[X]) || !std::isfinite(m_minimum[X]) ||
 					 !std::isfinite(m_maximum[Y]) || !std::isfinite(m_minimum[Y]) ||
 					 !std::isfinite(m_maximum[Z]) || !std::isfinite(m_minimum[Z]) )
+				{
+					return false;
+				}
+
+				/* Check that the extent itself is representable: finite bounds can still
+				 * make max - min overflow to +Inf (e.g. lowest()..max()), which would poison
+				 * every downstream dimension computation. Compare half-extents so the guard
+				 * never performs an overflowing subtraction — the direct max - min form is
+				 * constant-folded by MSVC into a C4756 'overflow in constant arithmetic'. */
+				constexpr auto halfMax = std::numeric_limits< precision_t >::max() / 2;
+
+				if ( m_maximum[X] / 2 - m_minimum[X] / 2 > halfMax ||
+					 m_maximum[Y] / 2 - m_minimum[Y] / 2 > halfMax ||
+					 m_maximum[Z] / 2 - m_minimum[Z] / 2 > halfMax )
 				{
 					return false;
 				}

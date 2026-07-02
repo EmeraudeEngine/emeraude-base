@@ -642,7 +642,10 @@ TYPED_TEST(MathSpace3D, AACuboidIsValidRejectsNonFinite)
 	cuboid.set({std::numeric_limits< TypeParam >::quiet_NaN(), 1, 1}, {-1, -1, -1});
 	ASSERT_FALSE(cuboid.isValid());
 
-	// Infinite extent (max - min == inf) must be rejected by the std::isfinite guard.
+	// Infinite extent must be rejected even when both bounds are finite: lowest()..max()
+	// makes max - min overflow to +Inf. Regression: an MSVC-warning fix (C4756) once
+	// dropped this guard in favor of per-bound isfinite() checks only; isValid() now
+	// compares half-extents, which rejects the overflow without ever computing it.
 	cuboid.set(
 		{std::numeric_limits< TypeParam >::max(), 1, 1},
 		{std::numeric_limits< TypeParam >::lowest(), -1, -1});
