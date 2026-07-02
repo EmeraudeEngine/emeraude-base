@@ -26,6 +26,13 @@ usual approach). emeraude-base resolves it automatically and exposes:
 emeraude-base is the **single source of truth** for this path — your project reads these
 variables, it never recomputes them.
 
+The `<config>` architecture comes from `APP_ARCH`. If not passed on the command line, it
+defaults to `x86_64` on Linux/Windows; on macOS it follows `CMAKE_OSX_ARCHITECTURES` when
+set, otherwise the host architecture (`CMAKE_SYSTEM_PROCESSOR`) — so a native build on
+Apple Silicon picks `mac.arm64-*` automatically. A mismatch here is silent at compile time
+and only surfaces at link time (`ld: ignoring file … found architecture 'x86_64', required
+architecture 'arm64'` followed by a wall of undefined symbols).
+
 ## 2. Add it to your build
 
 ```cmake

@@ -91,7 +91,13 @@ endif ()
 # Single source of truth: consumers read EMERAUDE_EXT_LIBS_PATH (+ _INCLUDE_DIR /
 # _LIB_DIR) after add_subdirectory(); they never recompute the path themselves.
 if ( NOT DEFINED APP_ARCH )
-	set(APP_ARCH "x86_64")
+	if ( APPLE )
+		# Native build: CMAKE_OSX_ARCHITECTURES is usually empty (CLion, plain cmake),
+		# the effective arch is the host one.
+		set(APP_ARCH ${CMAKE_SYSTEM_PROCESSOR})
+	else ()
+		set(APP_ARCH "x86_64")
+	endif ()
 endif ()
 
 # ext-deps-generator only ships two configurations (Release / Debug).
