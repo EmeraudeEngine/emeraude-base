@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <atomic>
 #include <concepts>
 #include <cstddef>
@@ -133,7 +134,7 @@ namespace EmEn::Base
 	 * @note Platform support: Tested on Linux (G++ 13.3+), macOS (AppleClang 17.0+), Windows (MSVC 2022+).
 	 * @note Requires C++20 for concepts and std::invocable support.
 	 * @see Task
-	 * @version 0.8.38
+	 * @version 1.1.6
 	 */
 	class ThreadPool final
 	{
@@ -213,12 +214,14 @@ namespace EmEn::Base
 					 * @param callable The callable object to store. Forwarded to avoid unnecessary copies.
 					 * @pre F must be invocable with no arguments: callable().
 					 * @post empty() returns false, operator bool() returns true.
-					 * @note Noexcept if F fits in SBO and is nothrow move-constructible.
+					 * @note Noexcept if the callable takes the small-buffer path (size AND
+					 *	   alignment fit) and its construction from the forwarded argument
+					 *	   (copy for lvalues, move for rvalues) cannot throw.
 					 */
 					template< typename function_t >
 					requires std::invocable< function_t > && (!std::is_same_v< std::decay_t< function_t >, Task >)
 					explicit
-					Task (function_t && callable) noexcept(sizeof(std::decay_t< function_t >) <= SmallBufferSize && std::is_nothrow_move_constructible_v< std::decay_t< function_t > >)
+					Task (function_t && callable) noexcept(sizeof(std::decay_t< function_t >) <= SmallBufferSize && alignof(std::decay_t< function_t >) <= alignof(std::max_align_t) && std::is_nothrow_constructible_v< std::decay_t< function_t >, function_t >)
 					{
 						using DecayedF = std::decay_t< function_t >;
 
@@ -647,15 +650,18 @@ namespace EmEn::Base
 					return 0;
 				}
 
-				if ( m_stop.load(std::memory_order_acquire) )
-				{
-					return 0;
-				}
-
 				size_t count = 0;
 
 				{
 					const std::scoped_lock lock{m_mutex};
+
+					/* NOTE: The stop flag is checked under the mutex (like enqueueTask()) so
+					 * a concurrent shutdown cannot slip in between the check and the insertion,
+					 * which would leave tasks in the queue that no worker will ever execute. */
+					if ( m_stop.load(std::memory_order_acquire) )
+					{
+						return 0;
+					}
 
 					for ( auto it = begin; it != end; ++it )
 					{
@@ -777,6 +783,7 @@ namespace EmEn::Base
 			 * @param grainSize Minimum number of iterations per task chunk (default 1).
 			 *				  Higher values reduce task creation overhead but may cause
 			 *				  load imbalance. Automatically increased for very small workloads.
+			 *				  A value of 0 is treated as 1.
 			 *
 			 * @pre start < end (if start >= end, returns immediately without executing body).
 			 * @post All iterations in [start, end) have been executed exactly once.
@@ -858,6 +865,7 @@ namespace EmEn::Base
 			 * @param grainSize Minimum number of iterations per task chunk (default 1).
 			 *				  Higher values reduce task creation overhead but may cause
 			 *				  load imbalance. Automatically increased for very small workloads.
+			 *				  A value of 0 is treated as 1.
 			 *
 			 * @pre start < end (if start >= end, returns immediately without executing body).
 			 * @post Every index in [start, end) has been covered by exactly one chunk.
@@ -971,19 +979,28 @@ namespace EmEn::Base
 			 *
 			 * Handles range checking, the sequential fallback, chunk sizing, work
 			 * distribution (atomic counter), calling-thread participation and the
-			 * completion spin-wait. @c chunkBody is invoked once per chunk with the
+			 * completion wait. @c chunkBody is invoked once per chunk with the
 			 * half-open bounds [chunkStart, chunkEnd). The public per-index overload
 			 * wraps it with a per-index loop; the public range overload forwards its
 			 * body directly.
+			 *
+			 * The calling thread sleeps on the completion counter (std::atomic::wait,
+			 * futex-style) instead of spinning, and helper tasks capture a single
+			 * shared_ptr plus a reference so they fit Task's small buffer (enforced
+			 * by a static_assert): a parallelFor call performs exactly one heap
+			 * allocation (the shared state), regardless of the worker count.
 			 *
 			 * @tparam index_t Unsigned integer index type.
 			 * @tparam chunk_function_t Callable accepting (index_t chunkStart, index_t chunkEnd).
 			 * @param start First index to process (inclusive).
 			 * @param end Last index (exclusive).
 			 * @param chunkBody Per-chunk callable. Must be thread-safe for concurrent execution.
-			 * @param grainSize Minimum number of iterations per task chunk.
-			 * @warning Calling this from a task already running on this pool deadlocks if the
-			 *			pool is saturated: the spin-wait expects every enqueued worker task to run.
+			 * @param grainSize Minimum number of iterations per task chunk. A value of 0 is treated as 1.
+			 * @note Completion is counted per CHUNK, not per helper task, so calling this
+			 *		 from a task already running on this pool is safe even when the pool is
+			 *		 saturated: the nested call completes on its calling thread, and helpers
+			 *		 that only get scheduled afterwards exit as no-ops (they claim an index
+			 *		 past the last chunk and never touch the body).
 			 * @note @c chunkBody must not throw. On a worker thread an escaping exception calls
 			 *		 std::terminate(); on the calling thread it abandons the still-running worker
 			 *		 tasks while their captured chunkBody is destroyed (undefined behaviour).
@@ -996,6 +1013,13 @@ namespace EmEn::Base
 				if ( start >= end )
 				{
 					return;
+				}
+
+				/* NOTE: A grain size of zero would produce a zero effective grain below
+				 * (division by zero); treat it as the smallest meaningful value. */
+				if ( grainSize == 0 )
+				{
+					grainSize = 1;
 				}
 
 				const auto totalIterations = static_cast< size_t >(end - start);
@@ -1013,41 +1037,68 @@ namespace EmEn::Base
 				const size_t effectiveGrain = std::max(grainSize, totalIterations / (numWorkers * 4));
 				const size_t numChunks = (totalIterations + effectiveGrain - 1) / effectiveGrain;
 
-				/* Use shared_ptr to ensure state lives until all tasks complete. */
+				/* The calling thread takes one share of the work, so at most numChunks - 1
+				 * helpers are useful: never enqueue tasks that would find no chunk to run.
+				 * NOTE: numChunks >= 2 here (the sequential fallback handled the rest). */
+				const size_t helperCount = std::min(numWorkers, numChunks - 1);
+
+				/* Shared state, kept alive by the shared_ptr captured in each helper task.
+				 * The chunk parameters live here (instead of in the lambda capture) so the
+				 * helper capture stays within Task's small buffer (see static_assert below). */
 				struct SharedState
 				{
 					std::atomic< size_t > nextChunk{0};
-					std::atomic< size_t > completedTasks{0};
-					size_t totalTasks{0};
+					std::atomic< size_t > completedChunks{0};
+					index_t start{0};
+					index_t end{0};
+					size_t effectiveGrain{0};
+					size_t numChunks{0};
 				};
 
 				auto state = std::make_shared< SharedState >();
-				state->totalTasks = numWorkers + 1; /* Workers + calling thread. */
+				state->start = start;
+				state->end = end;
+				state->effectiveGrain = effectiveGrain;
+				state->numChunks = numChunks;
 
-				/* Create worker task. */
-				auto workerTask = [state, &chunkBody, start, end, effectiveGrain, numChunks] ()
+				/* Create the worker task. The reference to chunkBody is only dereferenced
+				 * for a claimed chunk; the caller cannot return while any chunk is in
+				 * flight, so the reference is never used after it dies. */
+				auto workerTask = [state, &chunkBody] ()
 				{
 					while ( true )
 					{
 						const size_t chunkIndex = state->nextChunk.fetch_add(1, std::memory_order_relaxed);
 
-						if ( chunkIndex >= numChunks )
+						if ( chunkIndex >= state->numChunks )
 						{
 							break;
 						}
 
-						const auto chunkStart = static_cast< index_t >(start + (chunkIndex * effectiveGrain));
-						const auto chunkEnd = static_cast< index_t >(std::min(static_cast< size_t >(chunkStart) + effectiveGrain, static_cast< size_t >(end)));
+						const auto chunkStart = static_cast< index_t >(static_cast< size_t >(state->start) + (chunkIndex * state->effectiveGrain));
+						const auto chunkEnd = static_cast< index_t >(std::min(static_cast< size_t >(chunkStart) + state->effectiveGrain, static_cast< size_t >(state->end)));
 
 						chunkBody(chunkStart, chunkEnd);
-					}
 
-					/* Mark this task as fully done (including the break from loop). */
-					state->completedTasks.fetch_add(1, std::memory_order_release);
+						/* Count completion per CHUNK; the finisher of the last chunk wakes the
+						 * calling thread. NOTE: The captured shared_ptr keeps the state alive
+						 * during notify_one(), so the notification can never touch a destroyed
+						 * atomic. */
+						if ( state->completedChunks.fetch_add(1, std::memory_order_release) + 1 == state->numChunks )
+						{
+							state->completedChunks.notify_one();
+						}
+					}
 				};
 
-				/* Enqueue one task per worker. */
-				for ( size_t index = 0; index < numWorkers; ++index )
+				/* The whole point of the SharedState indirection: helper tasks must not
+				 * fall back to heap allocation on the pool's hottest code path. */
+				static_assert(sizeof(workerTask) <= SmallBufferSize, "parallelFor worker task must fit the Task small buffer");
+
+				/* Enqueue one task per helper. A rejected enqueue (pool shutting down)
+				 * needs no accounting: completion is counted per chunk, and every chunk
+				 * is guaranteed to run -- at worst all on the calling thread below. */
+				for ( size_t index = 0; index < helperCount; ++index )
 				{
 					this->enqueue(workerTask);
 				}
@@ -1055,10 +1106,19 @@ namespace EmEn::Base
 				/* The calling thread also participates in the work. */
 				workerTask();
 
-				/* Spin-wait for all tasks to complete (not just chunks). */
-				while ( state->completedTasks.load(std::memory_order_acquire) < state->totalTasks )
+				/* Sleep until every chunk completed (futex-style, no CPU burn).
+				 * Chunk-based completion makes nested calls on a saturated pool safe:
+				 * helpers scheduled after the last chunk exit as no-ops, never touching
+				 * chunkBody (only the shared state, which their shared_ptr keeps alive).
+				 * No chunkBody invocation can still be in flight once the count is
+				 * reached, so the body reference cannot be used after this returns. */
+				size_t completed = state->completedChunks.load(std::memory_order_acquire);
+
+				while ( completed < numChunks )
 				{
-					std::this_thread::yield();
+					state->completedChunks.wait(completed, std::memory_order_acquire);
+
+					completed = state->completedChunks.load(std::memory_order_acquire);
 				}
 			}
 

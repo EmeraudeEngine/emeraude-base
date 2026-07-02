@@ -173,8 +173,14 @@ namespace EmEn::Base
 					task = std::move(m_tasks.front());
 
 					m_tasks.pop_front();
-					m_pendingTasks.fetch_sub(1, std::memory_order_release);
+
+					/* NOTE: Increment the busy count BEFORE decrementing the pending count.
+					 * isIdle() reads both atomics without holding the mutex: the reverse
+					 * order would expose a transient "pending == 0 && busy == 0" state
+					 * while a task is about to execute. This order only exposes a
+					 * conservative transient double-count. */
 					m_busyWorkers.fetch_add(1, std::memory_order_release);
+					m_pendingTasks.fetch_sub(1, std::memory_order_release);
 				}
 				else
 				{
@@ -203,14 +209,16 @@ namespace EmEn::Base
 				task();
 			}
 
-			/* Decrement busy count and signal completion. */
+			/* Decrement busy count and signal completion.
+			 * NOTE: The notification is issued after releasing the mutex, so woken
+			 * waiters do not immediately block on a still-held lock. */
 			{
 				const std::scoped_lock lock{m_mutex};
 
 				m_busyWorkers.fetch_sub(1, std::memory_order_release);
-
-				m_completionCondition.notify_all();
 			}
+
+			m_completionCondition.notify_all();
 		}
 	}
 }

@@ -29,6 +29,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -194,6 +195,68 @@ TEST(ThreadPoolTask, StdFunction)
 	task();
 
 	EXPECT_EQ(value, 99);
+}
+
+TEST(ThreadPoolTask, ConstructorNoexceptSpecification)
+{
+	/* Small, nothrow-constructible rvalue lambda: small-buffer path, noexcept. */
+	static_assert(noexcept(ThreadPool::Task{[] { }}));
+
+	/* Callable with a throwing copy constructor but a noexcept move constructor:
+	 * constructing from an LVALUE copies, so the specification must be false.
+	 * (Regression: the spec used to test is_nothrow_move_constructible only,
+	 * promising noexcept for a construction that could actually throw.) */
+	struct ThrowingCopy
+	{
+		ThrowingCopy () noexcept = default;
+		ThrowingCopy (const ThrowingCopy &) noexcept(false) { }
+		ThrowingCopy (ThrowingCopy &&) noexcept = default;
+		ThrowingCopy & operator= (const ThrowingCopy &) = delete;
+		ThrowingCopy & operator= (ThrowingCopy &&) = delete;
+		~ThrowingCopy () = default;
+
+		void operator() () const noexcept { }
+	};
+
+	static_assert(!noexcept(ThreadPool::Task{std::declval< ThrowingCopy & >()}));
+
+	/* The same callable moved in takes the nothrow move: noexcept again. */
+	static_assert(noexcept(ThreadPool::Task{std::declval< ThrowingCopy >()}));
+
+	/* Callable larger than the small buffer: heap path, never noexcept. */
+	struct BigCallable
+	{
+		std::array< std::byte, ThreadPool::SmallBufferSize + 1 > data{};
+
+		void operator() () const noexcept { }
+	};
+
+	static_assert(!noexcept(ThreadPool::Task{std::declval< BigCallable >()}));
+
+	SUCCEED();
+}
+
+TEST(ThreadPoolTask, OverAlignedCallableFallsBackToHeap)
+{
+	/* A callable that FITS the small buffer by size but is over-aligned must take
+	 * the heap path (the inline buffer only guarantees max_align_t alignment) and
+	 * must therefore not advertise a noexcept construction. */
+	struct alignas(2 * alignof(std::max_align_t)) OverAligned
+	{
+		float values[4]{};
+
+		void operator() () const noexcept { }
+	};
+
+	static_assert(sizeof(OverAligned) <= ThreadPool::SmallBufferSize);
+	static_assert(alignof(OverAligned) > alignof(std::max_align_t));
+	static_assert(!noexcept(ThreadPool::Task{std::declval< OverAligned >()}));
+
+	ThreadPool::Task task{OverAligned{}};
+
+	EXPECT_FALSE(task.isSmall());
+
+	task();
 }
 
 /* ============================================================================
@@ -541,6 +604,80 @@ TEST(ThreadPool, ParallelForWithGrainSize)
 	EXPECT_EQ(counter.load(), size);
 }
 
+TEST(ThreadPool, ParallelForZeroGrainSize)
+{
+	ThreadPool pool(4);
+
+	/* Regression: a grain size of 0 with a range smaller than numWorkers * 4 used to
+	 * produce a zero effective grain and a division by zero. It must behave as 1. */
+	constexpr size_t size = 10;
+	std::vector< std::atomic< int > > hits(size);
+
+	for ( auto & hit : hits )
+	{
+		hit.store(0, std::memory_order_relaxed);
+	}
+
+	pool.parallelFor(size_t{0}, size, [&hits](size_t i) {
+		hits[i].fetch_add(1, std::memory_order_relaxed);
+	}, 0);
+
+	for ( size_t i = 0; i < size; ++i )
+	{
+		EXPECT_EQ(hits[i].load(), 1) << "Index " << i << " was not executed exactly once";
+	}
+}
+
+TEST(ThreadPool, ParallelForFewerChunksThanWorkers)
+{
+	/* 30 iterations with grain 10 make 3 chunks for 8 workers: the pool must only
+	 * enqueue useful helpers and still cover the range exactly once. */
+	ThreadPool pool(8);
+	constexpr size_t size = 30;
+	std::vector< std::atomic< int > > hits(size);
+
+	for ( auto & hit : hits )
+	{
+		hit.store(0, std::memory_order_relaxed);
+	}
+
+	pool.parallelFor(size_t{0}, size, [&hits](size_t i) {
+		hits[i].fetch_add(1, std::memory_order_relaxed);
+	}, 10);
+
+	for ( size_t i = 0; i < size; ++i )
+	{
+		EXPECT_EQ(hits[i].load(), 1) << "Index " << i << " was not executed exactly once";
+	}
+}
+
+TEST(ThreadPool, NestedParallelForOnSaturatedPool)
+{
+	/* Regression: parallelFor used to wait for its helper TASKS to complete, which can
+	 * never happen when every worker is already busy inside the outer tasks -> livelock.
+	 * Completion is now counted per CHUNK: the nested call finishes on its calling
+	 * thread and the late helpers run afterwards as no-ops. */
+	ThreadPool pool(2);
+	std::atomic< size_t > total{0};
+	std::atomic< size_t > outerDone{0};
+
+	for ( size_t outer = 0; outer < 2; ++outer )
+	{
+		ASSERT_TRUE(pool.enqueue([&pool, &total, &outerDone] {
+			pool.parallelFor(size_t{0}, size_t{1000}, [&total](size_t) {
+				total.fetch_add(1, std::memory_order_relaxed);
+			});
+
+			outerDone.fetch_add(1, std::memory_order_relaxed);
+		}));
+	}
+
+	pool.wait();
+
+	EXPECT_EQ(outerDone.load(), 2U);
+	EXPECT_EQ(total.load(), 2000U);
+}
+
 TEST(ThreadPool, ParallelForSmallWorkload)
 {
 	/* With a single thread pool, small workloads should run sequentially. */
@@ -776,6 +913,32 @@ TEST(ThreadPool, ParallelForRangeWithGrainSize)
 	}
 }
 
+TEST(ThreadPool, ParallelForRangeZeroGrainSize)
+{
+	ThreadPool pool(4);
+
+	/* Same regression as ParallelForZeroGrainSize, on the range overload. */
+	constexpr size_t size = 10;
+	std::vector< std::atomic< int > > hits(size);
+
+	for ( auto & hit : hits )
+	{
+		hit.store(0, std::memory_order_relaxed);
+	}
+
+	pool.parallelFor(size_t{0}, size, [&hits](size_t chunkStart, size_t chunkEnd) {
+		for ( size_t i = chunkStart; i < chunkEnd; ++i )
+		{
+			hits[i].fetch_add(1, std::memory_order_relaxed);
+		}
+	}, 0);
+
+	for ( size_t i = 0; i < size; ++i )
+	{
+		EXPECT_EQ(hits[i].load(), 1) << "Index " << i << " was not covered exactly once";
+	}
+}
+
 TEST(ThreadPool, ParallelForRangeSingleThreadFallback)
 {
 	/* A single-thread pool must run the whole range as one body(start, end) call. */
@@ -888,6 +1051,49 @@ TEST(ThreadPool, IsIdleAfterWait)
 	pool.wait();
 
 	EXPECT_TRUE(pool.isIdle());
+}
+
+TEST(ThreadPool, IsIdleNeverTrueWhileTaskInFlight)
+{
+	/* Regression stress: the worker used to decrement the pending count BEFORE
+	 * incrementing the busy count. isIdle() reads both atomics without the mutex,
+	 * so it could observe "pending == 0 && busy == 0" while a task was about to
+	 * execute. With the corrected order, isIdle() == true implies the task ran. */
+	ThreadPool pool(2);
+	constexpr size_t iterations = 2000;
+
+	for ( size_t iteration = 0; iteration < iterations; ++iteration )
+	{
+		std::atomic< bool > done{false};
+
+		ASSERT_TRUE(pool.enqueue([&done] {
+			done.store(true, std::memory_order_release);
+		}));
+
+		while ( true )
+		{
+			/* Order matters: read isIdle() first, then the flag. The flag only goes
+			 * false -> true, so "idle && !done" cannot be a stale false positive. */
+			const bool idle = pool.isIdle();
+			const bool finished = done.load(std::memory_order_acquire);
+
+			if ( idle )
+			{
+				EXPECT_TRUE(finished) << "isIdle() returned true while the enqueued task had not run (iteration " << iteration << ")";
+
+				break;
+			}
+
+			if ( finished )
+			{
+				break;
+			}
+
+			std::this_thread::yield();
+		}
+
+		pool.wait();
+	}
 }
 
 TEST(ThreadPool, PendingTasksCount)
