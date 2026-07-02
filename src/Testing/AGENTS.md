@@ -1,241 +1,141 @@
 # Testing System
 
-Context for developing Emeraude Engine unit tests.
+Context for developing **emeraude-base** (`EmEn::Base`) unit tests.
 
 ## Module Overview
 
-Engine unit tests using **Google Test**. Current focus on **Libs** (critical foundation), future expansion to high-level systems.
+Unit tests for the emeraude-base foundation library, using **Google Test**.
+Suite target: **`EmeraudeBaseUnitTests`**, gated by the CMake option
+**`EMERAUDE_ENABLE_TESTS`** (OFF by default — a normal library build never builds tests).
 
-## Testing-Specific Rules
+- **Governance ("Ave robustus!"): no fix without a test.** Every correction ships with a
+  unit test that fails before the fix and passes after. Plan:
+  [`docs/plans/ave-robustus.md`](../../docs/plans/ave-robustus.md).
+- **CTest integration**: `ctest` aggregates the suite and sets the working directory to
+  `resources/` so fixture assets resolve (see `Constants.hpp`).
+- **Sanitizer gate**: the suite also builds under ASan+UBSan via
+  **`EMERAUDE_ENABLE_SANITIZERS`** (Debug, separate build dir). A fix is "proven" when the
+  suite is green in Release AND under the sanitizers. **TSan** (data races — ThreadPool,
+  TimedEvent) is a planned separate mode, incompatible with ASan.
+- **No CI yet**: both gates are run manually.
 
-### Framework: Google Test
-- **Google Test (gtest)**: C++ unit testing framework
-- **CTest integration**: Launched via `ctest` for CI/CD
-- **Standard assertions**: EXPECT_*, ASSERT_*, etc.
+## MANDATORY Test Conventions
 
-### MANDATORY Test Conventions
-
-**File organization**:
-- **One file per class/concept**: One test file per tested unit
-- Naming: `ClassNameTest.cpp` or `ConceptTest.cpp`
+**File organization** (flat directory, one file per tested concept):
+- Naming: `test_<Concept>.cpp` — e.g. `test_MathVector.cpp`, `test_ThreadPool.cpp`.
+- **A new test file must be added to the explicit source list in
+  [`cmake/PrepareBaseSourceFiles.cmake`](../../cmake/PrepareBaseSourceFiles.cmake)**
+  (there is NO glob), then re-run the CMake configure step.
 
 **Test organization**:
-- **One test per function**: Each function has its own TEST()
-- **Variants in same test**: Alternative calls/edge cases grouped
-- Test naming: `TEST(ClassName, FunctionName)` or `TEST(ClassName, FunctionName_EdgeCase)`
+- Test naming: `TEST(Suite, Behavior)` — e.g. `TEST(ThreadPool, ParallelForZeroGrainSize)`.
+- Group variants and edge cases of one behavior inside the same `TEST()`.
+- **Regression tests state their history**: open with a comment explaining what failed
+  before the fix (see `test_ThreadPool.cpp` for examples). This is how the suite doubles
+  as institutional memory.
+- Code style matches the library: tabs, braces on every block, `std::memory_order`
+  spelled out in concurrency tests.
 
-**Example**:
-```cpp
-// VectorTest.cpp - tests Libs/Math/Vector
+**Support files**:
+- `main.cpp` — plain `InitGoogleTest` + `RUN_ALL_TESTS` entry point.
+- `Constants.hpp` — shared fixture paths and dimensions (assets under `resources/`;
+  some sizes shrink when heavy-fixture builds are disabled).
+- `TinySoundFontImpl.cpp` — vendored TinySoundFont implementation TU for Wave tests.
 
-TEST(Vector, Constructor) {
-    Vector3 v1(1.0f, 2.0f, 3.0f);
-    EXPECT_EQ(v1.x, 1.0f);
-    EXPECT_EQ(v1.y, 2.0f);
-    EXPECT_EQ(v1.z, 3.0f);
+## Test Inventory (by domain)
 
-    // Variant: default constructor
-    Vector3 v2;
-    EXPECT_EQ(v2.x, 0.0f);
-    EXPECT_EQ(v2.y, 0.0f);
-    EXPECT_EQ(v2.z, 0.0f);
-}
+Authoritative list: `ls src/Testing/` (or the CMake source list). Grouped view:
 
-TEST(Vector, Length) {
-    Vector3 v(3.0f, 4.0f, 0.0f);
-    EXPECT_FLOAT_EQ(v.length(), 5.0f);
+| Domain | Files (`test_*.cpp`) |
+|--------|----------------------|
+| Math | `MathBasics`, `MathVector`, `MathMatrix`, `MathQuaternion`, `MathCartesianFrame`, `MathSpace2D`, `MathSpace3D`, `MathTransformConversions`, `MathOrientedCuboid`, `LineFormula`, `AnimationCubicSpline` |
+| PixelFactory | `PixelFactoryColor`, `PixelFactoryPixmap`, `PixelFactoryPixmapFormat`, `PixelFactoryProcessor`, `PixelFactoryTextPixmap`, `PixelFactoryFileFormats` |
+| VertexFactory | `VertexFactoryFileFormats`, `VertexFactoryShapeBuilder`, `MD5AnimParser` |
+| WaveFactory | `WaveFactoryFileFormats` |
+| Concurrency / core | `ThreadPool`, `Time`, `ObserverPattern`, `NodeTrait`, `StaticVector`, `Variant`, `String`, `TokenFormatter` |
+| IO / formats | `IO`, `ZipArchive`, `Compression`, `INIParser`, `FastJSON`, `Hash` |
+| Platform / infra | `Platform`, `Debug`, `Logging`, `Version` |
 
-    // Edge case: zero vector
-    Vector3 zero(0.0f, 0.0f, 0.0f);
-    EXPECT_FLOAT_EQ(zero.length(), 0.0f);
-}
-
-TEST(Vector, Normalize) {
-    Vector3 v(3.0f, 4.0f, 0.0f);
-    v.normalize();
-    EXPECT_FLOAT_EQ(v.length(), 1.0f);
-    EXPECT_FLOAT_EQ(v.x, 0.6f);
-    EXPECT_FLOAT_EQ(v.y, 0.8f);
-
-    // Edge case: normalize zero vector
-    Vector3 zero(0.0f, 0.0f, 0.0f);
-    zero.normalize();  // Must not crash
-    EXPECT_TRUE(std::isnan(zero.x) || zero.x == 0.0f);
-}
-```
-
-### Test Priority
-
-**Currently tested**:
-- **Libs**: Absolute priority (engine foundation)
-  - Math (Vector, Matrix, Quaternion, CartesianFrame)
-  - Algorithms
-  - IO
-  - ThreadPool
-  - Observer/Observable
-  - Etc.
-
-**Future expansion**:
-- Resources (loading, fail-safe, dependencies)
-- Physics (collisions, constraints, integration)
-- Graphics (geometry, materials, renderables)
-- Scenes (nodes, components, transformations)
-- Saphir (shader generation, compatibility)
-
-### Stack-Up Strategy
-1. **Libs 100% tested**: Solid foundation guaranteed
-2. **Foundational systems**: Resources, Physics
-3. **Graphics systems**: Graphics, Saphir
-4. **High-level systems**: Scenes, Audio, Overlay
-5. **Integration tests**: Inter-system tests
+Higher-level systems (Resources, Physics, Graphics, Scenes, Saphir) belong to the
+**engine** repository, not to this foundation library.
 
 ## Development Commands
 
 ```bash
-# Run all tests
-ctest
+# From the emeraude-base repo root, in a dedicated git-ignored build dir
+# (.gitignore covers cmake-build-* and .claude-build-*):
 
-# Run tests in parallel
-ctest --parallel $(nproc)
+# 1. Configure once (Release, tests ON)
+cmake -S . -B .claude-build-release -DCMAKE_BUILD_TYPE=Release -DEMERAUDE_ENABLE_TESTS=On
 
-# Run specific tests
-ctest -R Vector           # Tests containing "Vector"
-ctest -R Libs             # All Libs tests
-./test --gtest_filter="Vector.*"  # Google Test filter
+# 2. Build only the test target
+cmake --build .claude-build-release --target EmeraudeBaseUnitTests -j$(nproc)
 
-# Verbose mode
-ctest --verbose
-ctest --output-on-failure
+# 3. Run the suite (ctest sets the resources/ working dir for fixtures)
+cd .claude-build-release && ctest --output-on-failure -j$(nproc)
 
-# Run test executable directly
-./test                    # All tests
-./test --gtest_list_tests # List available tests
-```
+# Run a single suite while iterating (from resources/ so fixture paths resolve):
+cd resources && ../.claude-build-release/Release/EmeraudeBaseUnitTests --gtest_filter='ThreadPool.*'
 
-## Important Files
-
-### Testing/ Structure
-```
-Testing/
-├── Libs/                  # Libs tests (current priority)
-│   ├── Math/
-│   │   ├── VectorTest.cpp
-│   │   ├── MatrixTest.cpp
-│   │   ├── QuaternionTest.cpp
-│   │   └── CartesianFrameTest.cpp
-│   ├── IO/
-│   │   └── FileSystemTest.cpp
-│   ├── ThreadPoolTest.cpp
-│   └── ObserverTest.cpp
-├── Resources/             # Future
-├── Physics/               # Future
-└── CMakeLists.txt
+# Sanitizer gate (ASan+UBSan, Debug, own build dir):
+cmake -S . -B .claude-build-san -DCMAKE_BUILD_TYPE=Debug -DEMERAUDE_ENABLE_TESTS=On -DEMERAUDE_ENABLE_SANITIZERS=On
+cmake --build .claude-build-san --target EmeraudeBaseUnitTests -j$(nproc)
+cd .claude-build-san && ctest --output-on-failure -j$(nproc)
 ```
 
 ## Development Patterns
 
 ### Creating a New Test
-```cpp
-// 1. Create file Testing/Category/ClassTest.cpp
-#include <gtest/gtest.h>
-#include "Math/Vector.hpp"
 
-// 2. One test per function
-TEST(Vector, Add) {
-    Vector3 a(1, 2, 3);
-    Vector3 b(4, 5, 6);
-    Vector3 result = a + b;
-
-    EXPECT_EQ(result.x, 5);
-    EXPECT_EQ(result.y, 7);
-    EXPECT_EQ(result.z, 9);
-}
-
-// 3. Test edge cases
-TEST(Vector, Add_WithZero) {
-    Vector3 a(1, 2, 3);
-    Vector3 zero(0, 0, 0);
-    Vector3 result = a + zero;
-
-    EXPECT_EQ(result, a);
-}
-
-// 4. Test boundary cases
-TEST(Vector, Add_Overflow) {
-    Vector3 a(FLT_MAX, 0, 0);
-    Vector3 b(1, 0, 0);
-    Vector3 result = a + b;
-    // Verify overflow behavior
-}
-```
+1. Create `src/Testing/test_<Concept>.cpp` (license header + STL / third-party / local
+   include blocks, like every other file).
+2. Add it to `cmake/PrepareBaseSourceFiles.cmake`, re-run the configure step.
+3. One `TEST(Suite, Behavior)` per behavior; edge cases (zero, negative, empty range,
+   overflow, invalid input) are mandatory, either grouped or as `Suite, Behavior_EdgeCase`.
+4. For a bugfix: write the test FIRST, watch it fail, fix, watch it pass (Release + sanitizers).
 
 ### Google Test Assertion Types
+
 ```cpp
-// Equality
-EXPECT_EQ(a, b);      // a == b
-EXPECT_NE(a, b);      // a != b
-
-// Comparison
-EXPECT_LT(a, b);      // a < b
-EXPECT_LE(a, b);      // a <= b
-EXPECT_GT(a, b);      // a > b
-EXPECT_GE(a, b);      // a >= b
-
-// Floats (with epsilon)
-EXPECT_FLOAT_EQ(a, b);   // ~equal for float
-EXPECT_DOUBLE_EQ(a, b);  // ~equal for double
-EXPECT_NEAR(a, b, eps);  // |a - b| <= eps
-
-// Booleans
-EXPECT_TRUE(condition);
-EXPECT_FALSE(condition);
-
-// Pointers
-EXPECT_EQ(ptr, nullptr);
-EXPECT_NE(ptr, nullptr);
-
-// ASSERT_* variants: stop test on failure
-ASSERT_EQ(a, b);  // If fails, stops the test
+EXPECT_EQ(a, b);   EXPECT_NE(a, b);            // equality
+EXPECT_LT/LE/GT/GE(a, b);                      // ordering
+EXPECT_FLOAT_EQ(a, b);  EXPECT_DOUBLE_EQ(a, b);// floats (never EXPECT_EQ on floats)
+EXPECT_NEAR(a, b, eps);                        // |a - b| <= eps
+EXPECT_TRUE(cond);      EXPECT_FALSE(cond);
+ASSERT_*(...);   // same checks, but STOP the test on failure (use when continuing is meaningless)
 ```
 
 ### Tests with Fixtures (setup/teardown)
+
 ```cpp
-class VectorTest : public ::testing::Test {
-protected:
-    void SetUp() override {
-        // Setup before each test
-        v1 = Vector3(1, 2, 3);
-        v2 = Vector3(4, 5, 6);
-    }
+class MyFixture : public ::testing::Test
+{
+	protected:
 
-    void TearDown() override {
-        // Cleanup after each test
-    }
-
-    Vector3 v1, v2;
+		void SetUp () override { /* runs before each TEST_F */ }
+		void TearDown () override { /* runs after each TEST_F */ }
 };
 
-TEST_F(VectorTest, Add) {
-    // Uses v1 and v2 from fixture
-    Vector3 result = v1 + v2;
-    EXPECT_EQ(result.x, 5);
-}
+TEST_F(MyFixture, Behavior) { /* ... */ }
 ```
 
 ## Critical Points
 
-- **Libs priority**: Critical foundation, must be 100% tested
-- **One test = one function**: Clarity and isolation
-- **Edge cases mandatory**: Test boundary values, zero, negative, overflow
-- **EXPECT vs ASSERT**: EXPECT continues after failure, ASSERT stops
-- **Float comparison**: Use EXPECT_FLOAT_EQ, not EXPECT_EQ
-- **Fast tests**: Avoid long tests (< 1 second ideally)
-- **No randomness**: Reproducible tests, no random values
-- **CI/CD integration**: Tests run automatically on commits
+- **The base must stay 100% tested** — it is the foundation the engine trusts blindly.
+- **One test = one behavior**: clarity and isolation.
+- **Edge cases mandatory**: boundary values, zero, negative, empty, overflow.
+- **EXPECT vs ASSERT**: EXPECT continues after failure, ASSERT stops the test.
+- **Float comparison**: `EXPECT_FLOAT_EQ` / `EXPECT_NEAR`, never `EXPECT_EQ`.
+- **Fast tests** (< 1 s ideally). Deliberate exceptions exist (LZMA compression,
+  `ThreadPool.ParallelPixmapDrawing`) — do not add new heavy tests without cause, and
+  never assert on absolute timings (hosts differ); assert on ratios with a safety margin.
+- **Reproducible**: no free randomness — RNGs use fixed seeds (e.g. `std::mt19937{42}`).
+- **Verification is manual** (no CI yet): Release suite + ASan/UBSan run, both green,
+  before any change is considered done.
 
 ## Detailed Documentation
 
-Tested systems:
-- @src/Libs/AGENTS.md - Current test priority
-- Google Test documentation - For assertions and advanced features
-- CTest documentation - For CMake integration
+- [`../AGENTS.md`](../AGENTS.md) — library-wide context, module map, patterns.
+- [`docs/plans/ave-robustus.md`](../../docs/plans/ave-robustus.md) — robustness plan,
+  per-fix history, known-green baseline.
+- Google Test / CTest documentation — assertions, fixtures, CMake integration.
