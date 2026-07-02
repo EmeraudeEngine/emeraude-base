@@ -769,9 +769,9 @@ namespace EmEn::Base
 			 * - Falls back to sequential execution for small workloads to avoid overhead
 			 *
 			 * @tparam index_t Unsigned integer type for indices (e.g., size_t, uint32_t, uint64_t).
-			 * @tparam function_t Callable type that accepts a single IndexType parameter.
+			 * @tparam function_t Callable accepting a single index_t parameter: body(index).
 			 * @param start First index to process (inclusive).
-			 * @param end Last index (exclusive), following
+			 * @param end One-past-the-last index to process (exclusive).
 			 * @param body Callable invoked for each index: body(index). Must be thread-safe
 			 *			 if it accesses shared data.
 			 * @param grainSize Minimum number of iterations per task chunk (default 1).
@@ -782,10 +782,18 @@ namespace EmEn::Base
 			 * @post All iterations in [start, end) have been executed exactly once.
 			 * @note Blocks until all iterations complete (synchronous operation with implicit wait).
 			 * @note Thread-safe: body must be thread-safe for concurrent execution.
-			 * @note Exceptions: If body throws, the exception propagates from parallelFor.
-			 *	   Other iterations may continue executing concurrently.
-			 * @note Sequential fallback: If end-start <= grainSize or threadCount() <= 1,
-			 *	   executes sequentially to avoid parallelization overhead.
+			 * @note Overload selection: this overload is chosen when @a body is invocable with a
+			 *	   single index_t. A callable invocable with BOTH one and two index_t arguments
+			 *	   (e.g. a variadic generic lambda) also satisfies the range overload below, which
+			 *	   makes the call ambiguous; give such a callable a fixed arity to disambiguate.
+			 * @note Sequential fallback: if (end - start) <= grainSize, or the pool has 0 or 1
+			 *	   worker threads, the whole range runs on the calling thread with no task
+			 *	   enqueuing, to avoid parallelization overhead.
+			 * @warning @a body must not throw. It runs on worker threads and on the calling thread;
+			 *	   an exception escaping a worker-thread invocation calls std::terminate(), and one
+			 *	   escaping the calling-thread invocation abandons the still-running worker tasks
+			 *	   while their captured body is destroyed (undefined behaviour). Report failures
+			 *	   through captured state, not exceptions.
 			 *
 			 * @code
 			 * ThreadPool pool;
@@ -840,7 +848,7 @@ namespace EmEn::Base
 			 * out via an atomic counter, and the call blocks until every chunk completes.
 			 *
 			 * @tparam index_t Unsigned integer type for indices (e.g., size_t, uint32_t, uint64_t).
-			 * @tparam function_t Callable type that accepts two index_t parameters (start, end).
+			 * @tparam function_t Callable accepting two index_t parameters: body(chunkStart, chunkEnd).
 			 * @param start First index to process (inclusive).
 			 * @param end Last index (exclusive).
 			 * @param body Callable invoked for each chunk: body(chunkStart, chunkEnd), where
@@ -854,10 +862,19 @@ namespace EmEn::Base
 			 * @post Every index in [start, end) has been covered by exactly one chunk.
 			 * @note Blocks until all chunks complete (synchronous operation with implicit wait).
 			 * @note Thread-safe: body must be thread-safe for concurrent execution.
-			 * @note Exceptions: If body throws, the exception propagates from parallelFor.
-			 *	   Other chunks may continue executing concurrently.
-			 * @note Sequential fallback: If end-start <= grainSize or threadCount() <= 1,
-			 *	   executes the whole range as a single body(start, end) call.
+			 * @note Overload selection: this overload is chosen when @a body is invocable with two
+			 *	   index_t arguments (chunkStart, chunkEnd). A callable invocable with BOTH one and
+			 *	   two index_t arguments (e.g. a variadic generic lambda) also satisfies the
+			 *	   per-index overload above, which makes the call ambiguous; give such a callable
+			 *	   a fixed arity to disambiguate.
+			 * @note Sequential fallback: if (end - start) <= grainSize, or the pool has 0 or 1
+			 *	   worker threads, the whole range runs on the calling thread as a single
+			 *	   body(start, end) call, to avoid parallelization overhead.
+			 * @warning @a body must not throw. It runs on worker threads and on the calling thread;
+			 *	   an exception escaping a worker-thread invocation calls std::terminate(), and one
+			 *	   escaping the calling-thread invocation abandons the still-running worker tasks
+			 *	   while their captured body is destroyed (undefined behaviour). Report failures
+			 *	   through captured state, not exceptions.
 			 *
 			 * @code
 			 * ThreadPool pool;
@@ -931,8 +948,9 @@ namespace EmEn::Base
 			 * @param grainSize Minimum number of iterations per task chunk.
 			 * @warning Calling this from a task already running on this pool deadlocks if the
 			 *			pool is saturated: the spin-wait expects every enqueued worker task to run.
-			 * @note If @c chunkBody throws on a worker thread, the exception escapes the worker
-			 *		 loop and calls std::terminate(); only the calling thread's chunk propagates.
+			 * @note @c chunkBody must not throw. On a worker thread an escaping exception calls
+			 *		 std::terminate(); on the calling thread it abandons the still-running worker
+			 *		 tasks while their captured chunkBody is destroyed (undefined behaviour).
 			 */
 			template< typename index_t, typename chunk_function_t >
 			requires std::unsigned_integral< index_t > && std::invocable< chunk_function_t, index_t, index_t >

@@ -31,9 +31,11 @@
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <numeric>
 #include <random>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /* Third-party inclusions. */
@@ -589,6 +591,239 @@ TEST(ThreadPool, ParallelForAccumulation)
 	size_t expected = size * (size - 1) / 2;
 
 	EXPECT_EQ(sum, expected);
+}
+
+/* ============================================================================
+ * parallelFor (range overload: body(chunkStart, chunkEnd)) tests
+ * ============================================================================ */
+
+TEST(ThreadPool, ParallelForRangeEmptyRange)
+{
+	ThreadPool pool(4);
+	std::atomic< size_t > chunkCount{0};
+
+	/* Empty range must not invoke the body at all. */
+	pool.parallelFor(size_t{0}, size_t{0}, [&chunkCount](size_t, size_t) {
+		chunkCount.fetch_add(1, std::memory_order_relaxed);
+	});
+
+	EXPECT_EQ(chunkCount.load(), 0U);
+}
+
+TEST(ThreadPool, ParallelForRangeReversedRange)
+{
+	ThreadPool pool(4);
+	std::atomic< size_t > chunkCount{0};
+
+	/* Reversed range (start >= end) must not invoke the body. */
+	pool.parallelFor(size_t{10}, size_t{5}, [&chunkCount](size_t, size_t) {
+		chunkCount.fetch_add(1, std::memory_order_relaxed);
+	});
+
+	EXPECT_EQ(chunkCount.load(), 0U);
+}
+
+TEST(ThreadPool, ParallelForRangeCoversEachIndexOnce)
+{
+	ThreadPool pool(4);
+	constexpr size_t size = 5000;
+	std::vector< std::atomic< int > > hits(size);
+
+	for ( auto & hit : hits )
+	{
+		hit.store(0, std::memory_order_relaxed);
+	}
+
+	std::atomic< bool > boundsValid{true};
+
+	pool.parallelFor(size_t{0}, size, [&](size_t chunkStart, size_t chunkEnd) {
+		/* Every chunk must be a non-empty sub-range within [0, size). */
+		if ( chunkStart >= chunkEnd || chunkEnd > size )
+		{
+			boundsValid.store(false, std::memory_order_relaxed);
+
+			return;
+		}
+
+		for ( size_t i = chunkStart; i < chunkEnd; ++i )
+		{
+			hits[i].fetch_add(1, std::memory_order_relaxed);
+		}
+	});
+
+	EXPECT_TRUE(boundsValid.load()) << "A chunk reported invalid or out-of-range bounds";
+
+	/* The union of all chunks must cover [0, size) exactly once (disjoint + complete). */
+	for ( size_t i = 0; i < size; ++i )
+	{
+		EXPECT_EQ(hits[i].load(), 1) << "Index " << i << " was not covered exactly once";
+	}
+}
+
+TEST(ThreadPool, ParallelForRangeChunksTileTheRange)
+{
+	ThreadPool pool(4);
+	constexpr size_t start = 0;
+	constexpr size_t end = 5000;
+
+	std::mutex mutex;
+	std::vector< std::pair< size_t, size_t > > chunks;
+
+	pool.parallelFor(start, end, [&](size_t chunkStart, size_t chunkEnd) {
+		const std::lock_guard< std::mutex > lock(mutex);
+
+		chunks.emplace_back(chunkStart, chunkEnd);
+	});
+
+	ASSERT_FALSE(chunks.empty());
+
+	std::sort(chunks.begin(), chunks.end());
+
+	/* Chunks must tile [start, end): the first starts at start, the last ends at end, and
+	 * each chunk begins exactly where the previous one ended (no gaps, no overlaps). */
+	EXPECT_EQ(chunks.front().first, start);
+	EXPECT_EQ(chunks.back().second, end);
+
+	for ( size_t i = 0; i < chunks.size(); ++i )
+	{
+		EXPECT_LT(chunks[i].first, chunks[i].second) << "Empty chunk at position " << i;
+
+		if ( i > 0 )
+		{
+			EXPECT_EQ(chunks[i].first, chunks[i - 1].second) << "Gap or overlap before chunk " << i;
+		}
+	}
+}
+
+TEST(ThreadPool, ParallelForRangeReduction)
+{
+	ThreadPool pool(4);
+	constexpr size_t size = 100000;
+	std::vector< size_t > data(size);
+
+	for ( size_t i = 0; i < size; ++i )
+	{
+		data[i] = i;
+	}
+
+	/* Documented use case: a per-chunk local accumulator folded into a single atomic add. */
+	std::atomic< size_t > total{0};
+
+	pool.parallelFor(size_t{0}, size, [&](size_t chunkStart, size_t chunkEnd) {
+		size_t local = 0;
+
+		for ( size_t i = chunkStart; i < chunkEnd; ++i )
+		{
+			local += data[i];
+		}
+
+		total.fetch_add(local, std::memory_order_relaxed);
+	});
+
+	const size_t expected = size * (size - 1) / 2;
+
+	EXPECT_EQ(total.load(), expected);
+}
+
+TEST(ThreadPool, ParallelForRangeWithOffset)
+{
+	ThreadPool pool(4);
+	constexpr size_t start = 10;
+	constexpr size_t end = 110;
+	std::vector< int > data(end, -1);
+
+	pool.parallelFor(start, end, [&data](size_t chunkStart, size_t chunkEnd) {
+		for ( size_t i = chunkStart; i < chunkEnd; ++i )
+		{
+			data[i] = static_cast< int >(i);
+		}
+	});
+
+	/* Values before start must be untouched. */
+	for ( size_t i = 0; i < start; ++i )
+	{
+		EXPECT_EQ(data[i], -1);
+	}
+
+	/* Values in range must be set. */
+	for ( size_t i = start; i < end; ++i )
+	{
+		EXPECT_EQ(data[i], static_cast< int >(i));
+	}
+}
+
+TEST(ThreadPool, ParallelForRangeWithGrainSize)
+{
+	ThreadPool pool(4);
+	constexpr size_t size = 1000;
+	std::vector< std::atomic< int > > hits(size);
+
+	for ( auto & hit : hits )
+	{
+		hit.store(0, std::memory_order_relaxed);
+	}
+
+	pool.parallelFor(size_t{0}, size, [&hits](size_t chunkStart, size_t chunkEnd) {
+		for ( size_t i = chunkStart; i < chunkEnd; ++i )
+		{
+			hits[i].fetch_add(1, std::memory_order_relaxed);
+		}
+	}, 100);
+
+	for ( size_t i = 0; i < size; ++i )
+	{
+		EXPECT_EQ(hits[i].load(), 1) << "Index " << i << " was not covered exactly once";
+	}
+}
+
+TEST(ThreadPool, ParallelForRangeSingleThreadFallback)
+{
+	/* A single-thread pool must run the whole range as one body(start, end) call. */
+	ThreadPool pool(1);
+	constexpr size_t size = 100;
+	std::vector< int > data(size, -1);
+	std::atomic< size_t > chunkCount{0};
+	std::atomic< size_t > seenStart{~size_t{0}};
+	std::atomic< size_t > seenEnd{0};
+
+	pool.parallelFor(size_t{0}, size, [&](size_t chunkStart, size_t chunkEnd) {
+		chunkCount.fetch_add(1, std::memory_order_relaxed);
+		seenStart.store(chunkStart, std::memory_order_relaxed);
+		seenEnd.store(chunkEnd, std::memory_order_relaxed);
+
+		for ( size_t i = chunkStart; i < chunkEnd; ++i )
+		{
+			data[i] = static_cast< int >(i);
+		}
+	});
+
+	EXPECT_EQ(chunkCount.load(), 1U);
+	EXPECT_EQ(seenStart.load(), 0U);
+	EXPECT_EQ(seenEnd.load(), size);
+
+	for ( size_t i = 0; i < size; ++i )
+	{
+		EXPECT_EQ(data[i], static_cast< int >(i));
+	}
+}
+
+TEST(ThreadPool, ParallelForRangeSmallWorkloadFallback)
+{
+	/* When the range is no larger than the grain size, everything runs in a single chunk. */
+	ThreadPool pool(4);
+	std::atomic< size_t > chunkCount{0};
+	std::atomic< size_t > seenStart{~size_t{0}};
+	std::atomic< size_t > seenEnd{0};
+
+	pool.parallelFor(size_t{0}, size_t{8}, [&](size_t chunkStart, size_t chunkEnd) {
+		chunkCount.fetch_add(1, std::memory_order_relaxed);
+		seenStart.store(chunkStart, std::memory_order_relaxed);
+		seenEnd.store(chunkEnd, std::memory_order_relaxed);
+	}, 100);
+
+	EXPECT_EQ(chunkCount.load(), 1U);
+	EXPECT_EQ(seenStart.load(), 0U);
+	EXPECT_EQ(seenEnd.load(), 8U);
 }
 
 /* ============================================================================
