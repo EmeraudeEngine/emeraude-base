@@ -489,7 +489,9 @@ namespace EmEn::Base
 	TEST_F (StaticVectorTest, SelfAssignment)
 	{
 		StaticVector< int, 10 > s{1, 2, 3};
-		s = s;
+		/* Aliased on purpose: a literal `s = s` trips -Wself-assign-overloaded. */
+		auto & self = s;
+		s = self;
 		ASSERT_EQ(s.size(), 3);
 		ASSERT_EQ(s[0], 1);
 		ASSERT_EQ(s[1], 2);

@@ -349,7 +349,7 @@ TYPED_TEST(MathMatrix, DeterminantInverse2)
 
 		for ( size_t i = 0; i < 4; ++i )
 		{
-			ASSERT_EQ(inversedMatrix[i], inversedMatrix[i]);
+			ASSERT_NEAR(originalMatrix[i], matrix[i], static_cast< TypeParam >(0.001));
 		}
 	}
 }
@@ -370,7 +370,7 @@ TYPED_TEST(MathMatrix, DeterminantInverse3)
 
 		for ( size_t i = 0; i < 9; ++i )
 		{
-			ASSERT_EQ(inversedMatrix[i], inversedMatrix[i]);
+			ASSERT_NEAR(originalMatrix[i], matrix[i], static_cast< TypeParam >(0.001));
 		}
 	}
 }
@@ -392,7 +392,7 @@ TYPED_TEST(MathMatrix, DeterminantInverse4)
 
 		for ( size_t i = 0; i < 16; ++i )
 		{
-			ASSERT_EQ(inversedMatrix[i], inversedMatrix[i]);
+			ASSERT_NEAR(originalMatrix[i], matrix[i], static_cast< TypeParam >(0.001));
 		}
 	}
 }
