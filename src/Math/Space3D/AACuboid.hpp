@@ -95,10 +95,13 @@ namespace EmEn::Base::Math::Space3D
 					return false;
 				}
 
-				/* Check that dimensions are finite (catches overflow from default-constructed AABB). */
-				if ( !std::isfinite(m_maximum[X] - m_minimum[X]) ||
-					 !std::isfinite(m_maximum[Y] - m_minimum[Y]) ||
-					 !std::isfinite(m_maximum[Z] - m_minimum[Z]) )
+				/* Check that every bound is finite (rejects NaN/Inf inputs).
+				 * We test the coordinates individually rather than their difference:
+				 * the default-constructed AABB (lowest/max) is already rejected by the
+				 * consistency check above, and subtracting those bounds would overflow. */
+				if ( !std::isfinite(m_maximum[X]) || !std::isfinite(m_minimum[X]) ||
+					 !std::isfinite(m_maximum[Y]) || !std::isfinite(m_minimum[Y]) ||
+					 !std::isfinite(m_maximum[Z]) || !std::isfinite(m_minimum[Z]) )
 				{
 					return false;
 				}

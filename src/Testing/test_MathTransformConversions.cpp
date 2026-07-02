@@ -320,7 +320,7 @@ TYPED_TEST(MathTransformConversions, CartesianFrameModelMatrixRoundtrip)
 {
 	/* Build a frame, get model matrix, decompose, rebuild, compare model matrix. */
 	const Vector< 3, TypeParam > pos{5, -3, 7};
-	const Vector< 3, TypeParam > scale{1.5, 2.0, 0.8};
+	const Vector< 3, TypeParam > scale{static_cast< TypeParam >(1.5), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.8)};
 
 	CartesianFrame< TypeParam > original{pos};
 	original.setScalingFactor(Vector< 3, TypeParam >{scale});
@@ -340,104 +340,104 @@ TYPED_TEST(MathTransformConversions, CartesianFrameModelMatrixRoundtrip)
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_Identity)
 {
-	const Vector< 3, TypeParam > T{0, 0, 0};
-	const Quaternion< TypeParam > R{0, 0, 0, 1};
-	const Vector< 3, TypeParam > S{1, 1, 1};
+	const Vector< 3, TypeParam > translation{0, 0, 0};
+	const Quaternion< TypeParam > rotation{0, 0, 0, 1};
+	const Vector< 3, TypeParam > scale{1, 1, 1};
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_TranslationOnly)
 {
-	const Vector< 3, TypeParam > T{10, -20, 30};
-	const Quaternion< TypeParam > R{0, 0, 0, 1};
-	const Vector< 3, TypeParam > S{1, 1, 1};
+	const Vector< 3, TypeParam > translation{10, -20, 30};
+	const Quaternion< TypeParam > rotation{0, 0, 0, 1};
+	const Vector< 3, TypeParam > scale{1, 1, 1};
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_RotationOnly)
 {
-	const Vector< 3, TypeParam > T{0, 0, 0};
-	const Vector< 3, TypeParam > S{1, 1, 1};
+	const Vector< 3, TypeParam > translation{0, 0, 0};
+	const Vector< 3, TypeParam > scale{1, 1, 1};
 
-	Quaternion< TypeParam > R;
-	R.fromAngleAxis(std::numbers::pi_v< TypeParam > / 6, Vector< 3, TypeParam >{0, 1, 0});
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(std::numbers::pi_v< TypeParam > / 6, Vector< 3, TypeParam >{0, 1, 0});
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_ScaleOnly)
 {
-	const Vector< 3, TypeParam > T{0, 0, 0};
-	const Quaternion< TypeParam > R{0, 0, 0, 1};
-	const Vector< 3, TypeParam > S{2, 3, 0.5};
+	const Vector< 3, TypeParam > translation{0, 0, 0};
+	const Quaternion< TypeParam > rotation{0, 0, 0, 1};
+	const Vector< 3, TypeParam > scale{2, 3, 0.5};
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_FullTRS)
 {
-	const Vector< 3, TypeParam > T{-5, 12, 0.3};
-	const Vector< 3, TypeParam > S{2, 0.5, 1.5};
+	const Vector< 3, TypeParam > translation{-5, 12, static_cast< TypeParam >(0.3)};
+	const Vector< 3, TypeParam > scale{2, static_cast< TypeParam >(0.5), static_cast< TypeParam >(1.5)};
 
-	Quaternion< TypeParam > R;
-	R.fromAngleAxis(static_cast< TypeParam >(1.3), Vector< 3, TypeParam >{1, 0, 0});
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(static_cast< TypeParam >(1.3), Vector< 3, TypeParam >{1, 0, 0});
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_NonUniformScale)
 {
-	const Vector< 3, TypeParam > T{1, 2, 3};
-	const Vector< 3, TypeParam > S{0.1, 5.0, 0.01};
+	const Vector< 3, TypeParam > translation{1, 2, 3};
+	const Vector< 3, TypeParam > scale{static_cast< TypeParam >(0.1), static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.01)};
 
-	Quaternion< TypeParam > R;
-	R.fromAngleAxis(static_cast< TypeParam >(2.5), Vector< 3, TypeParam >{0, 0, 1});
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(static_cast< TypeParam >(2.5), Vector< 3, TypeParam >{0, 0, 1});
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, DecomposeThenCompose_CartesianFrameMatrix)
@@ -463,7 +463,7 @@ TYPED_TEST(MathTransformConversions, ComposeTRSMatchesCartesianFrameModelMatrix)
 	/* composeTRS should produce the same matrix as CartesianFrame::getModelMatrix()
 	 * when given the same TRS components. */
 	const Vector< 3, TypeParam > pos{4, -2, 8};
-	const Vector< 3, TypeParam > scale{1.2, 0.8, 2.0};
+	const Vector< 3, TypeParam > scale{static_cast< TypeParam >(1.2), static_cast< TypeParam >(0.8), static_cast< TypeParam >(2.0)};
 
 	Quaternion< TypeParam > rotation;
 	rotation.fromAngleAxis(static_cast< TypeParam >(0.9), Vector< 3, TypeParam >{0, 0, 1});
@@ -499,39 +499,39 @@ TYPED_TEST(MathTransformConversions, ComposeTRSMatchesCartesianFrame_ArbitraryRo
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_180AroundX)
 {
-	const Vector< 3, TypeParam > T{1, 2, 3};
-	const Vector< 3, TypeParam > S{1, 1, 1};
+	const Vector< 3, TypeParam > translation{1, 2, 3};
+	const Vector< 3, TypeParam > scale{1, 1, 1};
 
-	Quaternion< TypeParam > R;
-	R.fromAngleAxis(std::numbers::pi_v< TypeParam >, Vector< 3, TypeParam >{1, 0, 0});
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(std::numbers::pi_v< TypeParam >, Vector< 3, TypeParam >{1, 0, 0});
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 TYPED_TEST(MathTransformConversions, ComposeThenDecompose_NearlyOppositeRotation)
 {
 	/* 179 degrees around an arbitrary axis — tests near-180° without hitting the singularity. */
-	const Vector< 3, TypeParam > T{0, 0, 0};
-	const Vector< 3, TypeParam > S{2, 2, 2};
+	const Vector< 3, TypeParam > translation{0, 0, 0};
+	const Vector< 3, TypeParam > scale{2, 2, 2};
 
-	Quaternion< TypeParam > R;
-	R.fromAngleAxis(std::numbers::pi_v< TypeParam > * static_cast< TypeParam >(0.99), Vector< 3, TypeParam >{1, 1, 0}.normalize());
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(std::numbers::pi_v< TypeParam > * static_cast< TypeParam >(0.99), Vector< 3, TypeParam >{1, 1, 0}.normalize());
 
-	const auto matrix = composeTRS(T, R, S);
+	const auto matrix = composeTRS(translation, rotation, scale);
 	const auto trs = decomposeTRS(matrix);
 
 	constexpr auto eps = testEpsilon< TypeParam >();
 
-	assertVectorNear(trs.translation, T, eps);
-	assertQuaternionEquivalent(trs.rotation, R, eps);
-	assertVectorNear(trs.scale, S, eps);
+	assertVectorNear(trs.translation, translation, eps);
+	assertQuaternionEquivalent(trs.rotation, rotation, eps);
+	assertVectorNear(trs.scale, scale, eps);
 }
 
 // ============================================================================
@@ -541,26 +541,26 @@ TYPED_TEST(MathTransformConversions, ComposeThenDecompose_NearlyOppositeRotation
 TYPED_TEST(MathTransformConversions, MultipleRoundtrips_NoDrift)
 {
 	/* Compose -> decompose 10 times and check for accumulated error. */
-	Vector< 3, TypeParam > T{7, -3, 12};
-	Quaternion< TypeParam > R;
-	R.fromAngleAxis(static_cast< TypeParam >(0.42), Vector< 3, TypeParam >{0, 1, 0});
-	Vector< 3, TypeParam > S{1.5, 2.0, 0.75};
+	Vector< 3, TypeParam > translation{7, -3, 12};
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(static_cast< TypeParam >(0.42), Vector< 3, TypeParam >{0, 1, 0});
+	Vector< 3, TypeParam > scaling{1.5, 2.0, 0.75};
 
 	for ( int i = 0; i < 10; ++i )
 	{
-		const auto matrix = composeTRS(T, R, S);
+		const auto matrix = composeTRS(translation, rotation, scaling);
 		const auto trs = decomposeTRS(matrix);
 
-		T = trs.translation;
-		R = trs.rotation;
-		S = trs.scale;
+		translation = trs.translation;
+		rotation = trs.rotation;
+		scaling = trs.scale;
 	}
 
 	/* After 10 roundtrips, values should remain stable. */
 	constexpr auto eps = static_cast< TypeParam >(1e-3);
 
-	assertVectorNear(T, Vector< 3, TypeParam >{7, -3, 12}, eps);
-	assertVectorNear(S, Vector< 3, TypeParam >{1.5, 2.0, 0.75}, eps);
+	assertVectorNear(translation, Vector< 3, TypeParam >{7, -3, 12}, eps);
+	assertVectorNear(scaling, Vector< 3, TypeParam >{1.5, 2.0, 0.75}, eps);
 
 	/* Check rotation by applying to a test vector. */
 	Quaternion< TypeParam > originalR;
@@ -568,7 +568,7 @@ TYPED_TEST(MathTransformConversions, MultipleRoundtrips_NoDrift)
 
 	const auto testVec = Vector< 3, TypeParam >{1, 0, 0};
 	const auto originalResult = originalR * testVec;
-	const auto driftedResult = R * testVec;
+	const auto driftedResult = rotation * testVec;
 
 	assertVectorNear(originalResult, driftedResult, eps);
 }
