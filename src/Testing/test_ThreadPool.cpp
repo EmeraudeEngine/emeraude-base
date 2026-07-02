@@ -826,6 +826,22 @@ TEST(ThreadPool, ParallelForRangeSmallWorkloadFallback)
 	EXPECT_EQ(seenEnd.load(), 8U);
 }
 
+/* ----------------------------------------------------------------------------
+ * Overload arity guard (compile-time contract).
+ *
+ * A body invocable with a single index_t selects the per-index overload; a body invocable
+ * with two index_t selects the range overload. A body invocable with BOTH arities (e.g.
+ * [](auto...){}) is ambiguous and is rejected by a guard overload via static_assert -- it
+ * does NOT silently pick a model. This is a compile failure, not a runtime condition, so it
+ * cannot be a TEST(); the snippet below is kept commented and was verified by hand to fail
+ * with the guard's diagnostic:
+ *
+ *     ThreadPool pool(2);
+ *     pool.parallelFor(size_t{0}, size_t{4}, [](auto...) {});  // static_assert fires
+ *
+ * Positive selection (single- and two-argument bodies) is exercised by the tests above.
+ * ---------------------------------------------------------------------------- */
+
 /* ============================================================================
  * wait and isIdle tests
  * ============================================================================ */

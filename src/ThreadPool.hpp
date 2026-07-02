@@ -783,9 +783,10 @@ namespace EmEn::Base
 			 * @note Blocks until all iterations complete (synchronous operation with implicit wait).
 			 * @note Thread-safe: body must be thread-safe for concurrent execution.
 			 * @note Overload selection: this overload is chosen when @a body is invocable with a
-			 *	   single index_t. A callable invocable with BOTH one and two index_t arguments
-			 *	   (e.g. a variadic generic lambda) also satisfies the range overload below, which
-			 *	   makes the call ambiguous; give such a callable a fixed arity to disambiguate.
+			 *	   single index_t and NOT with two. A callable invocable with BOTH one and two
+			 *	   index_t arguments (e.g. a variadic generic lambda) matches neither this overload
+			 *	   nor the range one, and is rejected at compile time by a guard overload with a
+			 *	   clear diagnostic; give such a callable a fixed arity to disambiguate.
 			 * @note Sequential fallback: if (end - start) <= grainSize, or the pool has 0 or 1
 			 *	   worker threads, the whole range runs on the calling thread with no task
 			 *	   enqueuing, to avoid parallelization overhead.
@@ -821,7 +822,7 @@ namespace EmEn::Base
 			 * @endcode
 			 */
 			template< typename index_t, typename function_t >
-			requires std::unsigned_integral< index_t > && std::invocable< function_t, index_t >
+			requires std::unsigned_integral< index_t > && std::invocable< function_t, index_t > && ( !std::invocable< function_t, index_t, index_t > )
 			void
 			parallelFor (index_t start, index_t end, function_t && body, size_t grainSize = 1)
 			{
@@ -863,10 +864,10 @@ namespace EmEn::Base
 			 * @note Blocks until all chunks complete (synchronous operation with implicit wait).
 			 * @note Thread-safe: body must be thread-safe for concurrent execution.
 			 * @note Overload selection: this overload is chosen when @a body is invocable with two
-			 *	   index_t arguments (chunkStart, chunkEnd). A callable invocable with BOTH one and
-			 *	   two index_t arguments (e.g. a variadic generic lambda) also satisfies the
-			 *	   per-index overload above, which makes the call ambiguous; give such a callable
-			 *	   a fixed arity to disambiguate.
+			 *	   index_t arguments (chunkStart, chunkEnd) and NOT with a single one. A callable
+			 *	   invocable with BOTH one and two index_t arguments (e.g. a variadic generic lambda)
+			 *	   matches neither overload and is rejected at compile time by a guard overload with
+			 *	   a clear diagnostic; give such a callable a fixed arity to disambiguate.
 			 * @note Sequential fallback: if (end - start) <= grainSize, or the pool has 0 or 1
 			 *	   worker threads, the whole range runs on the calling thread as a single
 			 *	   body(start, end) call, to avoid parallelization overhead.
@@ -890,11 +891,36 @@ namespace EmEn::Base
 			 * @endcode
 			 */
 			template< typename index_t, typename function_t >
-			requires std::unsigned_integral< index_t > && std::invocable< function_t, index_t, index_t >
+			requires std::unsigned_integral< index_t > && std::invocable< function_t, index_t, index_t > && ( !std::invocable< function_t, index_t > )
 			void
 			parallelFor (index_t start, index_t end, function_t && body, size_t grainSize = 1)
 			{
 				this->parallelForChunks(start, end, std::forward< function_t >(body), grainSize);
+			}
+
+			/**
+			 * @brief Guard overload: rejects a callable that is ambiguous between the two parallelFor() overloads.
+			 *
+			 * A callable invocable with BOTH a single index_t and two index_t arguments (e.g. a
+			 * variadic generic lambda such as [](auto...){}) cannot be classified as per-index or
+			 * range: choosing either would silently pick an iteration model the author may not have
+			 * intended. This overload captures exactly that case and fails compilation with a clear
+			 * message rather than letting overload resolution emit a cryptic diagnostic (or worse,
+			 * silently select one model). It is never callable: give the body a fixed arity.
+			 *
+			 * @tparam index_t Unsigned integer index type.
+			 * @tparam function_t Callable invocable with both one and two index_t arguments.
+			 */
+			template< typename index_t, typename function_t >
+			requires std::unsigned_integral< index_t > && std::invocable< function_t, index_t > && std::invocable< function_t, index_t, index_t >
+			void
+			parallelFor (index_t /*start*/, index_t /*end*/, function_t && /*body*/, size_t /*grainSize*/ = 1)
+			{
+				static_assert(dependentFalse< function_t >,
+					"ThreadPool::parallelFor: the body is invocable with BOTH one and two index_t "
+					"arguments, which is ambiguous between the per-index overload (body(index)) and "
+					"the range overload (body(chunkStart, chunkEnd)). Give the body a fixed arity "
+					"(name its parameters instead of using an auto/variadic pack) to select one.");
 			}
 
 			/**
@@ -929,6 +955,16 @@ namespace EmEn::Base
 			void wait ();
 
 		private:
+
+			/**
+			 * @brief Always-false value template, dependent on its type parameter.
+			 *
+			 * Used to defer a static_assert to template instantiation: a non-dependent
+			 * static_assert(false, ...) inside an uninstantiated template is ill-formed in C++20,
+			 * so the guard parallelFor() overload asserts on this instead.
+			 */
+			template< typename >
+			static constexpr bool dependentFalse = false;
 
 			/**
 			 * @brief Internal: shared fork-join driver for both parallelFor() overloads.
