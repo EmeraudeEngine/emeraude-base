@@ -461,6 +461,10 @@ if ( EMERAUDE_ENABLE_TESTS )
 	)
 
 	target_compile_definitions(EmeraudeBaseUnitTests PRIVATE ${EMERAUDE_COMPILE_DEFINITIONS})
+	# Bake the fixture directory so the test binary is working-directory independent
+	# (ctest, IDE run configs and direct runs all behave the same). Constants.hpp
+	# consumes it to build every asset path; tmp_* outputs land there too (gitignored).
+	target_compile_definitions(EmeraudeBaseUnitTests PRIVATE EMERAUDE_TESTS_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/assets")
 	target_compile_options(EmeraudeBaseUnitTests PRIVATE ${EMERAUDE_COMPILE_OPTIONS})
 	target_link_libraries(EmeraudeBaseUnitTests PRIVATE emeraude::base gtest_main)
 
@@ -474,8 +478,8 @@ if ( EMERAUDE_ENABLE_TESTS )
 	endif ()
 
 	enable_testing()
-	# Tests load fixtures via "./assets/…" — run them from resources/ where those live.
-	gtest_discover_tests(EmeraudeBaseUnitTests WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/resources)
+	# No WORKING_DIRECTORY needed: fixture paths are absolute via EMERAUDE_TESTS_ASSETS_DIR.
+	gtest_discover_tests(EmeraudeBaseUnitTests)
 endif ()
 
 #######################################################################

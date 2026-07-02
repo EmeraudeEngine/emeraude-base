@@ -11,8 +11,11 @@ Suite target: **`EmeraudeBaseUnitTests`**, gated by the CMake option
 - **Governance ("Ave robustus!"): no fix without a test.** Every correction ships with a
   unit test that fails before the fix and passes after. Plan:
   [`docs/plans/ave-robustus.md`](../../docs/plans/ave-robustus.md).
-- **CTest integration**: `ctest` aggregates the suite and sets the working directory to
-  `resources/` so fixture assets resolve (see `Constants.hpp`).
+- **CTest integration**: `ctest` aggregates the suite. The binary is **working-directory
+  independent**: CMake bakes `EMERAUDE_TESTS_ASSETS_DIR` (absolute path to
+  `resources/assets/`) and `Constants.hpp` builds every fixture path from it
+  (`AssetsDirectory`). Test outputs (`tmp_*`) land in that same directory, gitignored.
+  Never hard-code `./assets/...` in a test — compose paths with `AssetsDirectory`.
 - **Sanitizer gate**: the suite also builds under ASan+UBSan via
   **`EMERAUDE_ENABLE_SANITIZERS`** (Debug, separate build dir). A fix is "proven" when the
   suite is green in Release AND under the sanitizers. **TSan** (data races — ThreadPool,

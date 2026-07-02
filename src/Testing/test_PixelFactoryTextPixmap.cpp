@@ -91,5 +91,5 @@ TEST(PixelFactoryTextProcessor, write)
 		EXPECT_TRUE(textProcessor.write(LoremIpsum));
 	}*/
 
-	ASSERT_TRUE(FileIO::write(image, {"./assets/tmp_textPixmap.png"}, true));
+	ASSERT_TRUE(FileIO::write(image, AssetsDirectory / "tmp_textPixmap.png", true));
 }
