@@ -51,7 +51,10 @@ using namespace EmEn::Base;
 
 namespace
 {
-	/* A stable, secure, public resource: the full-resolution "Mr Bean" photo on
+	/* This resource is EXTERNAL and may stop responding (host down, file moved or
+	 * removed) — a failure here does not necessarily mean the client is broken; it
+	 * is why this whole suite is opt-in and never part of the default (hermetic) run.
+	 * A stable, secure, public resource: the full-resolution "Mr Bean" photo on
 	 * Wikimedia's CDN (image/jpeg, ~732 KB, HTTP/1.1 over TLS). NOTE: this is the
 	 * direct upload URL — the fr.wikipedia.org article link with a '#/media/...'
 	 * fragment is the HTML page, not the file. */
