@@ -67,6 +67,15 @@ namespace
 		return std::getenv("EMERAUDE_RUN_LIVE_NETWORK_TESTS") != nullptr;
 	}
 
+	/* Shared reminder for every live-resource failure: a third-party endpoint is
+	 * outside our control, so a red test here is inconclusive about the client. */
+	constexpr auto ExternalResourceHint{
+		"\n  --> This test hits a THIRD-PARTY resource (Wikimedia). A failure here is "
+		"likely the resource being unavailable (HTTP 404 / moved / host or network down), "
+		"NOT necessarily a bug in the HTTPS client. Verify the URL manually:\n"
+		"      curl -I https://upload.wikimedia.org/wikipedia/commons/6/6f/Rowan_Atkinson_and_Manneken_Pis.jpg\n"
+		"  Testing against external services carries exactly this drawback."};
+
 	/** @brief Builds an HTTPS client trusting the operating-system CA store. */
 	asio::ssl::context
 	makeSystemTrustContext () noexcept
@@ -92,7 +101,8 @@ TEST(NetworkHTTPSClientLive, downloadsMrBeanImageToFile)
 
 	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-mr-bean.jpg";
 
-	ASSERT_TRUE(client.download(Network::URI{MrBeanImageURL}, filepath)) << "download failed (network / trust store / TLS ?)";
+	ASSERT_TRUE(client.download(Network::URI{MrBeanImageURL}, filepath))
+		<< "download failed (non-2xx status, network, DNS, or TLS)." << ExternalResourceHint;
 
 	/* Verify we actually got the binary: JPEG magic (FF D8 FF) + a sane size. */
 	std::ifstream file{filepath, std::ios::binary};
@@ -124,8 +134,14 @@ TEST(NetworkHTTPSClientLive, getReturnsImageContentType)
 
 	const auto result = client.get(Network::URI{MrBeanImageURL});
 
-	ASSERT_TRUE(result.has_value()) << "GET failed";
-	EXPECT_EQ(result->response.codeResponse(), 200);
+	ASSERT_TRUE(result.has_value()) << "GET produced no response (network, DNS, or TLS)." << ExternalResourceHint;
+
+	/* A well-formed HTTP response that is NOT 200 (e.g. 404) points squarely at the
+	 * external resource, not the client — say so explicitly. */
+	ASSERT_EQ(result->response.codeResponse(), 200)
+		<< "server answered HTTP " << result->response.codeResponse()
+		<< " (expected 200) — the resource has likely moved or been removed." << ExternalResourceHint;
+
 	EXPECT_NE(result->response.value(Network::HTTPResponse::ContentType).find("image/jpeg"), std::string::npos);
 	EXPECT_FALSE(result->body.empty());
 
