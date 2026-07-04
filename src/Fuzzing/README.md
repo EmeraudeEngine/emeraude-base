@@ -55,6 +55,7 @@ Targets:
 | `fuzz_mdx`        | `VertexFactory::FileFormatMDx` (MDL/MD2/MD3/MD5)    |
 | `fuzz_compression`| `Compression::LZMA` + `Compression::ZLIB` decompressors |
 | `fuzz_ini`        | `INIParser` (via a per-process temp file)           |
+| `fuzz_http_response` | `Network::HTTPResponseParser` (whole + byte-sliced feeds) |
 
 A crash writes a `crash-<hash>` reproducer in the run directory; replay it with
 `src/Fuzzing/build/<target> crash-<hash>` to get the full sanitizer stack. Reproducers, the `build/`

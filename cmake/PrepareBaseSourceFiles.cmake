@@ -64,14 +64,19 @@ set(EMERAUDE_BASE_IO_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/IO/ZipWriter.cpp
 )
 
-# network module — ASIO (header-only).
+# network module — ASIO (header-only) + LibreSSL (TLS).
 set(EMERAUDE_BASE_NETWORK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponse.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponseParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPSClient.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Network.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/PercentEncoding.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Query.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/TLSConnection.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/TrustStore.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URI.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URIDomain.cpp
 )
@@ -112,6 +117,12 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace3D.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathTransformConversions.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPResponseParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClient.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClientLive.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkTLSConnection.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkTrustStore.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkURI.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NodeTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ObserverPattern.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Platform.cpp

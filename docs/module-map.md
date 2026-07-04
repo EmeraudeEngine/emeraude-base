@@ -26,7 +26,7 @@ linking one module target standalone may also require its siblings — the umbre
 | debug | `emeraude::base::debug` | OBJECT | — | DONE |
 | compression | `emeraude::base::compression` | OBJECT | ZLIB, LZMA | DONE |
 | io | `emeraude::base::io` | OBJECT | libzip | DONE |
-| network | `emeraude::base::network` | OBJECT | ASIO | DONE |
+| network | `emeraude::base::network` | OBJECT | ASIO, LibreSSL | DONE |
 | vertex | `emeraude::base::vertex` | OBJECT | — | DONE |
 | wave | `emeraude::base::wave` | OBJECT | sndfile, samplerate, TinySoundFont | DONE |
 

@@ -90,10 +90,9 @@ namespace EmEn::Base::Network
 			void
 			setScheme (const std::string & scheme) noexcept
 			{
-				/* TODO: Le nom du schéma est une lettre suivie de n'importe quelle
-				 * combinaison de lettres, de chiffres, du signe plus (+), du point (.)
-				 * ou d'un tiret (-) et se termine par deux points (:). */
-				m_scheme = scheme;
+				/* RFC 3986 §6.2.2.1: the scheme is case-insensitive and normalized to
+				 * lowercase. Syntactic validation happens at parse time. */
+				m_scheme = toLowerASCII(scheme);
 			}
 
 			/**
@@ -223,54 +222,50 @@ namespace EmEn::Base::Network
 				return false;
 			}
 
+			/**
+			 * @brief Resolves a URI reference against a base URI (RFC 3986 §5).
+			 * @note This is the algorithm the HTTPS client uses to turn a redirect
+			 * Location (which may be absolute, absolute-path, or relative) into an
+			 * absolute URI. The base MUST be absolute (have a scheme).
+			 * @param base The base URI.
+			 * @param reference The reference (absolute or relative) as a raw string.
+			 * @return URI The resolved (target) URI.
+			 */
+			[[nodiscard]]
+			static URI resolve (const URI & base, const std::string & reference) noexcept;
+
+			/**
+			 * @brief Removes the '.' and '..' segments of a path (RFC 3986 §5.2.4).
+			 * @param path The input path.
+			 * @return std::string
+			 */
+			[[nodiscard]]
+			static std::string removeDotSegments (const std::string & path) noexcept;
+
 		private:
 
 			/**
-			 * @brief checkSimplePath
-			 * @param string
-			 * @return bool
-			 */
-			[[nodiscard]]
-			bool checkSimplePath (const std::string & string) noexcept;
-
-			/**
-			 * @brief extractScheme
-			 * @param string
+			 * @brief Lowercases the ASCII letters of a string (scheme/host normalization).
+			 * @param string The input.
 			 * @return std::string
 			 */
 			[[nodiscard]]
-			std::string extractScheme (const std::string & string) noexcept;
+			static std::string toLowerASCII (const std::string & string) noexcept;
 
 			/**
-			 * @brief extractFragment
-			 * @param string
+			 * @brief Parses a raw URI/relative-reference string (RFC 3986 Appendix B).
+			 * @param rawString The raw string.
+			 * @return bool True when the string is non-empty (the grammar always matches).
+			 */
+			bool parseRawString (const std::string & rawString) noexcept;
+
+			/**
+			 * @brief Merges a reference path onto this (base) path (RFC 3986 §5.2.3).
+			 * @param referencePath The reference path.
 			 * @return std::string
 			 */
 			[[nodiscard]]
-			std::string extractFragment (const std::string & string) noexcept;
-
-			/**
-			 * @brief extractQuery
-			 * @param string
-			 * @return std::string
-			 */
-			[[nodiscard]]
-			std::string extractQuery (const std::string & string) noexcept;
-
-			/**
-			 * @brief extractURIDomain
-			 * @param string
-			 * @return std::string
-			 */
-			[[nodiscard]]
-			std::string extractURIDomain (const std::string & string) noexcept;
-
-			/**
-			 * @brief parseRawString
-			 * @param rawString
-			 * @return bool
-			 */
-			bool parseRawString (std::string rawString) noexcept;
+			std::string mergePath (const std::string & referencePath) const noexcept;
 
 			/**
 			 * @brief STL streams printable object.

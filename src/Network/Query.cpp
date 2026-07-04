@@ -27,10 +27,10 @@
 #include "Query.hpp"
 
 /* STL inclusions. */
-#include <algorithm>
 #include <vector>
 
 /* Local inclusions. */
+#include "PercentEncoding.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
@@ -44,15 +44,22 @@ namespace EmEn::Base::Network
 
 		for ( const auto & variable : variables )
 		{
-			const auto definition = String::explode(variable, '=');
-
-			if ( definition.size() == 2 )
+			if ( variable.empty() )
 			{
-				query.addVariable(definition[0], definition[1]);
+				continue;
+			}
+
+			/* Split on the first '=' only: a value may legitimately contain '='.
+			 * Keys and values are percent-decoded (stored decoded, re-encoded on output). */
+			const auto separator = variable.find('=');
+
+			if ( separator == std::string::npos )
+			{
+				query.addVariable(PercentEncoding::decode(variable), "");
 			}
 			else
 			{
-				query.addVariable(definition[0], "");
+				query.addVariable(PercentEncoding::decode(variable.substr(0, separator)), PercentEncoding::decode(variable.substr(separator + 1)));
 			}
 		}
 
@@ -62,11 +69,22 @@ namespace EmEn::Base::Network
 	std::ostream &
 	operator<< (std::ostream & out, const Query & obj)
 	{
-		std::vector< std::string > variables(obj.m_variables.size());
+		std::vector< std::string > variables;
+		variables.reserve(obj.m_variables.size());
 
-		std::ranges::transform(obj.m_variables, std::back_inserter(variables), [] (const auto & variable) {
-			return variable.first + '=' + variable.second;
-		});
+		for ( const auto & [key, value] : obj.m_variables )
+		{
+			auto encoded = PercentEncoding::encode(key, PercentEncoding::Component::Query);
+
+			/* A value-less key is emitted bare (no trailing '='): matches how a
+			 * flag-style query ("?y") round-trips. */
+			if ( !value.empty() )
+			{
+				encoded += '=' + PercentEncoding::encode(value, PercentEncoding::Component::Query);
+			}
+
+			variables.emplace_back(std::move(encoded));
+		}
 
 		return out << String::implode(variables, '&');
 	}

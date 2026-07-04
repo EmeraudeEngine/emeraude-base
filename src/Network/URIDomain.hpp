@@ -277,31 +277,7 @@ namespace EmEn::Base::Network
 		private:
 
 			/**
-			 * @brief Extracts the port from a raw string.
-			 * @param string A reference to a string.
-			 * @return std::string
-			 */
-			[[nodiscard]]
-			std::string extractPort (const std::string & string) noexcept;
-
-			/**
-			 * @brief Extracts the base from a raw string.
-			 * @param string A reference to a string.
-			 * @return std::string
-			 */
-			[[nodiscard]]
-			std::string extractBase (const std::string & string) noexcept;
-
-			/**
-			 * @brief Extracts the user information from a raw string.
-			 * @param string A reference to a string.
-			 * @return std::string
-			 */
-			[[nodiscard]]
-			std::string extractUserInfos (const std::string & string) noexcept;
-
-			/**
-			 * @brief Parses the user information.
+			 * @brief Parses the user information (percent-decoded).
 			 * @param string A reference to a string.
 			 * @return void
 			 */

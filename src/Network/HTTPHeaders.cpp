@@ -26,10 +26,8 @@
 
 #include "HTTPHeaders.hpp"
 
-/* STL inclusions. */
-#include <iostream>
-
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
@@ -52,7 +50,7 @@ namespace EmEn::Base::Network
 
 		if ( empty(lines) )
 		{
-			std::cerr << "HTTPHeaders::parse(), empty HTTP header !" "\n";
+			Logging::error("Network::HTTPHeaders", "parse(), empty HTTP header !");
 
 			return false;
 		}
@@ -64,7 +62,7 @@ namespace EmEn::Base::Network
 		}
 		else
 		{
-			std::cerr << "HTTPHeaders::parse(), unable to identify the HTTP header !" "\n";
+			Logging::error("Network::HTTPHeaders", "parse(), unable to identify the HTTP header !");
 
 			return false;
 		}
@@ -78,7 +76,7 @@ namespace EmEn::Base::Network
 
 			if ( chunks.size() != 2 )
 			{
-				std::cerr << "HTTPHeaders::parse(), unable to parse header line : " << line << "\n";
+				Logging::warning("Network::HTTPHeaders", "parse(), unable to parse header line : " + line);
 
 				errors++;
 

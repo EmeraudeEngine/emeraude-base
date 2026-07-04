@@ -27,123 +27,161 @@
 #include "URIDomain.hpp"
 
 /* STL inclusions. */
-#include <iostream>
+#include <cctype>
 #include <sstream>
+#include <string>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
+#include "PercentEncoding.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
 {
-	URIDomain::URIDomain (std::string rawString) noexcept
+	namespace
 	{
-		if ( rawString.empty() )
+		constexpr auto Tag{"Network::URIDomain"};
+
+		/**
+		 * @brief Returns whether every character of a string is an ASCII digit.
+		 * @param string The string.
+		 * @return bool
+		 */
+		bool
+		isAllDigits (const std::string & string) noexcept
 		{
-			std::cerr << "URIDomain::URIDomain(), empty string !" "\n";
-
-			return;
-		}
-
-		rawString = this->extractPort(rawString);
-
-		if ( rawString.empty() )
-		{
-			return;
-		}
-
-		rawString = this->extractBase(rawString);
-
-		if ( rawString.empty() )
-		{
-			return;
-		}
-
-		m_hostname = Hostname::fromString(this->extractUserInfos(rawString));
-	}
-
-	std::string
-	URIDomain::extractPort (const std::string & string) noexcept
-	{
-		const auto chunks = String::explode(string, ':');
-
-		switch ( chunks.size() )
-		{
-			/* Port information present with user information. */
-			case 3 :
-				this->setPort(String::toNumber< unsigned int >(chunks[2]));
-
-				return chunks[0] + ':' + chunks[1];
-
-			/* Port information present. */
-			case 2 :
-				this->setPort(String::toNumber< unsigned int >(chunks[1]));
-
-				/* NOTE: The ':' char was separating the user information. */
-				if ( m_port == 0 )
-				{
-					return string;
-				}
-
-				return chunks[0];
-
-			case 1 :
-				return chunks[0];
-
-			default:
-				std::cerr << "URIDomain::extractPort(), invalid URI domain, multiple ':' char found !" "\n";
-
-				return string;
-		}
-	}
-
-	std::string
-	URIDomain::extractBase (const std::string & string) noexcept
-	{
-		for ( const auto & base : URIDomain::Bases )
-		{
-			if ( !string.starts_with(base) )
+			if ( string.empty() )
 			{
-				continue;
+				return false;
 			}
 
-			this->setBase(base);
+			for ( const auto character : string )
+			{
+				if ( std::isdigit(static_cast< unsigned char >(character)) == 0 )
+				{
+					return false;
+				}
+			}
 
-			return String::replace(base, "", string);
+			return true;
 		}
 
-		m_base.clear();
+		/**
+		 * @brief Lowercases the ASCII letters of a string (host normalization).
+		 * @param string The input.
+		 * @return std::string
+		 */
+		std::string
+		toLowerASCII (const std::string & string) noexcept
+		{
+			std::string output{string};
 
-		return string;
+			for ( auto & character : output )
+			{
+				character = static_cast< char >(std::tolower(static_cast< unsigned char >(character)));
+			}
+
+			return output;
+		}
 	}
 
-	std::string
-	URIDomain::extractUserInfos (const std::string & string) noexcept
+	URIDomain::URIDomain (std::string rawString) noexcept
 	{
-		const auto chunks = String::explode(string, '@');
-
-		switch ( chunks.size() )
+		/* rawString is the RFC 3986 authority: [ userinfo "@" ] host [ ":" port ].
+		 * The leading "//" is handled by URI, not here. */
+		if ( rawString.empty() )
 		{
-			/* User information present. */
-			case 2 :
-				this->parseUserInfos(chunks[0]);
+			return;
+		}
 
-				return chunks[1];
+		/* userinfo — everything before the first '@' (host never contains one). */
+		if ( const auto at = rawString.find('@'); at != std::string::npos )
+		{
+			this->parseUserInfos(rawString.substr(0, at));
 
-			/* No user information. */
-			case 1 :
-				return chunks[0];
+			rawString.erase(0, at + 1);
+		}
 
-			default:
-				std::cerr << "URIDomain::extractUserInfos(), invalid URI domain, multiple '@' char found !" "\n";
+		/* host + optional port, with IPv6 literals kept whole inside brackets. */
+		std::string host;
+		std::string port;
 
-				return string;
+		if ( !rawString.empty() && rawString.front() == '[' )
+		{
+			const auto close = rawString.find(']');
+
+			if ( close == std::string::npos )
+			{
+				Logging::error(Tag, "URIDomain(), unterminated IPv6 literal in '" + rawString + "'.");
+
+				return;
+			}
+
+			host = rawString.substr(0, close + 1);
+
+			const auto remainder = rawString.substr(close + 1);
+
+			if ( !remainder.empty() )
+			{
+				if ( remainder.front() != ':' )
+				{
+					Logging::error(Tag, "URIDomain(), junk after the IPv6 literal in '" + rawString + "'.");
+
+					return;
+				}
+
+				port = remainder.substr(1);
+			}
+		}
+		else if ( const auto colon = rawString.rfind(':'); colon != std::string::npos && isAllDigits(rawString.substr(colon + 1)) )
+		{
+			host = rawString.substr(0, colon);
+			port = rawString.substr(colon + 1);
+		}
+		else
+		{
+			host = rawString;
+		}
+
+		/* Port range validation (0-65535); an out-of-range value is dropped. */
+		if ( !port.empty() )
+		{
+			if ( isAllDigits(port) )
+			{
+				const auto value = String::toNumber< unsigned long >(port);
+
+				if ( value <= 65535 )
+				{
+					m_port = static_cast< uint32_t >(value);
+				}
+				else
+				{
+					Logging::error(Tag, "URIDomain(), port '" + port + "' out of range, ignored.");
+				}
+			}
+			else
+			{
+				Logging::error(Tag, "URIDomain(), non-numeric port '" + port + "', ignored.");
+			}
+		}
+
+		/* Host is case-insensitive (RFC 3986 §6.2.2.1) and percent-decoded. A
+		 * bracketed IP-literal keeps its brackets and is not further decoded. */
+		if ( !host.empty() && host.front() == '[' )
+		{
+			m_hostname = Hostname::fromString(toLowerASCII(host));
+		}
+		else
+		{
+			m_hostname = Hostname::fromString(toLowerASCII(PercentEncoding::decode(host)));
 		}
 	}
 
 	void
 	URIDomain::parseUserInfos (const std::string & string) noexcept
 	{
-		/* NOTE: ";AUTH" */
+		/* NOTE: non-standard ";AUTH=..." options are preserved for backward
+		 * compatibility; the standard userinfo is "user[:password]". */
 		auto chunks = String::explode(string, ';');
 
 		for ( size_t index = 1; index < chunks.size(); index++ )
@@ -152,30 +190,29 @@ namespace EmEn::Base::Network
 
 			if ( option.size() != 2 )
 			{
-				std::cerr << "URIDomain::parseUserInfos(), invalid URI domain option '" << chunks[index] << "' !" "\n";
+				Logging::warning(Tag, "parseUserInfos(), invalid option '" + chunks[index] + "'.");
 
 				continue;
 			}
 
-			this->addOption(option[0], option[1]);
+			this->addOption(PercentEncoding::decode(option[0]), PercentEncoding::decode(option[1]));
 		}
 
-		/* NOTE: "USER:PASSWORD" */
 		chunks = String::explode(chunks[0], ':');
 
 		switch ( chunks.size() )
 		{
 			case 2 :
-				this->setPassword(chunks[1]);
+				this->setPassword(PercentEncoding::decode(chunks[1]));
 
 				[[fallthrough]];
 
 			case 1 :
-				this->setUsername(chunks[0]);
+				this->setUsername(PercentEncoding::decode(chunks[0]));
 				break;
 
-			default:
-				std::cerr << "URIDomain::parseUserInfos(), invalid URI domain, multiple ':' char found in user information !" "\n";
+			default :
+				Logging::warning(Tag, "parseUserInfos(), multiple ':' in user information.");
 
 				break;
 		}
@@ -186,16 +223,16 @@ namespace EmEn::Base::Network
 	{
 		std::stringstream output;
 
-		output << m_username;
+		output << PercentEncoding::encode(m_username, PercentEncoding::Component::Userinfo);
 
 		if ( !m_password.empty() )
 		{
-			output << ':' << m_password;
+			output << ':' << PercentEncoding::encode(m_password, PercentEncoding::Component::Userinfo);
 		}
 
 		if ( !m_options.empty() )
 		{
-			for ( const auto & [name, value]: m_options )
+			for ( const auto & [name, value] : m_options )
 			{
 				output << ';' << name << '=' << value;
 			}
@@ -209,11 +246,11 @@ namespace EmEn::Base::Network
 	{
 		std::stringstream string;
 
-		string << m_hostname;
+		string << m_hostname.name();
 
 		if ( m_port > 0 )
 		{
-			string << m_port;
+			string << ':' << m_port;
 		}
 
 		return string.str();
@@ -222,29 +259,12 @@ namespace EmEn::Base::Network
 	std::ostream &
 	operator<< (std::ostream & out, const URIDomain & obj)
 	{
-		out << obj.m_base;
-
 		if ( !obj.m_username.empty() )
 		{
-			out << obj.m_username;
-
-			if ( !obj.m_password.empty() )
-			{
-				out << ':' << obj.m_password;
-			}
-
-			if ( !obj.m_options.empty() )
-			{
-				for ( const auto &option: obj.m_options )
-				{
-					out << ';' << option.first << '=' << option.second;
-				}
-			}
-
-			out << '@';
+			out << obj.userinfo() << '@';
 		}
 
-		out << obj.m_hostname;
+		out << obj.m_hostname.name();
 
 		if ( obj.m_port > 0 )
 		{

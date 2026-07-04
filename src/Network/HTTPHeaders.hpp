@@ -27,6 +27,8 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -60,6 +62,54 @@ namespace EmEn::Base::Network
 
 			static constexpr auto HeaderSeparator{"\r\n\r\n"};
 			static constexpr auto Separator{"\r\n"};
+
+			/**
+			 * @brief Case-insensitive hash for header field names.
+			 * @note HTTP field names are case-insensitive (RFC 9110 §5.1) — servers
+			 * legitimately send 'content-length' as well as 'Content-Length'.
+			 */
+			struct CaseInsensitiveHash final
+			{
+				[[nodiscard]]
+				size_t
+				operator() (const std::string & key) const noexcept
+				{
+					/* FNV-1a over lowercased bytes. */
+					size_t hash = 14695981039346656037ULL;
+
+					for ( const auto character : key )
+					{
+						hash ^= static_cast< size_t >(std::tolower(static_cast< unsigned char >(character)));
+						hash *= 1099511628211ULL;
+					}
+
+					return hash;
+				}
+			};
+
+			/** @brief Case-insensitive equality for header field names. */
+			struct CaseInsensitiveEqual final
+			{
+				[[nodiscard]]
+				bool
+				operator() (const std::string & lhs, const std::string & rhs) const noexcept
+				{
+					if ( lhs.size() != rhs.size() )
+					{
+						return false;
+					}
+
+					for ( size_t index = 0; index < lhs.size(); ++index )
+					{
+						if ( std::tolower(static_cast< unsigned char >(lhs[index])) != std::tolower(static_cast< unsigned char >(rhs[index])) )
+						{
+							return false;
+						}
+					}
+
+					return true;
+				}
+			};
 
 			/**
 			 * @brief Copy constructor.
@@ -193,6 +243,6 @@ namespace EmEn::Base::Network
 			virtual bool parseFirstLine (const std::string & line) noexcept = 0;
 
 			Version m_version;
-			std::unordered_map< std::string, std::string > m_headers;
+			std::unordered_map< std::string, std::string, CaseInsensitiveHash, CaseInsensitiveEqual > m_headers;
 	};
 }

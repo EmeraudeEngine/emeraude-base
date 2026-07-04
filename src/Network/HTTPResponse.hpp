@@ -27,7 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
-#include <iostream>
+#include <string>
 
 /* Local inclusions for inheritances. */
 #include "HTTPHeaders.hpp"
@@ -50,6 +50,7 @@ namespace EmEn::Base::Network
 			static constexpr auto ContentLength{"Content-Length"};
 			static constexpr auto Connection {"Connection"};
 			static constexpr auto ContentType {"Content-Type"};
+			static constexpr auto Location{"Location"};
 			static constexpr auto TransferEncoding{"Transfer-Encoding"};
 			static constexpr auto ContentEncoding {"Content-Encoding"};
 
@@ -95,11 +96,21 @@ namespace EmEn::Base::Network
 			explicit
 			HTTPResponse (const std::string & rawHeaders) noexcept
 			{
+				/* NOTE: on failure the instance simply stays invalid (isValid()). */
 				if ( !this->parse(rawHeaders) )
 				{
-					std::cerr << "HTTPResponse(), unable to parse the HTTP response !" "\n";
+					m_codeResponse = 0;
 				}
 			}
+
+			/**
+			 * @brief Returns whether the connection can be reused after this response.
+			 * @note HTTP/1.1 defaults to persistent connections unless 'Connection: close';
+			 * HTTP/1.0 defaults to close unless 'Connection: keep-alive' (RFC 9112 §9.3).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool keepConnectionAlive () const noexcept;
 
 			/** @copydoc EmEn::Base::Network::HTTPHeaders::isValid() */
 			[[nodiscard]]

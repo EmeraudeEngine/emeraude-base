@@ -27,9 +27,10 @@
 #include "HTTPResponse.hpp"
 
 /* STL inclusions. */
-#include <iostream>
+#include <sstream>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
@@ -37,27 +38,41 @@ namespace EmEn::Base::Network
 	bool
 	HTTPResponse::isValid () const noexcept
 	{
-		if ( m_codeResponse == 0 )
-		{
-			return false;
-		}
+		/* NOTE: the reason phrase is optional (RFC 9112 §4) — only the status
+		 * code qualifies the response. */
+		return m_codeResponse >= 100 && m_codeResponse <= 599;
+	}
 
-		if ( m_textResponse.empty() )
-		{
-			return false;
-		}
+	bool
+	HTTPResponse::keepConnectionAlive () const noexcept
+	{
+		const auto connectionValue = String::toLower(this->value(Connection));
 
-		return true;
+		switch ( m_version )
+		{
+			/* HTTP/1.1: persistent by default. */
+			case Version::HTTP11 :
+				return connectionValue != "close";
+
+			/* HTTP/1.0: close by default. */
+			case Version::HTTP10 :
+				return connectionValue == "keep-alive";
+
+			default :
+				return false;
+		}
 	}
 
 	bool
 	HTTPResponse::parseFirstLine (const std::string & line) noexcept
 	{
-		const auto chunks = String::explode(line, ' ', false, 2);
+		/* NOTE: keep empty chunks — the reason phrase is optional (RFC 9112 §4),
+		 * "HTTP/1.1 404" and "HTTP/1.1 404 " are both legal status lines. */
+		const auto chunks = String::explode(line, ' ', true, 2);
 
-		if ( chunks.size() != 3 )
+		if ( chunks.size() < 2 )
 		{
-			std::cerr << "HTTPResponse::parseFirstLine(), invalid HTTP response : " << line << "\n";
+			Logging::error("Network::HTTPResponse", "parseFirstLine(), invalid HTTP status line : " + line);
 
 			return false;
 		}
@@ -65,11 +80,20 @@ namespace EmEn::Base::Network
 		/* Protocol version. */
 		this->setVersion(HTTPHeaders::parseVersion(chunks[0]));
 
-		/* Code-response. */
-		m_codeResponse = String::toNumber< int >(chunks[1]);
+		/* Status code: exactly what qualifies the response — bounds-checked. */
+		const auto code = String::toNumber< int >(chunks[1]);
 
-		/* Text-response. */
-		m_textResponse = chunks[2];
+		if ( code < 100 || code > 599 )
+		{
+			Logging::error("Network::HTTPResponse", "parseFirstLine(), invalid HTTP status code : " + line);
+
+			return false;
+		}
+
+		m_codeResponse = code;
+
+		/* Optional reason phrase. */
+		m_textResponse = chunks.size() == 3 ? chunks[2] : std::string{};
 
 		return true;
 	}

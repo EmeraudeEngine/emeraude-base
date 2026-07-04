@@ -55,6 +55,7 @@ TARGETS=(
 	fuzz_png fuzz_jpeg fuzz_targa
 	fuzz_native fuzz_stl fuzz_mdx
 	fuzz_compression fuzz_ini
+	fuzz_http_response
 )
 
 mkdir -p "${OUT_DIR}"
