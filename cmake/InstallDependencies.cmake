@@ -1,47 +1,50 @@
 message("Installing external dependencies ...")
 
-# Developer bypass: if EMERAUDE_EXT_LIBS_PATH is a symbolic link (POSIX) or a directory
-# junction (Windows `mklink /J` / `mklink /D`), trust the local setup — e.g.
-# a developer pointing to a locally-built ext-deps-generator output — and
-# skip the download + extraction entirely.
+# Local-libs bypass: if the resolved target EMERAUDE_EXT_LIBS_PATH already exists
+# as a symbolic link to a directory (POSIX) or a directory junction (Windows
+# `mklink /J` / `mklink /D`), trust the local setup and skip the download +
+# extraction entirely.
+#
+# This is exactly the ext-deps-generator build host itself: it produces the
+# release archive, so it already has the libraries locally and points
+# EMERAUDE_EXT_LIBS_PATH at its own ext-deps-generator output via a symlink —
+# there is nothing to fetch. The check keys on EMERAUDE_EXT_LIBS_PATH, which
+# carries the full resolved folder name (including the host glibc / sdk / CRT
+# tag), so the bypass fires only when a symlink with the *correct* name for this
+# exact configuration is present; a stale symlink from an older naming (e.g. the
+# pre-v013 tag-less 'linux.x86_64-Release') is ignored and a real archive is
+# fetched instead.
 if ( IS_SYMLINK ${EMERAUDE_EXT_LIBS_PATH} AND IS_DIRECTORY ${EMERAUDE_EXT_LIBS_PATH} )
-	message("External dependencies directory '${EMERAUDE_EXT_LIBS_PATH}' is a symbolic link — bypassing download and extraction.")
+	message("External dependencies directory '${EMERAUDE_EXT_LIBS_PATH}' is a symbolic link to local libraries — bypassing download and extraction.")
 	return ()
 endif ()
 
-# Get the right build type name.
-if ( CMAKE_BUILD_TYPE MATCHES "Release|RelWithDebInfo|MinSizeRel" )
-	set(EXTERNAL_DEPENDENCIES_BUILD_TYPE Release)
-else ()
-	set(EXTERNAL_DEPENDENCIES_BUILD_TYPE Debug)
+# The folder grammar is the single source of truth: EMERAUDE_EXT_LIBS_DIRNAME
+# (computed in CMakeLists.txt, a mirror of ext-deps-generator's
+# BuildConfig.build_suffix) already carries the OS prefix, arch, build type and
+# the per-OS ABI tag (Linux host glibc, macOS deployment target, Windows CRT).
+#
+# From v013 the release archive is exactly that folder name with a
+# '.v<version>.zip' suffix (e.g. linux.x86_64-Release-glibc2.35.v013.zip,
+# macos.arm64-Release-sdk12.0.v013.zip, windows.x86_64-Release-MD.v013.zip), so
+# we derive the filename from the folder rather than recomputing an independent
+# (and historically divergent) name here — this also removes the old per-distro
+# lsb_release logic, superseded by the glibc tag.
+if ( NOT DEFINED EMERAUDE_EXT_LIBS_DIRNAME )
+	message(FATAL_ERROR "EMERAUDE_EXT_LIBS_DIRNAME is not set — CMakeLists.txt must compute the external dependencies folder name before include(InstallDependencies).")
 endif ()
 
-# Get the right archive name.
-if ( UNIX AND NOT APPLE )
-	find_program(LSB_RELEASE_EXEC lsb_release REQUIRED)
-
-	execute_process(COMMAND ${LSB_RELEASE_EXEC} -is OUTPUT_VARIABLE LSB_RELEASE_ID_SHORT OUTPUT_STRIP_TRAILING_WHITESPACE)
-
-	set(EXTERNAL_DEPENDENCIES_VERSION "012" CACHE STRING "The external dependencies version to download for Linux.")
-	set(EXTERNAL_DEPENDENCIES_FILENAME linux-${LSB_RELEASE_ID_SHORT}.x86_64-${EXTERNAL_DEPENDENCIES_BUILD_TYPE}-${EXTERNAL_DEPENDENCIES_VERSION}.zip)
-elseif ( APPLE )
-	set(EXTERNAL_DEPENDENCIES_VERSION "012" CACHE STRING "The external dependencies version to download for macOS.")
-	set(EXTERNAL_DEPENDENCIES_FILENAME mac.${CMAKE_OSX_ARCHITECTURES}-${EXTERNAL_DEPENDENCIES_BUILD_TYPE}-${EXTERNAL_DEPENDENCIES_VERSION}.zip)
-elseif ( MSVC )
-	set(EXTERNAL_DEPENDENCIES_VERSION "012" CACHE STRING "The external dependencies version to download for Windows.")
-
-	if ( EMERAUDE_USE_STATIC_RUNTIME )
-		set(EXTERNAL_DEPENDENCIES_FILENAME windows.x86_64-${EXTERNAL_DEPENDENCIES_BUILD_TYPE}-MT-${EXTERNAL_DEPENDENCIES_VERSION}.zip)
-	else ()
-		set(EXTERNAL_DEPENDENCIES_FILENAME windows.x86_64-${EXTERNAL_DEPENDENCIES_BUILD_TYPE}-MD-${EXTERNAL_DEPENDENCIES_VERSION}.zip)
-	endif ()
-else ()
-	message(FATAL_ERROR "Unable to detect the OS to download external dependencies !")
-endif ()
+# Plain (non-cached) variable on purpose: this is a maintainer-owned code
+# constant bumped by editing this line. A CACHE entry would let a stale value
+# from a previously-configured build dir (e.g. "v012") silently win over a bump.
+# The leading 'v' is part of the value: it is both the GitHub release tag and
+# the archive filename token (e.g. ...-glibc2.35.v013.zip).
+set(EXTERNAL_DEPENDENCIES_VERSION "v013")
+set(EXTERNAL_DEPENDENCIES_FILENAME "${EMERAUDE_EXT_LIBS_DIRNAME}.${EXTERNAL_DEPENDENCIES_VERSION}.zip")
 
 # Resolve URL and local paths.
-# Archives are hosted as GitHub Release assets, tagged 'v<PCK_VERSION>'.
-set(EXTERNAL_DEPENDENCIES_URL "https://github.com/EmeraudeEngine/ext-deps-generator/releases/download/v${EXTERNAL_DEPENDENCIES_VERSION}/${EXTERNAL_DEPENDENCIES_FILENAME}")
+# Archives are hosted as GitHub Release assets, tagged '<version>' (e.g. v013).
+set(EXTERNAL_DEPENDENCIES_URL "https://github.com/EmeraudeEngine/ext-deps-generator/releases/download/${EXTERNAL_DEPENDENCIES_VERSION}/${EXTERNAL_DEPENDENCIES_FILENAME}")
 set(EXTERNAL_DEPENDENCIES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
 set(EXTERNAL_DEPENDENCIES_PATH "${EXTERNAL_DEPENDENCIES_DIR}/${EXTERNAL_DEPENDENCIES_FILENAME}")
 

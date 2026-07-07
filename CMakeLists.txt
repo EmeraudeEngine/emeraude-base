@@ -110,14 +110,47 @@ else ()
 	set(EMERAUDE_EXT_LIBS_BUILD_TYPE Debug)
 endif ()
 
+# ext-deps-generator v013 folder grammar (mirrors BuildConfig.build_suffix):
+#   {os}.{arch}-{build_type}[-{os_tag}]  with os in linux/macos/windows.
+# The os_tag encodes whatever else changes the produced static libs' ABI, so
+# ABI-incompatible builds never collide and the folder matches the published
+# archive: Linux -> host glibc floor, macOS -> deployment target, Windows -> CRT.
 if ( UNIX AND NOT APPLE )
-	set(EMERAUDE_EXT_LIBS_DIRNAME "linux.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}")
+	# Linux: tag with the *host* glibc floor (mirror of ext-deps-generator's
+	# detect_libc_tag() / its CMakeLists getconf branch). Overridable for a
+	# build host whose glibc differs from the published release floor, e.g.
+	# -DEMERAUDE_EXT_LIBS_LINUX_LIBC_TAG=glibc2.35 (token without leading dash).
+	if ( NOT DEFINED EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG )
+		set(EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG "")
+		execute_process(
+			COMMAND getconf GNU_LIBC_VERSION
+			OUTPUT_VARIABLE _emeraude_libc_raw
+			OUTPUT_STRIP_TRAILING_WHITESPACE
+			ERROR_QUIET
+		)
+		# _emeraude_libc_raw looks like "glibc 2.41"; normalise "gnu" -> "glibc".
+		if ( _emeraude_libc_raw MATCHES "([A-Za-z]+)[ \t]+([0-9][0-9.]*)" )
+			string(TOLOWER "${CMAKE_MATCH_1}" _emeraude_libc_name)
+			if ( _emeraude_libc_name STREQUAL "gnu" )
+				set(_emeraude_libc_name "glibc")
+			endif ()
+			set(EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG "${_emeraude_libc_name}${CMAKE_MATCH_2}")
+		endif ()
+	endif ()
+
+	if ( EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG STREQUAL "" )
+		message(WARNING "[EmeraudeBase] Could not detect the host glibc version; the external dependencies folder/archive name will omit the '-glibc<ver>' tag and likely fail to resolve. Set -DEMERAUDE_EXT_LIBS_LINUX_LIBC_TAG=glibc<ver> to match the published release.")
+		set(EMERAUDE_EXT_LIBS_DIRNAME "linux.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}")
+	else ()
+		set(EMERAUDE_EXT_LIBS_DIRNAME "linux.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}-${EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG}")
+	endif ()
 elseif ( APPLE )
 	if ( CMAKE_OSX_ARCHITECTURES )
 		set(APP_ARCH ${CMAKE_OSX_ARCHITECTURES})
 	endif ()
 	set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
-	set(EMERAUDE_EXT_LIBS_DIRNAME "mac.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}")
+	# macOS: os prefix is now "macos" (was "mac"), tagged with the deployment target.
+	set(EMERAUDE_EXT_LIBS_DIRNAME "macos.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}-sdk${CMAKE_OSX_DEPLOYMENT_TARGET}")
 elseif ( MSVC )
 	if ( EMERAUDE_USE_STATIC_RUNTIME )
 		set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
