@@ -43,7 +43,7 @@ option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI." Off)
 option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point." Off)
-option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers." Off)
+option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers." On)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suite(s)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus! A.1)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Ave robustus! A.5)." Off)
@@ -231,6 +231,8 @@ if ( MSVC )
 		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:/WX>		# Treat warnings as errors
 		/wd4100 															# Ignore "unreferenced formal parameter"
 		/wd4127 															# Ignore "conditional expression is constant"
+		/wd4251															# Ignore "class member needs dll-interface" — the whole cascade (DLL + consumers) is built with the same toolchain/CRT, and emeraude-base is deliberately duplicated (static copy in the DLL and in the executables), so std:: members crossing the EMERAUDE_API boundary are safe by construction. See emeraude-engine/docs/windows-export-api.md.
+		/wd4275															# Ignore "non dll-interface base for dll-interface class" — same rationale: EMERAUDE_API classes may derive from emeraude-base traits that stay unexported by design (decision "2b": no EMERAUDE_BASE_API, consumers keep their static base copy). See emeraude-engine/docs/windows-export-api.md.
 		/wd4324 															# Ignore "structure was padded due to alignment specifier"
 		/wd4481 															# Ignore "nonstandard extension used: override"
 		/wd4512																# Ignore "assignment operator could not be generated"
