@@ -136,9 +136,7 @@ namespace EmEn::Base::Network::TrustStore
 	bool
 	applyCABundleFile (asio::ssl::context & context, const std::filesystem::path & bundleFilepath) noexcept
 	{
-		std::error_code fileError;
-
-		if ( !std::filesystem::is_regular_file(bundleFilepath, fileError) )
+		if ( std::error_code fileError; !std::filesystem::is_regular_file(bundleFilepath, fileError) )
 		{
 			Logging::error(Tag, "applyCABundleFile(), the CA bundle file '" + bundleFilepath.string() + "' does not exist !");
 
@@ -203,18 +201,14 @@ namespace EmEn::Base::Network::TrustStore
 #else
 		for ( const auto * candidate : LinuxBundleCandidates )
 		{
-			std::error_code fileError;
-
-			if ( std::filesystem::is_regular_file(candidate, fileError) )
+			if ( std::error_code fileError; std::filesystem::is_regular_file(candidate, fileError) )
 			{
 				return applyCABundleFile(context, candidate);
 			}
 		}
 
 		/* No bundle file: fall back to the hashed certificates directory. */
-		std::error_code fileError;
-
-		if ( std::filesystem::is_directory(LinuxHashedCertsDirectory, fileError) )
+		if ( std::error_code fileError; std::filesystem::is_directory(LinuxHashedCertsDirectory, fileError) )
 		{
 			asio::error_code error;
 
@@ -222,7 +216,11 @@ namespace EmEn::Base::Network::TrustStore
 
 			if ( !error )
 			{
-				Logging::warning(Tag, std::string{"applySystemTrustStore(), no CA bundle file found, using the hashed directory '"} + LinuxHashedCertsDirectory + "'.");
+				std::string message{"applySystemTrustStore(), no CA bundle file found, using the hashed directory '"};
+				message += LinuxHashedCertsDirectory;
+				message += "'.";
+
+				Logging::warning(Tag, message);
 
 				return true;
 			}

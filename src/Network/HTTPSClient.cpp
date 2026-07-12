@@ -30,8 +30,8 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
-#include <array>
 #include <cstdlib>
+#include <array>
 #include <fstream>
 
 /* Local inclusions. */
@@ -46,6 +46,11 @@ namespace EmEn::Base::Network
 		constexpr auto Tag{"Network::HTTPSClient"};
 		constexpr uint16_t HTTPSDefaultPort{443};
 		constexpr size_t TransportReadBufferSize{16384};
+
+		/* Fits the fixed header skeleton (~90 B) plus a typical host, target
+		 * and user-agent in a single allocation. A long query string may still
+		 * grow it once, which is acceptable. */
+		constexpr size_t RequestReserveBytes{256};
 
 		/**
 		 * @brief Extracts the HTTPS host and port from a URI, validating the scheme.
@@ -170,26 +175,14 @@ namespace EmEn::Base::Network
 	}
 
 	HTTPSClient::HTTPSClient (asio::ssl::context & tlsContext, HTTPSClientOptions options) noexcept
-		: m_tlsContext(tlsContext),
-		m_options(std::move(options))
+		: m_tlsContext{tlsContext},
+		m_options{std::move(options)}
 	{
 
-	}
-
-	std::optional< HTTPResult >
-	HTTPSClient::get (const URI & uri) noexcept
-	{
-		return this->run(HTTPRequest::Method::GET, uri, BodySink::Memory, {});
-	}
-
-	std::optional< HTTPResult >
-	HTTPSClient::head (const URI & uri) noexcept
-	{
-		return this->run(HTTPRequest::Method::HEAD, uri, BodySink::Discard, {});
 	}
 
 	bool
-	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath) noexcept
+	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath) const noexcept
 	{
 		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath);
 
@@ -214,7 +207,7 @@ namespace EmEn::Base::Network
 	}
 
 	bool
-	HTTPSClient::resolveRedirect (const URI & current, const std::string & location, URI & resolved) const noexcept
+	HTTPSClient::resolveRedirect (const URI & current, const std::string & location, URI & resolved) noexcept
 	{
 		const auto trimmedLocation = String::trim(location);
 
@@ -234,7 +227,7 @@ namespace EmEn::Base::Network
 			return false;
 		}
 
-		/* Refuse an https -> http downgrade (owner-ruled trust policy). */
+		/* Refuse a https -> http downgrade (owner-ruled trust policy). */
 		if ( String::toLower(current.scheme()) == "https" && String::toLower(resolved.scheme()) != "https" )
 		{
 			Logging::error(Tag, "resolveRedirect(), refused https -> http downgrade to '" + trimmedLocation + "'.");
@@ -295,7 +288,7 @@ namespace EmEn::Base::Network
 	}
 
 	std::optional< HTTPResult >
-	HTTPSClient::run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath) noexcept
+	HTTPSClient::run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath) const noexcept
 	{
 		const auto deadline = std::chrono::steady_clock::now() + m_options.totalTimeout;
 
@@ -329,7 +322,7 @@ namespace EmEn::Base::Network
 
 			URI nextURI;
 
-			if ( !this->resolveRedirect(currentURI, location, nextURI) )
+			if ( !HTTPSClient::resolveRedirect(currentURI, location, nextURI) )
 			{
 				return std::nullopt;
 			}
@@ -354,7 +347,7 @@ namespace EmEn::Base::Network
 	}
 
 	std::optional< HTTPResult >
-	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline) noexcept
+	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline) const noexcept
 	{
 		std::string host;
 		uint16_t port = 0;
@@ -369,13 +362,21 @@ namespace EmEn::Base::Network
 		/* Build the request (origin-form target, explicit close — no keep-alive
 		 * reuse yet, identity encoding so no client-side decompression needed). */
 		std::string request;
+		request.reserve(RequestReserveBytes);
 		request += HTTPRequest::method(method);
 		request += ' ';
 		request += buildRequestTarget(uri);
 		request += " HTTP/1.1\r\n";
-		request += std::string{HTTPRequest::Host} + ": " + host + "\r\n";
-		request += std::string{HTTPRequest::UserAgent} + ": " + m_options.userAgent + "\r\n";
-		request += std::string{HTTPRequest::AcceptEncoding} + ": identity\r\n";
+		request += HTTPRequest::Host;
+		request += ": ";
+		request += host;
+		request += "\r\n";
+		request += HTTPRequest::UserAgent;
+		request += ": ";
+		request += m_options.userAgent;
+		request += "\r\n";
+		request += HTTPRequest::AcceptEncoding;
+		request += ": identity\r\n";
 		request += "Connection: close\r\n";
 		request += "\r\n";
 

@@ -76,7 +76,7 @@ namespace EmEn::Base::Network
 
 		/**
 		 * @brief Explicit proxy authority ("host:port" or "http://host:port"); empty = none.
-		 * @note Takes precedence over the environment. The tunnel to an https target
+		 * @note Takes precedence over the environment. The tunnel to a https target
 		 * is always a plaintext HTTP CONNECT to this proxy (see TLSConnection).
 		 */
 		std::string proxy;
@@ -98,7 +98,7 @@ namespace EmEn::Base::Network
 	 * (TLSConnection) and the response codec (HTTPResponseParser) into the synchronous
 	 * facade decided 2026-07-04 (see docs/plans/network-tls/README.md). The public API is
 	 * protocol-agnostic (h2-ready): HTTP/1.1, chunked and keep-alive are internal.
-	 * @note HTTPS only for now: an http:// target is refused (plaintext HTTP is a separate
+	 * @note HTTPS only for now: a http:// target is refused (plaintext HTTP is a separate
 	 * concern; the legacy Network::download covers it). Redirects: https→https always,
 	 * http→https upgrade honored on a Location, https→http downgrade refused. Proxy
 	 * support is the next increment (needs a two-phase TLSConnection connect).
@@ -123,15 +123,23 @@ namespace EmEn::Base::Network
 			 * @return std::optional< HTTPResult > std::nullopt on transport/parse/redirect error.
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > get (const URI & uri) noexcept;
+			std::optional< HTTPResult >
+			get (const URI & uri) const noexcept
+			{
+				return this->run(HTTPRequest::Method::GET, uri, BodySink::Memory, {});
+			}
 
 			/**
-			 * @brief Performs a HEAD request, following redirects, and returns the response (no body).
+			 * @brief Performs a HEAD request, following redirects, and returns the response (without body).
 			 * @param uri The target URI (https scheme).
 			 * @return std::optional< HTTPResult >
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > head (const URI & uri) noexcept;
+			std::optional< HTTPResult >
+			head (const URI & uri) const noexcept
+			{
+				return this->run(HTTPRequest::Method::HEAD, uri, BodySink::Discard, {});
+			}
 
 			/**
 			 * @brief Downloads a resource to a file, streaming the body (never held whole in memory).
@@ -140,7 +148,7 @@ namespace EmEn::Base::Network
 			 * @return bool True on a 2xx response fully written to the file.
 			 */
 			[[nodiscard]]
-			bool download (const URI & uri, const std::filesystem::path & filepath) noexcept;
+			bool download (const URI & uri, const std::filesystem::path & filepath) const noexcept;
 
 		private:
 
@@ -161,7 +169,7 @@ namespace EmEn::Base::Network
 			 * @return std::optional< HTTPResult > The final response (body empty when streamed to file).
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath) noexcept;
+			std::optional< HTTPResult > run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath) const noexcept;
 
 			/**
 			 * @brief Performs a single request/response exchange (one connection, no redirect).
@@ -173,7 +181,7 @@ namespace EmEn::Base::Network
 			 * @return std::optional< HTTPResult >
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline) noexcept;
+			std::optional< HTTPResult > performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline) const noexcept;
 
 			/**
 			 * @brief Resolves the proxy to use for a target host (explicit option or environment).
@@ -195,7 +203,7 @@ namespace EmEn::Base::Network
 			 * @return bool False when the Location is unusable or a downgrade.
 			 */
 			[[nodiscard]]
-			bool resolveRedirect (const URI & current, const std::string & location, URI & resolved) const noexcept;
+			static bool resolveRedirect (const URI & current, const std::string & location, URI & resolved) noexcept;
 
 			asio::ssl::context & m_tlsContext;
 			HTTPSClientOptions m_options;

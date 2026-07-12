@@ -107,7 +107,9 @@ by every consumer.
   - **GCC false positive.** Enabling the PCH shifts the STL inlining context enough to trip GCC 14's
     `-Wstringop-overread` on a `std::string` move whose inferred length exceeds the SSO buffer (seen
     in the engine's `Saphir/LightGenerator.cpp`). Fix at the source — force a heap buffer with
-    `reserve()` — never silence the warning. See engine `docs/caution-points.md`.
+    `reserve()` — never silence the warning. A sibling `-Wstringop-overflow` variant hits base
+    under `_FORTIFY_SOURCE=2` (fixed by `+=` on a named local, no `reserve` needed) — both triggers
+    and their correct fixes are in [`docs/caution-points.md`](docs/caution-points.md).
   - **app_kernel** — calls the base helper directly (guarded `if (EMERAUDE_BASE_CMAKE_DIR)` in its
     `CMakeLists.txt`, right after `add_library`). STL hot-set only for now; a second
     `target_precompile_headers` call for an Eigen-only layer remains a possible follow-up. Kernel
