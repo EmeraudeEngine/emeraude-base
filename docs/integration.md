@@ -33,6 +33,20 @@ Apple Silicon picks `mac.arm64-*` automatically. A mismatch here is silent at co
 and only surfaces at link time (`ld: ignoring file … found architecture 'x86_64', required
 architecture 'arm64'` followed by a wall of undefined symbols).
 
+### Linux glibc tag & download fallback
+
+On Linux the resolved folder/archive also carries a glibc floor tag (e.g.
+`linux.x86_64-Release-glibc2.41`): the ext-deps archives are ABI-tagged by the glibc they
+were built against. emeraude-base detects the host glibc (`getconf GNU_LIBC_VERSION`) and
+first tries the archive for that exact tag; when none is published it falls back to the
+**floor tag** (`EMERAUDE_EXT_LIBS_LINUX_LIBC_FALLBACK_TAG`, default `glibc2.35`) and repoints
+`EMERAUDE_EXT_LIBS_*` at whichever archive actually resolved. This is safe because a static
+lib linked against an older glibc runs on any newer host (symbol versioning is
+forward-compatible). When the host glibc cannot be detected at all, the floor tag is
+targeted directly. A missing GitHub asset (HTTP 404) is caught by validating the downloaded
+payload's ZIP magic, not merely the transport status — so a stale/absent exact-tag asset
+falls through to the floor instead of being extracted as garbage.
+
 ## 2. Add it to your build
 
 ```cmake
@@ -51,6 +65,8 @@ Options:
 | `EMERAUDE_DISABLE_PARANOID_COMPILATION` | `Off` | Relax warnings-as-errors (`-Werror`). |
 | `EMERAUDE_ENABLE_PCH` | `Off` | Precompiled headers. |
 | `EMERAUDE_ENABLE_TESTS` | `Off` | Build the GoogleTest suite. |
+| `EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG` | *(auto)* | Linux only. Host glibc tag (e.g. `glibc2.41`) selecting the exact ext-deps archive; auto-detected via `getconf GNU_LIBC_VERSION`. Override to force a specific published tag. |
+| `EMERAUDE_EXT_LIBS_LINUX_LIBC_FALLBACK_TAG` | `glibc2.35` | Linux only. Floor tag tried when no archive matches the host tag, and the direct target when the host glibc is undetectable. |
 
 > Note: only `EMERAUDE_BASE_LIBRARY_TYPE` keeps the `_BASE_` prefix (native to this repo).
 > The compile-policy options are project-wide (`EMERAUDE_*`) — emeraude-base owns them and
