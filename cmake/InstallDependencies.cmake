@@ -40,49 +40,114 @@ endif ()
 # The leading 'v' is part of the value: it is both the GitHub release tag and
 # the archive filename token (e.g. ...-glibc2.35.v013.zip).
 set(EXTERNAL_DEPENDENCIES_VERSION "v013")
-set(EXTERNAL_DEPENDENCIES_FILENAME "${EMERAUDE_EXT_LIBS_DIRNAME}.${EXTERNAL_DEPENDENCIES_VERSION}.zip")
-
-# Resolve URL and local paths.
-# Archives are hosted as GitHub Release assets, tagged '<version>' (e.g. v013).
-set(EXTERNAL_DEPENDENCIES_URL "https://github.com/EmeraudeEngine/ext-deps-generator/releases/download/${EXTERNAL_DEPENDENCIES_VERSION}/${EXTERNAL_DEPENDENCIES_FILENAME}")
 set(EXTERNAL_DEPENDENCIES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
-set(EXTERNAL_DEPENDENCIES_PATH "${EXTERNAL_DEPENDENCIES_DIR}/${EXTERNAL_DEPENDENCIES_FILENAME}")
 
-# Download the archive if it isn't cached yet.
-# A fresh download forces re-extraction afterwards (so version bumps overwrite the old extracted directory).
+# Candidate dirnames, in priority order: the exact host tag first, then the
+# published floor fallback (Linux only — DIRNAME_FALLBACK is undefined on
+# macOS/Windows, where a single ABI tag is published). A static lib linked
+# against the floor glibc runs on any newer host, so falling back to it is safe
+# when no exact-host archive is published.
+set(_emeraude_ext_candidates "${EMERAUDE_EXT_LIBS_DIRNAME}")
+
+if ( DEFINED EMERAUDE_EXT_LIBS_DIRNAME_FALLBACK AND NOT EMERAUDE_EXT_LIBS_DIRNAME_FALLBACK STREQUAL EMERAUDE_EXT_LIBS_DIRNAME )
+	list(APPEND _emeraude_ext_candidates "${EMERAUDE_EXT_LIBS_DIRNAME_FALLBACK}")
+endif ()
+
+# Resolve the first candidate that is already extracted, already cached as a
+# valid archive, or downloadable. A fresh download forces re-extraction below.
+set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "")
+set(EXTERNAL_DEPENDENCIES_PATH "")
 set(EXTERNAL_DEPENDENCIES_FRESH_DOWNLOAD FALSE)
+set(_emeraude_ext_tried "")
 
-if ( NOT EXISTS ${EXTERNAL_DEPENDENCIES_PATH} )
-	message("External dependencies archive '${EXTERNAL_DEPENDENCIES_FILENAME}' is not present ! Downloading it from ${EXTERNAL_DEPENDENCIES_URL} ...")
+file(MAKE_DIRECTORY ${EXTERNAL_DEPENDENCIES_DIR})
 
-	file(MAKE_DIRECTORY ${EXTERNAL_DEPENDENCIES_DIR})
+foreach ( _cand IN LISTS _emeraude_ext_candidates )
+	set(_cand_filename "${_cand}.${EXTERNAL_DEPENDENCIES_VERSION}.zip")
+	set(_cand_archive "${EXTERNAL_DEPENDENCIES_DIR}/${_cand_filename}")
+	set(_cand_extracted "${EXTERNAL_DEPENDENCIES_DIR}/${_cand}")
+	set(_cand_url "https://github.com/EmeraudeEngine/ext-deps-generator/releases/download/${EXTERNAL_DEPENDENCIES_VERSION}/${_cand_filename}")
+	string(APPEND _emeraude_ext_tried "  ${_cand_url}\n")
 
-	file(DOWNLOAD
-		${EXTERNAL_DEPENDENCIES_URL}
-		${EXTERNAL_DEPENDENCIES_PATH}
-		SHOW_PROGRESS
-		STATUS EXTERNAL_DEPENDENCIES_DOWNLOAD_STATUS
-		LOG EXTERNAL_DEPENDENCIES_DOWNLOAD_LOG
-	)
-
-	list(GET EXTERNAL_DEPENDENCIES_DOWNLOAD_STATUS 0 EXTERNAL_DEPENDENCIES_DOWNLOAD_CODE)
-	list(GET EXTERNAL_DEPENDENCIES_DOWNLOAD_STATUS 1 EXTERNAL_DEPENDENCIES_DOWNLOAD_MESSAGE)
-
-	if ( NOT EXTERNAL_DEPENDENCIES_DOWNLOAD_CODE EQUAL 0 )
-		# Remove the (potentially partial / HTML-error) file so we don't try to extract garbage.
-		file(REMOVE ${EXTERNAL_DEPENDENCIES_PATH})
-
-		message(FATAL_ERROR
-			"Failed to download external dependencies.\n"
-			"  URL:    ${EXTERNAL_DEPENDENCIES_URL}\n"
-			"  Status: ${EXTERNAL_DEPENDENCIES_DOWNLOAD_CODE} (${EXTERNAL_DEPENDENCIES_DOWNLOAD_MESSAGE})\n"
-			"  Log:\n${EXTERNAL_DEPENDENCIES_DOWNLOAD_LOG}"
-		)
+	# Already extracted (real dir or local symlink): nothing to fetch.
+	if ( EXISTS ${_cand_extracted} )
+		message("External dependencies '${_cand}' already present — no download needed.")
+		set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "${_cand}")
+		set(EXTERNAL_DEPENDENCIES_PATH "${_cand_archive}")
+		break ()
 	endif ()
 
+	# Archive already cached from a previous run (kept only when it was a valid ZIP): reuse it.
+	if ( EXISTS ${_cand_archive} )
+		message("External dependencies archive '${_cand_filename}' is present !")
+		set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "${_cand}")
+		set(EXTERNAL_DEPENDENCIES_PATH "${_cand_archive}")
+		break ()
+	endif ()
+
+	message("Downloading external dependencies archive '${_cand_filename}' from ${_cand_url} ...")
+
+	file(DOWNLOAD
+		${_cand_url}
+		${_cand_archive}
+		SHOW_PROGRESS
+		STATUS _cand_status
+		LOG _cand_log
+	)
+
+	list(GET _cand_status 0 _cand_code)
+	list(GET _cand_status 1 _cand_message)
+
+	if ( NOT _cand_code EQUAL 0 )
+		# Transport-level failure (offline, DNS, TLS): drop the partial file and try the next candidate.
+		message("  download failed (transport): ${_cand_code} (${_cand_message}) — trying next candidate.")
+		file(REMOVE ${_cand_archive})
+		continue ()
+	endif ()
+
+	# file(DOWNLOAD) reports curl code 0 even for an HTTP 404: GitHub returns a
+	# small HTML / 'Not Found' body, not the asset. Detect a real archive by its
+	# ZIP local-file-header magic (PK\x03\x04 = 0x504b0304) instead of trusting
+	# the status code, so a missing asset falls through to the next candidate
+	# rather than being extracted as garbage.
+	set(_cand_magic "")
+
+	if ( EXISTS ${_cand_archive} )
+		file(READ ${_cand_archive} _cand_magic LIMIT 4 HEX)
+	endif ()
+
+	if ( NOT _cand_magic MATCHES "^504b" )
+		message("  downloaded payload is not a ZIP archive (likely a 404) — trying next candidate.")
+		file(REMOVE ${_cand_archive})
+		continue ()
+	endif ()
+
+	set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "${_cand}")
+	set(EXTERNAL_DEPENDENCIES_PATH "${_cand_archive}")
 	set(EXTERNAL_DEPENDENCIES_FRESH_DOWNLOAD TRUE)
-else ()
-	message("External dependencies archive '${EXTERNAL_DEPENDENCIES_FILENAME}' is present !")
+	break ()
+endforeach ()
+
+if ( EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME STREQUAL "" )
+	message(FATAL_ERROR
+		"Failed to obtain the external dependencies archive for this configuration.\n"
+		"No candidate resolved (exact host tag, then the published floor fallback).\n"
+		"URLs tried:\n${_emeraude_ext_tried}"
+		"If this host is offline, drop the archive manually into ${EXTERNAL_DEPENDENCIES_DIR}, or point EMERAUDE_EXT_LIBS_PATH at a local build via a symlink."
+	)
+endif ()
+
+# When the resolved candidate is not the primary host tag, repoint the cached
+# path/include/lib variables (originally computed from the host tag in
+# CMakeLists.txt) at the archive that actually resolved. The extraction step and
+# every downstream Setup*.cmake read these, so they must name the real folder.
+if ( NOT EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME STREQUAL EMERAUDE_EXT_LIBS_DIRNAME )
+	message("External dependencies: no archive for '${EMERAUDE_EXT_LIBS_DIRNAME}', falling back to the published floor '${EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME}'.")
+
+	set(EMERAUDE_EXT_LIBS_DIRNAME "${EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME}")
+	set(EMERAUDE_EXT_LIBS_PATH        "${EXTERNAL_DEPENDENCIES_DIR}/${EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME}"         CACHE PATH "ext-deps-generator output root." FORCE)
+	set(EMERAUDE_EXT_LIBS_INCLUDE_DIR "${EXTERNAL_DEPENDENCIES_DIR}/${EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME}/include" CACHE PATH "External dependencies include dir." FORCE)
+	set(EMERAUDE_EXT_LIBS_LIB_DIR     "${EXTERNAL_DEPENDENCIES_DIR}/${EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME}/lib"     CACHE PATH "External dependencies library dir." FORCE)
 endif ()
 
 # Extract the archive when:

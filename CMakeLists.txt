@@ -116,6 +116,14 @@ endif ()
 # ABI-incompatible builds never collide and the folder matches the published
 # archive: Linux -> host glibc floor, macOS -> deployment target, Windows -> CRT.
 if ( UNIX AND NOT APPLE )
+	# Floor glibc tag the published archives are actually built against. A static
+	# lib linked against this floor runs on any newer host glibc (glibc symbol
+	# versioning is forward-compatible), so this tag doubles as (a) the download
+	# fallback when no archive matches the exact host tag and (b) the direct
+	# target when the host glibc cannot be detected. Overridable when the
+	# published floor moves.
+	set(EMERAUDE_EXT_LIBS_LINUX_LIBC_FALLBACK_TAG "glibc2.35" CACHE STRING "Floor glibc tag of the published external-dependencies archives (download fallback + detection-failure target).")
+
 	# Linux: tag with the *host* glibc floor (mirror of ext-deps-generator's
 	# detect_libc_tag() / its CMakeLists getconf branch). Overridable for a
 	# build host whose glibc differs from the published release floor, e.g.
@@ -138,9 +146,17 @@ if ( UNIX AND NOT APPLE )
 		endif ()
 	endif ()
 
+	# Always-available download fallback: the published floor archive. Consumed
+	# by InstallDependencies, which tries the primary dirname first, then this
+	# one, then repoints EMERAUDE_EXT_LIBS_PATH at whichever archive resolved.
+	set(EMERAUDE_EXT_LIBS_DIRNAME_FALLBACK "linux.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}-${EMERAUDE_EXT_LIBS_LINUX_LIBC_FALLBACK_TAG}")
+
 	if ( EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG STREQUAL "" )
-		message(WARNING "[EmeraudeBase] Could not detect the host glibc version; the external dependencies folder/archive name will omit the '-glibc<ver>' tag and likely fail to resolve. Set -DEMERAUDE_EXT_LIBS_LINUX_LIBC_TAG=glibc<ver> to match the published release.")
-		set(EMERAUDE_EXT_LIBS_DIRNAME "linux.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}")
+		# Host glibc undetectable: aim straight at the published floor instead of a
+		# tag-less name that cannot resolve. InstallDependencies still validates
+		# that the archive really exists before the build proceeds.
+		message(STATUS "[EmeraudeBase] Host glibc version undetectable; targeting the published floor '${EMERAUDE_EXT_LIBS_LINUX_LIBC_FALLBACK_TAG}' external-dependencies archive. Override with -DEMERAUDE_EXT_LIBS_LINUX_LIBC_TAG=glibc<ver> if needed.")
+		set(EMERAUDE_EXT_LIBS_DIRNAME "${EMERAUDE_EXT_LIBS_DIRNAME_FALLBACK}")
 	else ()
 		set(EMERAUDE_EXT_LIBS_DIRNAME "linux.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}-${EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG}")
 	endif ()

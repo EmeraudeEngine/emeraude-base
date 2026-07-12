@@ -26,9 +26,12 @@
 
 #pragma once
 
+/* Project configuration. */
+#include "emeraude_export.hpp"
+
 /* STL inclusions. */
-#include <algorithm>
 #include <cstddef>
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -46,7 +49,7 @@ namespace EmEn::Base::Animation
 	 */
 	template< typename precision_t = float >
 	requires (std::is_floating_point_v< precision_t >)
-	class AnimationClip final
+	class EMEN_API AnimationClip final
 	{
 		public:
 
