@@ -314,9 +314,14 @@ TEST(NetworkHTTPSClient, downloadStreamsToFile)
 
 	ASSERT_TRUE(client.download(serverURI(server, "/big.bin"), filepath));
 
-	std::ifstream file{filepath, std::ios::binary};
 	std::stringstream content;
-	content << file.rdbuf();
+
+	{
+		/* Scope the stream so its handle is released before remove(): on Windows a file
+		 * with an open handle cannot be deleted (unlike POSIX unlink-while-open). */
+		std::ifstream file{filepath, std::ios::binary};
+		content << file.rdbuf();
+	}
 
 	EXPECT_EQ(content.str(), payload);
 
