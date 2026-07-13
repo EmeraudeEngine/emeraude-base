@@ -43,6 +43,28 @@ using EmEn::Base::Testing::generateServerCredentials;
 
 namespace
 {
+	/** @brief Portable setenv (the MSVC CRT has no POSIX setenv/unsetenv). */
+	void
+	setTestEnv (const char * name, const char * value) noexcept
+	{
+#if defined(_WIN32)
+		_putenv_s(name, value);
+#else
+		setenv(name, value, 1);
+#endif
+	}
+
+	/** @brief Portable unsetenv. */
+	void
+	unsetTestEnv (const char * name) noexcept
+	{
+#if defined(_WIN32)
+		_putenv_s(name, ""); /* An empty value removes the variable from the CRT environment. */
+#else
+		unsetenv(name);
+#endif
+	}
+
 	/** @brief Builds a client TLS context trusting the given (PEM) certificate. */
 	asio::ssl::context
 	makeTrustingClientContext (const std::string & certificatePEM) noexcept
@@ -382,8 +404,8 @@ TEST(NetworkHTTPSClient, environmentNoProxyBypassesProxy)
 
 	/* https_proxy points at a dead port; no_proxy lists localhost → the client must
 	 * ignore the proxy and connect directly to the (direct-mode) server. */
-	setenv("https_proxy", "127.0.0.1:1", 1);
-	setenv("no_proxy", "localhost", 1);
+	setTestEnv("https_proxy", "127.0.0.1:1");
+	setTestEnv("no_proxy", "localhost");
 
 	Network::HTTPSClientOptions options;
 	options.useEnvironmentProxy = true;
@@ -392,8 +414,8 @@ TEST(NetworkHTTPSClient, environmentNoProxyBypassesProxy)
 
 	const auto result = client.get(serverURI(server, "/direct"));
 
-	unsetenv("https_proxy");
-	unsetenv("no_proxy");
+	unsetTestEnv("https_proxy");
+	unsetTestEnv("no_proxy");
 
 	ASSERT_TRUE(result.has_value());
 	EXPECT_EQ(result->body, "bypassed");
@@ -413,8 +435,8 @@ TEST(NetworkHTTPSClient, environmentProxyIsUsed)
 	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
 
 	const auto proxyEnv = "http://127.0.0.1:" + std::to_string(proxy.port());
-	setenv("https_proxy", proxyEnv.c_str(), 1);
-	unsetenv("no_proxy");
+	setTestEnv("https_proxy", proxyEnv.c_str());
+	unsetTestEnv("no_proxy");
 
 	Network::HTTPSClientOptions options;
 	options.useEnvironmentProxy = true;
@@ -423,7 +445,7 @@ TEST(NetworkHTTPSClient, environmentProxyIsUsed)
 
 	const auto result = client.get(Network::URI{"https://localhost:8443/via-env"});
 
-	unsetenv("https_proxy");
+	unsetTestEnv("https_proxy");
 
 	ASSERT_TRUE(result.has_value());
 	EXPECT_EQ(result->body, "via env proxy");
