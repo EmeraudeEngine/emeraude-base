@@ -86,6 +86,13 @@ by every consumer.
   its own PCH binary — **no `REUSE_FROM`**, so targets with divergent compile definitions never
   clash. base stays agnostic of consumer-specific headers: a consumer that needs heavy
   third-party headers on top appends them with its own second `target_precompile_headers()` call.
+  **Objective-C(++) sources are auto-skipped (2026-07):** the helper sets
+  `SKIP_PRECOMPILE_HEADERS ON` on every `.m`/`.mm` in the target's `SOURCES`. The CXX genex
+  cannot exclude them — without `enable_language(OBJCXX)` CMake classifies `.mm` as CXX, yet
+  clang compiles them as Objective-C++ (extension-driven) and rejects the pure-C++ PCH
+  (`error: Objective-C was disabled in PCH file but is currently enabled`). Consumers no longer
+  need a manual opt-out; sources added to the target *after* the helper call are the one case
+  still needing a manual `SKIP_PRECOMPILE_HEADERS`.
 - **`EMERAUDE_BASE_PCH_FILE`** (cache) — absolute path to the header, set next to
   `EMERAUDE_BASE_CMAKE_DIR`. **`EMERAUDE_ENABLE_PCH`** (option, default **On** since 2026-07)
   gates the whole feature; when Off the helper is a no-op.
@@ -117,8 +124,10 @@ by every consumer.
     never export-scanned.
   - **app_system** — `cmake/EnableAppSystemPCH.cmake` applies the base helper to the browser
     binary and the renderer (helper) binary. STL hot-set only for now; consumer-specific layers
-    (CEF, CEF + Eigen) remain possible follow-ups. Both are **executables**. On macOS, `.mm`/`.m`
-    sources opt out via `SKIP_PRECOMPILE_HEADERS` (the CXX genex does not exclude Objective-C++).
+    (CEF, CEF + Eigen) remain possible follow-ups. Both are **executables**. On macOS its
+    `.mm`/`.m` sources historically opted out via a manual `SKIP_PRECOMPILE_HEADERS`; the base
+    helper now does this automatically (see `EnablePrecompiledHeaders.cmake` above), so the
+    manual opt-out is redundant-but-harmless.
   - All gated by `EMERAUDE_ENABLE_PCH` — one project-wide switch, no per-repo PCH option.
 
 ## 4. Core Axioms
