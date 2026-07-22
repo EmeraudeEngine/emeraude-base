@@ -39,14 +39,14 @@ if ( EMERAUDE_C_VERSION LESS 17 )
 endif ()
 
 # Idealist by default, relaxable: warnings-as-errors ON unless explicitly disabled.
-option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions." On)
-option(EMERAUDE_DISABLE_RTTI "Disable RTTI." Off)
-option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors." Off)
-option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point." Off)
-option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers." On)
-option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suite(s)." Off)
-option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Ave robustus! A.1)." Off)
-option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Ave robustus! A.5)." Off)
+option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions (Default On)." On)
+option(EMERAUDE_DISABLE_RTTI "Disable RTTI (Default Off)." Off)
+option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors (Default Off)." Off)
+option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point (Default Off)." Off)
+option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers (Default Off)." Off)
+option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
+option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
+option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
