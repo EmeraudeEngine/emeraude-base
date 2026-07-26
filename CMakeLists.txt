@@ -192,7 +192,7 @@ set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emer
 # emeraude-base owns the project-wide precompiled header: a STL-only hot-set
 # (STLPrecompiledHeaders.hpp) + the EnablePrecompiledHeaders helper. It is applied across the whole
 # cascade — base's own compiled modules + umbrella, the engine SHARED library, and the leaf
-# executables (projet-alpha, app_kernel's Kernel, app_system's binaries) — by calling
+# executables (projet-alpha, the consumer library's Kernel, the consumer's binaries) — by calling
 # emeraude_base_target_enable_pch(<target>) right after each target is declared. STL only — never
 # project headers — so editing project code never invalidates it.
 #

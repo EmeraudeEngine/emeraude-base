@@ -11,14 +11,14 @@
 #   emeraude_base_target_enable_pch(MyTarget)
 #
 # This helper attaches ONLY the shared STL hot-set. A consumer that needs heavy third-party
-# headers on top (e.g. app_kernel + Eigen) appends them itself with a second
+# headers on top (e.g. a consumer library + Eigen) appends them itself with a second
 # target_precompile_headers() call — base stays agnostic of consumer-specific dependencies.
 #
 # Design notes:
 #   - Gated by EMERAUDE_ENABLE_PCH (declared in emeraude-base's CMakeLists). When OFF the
 #     helper is a no-op, so call sites can stay unconditional.
 #   - Applied PRIVATE: the PCH speeds up the target's OWN translation units and never
-#     propagates to consumers (no INTERFACE_PRECOMPILE_HEADERS leak onto app_system, …).
+#     propagates to consumers (no INTERFACE_PRECOMPILE_HEADERS leak onto a consumer, …).
 #   - Restricted to CXX via $<COMPILE_LANGUAGE:CXX> so it is never attached to the C / ASM
 #     translation units a target may also compile. Objective-C(++) sources (.m/.mm) need an
 #     explicit SKIP_PRECOMPILE_HEADERS on top: without the OBJCXX language enabled CMake

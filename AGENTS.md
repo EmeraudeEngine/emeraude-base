@@ -78,8 +78,8 @@ by every consumer.
   exposes `M_PI` etc. to every PCH-using TU (the PCH is force-included, so a TU's own define
   arrives too late). The strict rule lives in the file header: **never** add a project header
   (base's own or a consumer's) nor a third-party header — editing one would invalidate the PCH
-  and force a full rebuild. Consumer-specific heavy headers (Eigen for app_kernel, CEF for
-  app_system) belong in that consumer's own PCH, layered on top.
+  and force a full rebuild. Consumer-specific heavy headers (Eigen for one consumer, CEF for
+  another) belong in that consumer's own PCH, layered on top.
 - **`cmake/EnablePrecompiledHeaders.cmake`** — exposes `emeraude_base_target_enable_pch(target)`.
   Attaches **only** the shared STL hot-set, **PRIVATE** (never propagates to consumers) and
   **CXX-only** (`$<COMPILE_LANGUAGE:CXX>`, so it never lands on C/ASM TUs). Each target compiles
@@ -117,12 +117,12 @@ by every consumer.
     `reserve()` — never silence the warning. A sibling `-Wstringop-overflow` variant hits base
     under `_FORTIFY_SOURCE=2` (fixed by `+=` on a named local, no `reserve` needed) — both triggers
     and their correct fixes are in [`docs/caution-points.md`](docs/caution-points.md).
-  - **app_kernel** — calls the base helper directly (guarded `if (EMERAUDE_BASE_CMAKE_DIR)` in its
+  - **the consumer library** — calls the base helper directly (guarded `if (EMERAUDE_BASE_CMAKE_DIR)` in its
     `CMakeLists.txt`, right after `add_library`). STL hot-set only for now; a second
     `target_precompile_headers` call for an Eigen-only layer remains a possible follow-up. Kernel
-    is STATIC, linked into an app_system **executable** (no export-all), so its PCH object is
+    is STATIC, linked into a consumer **executable** (no export-all), so its PCH object is
     never export-scanned.
-  - **app_system** — `cmake/EnableAppSystemPCH.cmake` applies the base helper to the browser
+  - **the CEF consumer** — its own PCH helper script applies the base helper to the browser
     binary and the renderer (helper) binary. STL hot-set only for now; consumer-specific layers
     (CEF, CEF + Eigen) remain possible follow-ups. Both are **executables**. On macOS its
     `.mm`/`.m` sources historically opted out via a manual `SKIP_PRECOMPILE_HEADERS`; the base

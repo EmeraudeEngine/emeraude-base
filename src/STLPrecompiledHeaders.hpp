@@ -11,13 +11,13 @@
  *   ONLY the C++ standard library. Stable, rarely-changing, included almost everywhere.
  *
  *   NEVER add a project header — neither emeraude-base's own headers (Math/*, IO/*, …) nor
- *   a consumer's headers (engine, app_kernel). Editing a header listed here invalidates the
+ *   a consumer's headers (engine, a consumer library). Editing a header listed here invalidates the
  *   precompiled header and forces a FULL rebuild of every translation unit of every target
  *   that uses it — the exact opposite of the intended speed-up. Project code changes daily;
  *   the STL does not.
  *
  *   Likewise, NEVER add a third-party header here: it would tie this shared, STL-only PCH to
- *   one consumer's dependency (e.g. Eigen for app_kernel, Vulkan/GLFW for the engine). Such
+ *   one consumer's dependency (e.g. Eigen for a consumer library, Vulkan/GLFW for the engine). Such
  *   consumer-specific headers belong in that consumer's own PCH, layered on top of this one.
  *
  * MAINTENANCE
@@ -39,7 +39,7 @@
  * included. This PCH is force-included (/FI) ahead of every translation unit, so it parses
  * <cmath> before any TU can set the macro itself — a TU's own "#define _USE_MATH_DEFINES" would
  * arrive too late (the include guard already swallowed <cmath>). Define it here, once, for the
- * whole project. Ignored / harmless on POSIX. Without this, TUs relying on M_PI (e.g. app_kernel's
+ * whole project. Ignored / harmless on POSIX. Without this, TUs relying on M_PI (e.g. the consumer library's
  * InfillGyroid) fail with "M_PI: undeclared identifier". */
 #ifndef _USE_MATH_DEFINES
 #define _USE_MATH_DEFINES
