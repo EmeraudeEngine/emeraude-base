@@ -33,6 +33,7 @@
 #include <type_traits>
 
 /* Local inclusions. */
+#include "FileFormatHDR.hpp"
 #include "FileFormatJpeg.hpp"
 #include "FileFormatPNG.hpp"
 #include "FileFormatTarga.hpp"
@@ -77,21 +78,56 @@ namespace EmEn::Base::PixelFactory::FileIO
 
 		bool decoded = false;
 
+		/* NOTE: libjpeg/libpng/Targa are 8-bit APIs: their codecs only instantiate for
+		 * uint8_t pixmaps. The HDR (RGBE) codec is the floating-point citizen. */
 		if ( extension == "jpg" || extension == "jpeg" )
 		{
-			FileFormatJpeg< pixel_data_t, dimension_t > fileFormat;
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				FileFormatJpeg< pixel_data_t, dimension_t > fileFormat;
 
-			decoded = fileFormat.readStream(stream, pixmap);
+				decoded = fileFormat.readStream(stream, pixmap);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::read(), JPEG requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
 		}
 		else if ( extension == "png" )
 		{
-			FileFormatPNG< pixel_data_t, dimension_t > fileFormat;
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				FileFormatPNG< pixel_data_t, dimension_t > fileFormat;
 
-			decoded = fileFormat.readStream(stream, pixmap);
+				decoded = fileFormat.readStream(stream, pixmap);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::read(), PNG requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
 		}
 		else if ( extension == "tga" )
 		{
-			FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
+
+				decoded = fileFormat.readStream(stream, pixmap);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::read(), Targa requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
+		}
+		else if ( extension == "hdr" )
+		{
+			FileFormatHDR< pixel_data_t, dimension_t > fileFormat;
 
 			decoded = fileFormat.readStream(stream, pixmap);
 		}
@@ -146,21 +182,55 @@ namespace EmEn::Base::PixelFactory::FileIO
 
 		if ( extension == "jpg" || extension == "jpeg" )
 		{
-			const FileFormatJpeg< pixel_data_t, dimension_t > fileFormat;
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				const FileFormatJpeg< pixel_data_t, dimension_t > fileFormat;
 
-			return fileFormat.writeStream(stream, pixmap, options);
+				return fileFormat.writeStream(stream, pixmap, options);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::write(), JPEG requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
 		}
 
 		if ( extension == "png" )
 		{
-			const FileFormatPNG< pixel_data_t, dimension_t > fileFormat;
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				const FileFormatPNG< pixel_data_t, dimension_t > fileFormat;
 
-			return fileFormat.writeStream(stream, pixmap, options);
+				return fileFormat.writeStream(stream, pixmap, options);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::write(), PNG requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
 		}
 
 		if ( extension == "tga" )
 		{
-			const FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				const FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
+
+				return fileFormat.writeStream(stream, pixmap, options);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::write(), Targa requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
+		}
+
+		if ( extension == "hdr" )
+		{
+			const FileFormatHDR< pixel_data_t, dimension_t > fileFormat;
 
 			return fileFormat.writeStream(stream, pixmap, options);
 		}
