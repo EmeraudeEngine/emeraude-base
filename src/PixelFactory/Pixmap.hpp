@@ -30,6 +30,7 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
@@ -2039,7 +2040,10 @@ namespace EmEn::Base::PixelFactory
 				{
 					case ChannelMode::Grayscale :
 					case ChannelMode::RGB :
-						std::memset(m_data.data(), value, m_data.size() * sizeof(pixel_data_t));
+						/* NOTE : std::fill() and not std::memset(), which only holds for
+						 * single-byte pixel data. The compiler lowers it to a memset/vector
+						 * store when the element type allows it. */
+						std::fill(m_data.begin(), m_data.end(), value);
 						break;
 
 					case ChannelMode::GrayscaleAlpha :
@@ -2082,7 +2086,7 @@ namespace EmEn::Base::PixelFactory
 			bool
 			fill (const pixel_data_t * data, size_t size) noexcept
 			{
-				if ( !this->isValid() )
+				if ( !this->isValid() || data == nullptr || size == 0 )
 				{
 					return false;
 				}
@@ -2091,22 +2095,20 @@ namespace EmEn::Base::PixelFactory
 				{
 					case ChannelMode::Grayscale :
 					case ChannelMode::RGB :
-						if ( size >= m_data.size() )
-						{
-							std::memcpy(m_data.data(), data, m_data.size());
-						}
-						else
-						{
-							const auto loopLimit = std::ceil(m_data.size() / size);
-							const auto remain = m_data.size() % size;
+					{
+						/* NOTE : the source pattern is repeated cyclically from its first
+						 * element until the pixmap is full, like the interleaved branches
+						 * below. Every count here is in ELEMENTS; a byte count is an element
+						 * count multiplied by sizeof(pixel_data_t). */
+						const auto limit = m_data.size();
 
-							for ( size_t loopIndex = 0; loopIndex < loopLimit; loopIndex++ )
-							{
-								const auto shift = loopIndex * size;
+						for ( size_t index = 0; index < limit; index += size )
+						{
+							const auto chunk = std::min(size, limit - index);
 
-								std::memcpy(m_data.data() + shift, data + shift, loopIndex + 1 == loopLimit ? remain : size);
-							}
+							std::memcpy(m_data.data() + index, data, chunk * sizeof(pixel_data_t));
 						}
+					}
 						break;
 
 					case ChannelMode::GrayscaleAlpha :
@@ -2346,7 +2348,9 @@ namespace EmEn::Base::PixelFactory
 
 				if ( m_channelMode == ChannelMode::Grayscale )
 				{
-					std::memset(m_data.data(), value, m_data.size() * sizeof(pixel_data_t));
+					std::fill(m_data.begin(), m_data.end(), value);
+
+					this->markEverythingUpdated();
 
 					return true;
 				}
@@ -2374,7 +2378,7 @@ namespace EmEn::Base::PixelFactory
 			bool
 			fillChannel (Channel channel, const pixel_data_t * data, size_t size) noexcept
 			{
-				if ( !this->isValid() )
+				if ( !this->isValid() || data == nullptr || size == 0 )
 				{
 					return false;
 				}
@@ -2615,9 +2619,7 @@ namespace EmEn::Base::PixelFactory
 					return;
 				}
 
-				/* NOTE : C++ std::fill(myArray, myArray+N, 0); */
-				//std::fill(m_data.begin(), m_data.end(), 0);
-				std::memset(m_data.data(), 0, m_data.size() * sizeof(pixel_data_t));
+				std::fill(m_data.begin(), m_data.end(), Pixmap::zero());
 
 				this->markEverythingUpdated();
 			}
