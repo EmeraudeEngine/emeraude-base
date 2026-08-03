@@ -1654,11 +1654,17 @@ namespace EmEn::Base::PixelFactory
 	Color< output_t >
 	ColorFromInteger (input_t red, input_t green, input_t blue, input_t alpha) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
 	{
+		/* NOTE: the divisor is cast explicitly. For a wide input_t (uint32_t, uint64_t) the exact
+		 * maximum is not representable in output_t, and the implicit conversion clang flags
+		 * (-Wimplicit-const-int-float-conversion) rounds it up (4294967295 → 4294967296). The cast
+		 * yields the very same rounded divisor — it only states the intent. */
+		constexpr auto scale = static_cast< output_t >(std::numeric_limits< input_t >::max());
+
 		return {
-			static_cast< output_t >(red) / std::numeric_limits< input_t >::max(),
-			static_cast< output_t >(green) / std::numeric_limits< input_t >::max(),
-			static_cast< output_t >(blue) / std::numeric_limits< input_t >::max(),
-			static_cast< output_t >(alpha) / std::numeric_limits< input_t >::max()
+			static_cast< output_t >(red) / scale,
+			static_cast< output_t >(green) / scale,
+			static_cast< output_t >(blue) / scale,
+			static_cast< output_t >(alpha) / scale
 		};
 	}
 

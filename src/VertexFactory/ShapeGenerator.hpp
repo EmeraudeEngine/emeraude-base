@@ -979,7 +979,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			constexpr auto twoPi = static_cast< vertex_data_t >(2) * std::numbers::pi_v< vertex_data_t >;
 			constexpr auto poleThreshold = static_cast< vertex_data_t >(0.999);
 
-			const auto sphericalUV = [twoPi, zero, one](const Math::Vector< 3, vertex_data_t > & v) {
+			const auto sphericalUV = [one](const Math::Vector< 3, vertex_data_t > & v) {
 				const auto latitude = one - (std::acos(std::clamp(v[Math::Y], -one, one)) / std::numbers::pi_v< vertex_data_t >);
 				const auto longitude = (std::atan2(-v[Math::X], v[Math::Z]) + std::numbers::pi_v< vertex_data_t >) / twoPi;
 
@@ -1024,7 +1024,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 
 			/* Volumetric vertex color: map XYZ [-1, 1] to RGB [0, 1]. */
-			const auto volumetricColor = [half, one](const Math::Vector< 3, vertex_data_t > & v) {
+			const auto volumetricColor = [](const Math::Vector< 3, vertex_data_t > & v) {
 				return Math::Vector< 4, vertex_data_t >{
 					(v[Math::X] + one) * half,
 					(v[Math::Y] + one) * half,
@@ -1295,7 +1295,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto savedMultiplier = builder.options().textureCoordinatesMultiplier();
 			builder.options().setTextureCoordinatesMultiplier(builder.options().capTextureCoordinatesMultiplier());
 
-			const auto volumetricColor = [half, one] (const Math::Vector< 3, vertex_data_t > & p) {
+			const auto volumetricColor = [] (const Math::Vector< 3, vertex_data_t > & p) {
 				return Math::Vector< 4, vertex_data_t >{
 					(p[Math::X] + one) * half,
 					(p[Math::Y] + one) * half,
@@ -1724,7 +1724,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
 		const auto invRadius = one / radius;
-		const auto volumetricColor = [half, one, invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
 			return Math::Vector< 4, vertex_data_t >{
 				(pos[Math::X] * invRadius + one) * half,
 				(pos[Math::Y] * invRadius + one) * half,
@@ -1873,7 +1873,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
 		const auto invRadius = one / radius;
-		const auto volumetricColor = [half, one, invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
 			return Math::Vector< 4, vertex_data_t >{
 				(pos[Math::X] * invRadius + one) * half,
 				(pos[Math::Y] * invRadius + one) * half,
@@ -1992,7 +1992,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
 		const auto invRadius = one / radius;
-		const auto volumetricColor = [half, one, invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
 			return Math::Vector< 4, vertex_data_t >{
 				(pos[Math::X] * invRadius + one) * half,
 				(pos[Math::Y] * invRadius + one) * half,
@@ -2159,7 +2159,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
 		const auto invRadius = one / radius;
-		const auto volumetricColor = [half, one, invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
 			return Math::Vector< 4, vertex_data_t >{
 				(pos[Math::X] * invRadius + one) * half,
 				(pos[Math::Y] * invRadius + one) * half,
@@ -2599,7 +2599,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto invRadius = one / radius;
 
 		/* Volumetric vertex color. Y range: [-radius, 0]. */
-		const auto volumetricColor = [half, one, invRadius](const Math::Vector< 3, vertex_data_t > & p) {
+		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & p) {
 			return Math::Vector< 4, vertex_data_t >{
 				(p[Math::X] * invRadius + one) * half,
 				(p[Math::Y] * invRadius + one) * half,
@@ -2914,7 +2914,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto invHalfLen = one / halfLen;
 
 		/* Volumetric vertex color. */
-		const auto volumetricColor = [half, one, invOuterR, invHalfLen](const Math::Vector< 3, vertex_data_t > & p) {
+		const auto volumetricColor = [invOuterR, invHalfLen](const Math::Vector< 3, vertex_data_t > & p) {
 			return Math::Vector< 4, vertex_data_t >{
 				(p[Math::X] * invOuterR + one) * half,
 				(p[Math::Y] * invHalfLen + one) * half,
@@ -3163,7 +3163,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		 * Y range is [-pavilionDepth, crownHeight], so normalize by the max extent. */
 		const auto maxExtent = std::max(radius, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -3205,7 +3205,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Compute per-face tangent-frame UV for an arbitrary polygon.
 		 * Projects vertices onto the face plane using a local tangent frame,
 		 * then remaps to [0,1]x[0,1] (same technique as dodecahedron). */
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal,
 			const Vec3 & center,
 			const Vec3 * positions,
@@ -3395,7 +3395,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Volumetric vertex color: position -> RGB [0, 1]. */
 		const auto maxExtent = std::max(length * half, std::max(width * half, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -3435,7 +3435,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		};
 
 		/* Compute per-face tangent-frame UV for an arbitrary polygon. */
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal,
 			const Vec3 & center,
 			const Vec3 * positions,
@@ -3693,7 +3693,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(length * half, std::max(width * half, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -3730,7 +3730,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal,
 			const Vec3 & center,
 			const Vec3 * positions,
@@ -3952,7 +3952,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(halfS * static_cast< vertex_data_t >(1.42), std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -3984,7 +3984,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -4224,7 +4224,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(size, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -4256,7 +4256,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -4478,7 +4478,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -4510,7 +4510,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -4702,7 +4702,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -4734,7 +4734,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -4923,7 +4923,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -4955,7 +4955,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -5147,7 +5147,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -5165,7 +5165,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -5337,7 +5337,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(size, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -5355,7 +5355,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
@@ -5483,7 +5483,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(radius, height);
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [half, one, invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent](const Vec3 & pos) {
 			return Vec4(
 				(pos[Math::X] * invExtent + one) * half,
 				(pos[Math::Y] * invExtent + one) * half,
@@ -5501,7 +5501,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
 		};
 
-		const auto computeFaceUV = [&one](
+		const auto computeFaceUV = [](
 			const Vec3 & normal, const Vec3 & center,
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{

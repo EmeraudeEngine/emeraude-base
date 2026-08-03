@@ -51,6 +51,55 @@ Neither step changes behaviour.
 this today. Fix each site as the compiler actually flags it — a broad sweep is churn with no
 verification signal, and the trigger is context-dependent (PCH on/off, optimisation level).
 
+### Clang `-Wunused-lambda-capture`: never capture a `constexpr` local — Debug-only breakage
+
+`ShapeGenerator.hpp` captured its `constexpr` locals (`half`, `one`, `zero`, `twoPi`) in the
+per-shape `volumetricColor` / `sphericalUV` / `computeFaceUV` lambdas. Clang rejects that with
+**`-Werror,-Wunused-lambda-capture`** — "lambda capture 'half' is not required to be captured for
+this use": a variable usable in a constant expression needs no capture, so the capture is dead.
+31 lambdas were affected across the file (fixed Aug 2026).
+
+**Why it went unnoticed:** the warning comes from `-Wall`/`-Wextra`, which the consumer's **Debug**
+configuration adds and its **Release** configuration does not. A Release-only habit hides this class
+of breakage entirely; the whole Debug build of the cascade was broken (`ResourceGenerator.cpp`,
+`GeometryDataPrinter.cpp`) while Release stayed green.
+
+**The nuance that matters — capture is NOT always removable.** Only drop the entries the compiler
+actually flags. A `constexpr` local still needs capturing when the body **binds a reference** to it:
+
+```cpp
+constexpr auto one = static_cast< vertex_data_t >(1);
+
+/* 'one' MUST stay captured: std::clamp takes const T &, which odr-uses it. */
+const auto sphericalUV = [one](const Math::Vector< 3, vertex_data_t > & v) {
+    const auto latitude = one - (std::acos(std::clamp(v[Math::Y], -one, one)) / std::numbers::pi_v< vertex_data_t >);
+    /* … */
+};
+```
+
+Removing `one` there yields a hard error, not a warning: *"variable 'one' cannot be implicitly
+captured in a lambda with no capture-default specified"*. Clang's own diagnostics are the authority
+on which entries are dead — never sweep a capture list by hand.
+
+**Rule:** do not capture `constexpr` locals. Capture only non-`constexpr` locals (`invRadius`,
+`invExtent`, …) and any `constexpr` whose address or reference the body actually takes.
+
+### `numeric_limits< T >::max()` as a float divisor — cast it explicitly
+
+`ColorFromInteger()` divided by `std::numeric_limits< input_t >::max()` and let the conversion to
+`output_t` happen implicitly. For a wide `input_t` the exact maximum is **not representable**, so
+clang rejects the silent rounding: **`-Werror,-Wimplicit-const-int-float-conversion`**, "changes
+value from 4294967295 to 4294967296" (and the `uint64_t` equivalent). Only
+`test_PixelFactoryColor.cpp` instantiates those wide types, so the whole unit suite failed to build
+on macOS/clang while the library itself compiled (fixed Aug 2026).
+
+**Fix:** hoist the divisor into a `constexpr auto scale = static_cast< output_t >(…::max())`. The
+rounded divisor is bit-for-bit what the implicit conversion produced — the cast only states the
+intent — and the expression is evaluated once instead of four times.
+
+**Rule:** never let an integer maximum reach a floating-point division implicitly. Cast at the
+source, where the precision loss is a deliberate, reviewable decision.
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count
