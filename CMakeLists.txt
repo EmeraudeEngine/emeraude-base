@@ -199,7 +199,7 @@ set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emer
 # WINDOWS CAVEAT (CONFIRMED): the engine is a SHARED library; with WINDOWS_EXPORT_ALL_SYMBOLS its
 # auto-generated export .def scans every input .obj. With the PCH enabled, the PCH object's marker
 # symbols (__@@_PchSym_@00@…) leak into exports.def and the link fails (LNK2001 on a bogus '__').
-# This reproduces on MSVC. The fix is the explicit export API (EMERAUDE_API, dropping
+# This reproduces on MSVC. The fix is the explicit export API (EMEN_API, dropping
 # WINDOWS_EXPORT_ALL_SYMBOLS), gated by the engine's EMERAUDE_USE_EXPLICIT_EXPORTS option — NOT
 # reverting the PCH. Migration guide: emeraude-engine/docs/windows-export-api.md.
 set(EMERAUDE_BASE_PCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/STLPrecompiledHeaders.hpp" CACHE FILEPATH "emeraude-base shared precompiled header (STL hot-set)." FORCE)
@@ -247,8 +247,8 @@ if ( MSVC )
 		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:/WX>		# Treat warnings as errors
 		/wd4100 															# Ignore "unreferenced formal parameter"
 		/wd4127 															# Ignore "conditional expression is constant"
-		/wd4251															# Ignore "class member needs dll-interface" — the whole cascade (DLL + consumers) is built with the same toolchain/CRT, and emeraude-base is deliberately duplicated (static copy in the DLL and in the executables), so std:: members crossing the EMERAUDE_API boundary are safe by construction. See emeraude-engine/docs/windows-export-api.md.
-		/wd4275															# Ignore "non dll-interface base for dll-interface class" — same rationale: EMERAUDE_API classes may derive from emeraude-base traits that stay unexported by design (decision "2b": no EMERAUDE_BASE_API, consumers keep their static base copy). See emeraude-engine/docs/windows-export-api.md.
+		/wd4251															# Ignore "class member needs dll-interface" — the whole cascade (DLL + consumers) is built with the same toolchain/CRT, and emeraude-base is deliberately duplicated (static copy in the DLL and in the executables), so std:: members crossing the EMEN_API boundary are safe by construction. See emeraude-engine/docs/windows-export-api.md.
+		/wd4275															# Ignore "non dll-interface base for dll-interface class" — same rationale: EMEN_API classes may derive from emeraude-base traits that stay unexported by design (decision "2b": no EMERAUDE_BASE_API, consumers keep their static base copy). See emeraude-engine/docs/windows-export-api.md.
 		/wd4324 															# Ignore "structure was padded due to alignment specifier"
 		/wd4481 															# Ignore "nonstandard extension used: override"
 		/wd4512																# Ignore "assignment operator could not be generated"
