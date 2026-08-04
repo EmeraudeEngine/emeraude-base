@@ -63,7 +63,7 @@ Options:
 | `EMERAUDE_DISABLE_EXCEPTIONS` | `On` | Build with `-fno-exceptions`. |
 | `EMERAUDE_DISABLE_RTTI` | `Off` | Build with `-fno-rtti`. |
 | `EMERAUDE_DISABLE_PARANOID_COMPILATION` | `Off` | Relax warnings-as-errors (`-Werror`). |
-| `EMERAUDE_ENABLE_PCH` | `On` | Precompiled headers (shared STL hot-set; `.m`/`.mm` sources are auto-skipped). |
+| `EMERAUDE_ENABLE_PCH` | `On` | Precompiled headers. Pass `${EMERAUDE_BASE_STL_PCH_HEADERS}` to `emeraude_base_target_enable_pch()`; `.m`/`.mm` sources are auto-skipped. |
 | `EMERAUDE_ENABLE_TESTS` | `Off` | Build the GoogleTest suite. |
 | `EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG` | *(auto)* | Linux only. Host glibc tag (e.g. `glibc2.41`) selecting the exact ext-deps archive; auto-detected via `getconf GNU_LIBC_VERSION`. Override to force a specific published tag. |
 | `EMERAUDE_EXT_LIBS_LINUX_LIBC_FALLBACK_TAG` | `glibc2.35` | Linux only. Floor tag tried when no archive matches the host tag, and the direct target when the host glibc is undetectable. |

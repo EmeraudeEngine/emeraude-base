@@ -244,7 +244,7 @@ Declared here, inherited by the whole cascade:
 | `EMERAUDE_DISABLE_EXCEPTIONS` | `On` | C++ exceptions are disabled by default. |
 | `EMERAUDE_DISABLE_RTTI` | `Off` | Drop RTTI. |
 | `EMERAUDE_ENABLE_FP_OPTIMIZATION` | `Off` | Fast (non-strict) floating point. |
-| `EMERAUDE_ENABLE_PCH` | `Off` | Shared STL precompiled header (`STLPrecompiledHeaders.hpp`). |
+| `EMERAUDE_ENABLE_PCH` | `On` | Shared STL precompiled header (`EMERAUDE_BASE_STL_PCH_HEADERS`, see `cmake/STLPrecompiledHeaders.cmake`). Applies to every target of the cascade that asks for it; the one exception is the emeraude-engine target on MSVC, excluded by its own export-all guard. |
 | `EMERAUDE_ENABLE_TESTS` | `Off` | Build the GoogleTest suites (`EmeraudeBaseUnitTests`). |
 | `EMERAUDE_ENABLE_BENCHMARKS` | `Off` | Build the Google Benchmark suites. |
 | `EMERAUDE_ENABLE_SANITIZERS` | `Off` | AddressSanitizer + UndefinedBehaviorSanitizer. |

@@ -43,7 +43,7 @@ option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions (Default On)." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI (Default Off)." Off)
 option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors (Default Off)." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point (Default Off)." Off)
-option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers (Default Off)." Off)
+option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers (Default On)." On)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
@@ -190,11 +190,15 @@ set(EMERAUDE_EXT_LIBS_LIB_DIR     "${EMERAUDE_EXT_LIBS_PATH}/lib"     CACHE PATH
 set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emeraude-base CMake helpers (Setup*.cmake for external deps)." FORCE)
 
 # emeraude-base owns the project-wide precompiled header: a STL-only hot-set
-# (STLPrecompiledHeaders.hpp) + the EnablePrecompiledHeaders helper. It is applied across the whole
-# cascade — base's own compiled modules + umbrella, the engine SHARED library, and the leaf
-# executables (projet-alpha, the consumer library's Kernel, the consumer's binaries) — by calling
-# emeraude_base_target_enable_pch(<target>) right after each target is declared. STL only — never
-# project headers — so editing project code never invalidates it.
+# (EMERAUDE_BASE_STL_PCH_HEADERS, from cmake/STLPrecompiledHeaders.cmake) + the
+# EnablePrecompiledHeaders helper, which includes that list so a single include() brings both.
+# It is applied across the whole cascade — base's own compiled modules + umbrella, the engine
+# SHARED library, and the leaf executables (projet-alpha, the consumer library's Kernel, the
+# consumer's binaries) — by calling
+#   emeraude_base_target_enable_pch(<target> "${EMERAUDE_BASE_STL_PCH_HEADERS}")
+# right after each target is declared. The list is passed EXPLICITLY: a consumer composes it with
+# its own heavy third-party headers at the call site. STL only in the shared list — never project
+# headers — so editing project code never invalidates it.
 #
 # WINDOWS CAVEAT (CONFIRMED): the engine is a SHARED library; with WINDOWS_EXPORT_ALL_SYMBOLS its
 # auto-generated export .def scans every input .obj. With the PCH enabled, the PCH object's marker
@@ -386,7 +390,7 @@ function(emeraude_base_object_module name)
 	add_library(emeraude_base_${name} OBJECT ${ARGN})
 	target_link_libraries(emeraude_base_${name} PUBLIC emeraude_base_flags)
 	set_target_properties(emeraude_base_${name} PROPERTIES POSITION_INDEPENDENT_CODE ON)
-	emeraude_base_target_enable_pch(emeraude_base_${name})
+	emeraude_base_target_enable_pch(emeraude_base_${name} "${EMERAUDE_BASE_STL_PCH_HEADERS}")
 	add_library(emeraude::base::${name} ALIAS emeraude_base_${name})
 endfunction()
 
@@ -440,7 +444,7 @@ set_target_properties(emeraude_base PROPERTIES
 )
 
 # Umbrella's own loose sources (${EMERAUDE_BASE_SOURCES}) get the PCH too.
-emeraude_base_target_enable_pch(emeraude_base)
+emeraude_base_target_enable_pch(emeraude_base "${EMERAUDE_BASE_STL_PCH_HEADERS}")
 
 target_link_libraries(emeraude_base PUBLIC emeraude_base_flags emeraude::base::platform)
 
@@ -511,7 +515,7 @@ if ( EMERAUDE_ENABLE_TESTS )
 	FetchContent_MakeAvailable(googletest)
 
 	add_executable(EmeraudeBaseUnitTests ${EMERAUDE_BASE_TEST_SOURCES})
-	emeraude_base_target_enable_pch(EmeraudeBaseUnitTests)
+	emeraude_base_target_enable_pch(EmeraudeBaseUnitTests "${EMERAUDE_BASE_STL_PCH_HEADERS}")
 
 	set_target_properties(EmeraudeBaseUnitTests PROPERTIES
 		C_STANDARD ${EMERAUDE_C_VERSION} C_STANDARD_REQUIRED On C_EXTENSIONS Off
@@ -562,7 +566,7 @@ if ( EMERAUDE_ENABLE_BENCHMARKS )
 	FetchContent_MakeAvailable(googlebenchmark)
 
 	add_executable(EmeraudeBaseBenchmarks ${EMERAUDE_BASE_BENCHMARK_SOURCES})
-	emeraude_base_target_enable_pch(EmeraudeBaseBenchmarks)
+	emeraude_base_target_enable_pch(EmeraudeBaseBenchmarks "${EMERAUDE_BASE_STL_PCH_HEADERS}")
 
 	set_target_properties(EmeraudeBaseBenchmarks PROPERTIES
 		C_STANDARD ${EMERAUDE_C_VERSION} C_STANDARD_REQUIRED On C_EXTENSIONS Off
