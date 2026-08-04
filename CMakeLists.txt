@@ -43,7 +43,7 @@ option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions (Default On)." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI (Default Off)." Off)
 option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors (Default Off)." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point (Default Off)." Off)
-option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers (Default On)." On)
+option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual Studio (Default Off)." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
@@ -189,24 +189,7 @@ set(EMERAUDE_EXT_LIBS_LIB_DIR     "${EMERAUDE_EXT_LIBS_PATH}/lib"     CACHE PATH
 # by the engine and any other project.
 set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emeraude-base CMake helpers (Setup*.cmake for external deps)." FORCE)
 
-# emeraude-base owns the project-wide precompiled header: a STL-only hot-set
-# (EMERAUDE_BASE_STL_PCH_HEADERS, from cmake/STLPrecompiledHeaders.cmake) + the
-# EnablePrecompiledHeaders helper, which includes that list so a single include() brings both.
-# It is applied across the whole cascade — base's own compiled modules + umbrella, the engine
-# SHARED library, and the leaf executables (projet-alpha, the consumer library's Kernel, the
-# consumer's binaries) — by calling
-#   emeraude_base_target_enable_pch(<target> "${EMERAUDE_BASE_STL_PCH_HEADERS}")
-# right after each target is declared. The list is passed EXPLICITLY: a consumer composes it with
-# its own heavy third-party headers at the call site. STL only in the shared list — never project
-# headers — so editing project code never invalidates it.
-#
-# WINDOWS CAVEAT (CONFIRMED): the engine is a SHARED library; with WINDOWS_EXPORT_ALL_SYMBOLS its
-# auto-generated export .def scans every input .obj. With the PCH enabled, the PCH object's marker
-# symbols (__@@_PchSym_@00@…) leak into exports.def and the link fails (LNK2001 on a bogus '__').
-# This reproduces on MSVC. The fix is the explicit export API (EMEN_API, dropping
-# WINDOWS_EXPORT_ALL_SYMBOLS), gated by the engine's EMERAUDE_USE_EXPLICIT_EXPORTS option — NOT
-# reverting the PCH. Migration guide: emeraude-engine/docs/windows-export-api.md.
-set(EMERAUDE_BASE_PCH_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/STLPrecompiledHeaders.hpp" CACHE FILEPATH "emeraude-base shared precompiled header (STL hot-set)." FORCE)
+# Script to enable PCH conditionally.
 include(EnablePrecompiledHeaders)
 
 # Download + extract the prebuilt archive when EMERAUDE_EXT_LIBS_PATH is absent.
@@ -251,8 +234,8 @@ if ( MSVC )
 		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:/WX>		# Treat warnings as errors
 		/wd4100 															# Ignore "unreferenced formal parameter"
 		/wd4127 															# Ignore "conditional expression is constant"
-		/wd4251															# Ignore "class member needs dll-interface" — the whole cascade (DLL + consumers) is built with the same toolchain/CRT, and emeraude-base is deliberately duplicated (static copy in the DLL and in the executables), so std:: members crossing the EMEN_API boundary are safe by construction. See emeraude-engine/docs/windows-export-api.md.
-		/wd4275															# Ignore "non dll-interface base for dll-interface class" — same rationale: EMEN_API classes may derive from emeraude-base traits that stay unexported by design (decision "2b": no EMERAUDE_BASE_API, consumers keep their static base copy). See emeraude-engine/docs/windows-export-api.md.
+		/wd4251																# Ignore "class member needs dll-interface" — the whole cascade (DLL + consumers) is built with the same toolchain/CRT, and emeraude-base is deliberately duplicated (static copy in the DLL and in the executables), so std:: members crossing the EMEN_API boundary are safe by construction. See emeraude-engine/docs/windows-export-api.md.
+		/wd4275																# Ignore "non dll-interface base for dll-interface class" — same rationale: EMEN_API classes may derive from emeraude-base traits that stay unexported by design (decision "2b": no EMERAUDE_BASE_API, consumers keep their static base copy). See emeraude-engine/docs/windows-export-api.md.
 		/wd4324 															# Ignore "structure was padded due to alignment specifier"
 		/wd4481 															# Ignore "nonstandard extension used: override"
 		/wd4512																# Ignore "assignment operator could not be generated"
