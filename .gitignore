@@ -17,8 +17,8 @@ dependencies/*
 cmake-build-*
 
 # Claude Code build directories
-.claude/settings.local.json
-.claude-build-*/
+.claude/
+.claude-build-*
 
 # Temporary tests resources
 resources/assets/tmp_*
