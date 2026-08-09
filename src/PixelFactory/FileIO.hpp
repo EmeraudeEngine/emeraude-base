@@ -37,6 +37,7 @@
 #include "FileFormatJpeg.hpp"
 #include "FileFormatPNG.hpp"
 #include "FileFormatTarga.hpp"
+#include "FileFormatTIFF.hpp"
 #include "IOCommon.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
@@ -121,6 +122,21 @@ namespace EmEn::Base::PixelFactory::FileIO
 			else
 			{
 				std::cerr << "PixelFactory::FileIO::read(), Targa requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
+		}
+		else if ( extension == "tif" || extension == "tiff" )
+		{
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				FileFormatTIFF< pixel_data_t, dimension_t > fileFormat;
+
+				decoded = fileFormat.readStream(stream, pixmap);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::read(), TIFF requires an 8-bit pixmap !" "\n";
 
 				return false;
 			}
