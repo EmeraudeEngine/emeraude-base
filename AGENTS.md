@@ -246,7 +246,7 @@ asset to pre-chew.
 > **A format this table does not list must be rejected BEFORE the resource manager sees it.**
 > An `ImageResource` that fails to load takes its texture and then its material down with it, so
 > the object stops rendering ENTIRELY — strictly worse than a missing file, which merely falls
-> back to a flat colour. `SceneLoaders::USDLoader` checks the extension first for that reason.
+> back to a flat colour. `Scenes::Loaders::USDLoader` checks the extension first for that reason.
 
 ## 7. Status
 
