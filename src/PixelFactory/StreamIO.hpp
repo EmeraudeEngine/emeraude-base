@@ -44,10 +44,15 @@
 namespace EmEn::Base::PixelFactory::StreamIO
 {
 	/**
-	 * @brief Decodes a pixmap from a memory buffer.
+	 * @brief Decodes a pixmap from a memory range, WITHOUT owning or copying it.
+	 * @note The range is read in place. This is what lets an image be decoded straight out of a
+	 * memory-mapped container — a USDZ archive, an asset pack — instead of being copied into a
+	 * vector first, which on a large archive means duplicating every texture in turn.
+	 * @warning The caller guarantees the range stays valid and unmapped for the whole call.
 	 * @tparam pixel_data_t The pixel component type for the pixmap depth precision. Default uint8_t.
 	 * @tparam dimension_t The type of unsigned integer used for pixmap dimension. Default uint32_t.
-	 * @param data A reference to the source byte vector.
+	 * @param data A pointer to the first byte of the source range.
+	 * @param size The size of the source range, in bytes.
 	 * @param format The image format to decode as.
 	 * @param pixmap A reference to the destination pixmap.
 	 * @param options Read post-processing options. Default: no transformations.
@@ -56,16 +61,16 @@ namespace EmEn::Base::PixelFactory::StreamIO
 	template< typename pixel_data_t = uint8_t, typename dimension_t = uint32_t >
 	[[nodiscard]]
 	bool
-	read (const std::vector< std::byte > & data, typename Pixmap< pixel_data_t, dimension_t >::Format format, Pixmap< pixel_data_t, dimension_t > & pixmap, const ReadOptions & options = {}) requires (std::is_arithmetic_v< pixel_data_t > && std::is_unsigned_v< dimension_t >)
+	read (const std::byte * data, size_t size, typename Pixmap< pixel_data_t, dimension_t >::Format format, Pixmap< pixel_data_t, dimension_t > & pixmap, const ReadOptions & options = {}) requires (std::is_arithmetic_v< pixel_data_t > && std::is_unsigned_v< dimension_t >)
 	{
-		if ( data.empty() )
+		if ( data == nullptr || size == 0 )
 		{
 			std::cerr << "PixelFactory::StreamIO::read(), empty input buffer !" "\n";
 
 			return false;
 		}
 
-		IO::MemoryStream stream{data};
+		IO::MemoryStream stream{data, size};
 
 		bool decoded = false;
 
@@ -108,6 +113,24 @@ namespace EmEn::Base::PixelFactory::StreamIO
 
 		/* Apply read post-processing options. */
 		return applyReadOptions(pixmap, options);
+	}
+
+	/**
+	 * @brief Decodes a pixmap from a memory buffer.
+	 * @tparam pixel_data_t The pixel component type for the pixmap depth precision. Default uint8_t.
+	 * @tparam dimension_t The type of unsigned integer used for pixmap dimension. Default uint32_t.
+	 * @param data A reference to the source byte vector.
+	 * @param format The image format to decode as.
+	 * @param pixmap A reference to the destination pixmap.
+	 * @param options Read post-processing options. Default: no transformations.
+	 * @return bool
+	 */
+	template< typename pixel_data_t = uint8_t, typename dimension_t = uint32_t >
+	[[nodiscard]]
+	bool
+	read (const std::vector< std::byte > & data, typename Pixmap< pixel_data_t, dimension_t >::Format format, Pixmap< pixel_data_t, dimension_t > & pixmap, const ReadOptions & options = {}) requires (std::is_arithmetic_v< pixel_data_t > && std::is_unsigned_v< dimension_t >)
+	{
+		return read< pixel_data_t, dimension_t >(data.data(), data.size(), format, pixmap, options);
 	}
 
 	/**
