@@ -1096,6 +1096,19 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
+				/* A blob that merely CONTAINS the "MD5Version" token is dispatched here, and the parser
+				 * is tolerant by design: it skips whatever it does not recognise. Without this check it
+				 * would walk hostile input to the end, build an EMPTY shape and report SUCCESS — an
+				 * empty resource then travels down the pipeline as if it were a model. Cancelling here
+				 * also spares the caller the misleading "geometry data is empty !" TBN warnings.
+				 * A real MD5 always carries a skeleton and at least one mesh. */
+				if ( joints.empty() || meshes.empty() )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), no joint or no mesh was parsed !");
+
+					return false;
+				}
+
 				/* ---- Phase 2: Build Skeleton in engine coordinates ---- */
 				/* Derive the joint count from the vector actually parsed, NOT from the declared
 				 * numJoints header: a file that declares "numJoints N" but omits the "joints {" block
@@ -1280,13 +1293,16 @@ namespace EmEn::Base::VertexFactory
 						{
 							/* More than 4 weights: pick the 4 largest by bias. */
 							struct WeightEntry { int jointIndex; float bias; };
-							if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(vert.countWeight)) )
-							{
-								Logging::error("VertexFactory::FileFormatMDx", "readStream(), weight count exceeds the stream size !");
-							
-								return false;
-							}
-							
+
+							/* NOTE: No stream guard here. 'vert.countWeight' is an ALREADY PARSED, in-memory
+							 * count, and the validation phase above has proven that
+							 * startWeight + countWeight <= mesh.weights.size() — which is the real invariant
+							 * this allocation and the loop below depend on. Testing it against the stream was
+							 * both redundant and WRONG: by this point the file is fully read, so tellg() on the
+							 * eof-flagged stream returns -1 and exceedsStream() answered "exceeds" for EVERY
+							 * mesh reaching this branch. It rejected every MD5 model having a vertex with more
+							 * than 4 weights (cyberdemon.md5mesh). exceedsStream() is a pre-READ sanity bound —
+							 * only valid where a count is about to drive a read, as in the parsing phase. */
 							std::vector< WeightEntry > allWeights(vert.countWeight);
 
 							for ( int w = 0; w < vert.countWeight; ++w )
@@ -1355,13 +1371,10 @@ namespace EmEn::Base::VertexFactory
 
 				/* ---- Phase 5: Build Skin and attach to Shape ---- */
 				/* MD5 uses direct joint indexing (skin-local == skeleton-global). */
-				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(jointCount)) )
-				{
-					Logging::error("VertexFactory::FileFormatMDx", "readStream(), joint-index count exceeds the stream size !");
-				
-					return false;
-				}
-				
+				/* NOTE: Same story as the weight branch above — no stream guard here. 'jointCount' is
+				 * joints.size(), a vector ALREADY allocated (and already guarded against the stream, at
+				 * parse time, where that test is meaningful). Re-testing it here, with the file fully
+				 * consumed, made tellg() return -1 and rejected EVERY MD5 file carrying a skeleton. */
 				std::vector< int32_t > skinJointIndices(jointCount);
 				for ( size_t i = 0; i < jointCount; ++i )
 				{
@@ -1369,6 +1382,15 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				Animation::Skin< vertex_data_t > skin{std::move(skinJointIndices), std::move(inverseBindMatrices)};
+
+				/* Post-condition: meshes may have parsed and still have yielded no triangle (empty or
+				 * malformed blocks). Reporting success on an empty shape is a FALSE success — fail. */
+				if ( geometry.empty() )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), the resulting geometry has no triangle !");
+
+					return false;
+				}
 
 				result.skeleton = std::move(skeleton);
 				result.skin = std::move(skin);

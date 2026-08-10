@@ -379,8 +379,12 @@ namespace EmEn::Base::VertexFactory
 			0x00, 0x00, 0x00
 		}};
 
-		std::vector< std::byte > buffer(md3.size());
-		std::memcpy(buffer.data(), md3.data(), md3.size());
+		std::vector< std::byte > raw(md3.size());
+		std::memcpy(raw.data(), md3.data(), md3.size());
+
+		/* NOTE: const — MemoryStream's non-const overload opens for WRITING, and the read
+		 * then fails before the loader is reached, making this test pass vacuously. */
+		const std::vector< std::byte > & buffer = raw;
 
 		MemoryStream stream{buffer};
 		MDx format;
@@ -407,13 +411,80 @@ namespace EmEn::Base::VertexFactory
 			0x44, 0x30, 0x78, 0x50
 		}};
 
-		std::vector< std::byte > buffer(md5.size());
-		std::memcpy(buffer.data(), md5.data(), md5.size());
+		std::vector< std::byte > raw(md5.size());
+		std::memcpy(raw.data(), md5.data(), md5.size());
+
+		/* NOTE: const — MemoryStream's non-const overload opens for WRITING, and the read
+		 * then fails before the loader is reached, making this test pass vacuously. */
+		const std::vector< std::byte > & buffer = raw;
 
 		MemoryStream stream{buffer};
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+	}
+
+	TEST(VertexFactoryMDx, md5VertexWithMoreThanFourWeightsLoads)
+	{
+		/* A vertex may legitimately bind to more than four joints; the loader keeps the four largest
+		 * biases and renormalizes them. That branch used to test an ALREADY PARSED, in-memory weight
+		 * count against the STREAM — which is at EOF by then, so tellg() returned -1 and the guard
+		 * answered "exceeds" every single time. Every MD5 model owning such a vertex was rejected
+		 * (cyberdemon.md5mesh). The real bound is enforced by the validation phase
+		 * (startWeight + countWeight <= weights.size()), so the guard was redundant as well as wrong. */
+		static constexpr std::string_view md5{
+			"MD5Version 10\n"
+			"commandline \"\"\n"
+			"numJoints 2\n"
+			"numMeshes 1\n"
+			"joints {\n"
+			"\t\"root\" -1 ( 0 0 0 ) ( 0 0 0 )\n"
+			"\t\"bone\" 0 ( 1 0 0 ) ( 0 0 0 )\n"
+			"}\n"
+			"mesh {\n"
+			"\tshader \"test\"\n"
+			"\tnumverts 3\n"
+			"\tvert 0 ( 0 0 ) 0 5\n"
+			"\tvert 1 ( 1 0 ) 5 1\n"
+			"\tvert 2 ( 0 1 ) 6 1\n"
+			"\tnumtris 1\n"
+			"\ttri 0 0 1 2\n"
+			"\tnumweights 7\n"
+			"\tweight 0 0 0.4 ( 0 0 0 )\n"
+			"\tweight 1 1 0.3 ( 1 0 0 )\n"
+			"\tweight 2 0 0.15 ( 0 1 0 )\n"
+			"\tweight 3 1 0.1 ( 0 0 1 )\n"
+			"\tweight 4 0 0.05 ( 1 1 0 )\n"
+			"\tweight 5 0 1.0 ( 0 0 0 )\n"
+			"\tweight 6 1 1.0 ( 1 1 1 )\n"
+			"}\n"
+		};
+
+		std::vector< std::byte > raw(md5.size());
+		std::memcpy(raw.data(), md5.data(), md5.size());
+
+		/* NOTE: The buffer MUST be const — MemoryStream's non-const overload opens for WRITING, and
+		 * a read from it fails before the loader is ever reached. */
+		const std::vector< std::byte > & buffer = raw;
+
+		MemoryStream stream{buffer};
+		MDx format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+
+		ASSERT_EQ(result.shape.triangles().size(), 1U);
+		ASSERT_EQ(result.shape.vertices().size(), 3U);
+
+		/* The first vertex declares FIVE weights: the four largest biases (0.4, 0.3, 0.15, 0.1) are
+		 * kept, the 0.05 one is dropped, and the survivors are renormalized to sum to 1. */
+		const auto & vertex = result.shape.vertices()[0];
+
+		EXPECT_EQ(vertex.influences()[0], 0);
+		EXPECT_EQ(vertex.influences()[1], 1);
+
+		const auto weightSum = vertex.weights()[0] + vertex.weights()[1] + vertex.weights()[2] + vertex.weights()[3];
+		EXPECT_NEAR(weightSum, 1.0F, 1e-5F);
+		EXPECT_NEAR(vertex.weights()[0], 0.4F / 0.95F, 1e-5F);
 	}
 
 	TEST(VertexFactoryMDx, md3HugeTriangleTotalDoesNotOOM)
@@ -439,8 +510,12 @@ namespace EmEn::Base::VertexFactory
 			0x50, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 		}};
 
-		std::vector< std::byte > buffer(md3.size());
-		std::memcpy(buffer.data(), md3.data(), md3.size());
+		std::vector< std::byte > raw(md3.size());
+		std::memcpy(raw.data(), md3.data(), md3.size());
+
+		/* NOTE: const — MemoryStream's non-const overload opens for WRITING, and the read
+		 * then fails before the loader is reached, making this test pass vacuously. */
+		const std::vector< std::byte > & buffer = raw;
 
 		MemoryStream stream{buffer};
 		MDx format;

@@ -100,6 +100,95 @@ intent — and the expression is evaluated once instead of four times.
 **Rule:** never let an integer maximum reach a floating-point division implicitly. Cast at the
 source, where the precision loss is a deliberate, reviewable decision.
 
+## VertexFactory
+
+### `exceedsStream()` is a PRE-READ bound — using it after the parse rejects every valid file (Aug 2026)
+
+> [!CRITICAL]
+> `FileFormatMDx::exceedsStream(file, count)` answers *"could this stream possibly hold `count`
+> elements?"* by comparing the count to the **remaining file size**. It is a cheap DoS guard for a
+> count that has just been read from the header and is **about to drive a read** — its only valid
+> position is the parsing phase.
+>
+> Two calls in `loadMD5()` had drifted into the **post-parse** phases (vertex→weight conversion,
+> skin build). By then the whole file has been consumed: the stream carries `eofbit`, `tellg()`
+> returns **-1**, and the `current < 0` clause makes the guard answer **"exceeds" unconditionally**.
+>
+> **Effect:** `cyberdemon.md5mesh` — and every MD5 model owning a vertex with more than four
+> weights, or simply owning a skeleton — was rejected with
+> `readStream(), weight count exceeds the stream size !`. The file was perfectly valid.
+> `animation-debug --demo-options 1` and the `ID/cyberdemon` store resource were both dead.
+>
+> **Both guards were also REDUNDANT**: the validation phase that runs right after parsing already
+> checks the real invariants on the parsed data — joint parents, `weight.jointIndex < jointCount`,
+> `startWeight + countWeight <= weights.size()`, triangle→vertex indices. That phase is what makes
+> the later allocations safe; the stream has nothing to say about them. Both calls were removed,
+> not replaced.
+>
+> **The rule:** an `exceedsStream()` call belongs where a count is read from the stream and drives
+> the very next read. Anywhere downstream, the invariant to check is a **container size**, not a
+> file size. A guard on an already-parsed, in-memory count is at best noise and at worst — as here
+> — a permanent rejection.
+>
+> Regression test: `VertexFactoryMDx.md5VertexWithMoreThanFourWeightsLoads`
+> (`src/Testing/test_VertexFactoryFileFormats.cpp`) — a synthetic MD5 whose first vertex declares
+> five weights; asserts the load succeeds AND that the four largest biases survive, renormalized.
+
+### ⚠️ `MemoryStream{buffer}` on a NON-const vector opens for WRITING
+
+> [!WARNING]
+> `IO::MemoryStream` has two constructors: `MemoryStream(const std::vector< std::byte > &)` reads,
+> `MemoryStream(std::vector< std::byte > &)` writes into the vector. A test that builds its input
+> in a **mutable** local and passes it directly picks the WRITE overload — every subsequent read
+> fails with `failed to read stream data !`, **before the parser is ever reached**.
+>
+> A test asserting `EXPECT_FALSE(format.readStream(...))` then passes for entirely the wrong
+> reason: it never exercised the loader. Bind the buffer to a `const` reference (or go through
+> `StreamIO::read()`, which takes a `const &`) and check the log for that message before trusting
+> a negative-path test.
+>
+> **Measured, not guessed**: run the whole suite and correlate each `[ RUN ]` with
+> `failed to read stream data !` / `stream is not open !`. That sweep found **three** vacuous
+> tests — `md3HostileSurfaceDoesNotCrash`, `md5HostileReferencesDoNotCrash`,
+> `md3HugeTriangleTotalDoesNotOOM` — all three now **activated** (buffer bound to a `const &`).
+> The other hits are legitimate: `NetworkTLSConnection.*` and the two `emptyStreamIsRejected`
+> tests exercise those error paths ON PURPOSE.
+>
+> **What the activation revealed** (Aug 2026):
+> - `md3HostileSurfaceDoesNotCrash` and `md3HugeTriangleTotalDoesNotOOM` now pass **for the right
+>   reason** — `loadMD3(), triangle total exceeds the stream size !`. The MD3 hardening was sound;
+>   it had simply never been executed. No 64 GB allocation.
+> - `md5HostileReferencesDoNotCrash` **FAILS**: see below.
+
+### `loadMD5()` used to return SUCCESS on a shape it built from nothing (Aug 2026, FIXED)
+
+> [!WARNING]
+> `loadMD5()` ends on an unconditional `return true`. Fed the 136-byte hostile blob of
+> `md5HostileReferencesDoNotCrash`, it parses no joint and no mesh, builds an **empty** shape
+> (`Shape::computeTriangleTBNSpace(), geometry data is empty !`), attaches a 0-joint skeleton and
+> skin — and reports **success**.
+>
+> It no longer crashes (the validation phase did its job), but a loader that succeeds with zero
+> vertices and zero triangles pushes an empty resource down the pipeline instead of cancelling.
+> The test's authored intent — *"the validation pass must cancel the load"* — is the correct one.
+>
+> **Fix (owner decision: keep it LOCAL to `loadMD5()`, do not generalise yet):** two
+> post-conditions, both inside `loadMD5()`.
+> 1. **Fail fast, end of Phase 1** — `joints.empty() || meshes.empty()` cancels the load before
+>    any skeleton or geometry is built. A real MD5 always carries a skeleton and at least one
+>    mesh. This also spares the caller the misleading `geometry data is empty !` TBN warnings the
+>    old path emitted on its way to reporting success.
+> 2. **Post-condition on the result** — `geometry.empty()` (no triangle) cancels the load. Meshes
+>    can parse and still yield nothing; success on an empty shape is a false success.
+>
+> **Deliberately NOT done**: the same post-condition shared across MDL/MD2/MD3/MD5 (or hoisted
+> into `FileFormatInterface`). That is a **contract** change, not an implementation detail — a
+> format may legitimately describe an empty geometry, and no engine code relies on that today.
+> Left as an open architectural question rather than decided silently.
+>
+> **Verified**: suite back to `1967/1967`, and the real `cyberdemon.md5mesh` still loads with its
+> skeleton and 10 animation clips — the new checks reject garbage without touching valid models.
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count
