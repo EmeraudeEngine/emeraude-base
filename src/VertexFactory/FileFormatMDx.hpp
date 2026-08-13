@@ -378,7 +378,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( uint32_t triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++ )
 				{
-					/* Reverse vertex order (2,1,0) to fix winding. */
+					/* ⚠️ Reverse the vertex order (2,1,0): ID Tech stores its triangles in the opposite
+					 * winding to the engine's front-face convention. MEASURED, Aug 2026: this is a FORMAT
+					 * convention, NOT a compensation for the coordinate transform. It survives the Y-up
+					 * flip untouched — removing it renders every ID model inside out (boss1.md2 shows its
+					 * inner limb faces and a hollow head). Do not couple it to the transform's determinant. */
 					for ( int vertexIndex = 2; vertexIndex >= 0; vertexIndex-- )
 					{
 						const auto vertexRef = triangles[triangleIndex].vertex[vertexIndex];
@@ -412,15 +416,18 @@ namespace EmEn::Base::VertexFactory
 							s += skinWidth * 0.5F;
 						}
 
-						/* Combined transform: Y/Z swap + negation + rotation -90° Y = (Y, -Z, X) */
+						/* ID Tech (X forward, Y left, Z up) -> engine (Y up, +Z model front): (q.y, q.z, q.x).
+						 * ⚠️ This is a ROTATION (det +1), NOT a mirror. It used to be (q.y, -q.z, q.x),
+						 * det -1, which is why a winding reversal accompanied it — both died with the
+						 * Y-up flip and they MUST move together. */
 						builder.setPosition(
 							(header.scale[1] * static_cast< vertex_data_t >(vertex.v[1]) + header.translate[1]) * IDTechUnitScale,
-							-(((header.scale[2] * static_cast< vertex_data_t >(vertex.v[2]))) + header.translate[2]) * IDTechUnitScale,
+							(header.scale[2] * static_cast< vertex_data_t >(vertex.v[2]) + header.translate[2]) * IDTechUnitScale,
 							(header.scale[0] * static_cast< vertex_data_t >(vertex.v[0]) + header.translate[0]) * IDTechUnitScale
 						);
 						builder.setNormal(
+							static_cast< vertex_data_t >(normal[1]),
 							static_cast< vertex_data_t >(normal[2]),
-							-static_cast< vertex_data_t >(normal[1]),
 							static_cast< vertex_data_t >(normal[0])
 						);
 						builder.setTextureCoordinates(
@@ -557,7 +564,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( uint32_t triangleIndex = 0; triangleIndex < triangleCount; triangleIndex++ )
 				{
-					/* Reverse vertex order (2,1,0) to fix winding. */
+					/* ⚠️ Reverse the vertex order (2,1,0): ID Tech stores its triangles in the opposite
+					 * winding to the engine's front-face convention. MEASURED, Aug 2026: this is a FORMAT
+					 * convention, NOT a compensation for the coordinate transform. It survives the Y-up
+					 * flip untouched — removing it renders every ID model inside out (boss1.md2 shows its
+					 * inner limb faces and a hollow head). Do not couple it to the transform's determinant. */
 					for ( int vertexIndex = 2; vertexIndex >= 0; vertexIndex-- )
 					{
 						const auto vertexRef = triangles[triangleIndex].vertex[vertexIndex];
@@ -585,15 +596,18 @@ namespace EmEn::Base::VertexFactory
 						const auto & normal = s_anorms[vertex.normalIndex];
 						const auto & textureCoordinate = textureCoordinates[texCoordRef];
 
-						/* Combined transform: Y/Z swap + negation + rotation -90° Y = (Y, -Z, X) */
+						/* ID Tech (X forward, Y left, Z up) -> engine (Y up, +Z model front): (q.y, q.z, q.x).
+						 * ⚠️ This is a ROTATION (det +1), NOT a mirror. It used to be (q.y, -q.z, q.x),
+						 * det -1, which is why a winding reversal accompanied it — both died with the
+						 * Y-up flip and they MUST move together. */
 						builder.setPosition(
 							(frame.scale[1] * static_cast< vertex_data_t >(vertex.v[1]) + frame.translate[1]) * IDTechUnitScale,
-							-(((frame.scale[2] * static_cast< vertex_data_t >(vertex.v[2]))) + frame.translate[2]) * IDTechUnitScale,
+							(frame.scale[2] * static_cast< vertex_data_t >(vertex.v[2]) + frame.translate[2]) * IDTechUnitScale,
 							(frame.scale[0] * static_cast< vertex_data_t >(vertex.v[0]) + frame.translate[0]) * IDTechUnitScale
 						);
 						builder.setNormal(
 							static_cast< vertex_data_t >(normal[1]),
-							-static_cast< vertex_data_t >(normal[2]),
+							static_cast< vertex_data_t >(normal[2]),
 							static_cast< vertex_data_t >(normal[0])
 						);
 						builder.setTextureCoordinates(
@@ -784,7 +798,11 @@ namespace EmEn::Base::VertexFactory
 
 					for ( const auto & tri : tris )
 					{
-						/* Reverse vertex order (2,1,0) to fix winding. */
+						/* ⚠️ Reverse the vertex order (2,1,0): ID Tech stores its triangles in the opposite
+						 * winding to the engine's front-face convention. MEASURED, Aug 2026: this is a FORMAT
+						 * convention, NOT a compensation for the coordinate transform. It survives the Y-up
+						 * flip untouched — removing it renders every ID model inside out (boss1.md2 shows its
+						 * inner limb faces and a hollow head). Do not couple it to the transform's determinant. */
 						for ( int k = 2; k >= 0; --k )
 						{
 							const int idx = tri.indexes[k];
@@ -807,15 +825,18 @@ namespace EmEn::Base::VertexFactory
 							const float ny = std::sin(lat) * std::sin(lng);
 							const float nz = std::cos(lng);
 
-							/* Combined transform: Y/Z swap + negation + rotation -90° Y = (Y, -Z, X) */
+							/* ID Tech (X forward, Y left, Z up) -> engine (Y up, +Z model front): (q.y, q.z, q.x).
+						 * ⚠️ This is a ROTATION (det +1), NOT a mirror. It used to be (q.y, -q.z, q.x),
+						 * det -1, which is why a winding reversal accompanied it — both died with the
+						 * Y-up flip and they MUST move together. */
 							builder.setPosition(
 								static_cast< vertex_data_t >(v.v[1]) * MD3_XYZ_SCALE * IDTechUnitScale,
-								-static_cast< vertex_data_t >(v.v[2]) * MD3_XYZ_SCALE * IDTechUnitScale,
+								static_cast< vertex_data_t >(v.v[2]) * MD3_XYZ_SCALE * IDTechUnitScale,
 								static_cast< vertex_data_t >(v.v[0]) * MD3_XYZ_SCALE * IDTechUnitScale
 							);
 							builder.setNormal(
 								static_cast< vertex_data_t >(ny),
-								-static_cast< vertex_data_t >(nz),
+								static_cast< vertex_data_t >(nz),
 								static_cast< vertex_data_t >(nx)
 							);
 							builder.setTextureCoordinates(
@@ -896,8 +917,8 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Converts an MD5 position vector from ID Tech coordinate space to engine space.
-			 * @note MD5 uses right-handed Y-up. Engine uses Y-down.
-			 * Combined transform: (md5.y, -md5.z, md5.x) * IDTechUnitScale.
+			 * @note MD5 uses right-handed Z-up; the engine is Y-up. Combined transform:
+			 * (md5.y, md5.z, md5.x) * IDTechUnitScale — a ROTATION (det +1), not a mirror.
 			 * @param md5Pos The position in MD5 coordinate space.
 			 * @return Math::Vector< 3, vertex_data_t >
 			 */
@@ -907,7 +928,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				return {
 					static_cast< vertex_data_t >(md5Pos[1]) * IDTechUnitScale,
-					-static_cast< vertex_data_t >(md5Pos[2]) * IDTechUnitScale,
+					static_cast< vertex_data_t >(md5Pos[2]) * IDTechUnitScale,
 					static_cast< vertex_data_t >(md5Pos[0]) * IDTechUnitScale
 				};
 			}
@@ -915,8 +936,12 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Converts an MD5 quaternion from ID Tech coordinate space to engine space.
 			 * @note Uses the rotation matrix path: quat → matrix → coordinate transform → matrix → quat.
-			 * The coordinate change matrix M maps (x,y,z)_md5 → (y,-z,x)_engine.
+			 * The coordinate change matrix M maps (x,y,z)_md5 → (y,z,x)_engine — a ROTATION (det +1).
 			 * R_engine = M * R_md5 * M^T.
+			 * ⚠️⚠️ M MUST stay identical to the one md5ToEnginePosition() applies. They were split
+			 * at the Y-up flip — positions converted, orientations left on the old (y,-z,x) mirror —
+			 * and a skinned MD5 then renders UPSIDE DOWN while every other ID format is upright,
+			 * because the vertices are built from joint orientations, not from raw positions.
 			 * @param md5Orient The quaternion in MD5 coordinate space (x, y, z, w).
 			 * @return Math::Quaternion< vertex_data_t >
 			 */
@@ -935,24 +960,23 @@ namespace EmEn::Base::VertexFactory
 				/* Get proper column-major rotation matrix from MD5 quaternion. */
 				const auto rotMD5 = qMD5.toRotationMatrix4();
 
-				/* Coordinate change matrix M: engine = (md5.y, -md5.z, md5.x).
-				 * Using row-major constructor: row0=(0,1,0,0), row1=(0,0,-1,0), row2=(1,0,0,0), row3=(0,0,0,1). */
+				/* Coordinate change matrix M: engine = (md5.y, md5.z, md5.x).
+				 * Using row-major constructor: row0=(0,1,0,0), row1=(0,0,1,0), row2=(1,0,0,0), row3=(0,0,0,1). */
 				constexpr auto Zero = static_cast< vertex_data_t >(0);
 				constexpr auto One = static_cast< vertex_data_t >(1);
-				constexpr auto NegOne = static_cast< vertex_data_t >(-1);
 
 				const Math::Matrix< 4, vertex_data_t > M{
-					Zero, One,	Zero, Zero,
-					Zero, Zero, NegOne, Zero,
-					One,  Zero,   Zero, Zero,
-					Zero, Zero,   Zero, One
+					Zero, One,  Zero, Zero,
+					Zero, Zero, One,  Zero,
+					One,  Zero, Zero, Zero,
+					Zero, Zero, Zero, One
 				};
 
-				/* M^T (transpose). Using row-major constructor. */
+				/* M^T (transpose). M is orthogonal, so this is also its inverse. */
 				const Math::Matrix< 4, vertex_data_t > MT{
 					Zero, Zero, One,  Zero,
 					One,  Zero, Zero, Zero,
-					Zero, NegOne, Zero, Zero,
+					Zero, One,  Zero, Zero,
 					Zero, Zero, Zero, One
 				};
 
@@ -1257,13 +1281,13 @@ namespace EmEn::Base::VertexFactory
 							finalPos[2] += (joint.pos[2] + rotPos[2]) * weight.bias;
 						}
 
-						/* Convert MD5 → engine coordinates: (y, -z, x) * scale. */
+						/* ⚠️ Go through md5ToEnginePosition() — do NOT inline the conversion again.
+						 * This site used to carry its own copy of the (y,-z,x) transform, and it is
+						 * the one that builds the VISIBLE mesh: when the Y-up flip updated the two
+						 * named helpers and missed this duplicate, every other ID format came out
+						 * upright while the skinned MD5 alone stayed upside down. */
 						ShapeVertex< vertex_data_t > vertex{
-							Math::Vector< 3, vertex_data_t >{
-								static_cast< vertex_data_t >(finalPos[1]) * IDTechUnitScale,
-								-static_cast< vertex_data_t >(finalPos[2]) * IDTechUnitScale,
-								static_cast< vertex_data_t >(finalPos[0]) * IDTechUnitScale
-							},
+							md5ToEnginePosition(finalPos),
 							{}
 						};
 
@@ -1337,7 +1361,9 @@ namespace EmEn::Base::VertexFactory
 					}
 
 					/* Pass 2: Build triangles referencing the shared vertices.
-					 * Reverse winding (2,1,0) for engine face culling convention. */
+					 * ⚠️ Reverse the winding (2,1,0): ID Tech's triangle order is opposite to the
+					 * engine's front-face convention. A FORMAT convention, independent of the
+					 * coordinate transform — it survives the Y-up flip untouched. */
 					for ( const auto & tri : mesh.tris )
 					{
 						ShapeTriangle< vertex_data_t > triangle{};
@@ -1359,13 +1385,12 @@ namespace EmEn::Base::VertexFactory
 				geometry.computeTriangleTBNSpace();
 				geometry.computeVertexTBNSpace();
 
-				/* The coordinate conversion (y, -z, x) is a reflection (determinant -1),
-				 * which inverts the cross product used for normal computation.
-				 * Negate vertex normals to correct the orientation. */
-				for ( auto & v : vertices )
-				{
-					v.setNormal(-v.normal());
-				}
+				/* ⚠️ NO normal negation here. The MD5 -> engine conversion used to be (y,-z,x), a
+				 * REFLECTION (determinant -1), which inverted the cross product behind
+				 * computeVertexTBNSpace() and had to be undone by flipping every normal. It is now
+				 * (y,z,x), a rotation (determinant +1), so the cross product comes out right and
+				 * negating would light the whole model from the inside. This block and the
+				 * determinant of md5ToEnginePosition() move together, always. */
 
 				geometry.updateProperties();
 

@@ -1097,7 +1097,7 @@ namespace EmEn::Base::VertexFactory
 			 * @param indexOnY Grid point index along Z axis.
 			 * @param thisPosition Pre-computed 3D position at this grid point.
 			 *
-			 * @return Normalized surface normal vector, or negative Y (0, -1, 0) if on a flat region or edge.
+			 * @return Normalized surface normal vector, or positive Y (0, 1, 0) if on a flat region or edge.
 			 *
 			 * @note Averages normals from surrounding quads for smooth results
 			 * @note Edge and corner vertices have fewer adjacent quads to consider
@@ -1131,6 +1131,12 @@ namespace EmEn::Base::VertexFactory
 					right = this->position(indexOnX + 1, indexOnY);
 				}
 
+				/* Each accumulation feeds Vector::normal(A, B, C), whose sign is decided by the
+				 * argument order alone. The X/Z index topology is untouched by the Y-up flip, so
+				 * these four triples are the only thing that makes the sum point up. They used
+				 * to be given first-and-last swapped, back when -Y was up. The order below now
+				 * matches tangent() below, which already used it. */
+
 				/* Checks the two quads top to this position.
 				 * NOTE: indexOnY:0 = top. */
 				if ( hasTop )
@@ -1140,13 +1146,13 @@ namespace EmEn::Base::VertexFactory
 					/* Top-Left quad. */
 					if ( hasLeft )
 					{
-						normal += Math::Vector< 3, vertex_data_t >::normal(top, thisPosition, left);
+						normal += Math::Vector< 3, vertex_data_t >::normal(left, thisPosition, top);
 					}
 
 					/* Top-Right quad. */
 					if ( hasRight )
 					{
-						normal += Math::Vector< 3, vertex_data_t >::normal(right, thisPosition, top);
+						normal += Math::Vector< 3, vertex_data_t >::normal(top, thisPosition, right);
 					}
 				}
 
@@ -1158,19 +1164,21 @@ namespace EmEn::Base::VertexFactory
 					/* Bottom-Left quad. */
 					if ( hasLeft )
 					{
-						normal += Math::Vector< 3, vertex_data_t >::normal(left, thisPosition, bottom);
+						normal += Math::Vector< 3, vertex_data_t >::normal(bottom, thisPosition, left);
 					}
 
 					/* Bottom-Right quad. */
 					if ( hasRight )
 					{
-						normal += Math::Vector< 3, vertex_data_t >::normal(bottom, thisPosition, right);
+						normal += Math::Vector< 3, vertex_data_t >::normal(right, thisPosition, bottom);
 					}
 				}
 
 				if ( normal.isZero() )
 				{
-					return Math::Vector< 3, vertex_data_t >::negativeY();
+					/* Flat region or isolated point: straight up. Used to be negativeY(),
+					 * back when -Y was up. */
+					return Math::Vector< 3, vertex_data_t >::positiveY();
 				}
 
 				return normal.normalize();

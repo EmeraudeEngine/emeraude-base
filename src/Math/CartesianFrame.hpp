@@ -115,17 +115,17 @@ namespace EmEn::Base::Math
 			constexpr
 			CartesianFrame (const Matrix< 4, precision_t > & matrix, const Vector< 3, precision_t > & scale = {1, 1, 1}) noexcept
 				: m_position(matrix[M4x4Col3Row0], matrix[M4x4Col3Row1], matrix[M4x4Col3Row2]),
-				  m_downward(matrix[M4x4Col1Row0], matrix[M4x4Col1Row1], matrix[M4x4Col1Row2]),
+				  m_upward(matrix[M4x4Col1Row0], matrix[M4x4Col1Row1], matrix[M4x4Col1Row2]),
 				  m_backward(matrix[M4x4Col2Row0], matrix[M4x4Col2Row1], matrix[M4x4Col2Row2]),
 				  m_scaling(scale)
 			{
-				m_downward.normalize();
+				m_upward.normalize();
 				m_backward.normalize();
 			}
 
 			/**
 			 * @brief Creates a cartesian frame from a position, a rotation quaternion and an optional scale.
-			 * @note Static factory method to avoid constructor ambiguity with CartesianFrame(pos, downward, backward).
+			 * @note Static factory method to avoid constructor ambiguity with CartesianFrame(pos, upward, backward).
 			 * @param position A reference to a vector for position.
 			 * @param rotation A reference to a quaternion for rotation.
 			 * @param scale A reference to a vector for scaling. Default, no scale.
@@ -148,7 +148,7 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Construct a cartesian frame from a position and a backward vector.
-			 * @note This version will compute downward vector from position and backward vector.
+			 * @note This version will compute the upward vector from the backward vector.
 			 * @param position A reference to a vector.
 			 * @param backward A reference to a vector.
 			 */
@@ -161,14 +161,17 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Construct a cartesian frame from raw vectors.
 			 * @param position A vector the position.
-			 * @param downward A reference to a vector.
-			 * @param backward A reference to a vector.
+			 * @param upward A reference to a vector for the frame Y+ axis.
+			 * @param backward A reference to a vector for the frame Z+ axis.
 			 * @param scale A reference to a vector. Default, no scale.
+			 * @warning ⚠️ This parameter was named 'downward' until Aug 2026, long after the member
+			 * it feeds became m_upward. Anyone trusting the old name and passing a genuine DOWN
+			 * vector silently flipped the frame — pass the UP axis.
 			 */
 			constexpr
-			CartesianFrame (const Vector< 3, precision_t > & position, const Vector< 3, precision_t > & downward, const Vector< 3, precision_t > & backward, const Vector< 3, precision_t > & scale = {1, 1, 1}) noexcept
+			CartesianFrame (const Vector< 3, precision_t > & position, const Vector< 3, precision_t > & upward, const Vector< 3, precision_t > & backward, const Vector< 3, precision_t > & scale = {1, 1, 1}) noexcept
 				: m_position(position),
-				  m_downward(downward),
+				  m_upward(upward),
 				  m_backward(backward),
 				  m_scaling(scale)
 			{
@@ -261,12 +264,12 @@ namespace EmEn::Base::Math
 			 * @return void
 			 */
 			void
-			setBackwardVector (const Vector< 3, precision_t > & forward) noexcept
+			setBackwardVector (const Vector< 3, precision_t > & backward) noexcept
 			{
-				m_backward = forward.normalized();
+				m_backward = backward.normalized();
 
-				/* NOTE: Recompute the downward vector from the new backward axis. */
-				m_downward = CartesianFrame::computeYAxis(m_backward);
+				/* NOTE: Recompute the upward vector from the new backward axis. */
+				m_upward = CartesianFrame::computeYAxis(m_backward);
 			}
 
 			/**
@@ -279,32 +282,36 @@ namespace EmEn::Base::Math
 			void
 			setBackwardVector (precision_t xValue, precision_t yValue, precision_t zValue) noexcept
 			{
-				this->setBackwardVector(xValue, yValue, zValue);
+				/* ⚠️ The braces are load-bearing: without them this calls ITSELF and overflows the
+				 * stack. It shipped that way and never crashed only because nothing ever called it. */
+				this->setBackwardVector({xValue, yValue, zValue});
 			}
 
 			/**
-			 * @brief Sets the downward vector (Y+) and the backward vector (Z+).
+			 * @brief Sets the upward vector (Y+) and the backward vector (Z+).
 			 * @warning You must pass coherent vectors.
-			 * @param backward A reference to vector.
-			 * @param downward A reference to vector.
+			 * @warning ⚠️ The second parameter was named 'downward' until Aug 2026 while already
+			 * feeding m_upward. Pass the UP axis, not gravity.
+			 * @param backward A reference to vector for the frame Z+ axis.
+			 * @param upward A reference to vector for the frame Y+ axis.
 			 * @return void
 			 */
 			void
-			setOrientationVectors (const Vector< 3, precision_t > & backward, const Vector< 3, precision_t > & downward) noexcept
+			setOrientationVectors (const Vector< 3, precision_t > & backward, const Vector< 3, precision_t > & upward) noexcept
 			{
-				m_downward = downward.normalized();
+				m_upward = upward.normalized();
 				m_backward = backward.normalized();
 			}
 
 			/**
-			 * @brief Sets the downward vector (Y+) and the backward vector (Z+) using another cartesian frame.
+			 * @brief Sets the upward vector (Y+) and the backward vector (Z+) using another cartesian frame.
 			 * @param frame A reference to a cartesian frame.
 			 * @return void
 			 */
 			void
 			setOrientationVectors (const CartesianFrame< precision_t > & frame) noexcept
 			{
-				m_downward = frame.m_downward;
+				m_upward = frame.m_upward;
 				m_backward = frame.m_backward;
 			}
 
@@ -414,7 +421,7 @@ namespace EmEn::Base::Math
 			Vector< 3, precision_t >
 			rightVector () const noexcept
 			{
-				return Vector< 3, precision_t >::crossProduct(m_downward, m_backward).normalize();
+				return Vector< 3, precision_t >::crossProduct(m_upward, m_backward).normalize();
 			}
 
 			/**
@@ -427,32 +434,55 @@ namespace EmEn::Base::Math
 			Vector< 3, precision_t >
 			leftVector () const noexcept
 			{
-				return Vector< 3, precision_t >::crossProduct(m_backward.inversed(), m_downward.inversed()).normalize();
+				return Vector< 3, precision_t >::crossProduct(m_backward.inversed(), m_upward.inversed()).normalize();
 			}
 
 			/**
-			 * @brief Returns the frame downward vector (Y+).
+			 * @brief Returns the frame's local Y basis column, with no up/down meaning attached.
+			 * @note ⚠️ The swap this accessor was created for HAS HAPPENED (Y-up, Aug 2026): it now
+			 * equals upwardVector() and is the OPPOSITE of downwardVector(). The note that used to
+			 * sit here — "same value as downwardVector() today" — is dead, and believing it inverts
+			 * the axis.
+			 * Every caller that wants "the Y column of this frame's basis" — composing a rotation
+			 * matrix out of (right, Y, backward), mirroring a stored axis, driving the gizmo's Y
+			 * handle, translating along local Y — must use THIS one, precisely because it carries no
+			 * up/down meaning and therefore cannot invert if the world convention ever moves again.
+			 * Reserve downwardVector()/upwardVector() for callers that genuinely mean gravity's
+			 * direction or its opposite.
+			 * @return const Vector< 3, precision_t > &
+			 */
+			[[nodiscard]]
+			const Vector< 3, precision_t > &
+			localYAxis () const noexcept
+			{
+				return m_upward;
+			}
+
+			/**
+			 * @brief Returns the frame downward vector (Y-).
+			 * @note An initial frame should give a vector [0, -1, 0].
+			 * @warning the return is a value.
+			 * @warning If you want the Y basis column rather than "the direction of gravity", use
+			 * localYAxis(): this accessor is about gravity, not about the basis.
+			 * @return Vector< 3, precision_t >
+			 */
+			[[nodiscard]]
+			Vector< 3, precision_t >
+			downwardVector () const noexcept
+			{
+				return m_upward.inversed();
+			}
+
+			/**
+			 * @brief Returns the frame upward vector (Y+).
 			 * @note An initial frame should give a vector [0, 1, 0].
 			 * @return const Vector< 3, precision_t > &
 			 */
 			[[nodiscard]]
 			const Vector< 3, precision_t > &
-			downwardVector () const noexcept
-			{
-				return m_downward;
-			}
-
-			/**
-			 * @brief Returns the frame upward vector (Y-).
-			 * @note An initial frame should give a vector [0, -1, 0].
-			 * @warning the return is a value.
-			 * @return Vector< 3, precision_t >
-			 */
-			[[nodiscard]]
-			Vector< 3, precision_t >
 			upwardVector () const noexcept
 			{
-				return m_downward.inversed();
+				return m_upward;
 			}
 
 			/**
@@ -502,7 +532,7 @@ namespace EmEn::Base::Math
 			const Vector< 3, precision_t > &
 			YAxis () const noexcept
 			{
-				return m_downward;
+				return m_upward;
 			}
 
 			/**
@@ -568,7 +598,7 @@ namespace EmEn::Base::Math
 			void
 			normalize () noexcept
 			{
-				m_downward.normalize();
+				m_upward.normalize();
 				m_backward.normalize();
 			}
 
@@ -603,10 +633,10 @@ namespace EmEn::Base::Math
 			void
 			lookAtUsingMatrix (const Vector< 3, precision_t > & target) noexcept
 			{
-				const auto matrix = Matrix< 4, precision_t >::lookAt(m_position, target, m_downward);
+				const auto matrix = Matrix< 4, precision_t >::lookAt(m_position, target, m_upward);
 
 				m_backward = (matrix * Vector< 4, precision_t >(m_backward, 0)).toVector3();
-				m_downward = (matrix * Vector< 4, precision_t >(m_downward, 0)).toVector3();
+				m_upward = (matrix * Vector< 4, precision_t >(m_upward, 0)).toVector3();
 			}
 
 			/**
@@ -681,7 +711,7 @@ namespace EmEn::Base::Math
 			{
 				if ( local )
 				{
-					m_position += m_downward * distance;
+					m_position += m_upward * distance;
 				}
 				else
 				{
@@ -793,7 +823,7 @@ namespace EmEn::Base::Math
 
 				const auto rotationMatrix = Matrix< 3, precision_t >::rotation(radian, effectiveAxis);
 
-				m_downward = (rotationMatrix * m_downward).normalize();
+				m_upward = (rotationMatrix * m_upward).normalize();
 				m_backward = (rotationMatrix * m_backward).normalize();
 
 				if ( !local )
@@ -817,7 +847,7 @@ namespace EmEn::Base::Math
 				const auto rotationMatrix = Matrix< 3, precision_t >::rotation(radian, worldAxis);
 				const auto relativePos = m_position - rotationPoint;
 
-				m_downward = (rotationMatrix * m_downward).normalize();
+				m_upward = (rotationMatrix * m_upward).normalize();
 				m_backward = (rotationMatrix * m_backward).normalize();
 				m_position = (rotationMatrix * relativePos) + rotationPoint;
 			}
@@ -836,7 +866,7 @@ namespace EmEn::Base::Math
 				{
 					const auto rotationMatrix = Matrix<3, precision_t>::rotation(radian, this->rightVector());
 
-					m_downward = (rotationMatrix * m_downward).normalize();
+					m_upward = (rotationMatrix * m_upward).normalize();
 					m_backward = (rotationMatrix * m_backward).normalize();
 				}
 				else
@@ -869,7 +899,7 @@ namespace EmEn::Base::Math
 			{
 				if ( local )
 				{
-					const auto rotationMatrix = Matrix< 3, precision_t >::rotation(radian, m_downward);
+					const auto rotationMatrix = Matrix< 3, precision_t >::rotation(radian, m_upward);
 
 					m_backward = (rotationMatrix * m_backward).normalize();
 				}
@@ -905,7 +935,7 @@ namespace EmEn::Base::Math
 				{
 					const auto rotationMatrix = Matrix<3, precision_t>::rotation(radian, m_backward);
 
-					m_downward = (rotationMatrix * m_downward).normalize();
+					m_upward = (rotationMatrix * m_upward).normalize();
 				}
 				else
 				{
@@ -953,7 +983,7 @@ namespace EmEn::Base::Math
 			Matrix< 3, precision_t >
 			getRotationMatrix3 () const noexcept
 			{
-				return {this->rightVector(), m_downward, m_backward};
+				return {this->rightVector(), m_upward, m_backward};
 			}
 
 			/**
@@ -969,12 +999,12 @@ namespace EmEn::Base::Math
 			Matrix< 4, precision_t >
 			getRotationMatrix4 () const noexcept
 			{
-				return {this->rightVector(), m_downward, m_backward};
+				return {this->rightVector(), m_upward, m_backward};
 			}
 
 			/**
 			 * @brief Returns the rotation as a quaternion.
-			 * @note This extracts the rotation from the downward and backward axis vectors
+			 * @note This extracts the rotation from the upward and backward axis vectors
 			 * via a 4x4 rotation matrix, then converts to quaternion.
 			 * @return Quaternion< precision_t >
 			 */
@@ -1033,11 +1063,11 @@ namespace EmEn::Base::Math
 				/* NOTE: This is the full mathematical way. */
 				/*return
 					Matrix< 4, precision_t >::translation(m_position) *
-					Matrix< 4, precision_t >::rotation(this->rightVector(), m_downward, m_backward) *
+					Matrix< 4, precision_t >::rotation(this->rightVector(), m_upward, m_backward) *
 					Matrix< 4, precision_t >::scaling(m_scaling);*/
 
 				/* NOTE: Init directly the model matrix with translation and rotation vectors and check if scaling is requested. */
-				Matrix< 4, precision_t > modelMatrix{this->rightVector(), m_downward, m_backward, m_position};
+				Matrix< 4, precision_t > modelMatrix{this->rightVector(), m_upward, m_backward, m_position};
 
 				if ( !m_scaling.isAllComponentOne() )
 				{
@@ -1063,10 +1093,10 @@ namespace EmEn::Base::Math
 			{
 				/* Prepare re-oriented vectors toward the camera. */
 				const auto backward = (cameraPosition - m_position).normalize();
-				const auto downward = CartesianFrame::computeYAxis(backward);
-				const auto right = Vector< 3, precision_t >::crossProduct(downward, backward);
+				const auto upward = CartesianFrame::computeYAxis(backward);
+				const auto right = Vector< 3, precision_t >::crossProduct(upward, backward);
 
-				Matrix< 4, precision_t > modelMatrix{right, downward, backward, m_position};
+				Matrix< 4, precision_t > modelMatrix{right, upward, backward, m_position};
 
 				/* Scale if needed. */
 				if ( !m_scaling.isAllComponentOne() )
@@ -1099,13 +1129,13 @@ namespace EmEn::Base::Math
 				const auto right = this->rightVector();
 
 				const auto positionX = -Vector< 3, precision_t >::dotProduct(right, m_position) / m_scaling[X];
-				const auto positionY = -Vector< 3, precision_t >::dotProduct(m_downward, m_position) / m_scaling[Y];
+				const auto positionY = -Vector< 3, precision_t >::dotProduct(m_upward, m_position) / m_scaling[Y];
 				const auto positionZ = -Vector< 3, precision_t >::dotProduct(m_backward, m_position) / m_scaling[Z];
 
 				std::array< precision_t, 16 > rawData{
-					right[X] / m_scaling[X], m_downward[X] / m_scaling[Y], m_backward[X] / m_scaling[Z], 0,
-					right[Y] / m_scaling[X], m_downward[Y] / m_scaling[Y], m_backward[Y] / m_scaling[Z], 0,
-					right[Z] / m_scaling[X], m_downward[Z] / m_scaling[Y], m_backward[Z] / m_scaling[Z], 0,
+					right[X] / m_scaling[X], m_upward[X] / m_scaling[Y], m_backward[X] / m_scaling[Z], 0,
+					right[Y] / m_scaling[X], m_upward[Y] / m_scaling[Y], m_backward[Y] / m_scaling[Z], 0,
+					right[Z] / m_scaling[X], m_upward[Z] / m_scaling[Y], m_backward[Z] / m_scaling[Z], 0,
 					positionX, positionY, positionZ, 1
 				};
 
@@ -1146,27 +1176,27 @@ namespace EmEn::Base::Math
 
 				// 2. Get the current world-space axes of the frame
 				const auto right = this->rightVector(); // X+ axis
-				// m_downward (Y+) and m_backward (Z+) are already members
+				// m_upward (Y+) and m_backward (Z+) are already members
 
 				// 3. Calculate translation part of the inverse matrix: T' = - (InvS * InvR * position)
 				//	InvR * position = [dot(right, pos), dot(down, pos), dot(back, pos)]
 				//	-InvS * (InvR * pos) = [-dot(r, p)*invSx, -dot(d, p)*invSy, -dot(b, p)*invSz]
 				const auto positionX = -Vector< 3, precision_t >::dotProduct(right, m_position) * invScaleX;
-				const auto positionY = -Vector< 3, precision_t >::dotProduct(m_downward, m_position) * invScaleY;
+				const auto positionY = -Vector< 3, precision_t >::dotProduct(m_upward, m_position) * invScaleY;
 				const auto positionZ = -Vector< 3, precision_t >::dotProduct(m_backward, m_position) * invScaleZ;
 
 				// 4. Calculate rotation part of the inverse matrix: R' = InvS * InvR .
-				//	InvR (transpose of R) has columns: right, downward, backward.
+				//	InvR (transpose of R) has columns: right, upward, backward.
 				//	InvS applies 1/scale to each component of these column vectors.
 				//	The resulting matrix (InvS * InvR) will have columns:
 				//	Col0 = [right.x*invSx, right.y*invSy, right.z*invSz]
-				//	Col1 = [downward.x*invSx, downward.y*invSy, downward.z*invSz]
+				//	Col1 = [upward.x*invSx, upward.y*invSy, upward.z*invSz]
 				//	Col2 = [backward.x*invSx, backward.y*invSy, backward.z*invSz]
 
 				// 5. Construct the final inverse matrix (InvS * InvR * InvT) in column-major order
 				std::array< precision_t, 16 > rawData{
 					right[X] * invScaleX, right[Y] * invScaleY, right[Z] * invScaleZ, 0, // Column 0 (InvS * right_axis_of_InvR)
-					m_downward[X] * invScaleX, m_downward[Y] * invScaleY, m_downward[Z] * invScaleZ, 0, // Column 1 (InvS * downward_axis_of_InvR)
+					m_upward[X] * invScaleX, m_upward[Y] * invScaleY, m_upward[Z] * invScaleZ, 0, // Column 1 (InvS * upward_axis_of_InvR)
 					m_backward[X] * invScaleX, m_backward[Y] * invScaleY, m_backward[Z] * invScaleZ, 0, // Column 2 (InvS * backward_axis_of_InvR)
 					positionX, positionY, positionZ, 1 // Column 3 (Translation part T')
 				};
@@ -1191,13 +1221,13 @@ namespace EmEn::Base::Math
 				const auto right = this->rightVector();
 
 				const auto positionX = -Vector< 3, precision_t >::dotProduct(right, m_position);
-				const auto positionY = -Vector< 3, precision_t >::dotProduct(m_downward, m_position);
+				const auto positionY = -Vector< 3, precision_t >::dotProduct(m_upward, m_position);
 				const auto positionZ = -Vector< 3, precision_t >::dotProduct(m_backward, m_position);
 
 				const std::array< precision_t, 16 > rawData{
-					right[X], m_downward[X], m_backward[X], 0,
-					right[Y], m_downward[Y], m_backward[Y], 0,
-					right[Z], m_downward[Z], m_backward[Z], 0,
+					right[X], m_upward[X], m_backward[X], 0,
+					right[Y], m_upward[Y], m_backward[Y], 0,
+					right[Z], m_upward[Z], m_backward[Z], 0,
 					positionX, positionY, positionZ, 1
 				};
 
@@ -1221,9 +1251,9 @@ namespace EmEn::Base::Math
 				const auto right = this->rightVector();
 
 				const std::array< precision_t, 16 > rawData{
-					right[X], m_downward[X], m_backward[X], 0,
-					right[Y], m_downward[Y], m_backward[Y], 0,
-					right[Z], m_downward[Z], m_backward[Z], 0,
+					right[X], m_upward[X], m_backward[X], 0,
+					right[Y], m_upward[Y], m_backward[Y], 0,
+					right[Z], m_upward[Z], m_backward[Z], 0,
 					0, 0, 0, 1
 				};
 
@@ -1249,7 +1279,7 @@ namespace EmEn::Base::Math
 			void
 			resetRotation () noexcept
 			{
-				m_downward = Vector< 3, precision_t >::positiveY();
+				m_upward = Vector< 3, precision_t >::positiveY();
 				m_backward = Vector< 3, precision_t >::positiveZ();
 			}
 
@@ -1266,7 +1296,7 @@ namespace EmEn::Base::Math
 			{
 				return {
 					Math::linearInterpolation(operandA.m_position, operandB.m_position, factor),
-					Math::linearInterpolation(operandA.m_downward, operandB.m_downward, factor),
+					Math::linearInterpolation(operandA.m_upward, operandB.m_upward, factor),
 					Math::linearInterpolation(operandA.m_backward, operandB.m_backward, factor),
 					Math::linearInterpolation(operandA.m_scaling, operandB.m_scaling, factor)
 				};
@@ -1285,7 +1315,7 @@ namespace EmEn::Base::Math
 			{
 				return {
 					Math::cosineInterpolation(operandA.m_position, operandB.m_position, factor),
-					Math::cosineInterpolation(operandA.m_downward, operandB.m_downward, factor),
+					Math::cosineInterpolation(operandA.m_upward, operandB.m_upward, factor),
 					Math::cosineInterpolation(operandA.m_backward, operandB.m_backward, factor),
 					Math::cosineInterpolation(operandA.m_scaling, operandB.m_scaling, factor)
 				};
@@ -1307,14 +1337,14 @@ namespace EmEn::Base::Math
 					"Position : " << obj.m_position << "\n"
 					"Right (X+) : " << obj.rightVector() << "\n"
 					"Left (X-) : " << obj.leftVector() << "\n"
-					"Downward (Y+) : " << obj.downwardVector() << "\n"
-					"Upward (Y-) : " << obj.upwardVector() << "\n"
+					"Upward (Y+) : " << obj.upwardVector() << "\n"
+					"Downward (Y-) : " << obj.downwardVector() << "\n"
 					"Backward (Z+) : " << obj.backwardVector() << "\n"
 					"Forward (Z-) : " << obj.forwardVector() << '\n';
 			}
 
 			/**
-			 * @brief Computes the downward (Y-Axis) vector from backward vector (Z-Axis).
+			 * @brief Computes the frame's Y-Axis (upward) vector from its backward vector (Z-Axis).
 			 * @param backward A reference to a vector.
 			 * @return Vector< 3, precision_t >
 			 */
@@ -1322,47 +1352,35 @@ namespace EmEn::Base::Math
 			Vector< 3, precision_t >
 			computeYAxis (const Vector< 3, precision_t > & backward) noexcept
 			{
-				/* Special case when backward is equal to downward (0, 1, 0). */
-				if ( backward == Vector< 3, precision_t >::positiveY() )
+				/* NOTE: Wide enough to cover the band where the cross product below becomes too short for
+				 * normalize() to touch it (about 0.02 degrees off the axis). */
+				constexpr auto PoleThreshold = static_cast< precision_t >(1e-4);
+
+				if ( std::abs(backward[Y]) > static_cast< precision_t >(1) - PoleThreshold )
 				{
-					return Vector< 3, precision_t >::positiveZ();
+					return backward[Y] > static_cast< precision_t >(0) ?
+						Vector< 3, precision_t >::positiveZ() :
+						Vector< 3, precision_t >::negativeZ();
 				}
 
-				/* Special case when backward is equal to upward (0, -1, 0). */
-				if ( backward == Vector< 3, precision_t >::negativeY() )
-				{
-					return Vector< 3, precision_t >::negativeZ();
-				}
+				/* In general, the frame's Y column is the world up axis. */
+				const auto upward = Vector< 3, precision_t >::positiveY();
 
-				Vector< 3, precision_t > downward;
+				/* Re-calculate the orthonormal Y column with the right vector.
+				 * NOTE: The final cross product of two orthogonal unit vectors is already unit, hence no
+				 * normalize() on the return. */
+				const auto right = Vector< 3, precision_t >::crossProduct(upward, backward).normalize();
 
-				/* Compute temporal downward vector based on the backward
-				 * vector watch out when look up/down at 90 degrees.
-				 * For example, the backward vector is on the Y axis. */
-				if ( std::abs(backward[X]) < 0.0F && std::abs(backward[Z]) < 0.0F )
-				{
-					/* If backward vector is pointing on +Y axis. */
-					downward = backward[Y] > 0.0F ? Vector< 3, precision_t >::negativeZ() : Vector< 3, precision_t >::positiveZ();
-				}
-				else
-				{
-					/* In general, the downward vector is straight down. */
-					downward = Vector< 3, precision_t >::positiveY();
-				}
-
-				/* Re-calculate the orthonormal downward vector with right vector. */
-				const auto right = Vector< 3, precision_t >::crossProduct(downward, backward).normalize();
-
-				return Vector< 3, precision_t >::crossProduct(backward, right); // NOTE: normalize() here seems useless.
+				return Vector< 3, precision_t >::crossProduct(backward, right);
 			}
 
 			/* NOTE:
 			 * The position and directions are expressed in parent axis (or world axis).
-			 * X axe vector is not here because it's extracted by a cross-product from downward and backward vectors.
+			 * X axe vector is not here because it's extracted by a cross-product from upward and backward vectors.
 			 * The scale vector is expressed in local axis.
 			 */
 			Vector< 3, precision_t > m_position;
-			Vector< 3, precision_t > m_downward{Vector< 3, precision_t >::positiveY()};
+			Vector< 3, precision_t > m_upward{Vector< 3, precision_t >::positiveY()};
 			Vector< 3, precision_t > m_backward{Vector< 3, precision_t >::positiveZ()};
 			Vector< 3, precision_t > m_scaling{1, 1, 1};
 	};

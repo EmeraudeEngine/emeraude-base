@@ -97,6 +97,33 @@ WaveFactory and PixelFactory.
 - `IDTechUnitScale` (0.01) converts the ~100× idTech unit system to engine units.
 - See: `FileFormatMDx.hpp`
 
+> [!CRITICAL]
+> **id Tech → engine axes (Y-up, Aug 2026): `(md5.y, md5.z, md5.x)`, a ROTATION (det +1).**
+> It used to be `(y, -z, x)`, a REFLECTION (det -1), for the old Y-down world. That single sign
+> had **three** compensations hanging off it, and they only make sense together:
+>
+> | What | Coupled to the determinant? | State |
+> |---|---|---|
+> | Position + vertex-normal transform (MDL/MD2/MD3/MD5) | yes — the sign IS the transform | fixed |
+> | MD5 vertex-normal negation after `computeVertexTBNSpace()` | **yes** — a reflection inverts the cross product | **deleted** |
+> | Triangle winding reversal (2,1,0), all four formats | **NO** — a FORMAT convention | **KEPT** |
+>
+> ⚠️⚠️ **The winding reversal is NOT a mirror compensation.** id Tech stores triangles in the
+> opposite winding to the engine's front-face convention, full stop. Measured: removing it renders
+> every ID model inside out (`boss1.md2` shows its inner limb faces and a hollow head). It survived
+> the Y-up flip untouched. Do not "simplify" it away along with the determinant.
+>
+> ⚠️⚠️ **The MD5 conversion lived in FOUR places and only two were named.** `md5ToEnginePosition()`,
+> `md5ToEngineRotation()` (the joint orientations — `M` must stay identical to the position one),
+> the normal negation above, and a **fourth copy inlined in the skinning loop** — the one that
+> actually builds the visible mesh. Updating the named helpers and missing the inline copy is what
+> left the skinned CyberDemon upside down while MDL/MD2/MD3 were already upright. The inline copy
+> now calls `md5ToEnginePosition()`; keep it that way.
+>
+> **Verification is visual, per format** — no unit test sees any of this:
+> `geometry-loader --demo-options 7` = QuakePlayer (MDL), `8` = boss1 (MD2), `6` = cyberdemon (MD5).
+> Upright, solid (no inner faces), correctly lit.
+
 **ShapeLoadResult** - The read destination: a `Shape` plus optional skeletal-animation data.
 - See: `ShapeLoadResult.hpp`
 
@@ -148,6 +175,39 @@ nothing fancier.* Hardening landed in the A.2 characterization pass and the A.3 
   so a list larger than `INT_MAX` cannot wrap (the former `int32_t` cast was UB).
 - **Diagnostics**: all `std::cerr` in the parsers, FileIO dispatch and StreamIO migrated to the
   `EmEn::Base::Logging` hook (no raw `cerr` in this module).
+
+## Texture coordinate convention (Y-up world)
+
+`V = 0` is the **top row of the image** (Vulkan image origin is top-left). Pairing that with a
+Y-up world gives the two rules every hand-authored generator must follow:
+
+- **Vertical faces** (normal in the XZ plane): `V = 0` pairs with the **`+Y`** edge, `V = 1` with
+  `-Y`. Reference: `generateQuad`.
+- **Horizontal faces**: follow `generatePlane` — on a `+Y`-facing surface `U` grows with `+X` and
+  `V` grows with `+Z`. The `-Y`-facing face of a closed shape is the same mapping with `V` negated.
+
+> [!IMPORTANT]
+> **`generateScreenQuad()` is the one deliberate exception, and it must stay that way.** It is a
+> fullscreen NDC quad (`-1..1`, no options, no scale) for the post-processor and the overlay manager,
+> whose source images are already in **screen space** — so its `V` pairs with **`+Y`**, the exact
+> opposite of every world-space generator. It is not a `generateQuad` that someone forgot to migrate.
+> Locked by `screenQuadPairsVWithPositiveYOnPurpose`, so a "harmonising" sweep over the `V` axis
+> fails loudly instead of silently flipping the whole post-process chain and the entire overlay.
+
+> [!CAUTION]
+> **The V pairing is a defect class of its own, distinct from winding, from vertex coordinates and
+> from declared normals.** The Y-up switch reversed the emission order of `generateCuboid`'s faces
+> (winding) but left every `setTextureCoordinates` paired with the position it had in the Y-down
+> era, so all six faces rendered **V-flipped** while compiling clean and passing 1975/1975 tests.
+> No assertion on the **geometry** can see it — the shape, its normals and its winding are all
+> correct, only the image is upside down. But an assertion on the **pairing** catches it outright,
+> and there is now one: `test_VertexFactoryShapeGenerator.cpp` walks every vertex of a shape, keeps
+> the vertical faces (`|normal.Y| < 0.5`) and requires `V = 0` above mid-height, `V = 1` below.
+> Fixed and measured for both `generateCuboid` overloads (Aug 2026) — negating `V` on all six faces
+> restores the pre-migration relationship, in which the up-facing horizontal face agreed with
+> `generatePlane`. `generateHollowedCube` is deliberately excluded: its UVs are parameterised
+> per beam (`U` = beam width, `V` = length/width ratio) and assembled through `ShapeAssembler`
+> rotations, so its `V` is not tied to world `Y`.
 
 ## Critical Attention Points
 

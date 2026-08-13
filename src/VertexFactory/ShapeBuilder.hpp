@@ -421,7 +421,7 @@ namespace EmEn::Base::VertexFactory
 					return;
 				}
 
-				/* Move the whole geometry above Y- axis, if requested. */
+				/* Rest the whole geometry on the Y=0 plane (extending toward +Y), if requested. */
 				if ( m_options.isCenteredAtBottom()  )
 				{
 					m_destinationShape->setCenterAtBottom(false);

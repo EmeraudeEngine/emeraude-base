@@ -296,7 +296,10 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Flips the Y-Axis of attributes.
+			 * @brief Flips the Y-Axis of the GEOMETRIC attributes.
+			 * @note The texture coordinate is deliberately NOT touched here — see flipTextureV().
+			 * Mirroring geometry and mirroring a UV are different intentions, and folding them into
+			 * one call means a caller can never ask for one without the other.
 			 * @return void
 			 */
 			void
@@ -305,6 +308,16 @@ namespace EmEn::Base::VertexFactory
 				m_position[Math::Y] = -m_position[Math::Y];
 				m_tangent[Math::Y] = -m_tangent[Math::Y];
 				m_normal[Math::Y] = -m_normal[Math::Y];
+			}
+
+			/**
+			 * @brief Negates the V texture coordinate.
+			 * @warning This is `-v`, NOT `1 - v`: they agree only under REPEAT wrapping.
+			 * @return void
+			 */
+			void
+			flipTextureV () noexcept
+			{
 				m_textureCoordinates[Math::Y] = -m_textureCoordinates[Math::Y];
 			}
 

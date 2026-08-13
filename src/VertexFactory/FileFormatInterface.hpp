@@ -56,6 +56,14 @@ namespace EmEn::Base::VertexFactory
 		bool flipXAxis = false;
 		bool flipYAxis = false;
 		bool flipZAxis = false;
+		/** @brief Negates the U texture coordinate.
+		 * @note Separate from flipXAxis on purpose: mirroring GEOMETRY and mirroring a TEXTURE
+		 * COORDINATE are different intentions that happened to share a flag. */
+		bool flipU = false;
+		/** @brief Negates the V texture coordinate.
+		 * @warning This is `-v`, NOT `1 - v`. The two agree only under REPEAT wrapping, where they
+		 * are congruent modulo 1; under CLAMP or with an atlas they address different texels. */
+		bool flipV = false;
 		bool requestNormal = false;
 		bool requestTangentSpace = false;
 		bool requestTextureCoordinates = false;

@@ -1265,8 +1265,11 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				auto & vector = m_vt[offset];
-				vector[Math::X] = m_readOptions.flipXAxis ? -u : u;
-				vector[Math::Y] = m_readOptions.flipYAxis ? -v : v;
+				/* NOTE: flipU/flipV, not flipXAxis/flipYAxis: a texture coordinate is not a
+				 * geometric axis, and reading the geometry flags here made one flag mean two
+				 * unrelated things. */
+				vector[Math::X] = m_readOptions.flipU ? -u : u;
+				vector[Math::Y] = m_readOptions.flipV ? -v : v;
 			}
 
 			/**

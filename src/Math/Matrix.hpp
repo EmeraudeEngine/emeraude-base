@@ -2189,42 +2189,6 @@ namespace EmEn::Base::Math
 			}
 
 			/**
-			 * @brief Returns a frustum 4x4 matrix.
-			 * @param xLeft Negative X distance.
-			 * @param xRight Positive X distance.
-			 * @param yBottom Negative Y distance.
-			 * @param yTop Positive Y distance.
-			 * @param zNear Negative Z distance.
-			 * @param zFar Positive Z distance.
-			 * @return Matrix< 4, precision_t >
-			 */
-			[[nodiscard]]
-			static
-			Matrix
-			frustum (precision_t xLeft, precision_t xRight, precision_t yBottom, precision_t yTop, precision_t zNear, precision_t zFar) noexcept
-				requires (dim_t == 4)
-			{
-				Matrix matrix;
-
-				if ( Utility::different(xRight, xLeft) && Utility::different(yTop, yBottom) && Utility::different(zNear, zFar) && zNear >= 0.0 && zFar >= 0.0 )
-				{
-					matrix[M4x4Col0Row0] = (2.0 * zNear) / (xRight - xLeft);
-					matrix[M4x4Col2Row0] = (xRight + xLeft) / (xRight - xLeft);
-
-					matrix[M4x4Col1Row1] = (2.0 * zNear) / (yTop - yBottom);
-					matrix[M4x4Col2Row1] = (yTop + yBottom) / (yTop - yBottom);
-
-					matrix[M4x4Col2Row2] = -(zFar + zNear) / (zFar - zNear);
-					matrix[M4x4Col3Row2] = -(2.0 * zFar * zNear) / (zFar - zNear);
-
-					matrix[M4x4Col2Row3] = -1;
-					matrix[M4x4Col3Row3] = 0;
-				}
-
-				return matrix;
-			}
-
-			/**
 			 * @brief Returns an orthographic projection 4x4 matrix.
 			 * @note Vulkan compliant (right-handed, depth range [0, 1]).
 			 * @param xLeft Negative X distance.
@@ -2252,8 +2216,12 @@ namespace EmEn::Base::Math
 
 					deltaValue = yTop - yBottom;
 
-					matrix[M4x4Col1Row1] = 2 / deltaValue;
-					matrix[M4x4Col3Row1] = -((yTop + yBottom) / deltaValue);
+					/* ⚠️ Y is negated here exactly as in perspectiveProjection(), and BOTH terms
+					 * must move: y_ndc = scale * y + bias, so flipping the axis negates the scale
+					 * and the bias together. Serves the CSM cascades, every directional and spot
+					 * shadow map, the 2D render targets and the cubemap views. */
+					matrix[M4x4Col1Row1] = -2 / deltaValue;
+					matrix[M4x4Col3Row1] = (yTop + yBottom) / deltaValue;
 
 					deltaValue = zFar - zNear;
 
@@ -2298,7 +2266,14 @@ namespace EmEn::Base::Math
 				Matrix matrix;
 				matrix[M4x4Col0Row0] = a / aspectRatio;
 
-				matrix[M4x4Col1Row1] = a;
+				/* ⚠️ NEGATIVE on purpose — this is the whole Y-up convention, in one coefficient.
+				 * The world is Y-up while Vulkan's NDC y points DOWN, so the projection is what
+				 * reconciles them. With a POSITIVE value here the eye->NDC map has a negative
+				 * determinant and the renderer produces a MIRROR IMAGE: that was the engine's
+				 * behaviour until Aug 2026, compensated in a dozen places that this change deletes.
+				 * ⚠️ orthographicProjection() must carry the same sign, scale AND bias, or shadow
+				 * maps and 2D targets stay mirrored relative to the main pass. */
+				matrix[M4x4Col1Row1] = -a;
 
 				/* NOTE: Vulkan uses depth range [0, 1] instead of OpenGL's [-1, 1].
 				 * OpenGL formula: z' = -(f+n)/(f-n) * z - 2fn/(f-n)

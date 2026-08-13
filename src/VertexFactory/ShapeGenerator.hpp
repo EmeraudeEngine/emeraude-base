@@ -41,10 +41,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 {
 	/**
 	 * @brief Generates a triangle front-facing the camera (Z+).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
-	 * @param size The size of the triangle. Default 1.
+	 * @param size The side length of the equilateral triangle. Default 1.
 	 * @param options A reference to initial builder options. Default none.
 	 * @return Shape< vertex_data_t, index_data_t >
 	 */
@@ -58,27 +57,36 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		ShapeBuilder< vertex_data_t, index_data_t > builder{shape, options};
 
-		const auto height = size * (std::sqrt(static_cast< vertex_data_t >(3)) * static_cast< vertex_data_t >(0.5));
+		/* Equilateral triangle of side 'size', centred on its bounding box: the apex sits at
+		 * +halfHeight, the base at -halfHeight, and the base spans 'size' exactly. Half the
+		 * height of an equilateral triangle is size * sqrt(3) / 4.
+		 * ⚠️ The base used to sit at -halfSize while the apex came from the height, which made
+		 * the legs 5.9% longer than the base. Symmetric bounds are also what let the volumetric
+		 * vertex colour formula span the full [0,1] range. */
+		const auto halfHeight = size * (std::sqrt(static_cast< vertex_data_t >(3)) * static_cast< vertex_data_t >(0.25));
 		const auto halfSize = size * static_cast< vertex_data_t >(0.5);
 
 		builder.beginConstruction(ConstructionMode::Triangles);
 
 		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveZ());
 
-		/* The top of the triangle (Negative Y). */
-		builder.setPosition(0, -(height * static_cast< vertex_data_t >(0.5)), 0);
+		/* Listed CCW around the +Z normal, hence top/left/right, authored Y-up:
+		 * the apex sits at +Y and carries the texture top (V=0). */
+
+		/* The top of the triangle (Positive Y). */
+		builder.setPosition(0, halfHeight, 0);
 		builder.setTextureCoordinates(0.5, 0);
 		builder.setVertexColor(1, 0, 0);
 		builder.newVertex();
 
 		/* The left of the triangle (Negative X). */
-		builder.setPosition(-halfSize, halfSize, 0);
+		builder.setPosition(-halfSize, -halfHeight, 0);
 		builder.setTextureCoordinates(0, 1);
 		builder.setVertexColor(0, 1, 0);
 		builder.newVertex();
 
 		/* The right of the triangle (Positive X). */
-		builder.setPosition(halfSize, halfSize, 0);
+		builder.setPosition(halfSize, -halfHeight, 0);
 		builder.setTextureCoordinates(1, 1);
 		builder.setVertexColor(0, 0, 1);
 		builder.newVertex();
@@ -90,7 +98,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a quad front-facing the camera (Z+).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param xScale The size in X-axis.
@@ -125,27 +132,31 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveZ());
 
-		/* Top-left */
+		/* NOTE: The winding is already CCW around +Z for Y-up; only the UV pairing
+		 * was authored Y-down (the vertex at -Y used to be the visual top). The
+		 * texture top (V=0) now maps to the +Y edge. */
+
+		/* Bottom-left */
 		builder.setPosition(-xScale, -yScale, 0);
-		builder.setTextureCoordinates(0, 0);
+		builder.setTextureCoordinates(0, 1);
 		builder.setVertexColor(0, 0, 0);
 		builder.newVertex();
 
-		/* Bottom-left */
+		/* Bottom-right */
+		builder.setPosition(xScale, -yScale, 0);
+		builder.setTextureCoordinates(1, 1);
+		builder.setVertexColor(1, 0, 0);
+		builder.newVertex();
+
+		/* Top-left */
 		builder.setPosition(-xScale, yScale, 0);
-		builder.setTextureCoordinates(0, 1);
+		builder.setTextureCoordinates(0, 0);
 		builder.setVertexColor(0, 1, 0);
 		builder.newVertex();
 
 		/* Top-right */
-		builder.setPosition(xScale, -yScale, 0);
-		builder.setTextureCoordinates(1, 0);
-		builder.setVertexColor(1, 0, 0);
-		builder.newVertex();
-
-		/* Bottom-right */
 		builder.setPosition(xScale, yScale, 0);
-		builder.setTextureCoordinates(1, 1);
+		builder.setTextureCoordinates(1, 0);
 		builder.setVertexColor(1, 1, 0, 1);
 		builder.newVertex();
 
@@ -155,8 +166,52 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	}
 
 	/**
+	 * @brief Generates a quad front-facing the camera (Z+).
+	 * @tparam vertex_data_t The precision type of vertex data. Default float.
+	 * @tparam index_data_t The precision type of index data. Default uint32_t.
+	 * @return Shape< vertex_data_t, index_data_t >
+	 */
+	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
+	[[nodiscard]]
+	Shape< vertex_data_t, index_data_t >
+	generateScreenQuad () noexcept
+		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
+	{
+		Shape< vertex_data_t, index_data_t > shape{2};
+
+		ShapeBuilder< vertex_data_t, index_data_t > builder{shape};
+
+		builder.beginConstruction(ConstructionMode::TriangleStrip);
+
+		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveZ());
+
+		/* Bottom-left */
+		builder.setPosition(-1.0, -1.0, 0);
+		builder.setTextureCoordinates(0, 0);
+		builder.newVertex();
+
+		/* Bottom-right */
+		builder.setPosition(1.0, -1.0, 0);
+		builder.setTextureCoordinates(1, 0);
+		builder.newVertex();
+
+		/* Top-left */
+		builder.setPosition(-1.0, 1.0, 0);
+		builder.setTextureCoordinates(0, 1);
+		builder.newVertex();
+
+		/* Top-right */
+		builder.setPosition(1.0, 1.0, 0);
+		builder.setTextureCoordinates(1, 1);
+		builder.newVertex();
+
+		builder.endConstruction();
+
+		return shape;
+	}
+
+	/**
 	 * @brief Generates a cuboid shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param width The width of the cuboid shape. Default 1.
@@ -205,27 +260,33 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.beginConstruction(ConstructionMode::TriangleStrip);
 
+		/* Texture mapping, authored Y-up: V=0 is the image top, so it pairs with the
+		 * +Y edge on the four vertical faces. The two horizontal faces follow
+		 * generatePlane(): U grows with +X, and V grows with +Z on the +Y face.
+		 * The Y-up switch only reordered the emission (winding); the V axis needed
+		 * this negation on all six faces. */
+
 		/* Right face (X+) */
 		{
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveX());
 
 			builder.setPosition(width, -height, -depth);
-			builder.setTextureCoordinates(1, 0);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(width, -height, depth);
-			builder.setTextureCoordinates(0, 0);
-			builder.setVertexColor(1, 0, 1);
-			builder.newVertex();
-
 			builder.setPosition(width, height, -depth);
-			builder.setTextureCoordinates(1, 1);
+			builder.setTextureCoordinates(1, 0);
 			builder.setVertexColor(1, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(width, height, depth);
+			builder.setPosition(width, -height, depth);
 			builder.setTextureCoordinates(0, 1);
+			builder.setVertexColor(1, 0, 1);
+			builder.newVertex();
+
+			builder.setPosition(width, height, depth);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(1, 1, 1);
 			builder.newVertex();
 
@@ -237,22 +298,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeX());
 
 			builder.setPosition(-width, height, -depth);
-			builder.setTextureCoordinates(0, 1);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(-width, height, depth);
-			builder.setTextureCoordinates(1, 1);
-			builder.setVertexColor(0, 1, 1);
-			builder.newVertex();
-
 			builder.setPosition(-width, -height, -depth);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(-width, -height, depth);
+			builder.setPosition(-width, height, depth);
 			builder.setTextureCoordinates(1, 0);
+			builder.setVertexColor(0, 1, 1);
+			builder.newVertex();
+
+			builder.setPosition(-width, -height, depth);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(0, 0, 1);
 			builder.newVertex();
 
@@ -264,22 +325,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveY());
 
 			builder.setPosition(-width, height, -depth);
-			builder.setTextureCoordinates(0, 1);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(width, height, -depth);
-			builder.setTextureCoordinates(1, 1);
-			builder.setVertexColor(1, 1, 0);
-			builder.newVertex();
-
 			builder.setPosition(-width, height, depth);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 1, 1);
 			builder.newVertex();
 
-			builder.setPosition(width, height, depth);
+			builder.setPosition(width, height, -depth);
 			builder.setTextureCoordinates(1, 0);
+			builder.setVertexColor(1, 1, 0);
+			builder.newVertex();
+
+			builder.setPosition(width, height, depth);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 1, 1);
 			builder.newVertex();
 
@@ -291,22 +352,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeY());
 
 			builder.setPosition(-width, -height, depth);
-			builder.setTextureCoordinates(0, 1);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(0, 0, 1);
 			builder.newVertex();
 
-			builder.setPosition(width, -height, depth);
-			builder.setTextureCoordinates(1, 1);
-			builder.setVertexColor(1, 0, 1);
-			builder.newVertex();
-
 			builder.setPosition(-width, -height, -depth);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(width, -height, -depth);
+			builder.setPosition(width, -height, depth);
 			builder.setTextureCoordinates(1, 0);
+			builder.setVertexColor(1, 0, 1);
+			builder.newVertex();
+
+			builder.setPosition(width, -height, -depth);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 0, 0);
 			builder.newVertex();
 
@@ -318,22 +379,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveZ());
 
 			builder.setPosition(-width, -height, depth);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 0, 1);
 			builder.newVertex();
 
-			builder.setPosition(-width, height, depth);
-			builder.setTextureCoordinates(0, 1);
-			builder.setVertexColor(0, 1, 1);
-			builder.newVertex();
-
 			builder.setPosition(width, -height, depth);
-			builder.setTextureCoordinates(1, 0);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 0, 1);
 			builder.newVertex();
 
+			builder.setPosition(-width, height, depth);
+			builder.setTextureCoordinates(0, 0);
+			builder.setVertexColor(0, 1, 1);
+			builder.newVertex();
+
 			builder.setPosition(width, height, depth);
-			builder.setTextureCoordinates(1, 1);
+			builder.setTextureCoordinates(1, 0);
 			builder.setVertexColor(1, 1, 1);
 			builder.newVertex();
 
@@ -345,22 +406,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeZ());
 
 			builder.setPosition(width, -height, -depth);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(1, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(width, height, -depth);
-			builder.setTextureCoordinates(0, 1);
-			builder.setVertexColor(1, 1, 0);
-			builder.newVertex();
-
 			builder.setPosition(-width, -height, -depth);
-			builder.setTextureCoordinates(1, 0);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(0, 0, 0);
 			builder.newVertex();
 
+			builder.setPosition(width, height, -depth);
+			builder.setTextureCoordinates(0, 0);
+			builder.setVertexColor(1, 1, 0);
+			builder.newVertex();
+
 			builder.setPosition(-width, height, -depth);
-			builder.setTextureCoordinates(1, 1);
+			builder.setTextureCoordinates(1, 0);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();
 
@@ -374,7 +435,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a cuboid shape from a vector 3.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param size The dimension of the cuboid. X for width, Y for height and Z for depth.
@@ -392,7 +452,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a cuboid shape from a vector 4.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param size The dimension of the cuboid. X for width, Y for height and Z for depth.
@@ -410,7 +469,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a cuboid shape by using a minimum and a maximum vector.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param max Positive point of the cuboid.
@@ -430,27 +488,33 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.beginConstruction(ConstructionMode::TriangleStrip);
 
+		/* Texture mapping, authored Y-up: V=0 is the image top, so it pairs with the
+		 * +Y edge on the four vertical faces. The two horizontal faces follow
+		 * generatePlane(): U grows with +X, and V grows with +Z on the +Y face.
+		 * The Y-up switch only reordered the emission (winding); the V axis needed
+		 * this negation on all six faces. */
+
 		/* Right face (X+) */
 		{
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveX());
 
 			builder.setPosition(max[Math::X], min[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(1, 0);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], min[Math::Y], max[Math::Z]);
-			builder.setTextureCoordinates(0, 0);
-			builder.setVertexColor(1, 0, 1);
-			builder.newVertex();
-
 			builder.setPosition(max[Math::X], max[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(1, 1);
+			builder.setTextureCoordinates(1, 0);
 			builder.setVertexColor(1, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], max[Math::Y], max[Math::Z]);
+			builder.setPosition(max[Math::X], min[Math::Y], max[Math::Z]);
 			builder.setTextureCoordinates(0, 1);
+			builder.setVertexColor(1, 0, 1);
+			builder.newVertex();
+
+			builder.setPosition(max[Math::X], max[Math::Y], max[Math::Z]);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(1, 1, 1);
 			builder.newVertex();
 
@@ -462,22 +526,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeX());
 
 			builder.setPosition(min[Math::X], max[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(0, 1);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(min[Math::X], max[Math::Y], max[Math::Z]);
-			builder.setTextureCoordinates(1, 1);
-			builder.setVertexColor(0, 1, 1);
-			builder.newVertex();
-
 			builder.setPosition(min[Math::X], min[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(min[Math::X], min[Math::Y], max[Math::Z]);
+			builder.setPosition(min[Math::X], max[Math::Y], max[Math::Z]);
 			builder.setTextureCoordinates(1, 0);
+			builder.setVertexColor(0, 1, 1);
+			builder.newVertex();
+
+			builder.setPosition(min[Math::X], min[Math::Y], max[Math::Z]);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(0, 0, 1);
 			builder.newVertex();
 
@@ -489,22 +553,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveY());
 
 			builder.setPosition(min[Math::X], max[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(0, 1);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], max[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(1, 1);
-			builder.setVertexColor(1, 1, 0);
-			builder.newVertex();
-
 			builder.setPosition(min[Math::X], max[Math::Y], max[Math::Z]);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 1, 1);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], max[Math::Y], max[Math::Z]);
+			builder.setPosition(max[Math::X], max[Math::Y], min[Math::Z]);
 			builder.setTextureCoordinates(1, 0);
+			builder.setVertexColor(1, 1, 0);
+			builder.newVertex();
+
+			builder.setPosition(max[Math::X], max[Math::Y], max[Math::Z]);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 1, 1);
 			builder.newVertex();
 
@@ -516,22 +580,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeY());
 
 			builder.setPosition(min[Math::X], min[Math::Y], max[Math::Z]);
-			builder.setTextureCoordinates(0, 1);
+			builder.setTextureCoordinates(0, 0);
 			builder.setVertexColor(0, 0, 1);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], min[Math::Y], max[Math::Z]);
-			builder.setTextureCoordinates(1, 1);
-			builder.setVertexColor(1, 0, 1);
-			builder.newVertex();
-
 			builder.setPosition(min[Math::X], min[Math::Y], min[Math::Z]);
-			builder.setTextureCoordinates(0, 0);
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], min[Math::Y], min[Math::Z]);
+			builder.setPosition(max[Math::X], min[Math::Y], max[Math::Z]);
 			builder.setTextureCoordinates(1, 0);
+			builder.setVertexColor(1, 0, 1);
+			builder.newVertex();
+
+			builder.setPosition(max[Math::X], min[Math::Y], min[Math::Z]);
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 0, 0);
 			builder.newVertex();
 
@@ -542,23 +606,23 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveZ());
 
-			builder.setPosition(min[Math::X], min[Math::Y], max[Math::Z]); // Top-left
-			builder.setTextureCoordinates(0, 0);
+			builder.setPosition(min[Math::X], min[Math::Y], max[Math::Z]); // Bottom-left
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(0, 0, 1);
 			builder.newVertex();
 
-			builder.setPosition(min[Math::X], max[Math::Y], max[Math::Z]); // Bottom-left
-			builder.setTextureCoordinates(0, 1);
-			builder.setVertexColor(0, 1, 1);
-			builder.newVertex();
-
-			builder.setPosition(max[Math::X], min[Math::Y], max[Math::Z]); // Top-right
-			builder.setTextureCoordinates(1, 0);
+			builder.setPosition(max[Math::X], min[Math::Y], max[Math::Z]); // Bottom-right
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(1, 0, 1);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], max[Math::Y], max[Math::Z]); // Bottom-right
-			builder.setTextureCoordinates(1, 1);
+			builder.setPosition(min[Math::X], max[Math::Y], max[Math::Z]); // Top-left
+			builder.setTextureCoordinates(0, 0);
+			builder.setVertexColor(0, 1, 1);
+			builder.newVertex();
+
+			builder.setPosition(max[Math::X], max[Math::Y], max[Math::Z]); // Top-right
+			builder.setTextureCoordinates(1, 0);
 			builder.setVertexColor(1, 1, 1);
 			builder.newVertex();
 
@@ -569,23 +633,23 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeZ());
 
-			builder.setPosition(max[Math::X], min[Math::Y], min[Math::Z]); // Top-right
-			builder.setTextureCoordinates(0, 0);
+			builder.setPosition(max[Math::X], min[Math::Y], min[Math::Z]); // Bottom-right
+			builder.setTextureCoordinates(0, 1);
 			builder.setVertexColor(1, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(max[Math::X], max[Math::Y], min[Math::Z]); // Bottom-right
-			builder.setTextureCoordinates(0, 1);
-			builder.setVertexColor(1, 1, 0);
-			builder.newVertex();
-
-			builder.setPosition(min[Math::X], min[Math::Y], min[Math::Z]); // Top-left
-			builder.setTextureCoordinates(1, 0);
+			builder.setPosition(min[Math::X], min[Math::Y], min[Math::Z]); // Bottom-left
+			builder.setTextureCoordinates(1, 1);
 			builder.setVertexColor(0, 0, 0);
 			builder.newVertex();
 
-			builder.setPosition(min[Math::X], max[Math::Y], min[Math::Z]); // Bottom-left
-			builder.setTextureCoordinates(1, 1);
+			builder.setPosition(max[Math::X], max[Math::Y], min[Math::Z]); // Top-right
+			builder.setTextureCoordinates(0, 0);
+			builder.setVertexColor(1, 1, 0);
+			builder.newVertex();
+
+			builder.setPosition(min[Math::X], max[Math::Y], min[Math::Z]); // Top-left
+			builder.setTextureCoordinates(1, 0);
 			builder.setVertexColor(0, 1, 0);
 			builder.newVertex();;
 
@@ -599,7 +663,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a cuboid shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param box A reference to a cuboid definition.
@@ -617,7 +680,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a hollowed cube shape (wireframe edges as 3D beams).
-	 * @note Ready for vulkan default world axis.
 	 * @note Vertex color is uniform white because ShapeAssembler rotations
 	 * do not transform vertex colors, making volumetric mapping invalid.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
@@ -673,11 +735,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.setPosition(-size + borderSize, -size + borderSize, -size);
 				builder.setTextureCoordinates(0, 0);
 				builder.newVertex();
-				builder.setPosition(-size + borderSize, -size + borderSize, -size + borderSize);
-				builder.setTextureCoordinates(1, 0);
-				builder.newVertex();
 				builder.setPosition(-size + borderSize,  size - borderSize, -size);
 				builder.setTextureCoordinates(0, vInner);
+				builder.newVertex();
+				builder.setPosition(-size + borderSize, -size + borderSize, -size + borderSize);
+				builder.setTextureCoordinates(1, 0);
 				builder.newVertex();
 				builder.setPosition(-size + borderSize,  size - borderSize, -size + borderSize);
 				builder.setTextureCoordinates(1, vInner);
@@ -693,11 +755,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.setPosition(-size,  size, -size);
 				builder.setTextureCoordinates(0, 0);
 				builder.newVertex();
-				builder.setPosition(-size,  size - borderSize, -size + borderSize);
-				builder.setTextureCoordinates(1, vBorder);
-				builder.newVertex();
 				builder.setPosition(-size, -size, -size);
 				builder.setTextureCoordinates(0, vOuter);
+				builder.newVertex();
+				builder.setPosition(-size,  size - borderSize, -size + borderSize);
+				builder.setTextureCoordinates(1, vBorder);
 				builder.newVertex();
 				builder.setPosition(-size, -size + borderSize, -size + borderSize);
 				builder.setTextureCoordinates(1, vOuter - vBorder);
@@ -709,11 +771,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.setPosition(-size, -size + borderSize, -size + borderSize);
 				builder.setTextureCoordinates(0, 0);
 				builder.newVertex();
-				builder.setPosition(-size,  size - borderSize, -size + borderSize);
-				builder.setTextureCoordinates(0, vInner);
-				builder.newVertex();
 				builder.setPosition(-size + borderSize, -size + borderSize, -size + borderSize);
 				builder.setTextureCoordinates(1, 0);
+				builder.newVertex();
+				builder.setPosition(-size,  size - borderSize, -size + borderSize);
+				builder.setTextureCoordinates(0, vInner);
 				builder.newVertex();
 				builder.setPosition(-size + borderSize,  size - borderSize, -size + borderSize);
 				builder.setTextureCoordinates(1, vInner);
@@ -726,11 +788,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.setPosition(-size + borderSize, -size + borderSize, -size);
 				builder.setTextureCoordinates(0, vBorder);
 				builder.newVertex();
-				builder.setPosition(-size + borderSize,  size - borderSize, -size);
-				builder.setTextureCoordinates(0, vOuter - vBorder);
-				builder.newVertex();
 				builder.setPosition(-size, -size, -size);
 				builder.setTextureCoordinates(1, 0);
+				builder.newVertex();
+				builder.setPosition(-size + borderSize,  size - borderSize, -size);
+				builder.setTextureCoordinates(0, vOuter - vBorder);
 				builder.newVertex();
 				builder.setPosition(-size,  size, -size);
 				builder.setTextureCoordinates(1, vOuter);
@@ -767,7 +829,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto absNY = std::abs(normal[Math::Y]);
 				const auto absNZ = std::abs(normal[Math::Z]);
 
-				vertex_data_t u, v;
+				vertex_data_t u;
+				vertex_data_t v;
 
 				if ( absNX >= absNY && absNX >= absNZ )
 				{
@@ -806,7 +869,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a sphere shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The radius of the sphere shape. Default 1.
@@ -910,23 +972,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				textureCoordinates[3] = {texCoordU - deltaV, texCoordV, 0};
 				normals[3] = {normalX, normalY, normalZ};
 
-				/* Draw quad */
+				/* Draw quad. The strip goes out as [0]/[2]/[1]/[3] so that both
+				 * triangles wind CCW around the outward normal; [0]/[1]/[2]/[3]
+				 * was the mirror-wound order compensating the old eye->NDC
+				 * transform. Each vertex keeps its own attributes. */
 				builder.setPosition(positions[0]);
 				builder.setNormal(normals[0]);
 				builder.setTextureCoordinates(textureCoordinates[0]);
 				builder.setVertexColor((normals[0][Math::X] + one) * half, (normals[0][Math::Y] + one) * half, (normals[0][Math::Z] + one) * half);
 				builder.newVertex();
 
-				builder.setPosition(positions[1]);
-				builder.setNormal(normals[1]);
-				builder.setTextureCoordinates(textureCoordinates[1]);
-				builder.setVertexColor((normals[1][Math::X] + one) * half, (normals[1][Math::Y] + one) * half, (normals[1][Math::Z] + one) * half);
-				builder.newVertex();
-
 				builder.setPosition(positions[2]);
 				builder.setNormal(normals[2]);
 				builder.setTextureCoordinates(textureCoordinates[2]);
 				builder.setVertexColor((normals[2][Math::X] + one) * half, (normals[2][Math::Y] + one) * half, (normals[2][Math::Z] + one) * half);
+				builder.newVertex();
+
+				builder.setPosition(positions[1]);
+				builder.setNormal(normals[1]);
+				builder.setTextureCoordinates(textureCoordinates[1]);
+				builder.setVertexColor((normals[1][Math::X] + one) * half, (normals[1][Math::Y] + one) * half, (normals[1][Math::Z] + one) * half);
 				builder.newVertex();
 
 				builder.setPosition(positions[3]);
@@ -1066,7 +1131,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	}
 	/**
 	 * @brief Generates a geodesic sphere shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The radius of the sphere shape. Default 1.
@@ -1115,27 +1179,30 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			{-positionZ, -positionX,  positionY}
 		}};
 
+		/* Seed faces, listed CCW around their outward normal. The second and third
+		 * index of every row used to be given the other way round to compensate the
+		 * mirrored eye->NDC transform; subdivide() preserves the orientation. */
 		constexpr std::array< std::array< index_data_t , 3 >, 20 > indices{{
-			{{0, 4, 1}},
-			{{0, 9, 4}},
-			{{9, 5, 4}},
-			{{4, 5, 8}},
-			{{4, 8, 1}},
-			{{8, 10, 1}},
-			{{8, 3, 10}},
-			{{5, 3, 8}},
-			{{5, 2, 3}},
-			{{2, 7, 3}},
-			{{7, 10, 3}},
-			{{7, 6, 10}},
-			{{7, 11, 6}},
-			{{11, 0, 6}},
-			{{0, 1, 6}},
-			{{6, 1, 10}},
-			{{9, 0, 11}},
-			{{9, 11, 2}},
-			{{9, 2, 5}},
-			{{7, 2, 11}}
+			{{0, 1, 4}},
+			{{0, 4, 9}},
+			{{9, 4, 5}},
+			{{4, 8, 5}},
+			{{4, 1, 8}},
+			{{8, 1, 10}},
+			{{8, 10, 3}},
+			{{5, 8, 3}},
+			{{5, 3, 2}},
+			{{2, 3, 7}},
+			{{7, 3, 10}},
+			{{7, 10, 6}},
+			{{7, 6, 11}},
+			{{11, 6, 0}},
+			{{0, 6, 1}},
+			{{6, 10, 1}},
+			{{9, 11, 0}},
+			{{9, 2, 11}},
+			{{9, 5, 2}},
+			{{7, 11, 2}}
 		}};
 
 		builder.beginConstruction(ConstructionMode::Triangles);
@@ -1154,7 +1221,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a cylinder shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param baseRadius The bottom radius of the cylinder shape. Default 1.
@@ -1192,11 +1258,13 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto deltaV = one / static_cast< vertex_data_t >(stacks);
 
 		/* Outward surface normal Y component for a truncated cone.
-		 * Derived from cross product of circumferential tangent and generatrix:
-		 * N = (-sin(θ), 0, cos(θ)) × ((topR-baseR)·cos(θ), -length, (topR-baseR)·sin(θ))
-		 *   = (length·cos(θ), topR-baseR, length·sin(θ))
+		 * The base circle (baseRadius) sits at Y = 0 and the top circle
+		 * (topRadius) at Y = +length. Derived from cross product of the
+		 * generatrix and the circumferential tangent:
+		 * N = ((topR-baseR)·cos(θ), length, (topR-baseR)·sin(θ)) × (-sin(θ), 0, cos(θ))
+		 *   = (length·cos(θ), baseR-topR, length·sin(θ))
 		 * For a straight cylinder (baseR == topR), yNormal = 0 (purely radial). */
-		const auto yNormal = Utility::isZero(baseRadius - topRadius) ? static_cast< vertex_data_t >(0) : topRadius - baseRadius;
+		const auto yNormal = Utility::isZero(baseRadius - topRadius) ? static_cast< vertex_data_t >(0) : baseRadius - topRadius;
 
 		std::array< Math::Vector< 3, vertex_data_t >, 4 > positions{};
 		std::array< Math::Vector< 3, vertex_data_t >, 4 > normals{};
@@ -1217,8 +1285,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto currentRadius = baseRadius + (radiusStep * stackIndexF);
 			const auto nextRadius = baseRadius + (radiusStep * stackIndexPlusOneF);
 
-			const auto currentY = -(length / stacks) * stackIndexF;
-			const auto nextY = -(length / stacks) * stackIndexPlusOneF;
+			const auto currentY = (length / stacks) * stackIndexF;
+			const auto nextY = (length / stacks) * stackIndexPlusOneF;
 
 			for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex )
 			{
@@ -1260,7 +1328,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				textureCoordinates[3] = {nextTexCoordU, nextV, 0};
 				normals[3] = normals[2];
 
-				/* Draw quad */
+				/* Draw quad. With the base ring at Y=0 and the next ring above it,
+				 * the natural [0]/[1]/[2]/[3] strip is already CCW around the
+				 * outward normal — do NOT "harmonize" it with the sphere/torus
+				 * [0]/[2]/[1]/[3] order, their ring parameterization differ. */
 				builder.setPosition(positions[0]);
 				builder.setNormal(normals[0]);
 				builder.setTextureCoordinates(textureCoordinates[0]);
@@ -1305,7 +1376,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			};
 
 			const auto emitDiskCap = [&] (vertex_data_t y, vertex_data_t capRadius, bool faceUp) {
-				const Math::Vector< 3, vertex_data_t > normal{0, faceUp ? -one : one, 0};
+				const Math::Vector< 3, vertex_data_t > normal{0, faceUp ? one : -one, 0};
 				const Math::Vector< 3, vertex_data_t > center{0, y, 0};
 
 				for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex )
@@ -1321,21 +1392,33 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 					const Math::Vector< 3, vertex_data_t > edgeA{cosA * capRadius, y, sinA * capRadius};
 					const Math::Vector< 3, vertex_data_t > edgeB{cosB * capRadius, y, sinB * capRadius};
 
-					vertex_data_t texAU, texAV, texBU, texBV, texCU, texCV;
+					vertex_data_t texAU;
+					vertex_data_t texAV;
+					vertex_data_t texBU;
+					vertex_data_t texBV;
+					vertex_data_t texCU;
+					vertex_data_t texCV;
 
 					if ( capMapping == CapUVMapping::Planar )
 					{
 						/* Planar UV projection: map XZ position [-r, +r] to [0, 1]. */
-						texAU = cosA * half + half; texAV = sinA * half + half;
-						texBU = cosB * half + half; texBV = sinB * half + half;
+						texAU = (cosA * half) + half;
+						texAV = (sinA * half) + half;
+						texBU = (cosB * half) + half;
+						texBV = (sinB * half) + half;
 						texCU = half; texCV = half;
 					}
 					else /* PerSegment */
 					{
 						/* Each triangle gets its own [0,1] UV space. */
-						texAU = 0; texAV = 0;
-						texBU = one; texBV = 0;
-						texCU = half; texCV = one;
+						texAU = 0;
+						texAV = 0;
+
+						texBU = one;
+						texBV = 0;
+
+						texCU = half;
+						texCV = one;
 					}
 
 					if ( faceUp )
@@ -1357,13 +1440,13 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			if ( topHasCap )
 			{
-				/* Top cap at Y = -length (topRadius), facing up (Y-). */
-				emitDiskCap(-length, topRadius, true);
+				/* Top cap at Y = +length (topRadius), facing up (Y+). */
+				emitDiskCap(length, topRadius, true);
 			}
 
 			if ( baseHasCap )
 			{
-				/* Base cap at Y = 0 (baseRadius), facing down (Y+). */
+				/* Base cap at Y = 0 (baseRadius), facing down (Y-). */
 				emitDiskCap(static_cast< vertex_data_t >(0), baseRadius, false);
 			}
 
@@ -1410,7 +1493,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a cone shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The radius of the base cylinder. Default 1.
@@ -1431,8 +1513,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	}
 
 	/**
-	 * @brief Generates a disk shape facing the sky (Y-).
-	 * @note Ready for vulkan default world axis.
+	 * @brief Generates a disk shape facing the sky (Y+).
+	 * @note Ready for the engine Y-up world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param outerRadius The radius of the outer part of the disk. Default 1.
@@ -1470,7 +1552,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::array< Math::Vector< 3, vertex_data_t >, 4 > textureCoordinates{};
 
 		builder.beginConstruction(ConstructionMode::TriangleStrip);
-		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeY());
+
+		/* NOTE: The winding is already CCW around +Y — only the declared normal
+		 * was authored Y-down (the old "sky" direction). Same failure mode as
+		 * generatePlane: do not touch the emission order. */
+		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveY());
 
 		for ( index_data_t stackIndex = 0; stackIndex < stacks; ++stackIndex )
 		{
@@ -1510,31 +1596,63 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				else
 				{
 					/* Planar UV: map XZ position [-outerR, +outerR] to [0, 1]. */
-					textureCoordinates[0] = {(positions[0][Math::X] * radialScale + one) * half, (positions[0][Math::Z] * radialScale + one) * half, zero};
-					textureCoordinates[1] = {(positions[1][Math::X] * radialScale + one) * half, (positions[1][Math::Z] * radialScale + one) * half, zero};
-					textureCoordinates[2] = {(positions[2][Math::X] * radialScale + one) * half, (positions[2][Math::Z] * radialScale + one) * half, zero};
-					textureCoordinates[3] = {(positions[3][Math::X] * radialScale + one) * half, (positions[3][Math::Z] * radialScale + one) * half, zero};
+					textureCoordinates[0] = {
+						((positions[0][Math::X] * radialScale) + one) * half,
+						((positions[0][Math::Z] * radialScale) + one) * half,
+						zero
+					};
+					textureCoordinates[1] = {
+						((positions[1][Math::X] * radialScale) + one) * half,
+						((positions[1][Math::Z] * radialScale) + one) * half,
+						zero
+					};
+					textureCoordinates[2] = {
+						((positions[2][Math::X] * radialScale) + one) * half,
+						((positions[2][Math::Z] * radialScale) + one) * half,
+						zero
+					};
+					textureCoordinates[3] = {
+						((positions[3][Math::X] * radialScale) + one) * half,
+						((positions[3][Math::Z] * radialScale) + one) * half,
+						zero
+					};
 				}
 
 				/* Draw quad */
 				builder.setPosition(positions[0]);
 				builder.setTextureCoordinates(textureCoordinates[0]);
-				builder.setVertexColor((positions[0][Math::X] / outerRadius + one) * half, half, (positions[0][Math::Z] / outerRadius + one) * half);
+				builder.setVertexColor(
+					((positions[0][Math::X] / outerRadius) + one) * half,
+					half,
+					((positions[0][Math::Z] / outerRadius) + one) * half
+				);
 				builder.newVertex();
 
 				builder.setPosition(positions[1]);
 				builder.setTextureCoordinates(textureCoordinates[1]);
-				builder.setVertexColor((positions[1][Math::X] / outerRadius + one) * half, half, (positions[1][Math::Z] / outerRadius + one) * half);
+				builder.setVertexColor(
+					((positions[1][Math::X] / outerRadius) + one) * half,
+					half,
+					((positions[1][Math::Z] / outerRadius) + one) * half
+				);
 				builder.newVertex();
 
 				builder.setPosition(positions[2]);
 				builder.setTextureCoordinates(textureCoordinates[2]);
-				builder.setVertexColor((positions[2][Math::X] / outerRadius + one) * half, half, (positions[2][Math::Z] / outerRadius + one) * half);
+				builder.setVertexColor(
+					((positions[2][Math::X] / outerRadius) + one) * half,
+					half,
+					((positions[2][Math::Z] / outerRadius) + one) * half
+				);
 				builder.newVertex();
 
 				builder.setPosition(positions[3]);
 				builder.setTextureCoordinates(textureCoordinates[3]);
-				builder.setVertexColor((positions[3][Math::X] / outerRadius + one) * half, half, (positions[3][Math::Z] / outerRadius + one) * half);
+				builder.setVertexColor(
+					((positions[3][Math::X] / outerRadius) + one) * half,
+					half,
+					((positions[3][Math::Z] / outerRadius) + one) * half
+				);
 				builder.newVertex();
 
 				builder.resetCurrentTriangle();
@@ -1548,7 +1666,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a torus shape.
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param majorRadius The major radius of the torus shape. Default 1.
@@ -1639,23 +1756,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				textureCoordinates[3] = {texCoordUB, nextTexCoordV, 0};
 				normals[3] = {positionXB * nextNorm, nextPositionY / minorRadius, positionZB * nextNorm};
 
-				/* Draw quad */
+				/* Draw quad. The strip goes out as [0]/[2]/[1]/[3] so that both
+				 * triangles wind CCW around the outward normal; [0]/[1]/[2]/[3]
+				 * was the mirror-wound order compensating the old eye->NDC
+				 * transform. Each vertex keeps its own attributes. */
 				builder.setPosition(positions[0]);
 				builder.setNormal(normals[0]);
 				builder.setTextureCoordinates(textureCoordinates[0]);
 				builder.setVertexColor((normals[0][Math::X] + one) * half, (normals[0][Math::Y] + one) * half, (normals[0][Math::Z] + one) * half);
 				builder.newVertex();
 
-				builder.setPosition(positions[1]);
-				builder.setNormal(normals[1]);
-				builder.setTextureCoordinates(textureCoordinates[1]);
-				builder.setVertexColor((normals[1][Math::X] + one) * half, (normals[1][Math::Y] + one) * half, (normals[1][Math::Z] + one) * half);
-				builder.newVertex();
-
 				builder.setPosition(positions[2]);
 				builder.setNormal(normals[2]);
 				builder.setTextureCoordinates(textureCoordinates[2]);
 				builder.setVertexColor((normals[2][Math::X] + one) * half, (normals[2][Math::Y] + one) * half, (normals[2][Math::Z] + one) * half);
+				builder.newVertex();
+
+				builder.setPosition(positions[1]);
+				builder.setNormal(normals[1]);
+				builder.setTextureCoordinates(textureCoordinates[1]);
+				builder.setVertexColor((normals[1][Math::X] + one) * half, (normals[1][Math::Y] + one) * half, (normals[1][Math::Z] + one) * half);
 				builder.newVertex();
 
 				builder.setPosition(positions[3]);
@@ -1675,7 +1795,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a tetrahedron shape (Fire symbol).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The circumscribed sphere radius. Default 1.
@@ -1705,17 +1824,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto sqrt6Over3 = sqrt6 * oneThird;
 		const auto twoSqrt2Over3 = static_cast< vertex_data_t >(2) * sqrt2Over3;
 
-		/* Vertices (Y- is up in Vulkan convention). */
-		const Math::Vector< 3, vertex_data_t > top	   {0,					   -radius,			  0};
-		const Math::Vector< 3, vertex_data_t > back	  {0,						radius * oneThird,	radius * twoSqrt2Over3};
-		const Math::Vector< 3, vertex_data_t > frontLeft {-radius * sqrt6Over3,	 radius * oneThird,   -radius * sqrt2Over3};
-		const Math::Vector< 3, vertex_data_t > frontRight{ radius * sqrt6Over3,	 radius * oneThird,   -radius * sqrt2Over3};
+		/* Vertices (Y+ is up: the apex sits at the +Y pole). */
+		const Math::Vector< 3, vertex_data_t > top	   {0,					   radius,			   0};
+		const Math::Vector< 3, vertex_data_t > back	  {0,					   -radius * oneThird,	radius * twoSqrt2Over3};
+		const Math::Vector< 3, vertex_data_t > frontLeft {-radius * sqrt6Over3,  -radius * oneThird,   -radius * sqrt2Over3};
+		const Math::Vector< 3, vertex_data_t > frontRight{ radius * sqrt6Over3,  -radius * oneThird,   -radius * sqrt2Over3};
 
-		/* Face normals (outward-pointing, already unit length). */
-		const Math::Vector< 3, vertex_data_t > normalFront {0,			-oneThird,  -twoSqrt2Over3};
-		const Math::Vector< 3, vertex_data_t > normalRight { sqrt6Over3,  -oneThird,   sqrt2Over3};
-		const Math::Vector< 3, vertex_data_t > normalLeft  {-sqrt6Over3,  -oneThird,   sqrt2Over3};
-		const Math::Vector< 3, vertex_data_t > normalBottom{0,			 one,		 0};
+		/* Face normals (outward-pointing, already unit length: for a regular
+		 * tetrahedron centered at the origin, the normal of a face is the
+		 * opposite vertex negated and normalized). */
+		const Math::Vector< 3, vertex_data_t > normalFront {0,			 oneThird,  -twoSqrt2Over3};
+		const Math::Vector< 3, vertex_data_t > normalRight { sqrt6Over3,   oneThird,   sqrt2Over3};
+		const Math::Vector< 3, vertex_data_t > normalLeft  {-sqrt6Over3,   oneThird,   sqrt2Over3};
+		const Math::Vector< 3, vertex_data_t > normalBottom{0,			-one,		0};
 
 		/* UV mapping: each face mapped to the same equilateral triangle. */
 		const Math::Vector< 3, vertex_data_t > uvA{0, one, 0};
@@ -1723,17 +1844,22 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const Math::Vector< 3, vertex_data_t > uvC{half, 0, 0};
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
-		const auto invRadius = one / radius;
-		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto inverseRadius = one / radius;
+
+		const auto volumetricColor = [inverseRadius] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(pos[Math::X] * invRadius + one) * half,
-				(pos[Math::Y] * invRadius + one) * half,
-				(pos[Math::Z] * invRadius + one) * half,
+				((position[Math::X] * inverseRadius) + one) * half,
+				((position[Math::Y] * inverseRadius) + one) * half,
+				((position[Math::Z] * inverseRadius) + one) * half,
 				one
 			};
 		};
 
 		builder.beginConstruction(ConstructionMode::Triangles);
+
+		/* Faces are listed CCW around their outward normal, authored Y-up: the
+		 * apex (top) carries the texture top (uvC) on every side face, and the
+		 * base pair reads along the texture bottom (uvA, uvB). */
 
 		/* Front face (frontLeft, top, frontRight) */
 		builder.setPosition(frontLeft);
@@ -1743,12 +1869,12 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		builder.newVertex();
 		builder.setPosition(top);
 		builder.setNormal(normalFront);
-		builder.setTextureCoordinates(uvB);
+		builder.setTextureCoordinates(uvC);
 		builder.setVertexColor(volumetricColor(top));
 		builder.newVertex();
 		builder.setPosition(frontRight);
 		builder.setNormal(normalFront);
-		builder.setTextureCoordinates(uvC);
+		builder.setTextureCoordinates(uvB);
 		builder.setVertexColor(volumetricColor(frontRight));
 		builder.newVertex();
 
@@ -1760,12 +1886,12 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		builder.newVertex();
 		builder.setPosition(top);
 		builder.setNormal(normalRight);
-		builder.setTextureCoordinates(uvB);
+		builder.setTextureCoordinates(uvC);
 		builder.setVertexColor(volumetricColor(top));
 		builder.newVertex();
 		builder.setPosition(back);
 		builder.setNormal(normalRight);
-		builder.setTextureCoordinates(uvC);
+		builder.setTextureCoordinates(uvB);
 		builder.setVertexColor(volumetricColor(back));
 		builder.newVertex();
 
@@ -1777,30 +1903,30 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		builder.newVertex();
 		builder.setPosition(top);
 		builder.setNormal(normalLeft);
-		builder.setTextureCoordinates(uvB);
+		builder.setTextureCoordinates(uvC);
 		builder.setVertexColor(volumetricColor(top));
 		builder.newVertex();
 		builder.setPosition(frontLeft);
 		builder.setNormal(normalLeft);
-		builder.setTextureCoordinates(uvC);
+		builder.setTextureCoordinates(uvB);
 		builder.setVertexColor(volumetricColor(frontLeft));
 		builder.newVertex();
 
-		/* Bottom face (frontRight, back, frontLeft) */
-		builder.setPosition(frontRight);
+		/* Bottom face (frontLeft, frontRight, back) */
+		builder.setPosition(frontLeft);
 		builder.setNormal(normalBottom);
 		builder.setTextureCoordinates(uvA);
+		builder.setVertexColor(volumetricColor(frontLeft));
+		builder.newVertex();
+		builder.setPosition(frontRight);
+		builder.setNormal(normalBottom);
+		builder.setTextureCoordinates(uvB);
 		builder.setVertexColor(volumetricColor(frontRight));
 		builder.newVertex();
 		builder.setPosition(back);
 		builder.setNormal(normalBottom);
-		builder.setTextureCoordinates(uvB);
-		builder.setVertexColor(volumetricColor(back));
-		builder.newVertex();
-		builder.setPosition(frontLeft);
-		builder.setNormal(normalBottom);
 		builder.setTextureCoordinates(uvC);
-		builder.setVertexColor(volumetricColor(frontLeft));
+		builder.setVertexColor(volumetricColor(back));
 		builder.newVertex();
 
 		builder.endConstruction();
@@ -1810,7 +1936,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a hexahedron shape (Earth symbol).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The circumscribed sphere radius. Default 1.
@@ -1833,7 +1958,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates an octahedron shape (Air symbol).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The circumscribed sphere radius. Default 1.
@@ -1856,8 +1980,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Regular octahedron inscribed in a sphere of the given radius.
 		 * 6 axis-aligned vertices, all at distance radius from origin.
 		 * Edge length: a = radius · √2 ≈ radius · 1.414 */
-		const Math::Vector< 3, vertex_data_t > top  {0,		-radius, 0};
-		const Math::Vector< 3, vertex_data_t > bot  {0,		 radius, 0};
+		const Math::Vector< 3, vertex_data_t > top  {0,		 radius, 0};
+		const Math::Vector< 3, vertex_data_t > bot  {0,		-radius, 0};
 		const Math::Vector< 3, vertex_data_t > front{0,		 0,	  radius};
 		const Math::Vector< 3, vertex_data_t > back {0,		 0,	 -radius};
 		const Math::Vector< 3, vertex_data_t > left {-radius,   0,	  0};
@@ -1872,17 +1996,21 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const Math::Vector< 3, vertex_data_t > uvC{half, 0, 0};
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
-		const auto invRadius = one / radius;
-		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto inverseRadius = one / radius;
+
+		const auto volumetricColor = [inverseRadius] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(pos[Math::X] * invRadius + one) * half,
-				(pos[Math::Y] * invRadius + one) * half,
-				(pos[Math::Z] * invRadius + one) * half,
+				((position[Math::X] * inverseRadius) + one) * half,
+				((position[Math::Y] * inverseRadius) + one) * half,
+				((position[Math::Z] * inverseRadius) + one) * half,
 				one
 			};
 		};
 
-		/* Helper to emit one triangular face with flat normal. */
+		/* Helper to emit one triangular face with flat normal. Vertices go out in
+		 * natural A/B/C order; the A/C/B reversal that compensated the mirrored
+		 * eye->NDC transform is gone. Each vertex kept the UV it already had,
+		 * which is why uvC precedes uvB. */
 		const auto emitFace = [&](
 			const Math::Vector< 3, vertex_data_t > & vA,
 			const Math::Vector< 3, vertex_data_t > & vB,
@@ -1895,32 +2023,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(uvB);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(uvC);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(uvB);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
 		builder.beginConstruction(ConstructionMode::Triangles);
 
-		/* Top pyramid (Y- is up) */
-		emitFace(right, front, top, { s, -s,  s});  /* Front-right */
-		emitFace(back,  right, top, { s, -s, -s});  /* Back-right */
-		emitFace(left,  back,  top, {-s, -s, -s});  /* Back-left */
-		emitFace(front, left,  top, {-s, -s,  s});  /* Front-left */
+		/* Top pyramid (Y+ is up) */
+		emitFace(front, right, top, { s,  s,  s});  /* Front-right */
+		emitFace(right, back,  top, { s,  s, -s});  /* Back-right */
+		emitFace(back,  left,  top, {-s,  s, -s});  /* Back-left */
+		emitFace(left,  front, top, {-s,  s,  s});  /* Front-left */
 
 		/* Bottom pyramid */
-		emitFace(front, right, bot, { s,  s,  s});  /* Front-right */
-		emitFace(right, back,  bot, { s,  s, -s});  /* Back-right */
-		emitFace(back,  left,  bot, {-s,  s, -s});  /* Back-left */
-		emitFace(left,  front, bot, {-s,  s,  s});  /* Front-left */
+		emitFace(right, front, bot, { s, -s,  s});  /* Front-right */
+		emitFace(back,  right, bot, { s, -s, -s});  /* Back-right */
+		emitFace(left,  back,  bot, {-s, -s, -s});  /* Back-left */
+		emitFace(front, left,  bot, {-s, -s,  s});  /* Front-left */
 
 		builder.endConstruction();
 
@@ -1929,7 +2057,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a dodecahedron shape (Ether, Universe symbol).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The circumscribed sphere radius. Default 1.
@@ -1991,12 +2118,13 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const Math::Vector< 3, vertex_data_t > v19 {-b, 0, -c};
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
-		const auto invRadius = one / radius;
-		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto inverseRadius = one / radius;
+
+		const auto volumetricColor = [inverseRadius](const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(pos[Math::X] * invRadius + one) * half,
-				(pos[Math::Y] * invRadius + one) * half,
-				(pos[Math::Z] * invRadius + one) * half,
+				((position[Math::X] * inverseRadius) + one) * half,
+				((position[Math::Y] * inverseRadius) + one) * half,
+				((position[Math::Z] * inverseRadius) + one) * half,
 				one
 			};
 		};
@@ -2017,16 +2145,16 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
+			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
 			builder.newVertex();
 		};
 
@@ -2055,11 +2183,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto B = Vec3::crossProduct(normal, T);
 
 			/* Project each vertex into 2D local coordinates (u along T, v along B). */
-			const auto lu0 = Vec3::dotProduct(p0 - center, T), lv0 = Vec3::dotProduct(p0 - center, B);
-			const auto lu1 = Vec3::dotProduct(p1 - center, T), lv1 = Vec3::dotProduct(p1 - center, B);
-			const auto lu2 = Vec3::dotProduct(p2 - center, T), lv2 = Vec3::dotProduct(p2 - center, B);
-			const auto lu3 = Vec3::dotProduct(p3 - center, T), lv3 = Vec3::dotProduct(p3 - center, B);
-			const auto lu4 = Vec3::dotProduct(p4 - center, T), lv4 = Vec3::dotProduct(p4 - center, B);
+			const auto lu0 = Vec3::dotProduct(p0 - center, T);
+			const auto lv0 = Vec3::dotProduct(p0 - center, B);
+
+			const auto lu1 = Vec3::dotProduct(p1 - center, T);
+			const auto lv1 = Vec3::dotProduct(p1 - center, B);
+
+			const auto lu2 = Vec3::dotProduct(p2 - center, T);
+			const auto lv2 = Vec3::dotProduct(p2 - center, B);
+
+			const auto lu3 = Vec3::dotProduct(p3 - center, T);
+			const auto lv3 = Vec3::dotProduct(p3 - center, B);
+
+			const auto lu4 = Vec3::dotProduct(p4 - center, T);
+			const auto lv4 = Vec3::dotProduct(p4 - center, B);
 
 			/* Find bounding box and remap to [0,1]. */
 			const auto uMin = std::min({lu0, lu1, lu2, lu3, lu4});
@@ -2104,7 +2241,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates an icosahedron shape (Water symbol).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The circumscribed sphere radius. Default 1.
@@ -2158,19 +2294,23 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const Math::Vector< 3, vertex_data_t > uvC{half, 0, 0};
 
 		/* Volumetric vertex color: position [-radius, radius] → RGB [0, 1]. */
-		const auto invRadius = one / radius;
-		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & pos) {
+		const auto inverseRadius = one / radius;
+
+		const auto volumetricColor = [inverseRadius] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(pos[Math::X] * invRadius + one) * half,
-				(pos[Math::Y] * invRadius + one) * half,
-				(pos[Math::Z] * invRadius + one) * half,
+				((position[Math::X] * inverseRadius) + one) * half,
+				((position[Math::Y] * inverseRadius) + one) * half,
+				((position[Math::Z] * inverseRadius) + one) * half,
 				one
 			};
 		};
 
 		/* Emit one triangle with flat normal and volumetric vertex color.
 		 * The outward normal is the normalized sum of the 3 vertex positions
-		 * (valid for any centrosymmetric solid centered at the origin). */
+		 * (valid for any centrosymmetric solid centered at the origin).
+		 * Vertices go out in natural A/B/C order; the A/C/B reversal that
+		 * compensated the mirrored eye->NDC transform is gone. Each vertex kept
+		 * the UV it already had, which is why uvC precedes uvB. */
 		const auto emitFace = [&](
 			const Math::Vector< 3, vertex_data_t > & vA,
 			const Math::Vector< 3, vertex_data_t > & vB,
@@ -2185,16 +2325,16 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(uvB);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(uvC);
 			builder.setVertexColor(volumetricColor(vB));
+			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(uvB);
+			builder.setVertexColor(volumetricColor(vC));
 			builder.newVertex();
 		};
 
@@ -2241,7 +2381,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a subdivided plane on the XZ plane.
-	 * @note Ready for vulkan default world axis. Normal points Y- (up).
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param width The width (X axis) of the plane. Default 1.
@@ -2271,8 +2410,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto stepX = width * invSubX;
 		const auto stepZ = depth * invSubZ;
 
-		/* Normal pointing Y- (up in Vulkan). */
-		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::negativeY());
+		/* Normal pointing Y+ (up). The winding was already CCW around +Y:
+		 * only this declared normal was stale from the Y-down era. */
+		builder.options().enableGlobalNormal(Math::Vector< 3, vertex_data_t >::positiveY());
 
 		builder.beginConstruction(ConstructionMode::TriangleStrip);
 
@@ -2284,8 +2424,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto texV1 = static_cast< vertex_data_t >(zIdx + 1) * invSubZ;
 
 			/* Volumetric vertex color: G = 0.5 (Y=0), R and B map X and Z. */
-			const auto colorB0 = (z0 / halfDepth + one) * half;
-			const auto colorB1 = (z1 / halfDepth + one) * half;
+			const auto colorB0 = ((z0 / halfDepth) + one) * half;
+			const auto colorB1 = ((z1 / halfDepth) + one) * half;
 
 			for ( index_data_t xIdx = 0; xIdx < subdivisionsX; ++xIdx )
 			{
@@ -2294,8 +2434,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto texU0 = static_cast< vertex_data_t >(xIdx) * invSubX;
 				const auto texU1 = static_cast< vertex_data_t >(xIdx + 1) * invSubX;
 
-				const auto colorR0 = (x0 / halfWidth + one) * half;
-				const auto colorR1 = (x1 / halfWidth + one) * half;
+				const auto colorR0 = ((x0 / halfWidth) + one) * half;
+				const auto colorR1 = ((x1 / halfWidth) + one) * half;
 
 				builder.setPosition(x0, 0, z0);
 				builder.setTextureCoordinates(texU0, texV0);
@@ -2328,7 +2468,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a capsule shape (cylinder with hemisphere caps).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The radius of the capsule cross-section. Default 1.
@@ -2367,8 +2506,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Volumetric vertex color extents. */
 		const auto halfHeight = halfLen + radius;
-		const auto invHalfHeight = one / halfHeight;
-		const auto invRadius = one / radius;
+		const auto inverseHalfHeight = one / halfHeight;
+		const auto inverseRadius = one / radius;
 
 		/* Emit one quad (4 vertices) for a strip row segment. */
 		const auto emitQuad = [&](
@@ -2385,11 +2524,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const Math::Vector< 3, vertex_data_t > & nD,
 			vertex_data_t uD, vertex_data_t vD)
 		{
-			const auto color = [&](const Math::Vector< 3, vertex_data_t > & p) {
+			const auto color = [&] (const Math::Vector< 3, vertex_data_t > & position) {
 				return Math::Vector< 4, vertex_data_t >{
-					(p[Math::X] * invRadius + one) * half,
-					(p[Math::Y] * invHalfHeight + one) * half,
-					(p[Math::Z] * invRadius + one) * half,
+					((position[Math::X] * inverseRadius) + one) * half,
+					((position[Math::Y] * inverseHalfHeight) + one) * half,
+					((position[Math::Z] * inverseRadius) + one) * half,
 					one
 				};
 			};
@@ -2425,7 +2564,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.beginConstruction(ConstructionMode::TriangleStrip);
 
-		/* --- Top hemisphere (north pole to equator) --- */
+		/* --- Top hemisphere (+Y pole to equator) --- */
 		for ( index_data_t stack = 0; stack < stacks; ++stack )
 		{
 			/* beta goes from PI/2 (pole) down to 0 (equator). */
@@ -2437,8 +2576,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto cosBetaB = std::cos(betaB);
 			const auto sinBetaB = std::sin(betaB);
 
-			const auto yA = -halfLen - (radius * sinBetaA);
-			const auto yB = -halfLen - (radius * sinBetaB);
+			const auto yA = halfLen + (radius * sinBetaA);
+			const auto yB = halfLen + (radius * sinBetaB);
 			const auto rA = radius * cosBetaA;
 			const auto rB = radius * cosBetaB;
 
@@ -2461,10 +2600,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto texUB = static_cast< vertex_data_t >(slice + 1) * deltaU;
 
 				emitQuad(
-					{cosPhi * rA, yA, sinPhi * rA}, {cosPhi * cosBetaA, -sinBetaA, sinPhi * cosBetaA}, texUA, texVA,
-					{cosPhi * rB, yB, sinPhi * rB}, {cosPhi * cosBetaB, -sinBetaB, sinPhi * cosBetaB}, texUA, texVB,
-					{cosPhiN * rA, yA, sinPhiN * rA}, {cosPhiN * cosBetaA, -sinBetaA, sinPhiN * cosBetaA}, texUB, texVA,
-					{cosPhiN * rB, yB, sinPhiN * rB}, {cosPhiN * cosBetaB, -sinBetaB, sinPhiN * cosBetaB}, texUB, texVB
+					{cosPhi * rA, yA, sinPhi * rA}, {cosPhi * cosBetaA, sinBetaA, sinPhi * cosBetaA}, texUA, texVA,
+					{cosPhi * rB, yB, sinPhi * rB}, {cosPhi * cosBetaB, sinBetaB, sinPhi * cosBetaB}, texUA, texVB,
+					{cosPhiN * rA, yA, sinPhiN * rA}, {cosPhiN * cosBetaA, sinBetaA, sinPhiN * cosBetaA}, texUB, texVA,
+					{cosPhiN * rB, yB, sinPhiN * rB}, {cosPhiN * cosBetaB, sinBetaB, sinPhiN * cosBetaB}, texUB, texVB
 				);
 			}
 		}
@@ -2488,18 +2627,18 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto texUB = static_cast< vertex_data_t >(slice + 1) * deltaU;
 
 				emitQuad(
-					{cosPhi * radius, -halfLen, sinPhi * radius}, {cosPhi, 0, sinPhi}, texUA, texVTop,
-					{cosPhi * radius, halfLen, sinPhi * radius}, {cosPhi, 0, sinPhi}, texUA, texVBot,
-					{cosPhiN * radius, -halfLen, sinPhiN * radius}, {cosPhiN, 0, sinPhiN}, texUB, texVTop,
-					{cosPhiN * radius, halfLen, sinPhiN * radius}, {cosPhiN, 0, sinPhiN}, texUB, texVBot
+					{cosPhi * radius, halfLen, sinPhi * radius}, {cosPhi, 0, sinPhi}, texUA, texVTop,
+					{cosPhi * radius, -halfLen, sinPhi * radius}, {cosPhi, 0, sinPhi}, texUA, texVBot,
+					{cosPhiN * radius, halfLen, sinPhiN * radius}, {cosPhiN, 0, sinPhiN}, texUB, texVTop,
+					{cosPhiN * radius, -halfLen, sinPhiN * radius}, {cosPhiN, 0, sinPhiN}, texUB, texVBot
 				);
 			}
 		}
 
-		/* --- Bottom hemisphere (equator to south pole) --- */
+		/* --- Bottom hemisphere (equator to -Y pole) --- */
 		for ( index_data_t stack = 0; stack < stacks; ++stack )
 		{
-			/* alpha goes from 0 (equator) to PI/2 (south pole). */
+			/* alpha goes from 0 (equator) to PI/2 (-Y pole). */
 			const auto alphaA = static_cast< vertex_data_t >(stack) * dAngle;
 			const auto alphaB = static_cast< vertex_data_t >(stack + 1) * dAngle;
 
@@ -2508,8 +2647,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto cosAlphaB = std::cos(alphaB);
 			const auto sinAlphaB = std::sin(alphaB);
 
-			const auto yA = halfLen + (radius * sinAlphaA);
-			const auto yB = halfLen + (radius * sinAlphaB);
+			const auto yA = -halfLen - (radius * sinAlphaA);
+			const auto yB = -halfLen - (radius * sinAlphaB);
 			const auto rA = radius * cosAlphaA;
 			const auto rB = radius * cosAlphaB;
 
@@ -2532,10 +2671,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto texUB = static_cast< vertex_data_t >(slice + 1) * deltaU;
 
 				emitQuad(
-					{cosPhi * rA, yA, sinPhi * rA}, {cosPhi * cosAlphaA, sinAlphaA, sinPhi * cosAlphaA}, texUA, texVA,
-					{cosPhi * rB, yB, sinPhi * rB}, {cosPhi * cosAlphaB, sinAlphaB, sinPhi * cosAlphaB}, texUA, texVB,
-					{cosPhiN * rA, yA, sinPhiN * rA}, {cosPhiN * cosAlphaA, sinAlphaA, sinPhiN * cosAlphaA}, texUB, texVA,
-					{cosPhiN * rB, yB, sinPhiN * rB}, {cosPhiN * cosAlphaB, sinAlphaB, sinPhiN * cosAlphaB}, texUB, texVB
+					{cosPhi * rA, yA, sinPhi * rA}, {cosPhi * cosAlphaA, -sinAlphaA, sinPhi * cosAlphaA}, texUA, texVA,
+					{cosPhi * rB, yB, sinPhi * rB}, {cosPhi * cosAlphaB, -sinAlphaB, sinPhi * cosAlphaB}, texUA, texVB,
+					{cosPhiN * rA, yA, sinPhiN * rA}, {cosPhiN * cosAlphaA, -sinAlphaA, sinPhiN * cosAlphaA}, texUB, texVA,
+					{cosPhiN * rB, yB, sinPhiN * rB}, {cosPhiN * cosAlphaB, -sinAlphaB, sinPhiN * cosAlphaB}, texUB, texVB
 				);
 			}
 		}
@@ -2568,7 +2707,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a hemisphere shape (half sphere with disk cap).
-	 * @note Ready for vulkan default world axis. Dome points Y- (up).
+	 * @note Ready for the engine Y-up world axis. Dome points Y+ (up).
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The radius of the hemisphere. Default 1.
@@ -2596,14 +2735,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto dAngle = halfPi / static_cast< vertex_data_t >(stacks);
 		const auto dPhi = (static_cast< vertex_data_t >(2) * pi) / static_cast< vertex_data_t >(slices);
 		const auto deltaU = one / static_cast< vertex_data_t >(slices);
-		const auto invRadius = one / radius;
+		const auto inverseRadius = one / radius;
 
-		/* Volumetric vertex color. Y range: [-radius, 0]. */
-		const auto volumetricColor = [invRadius](const Math::Vector< 3, vertex_data_t > & p) {
+		/* Volumetric vertex color. Y range: [0, +radius]. */
+		const auto volumetricColor = [inverseRadius] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(p[Math::X] * invRadius + one) * half,
-				(p[Math::Y] * invRadius + one) * half,
-				(p[Math::Z] * invRadius + one) * half,
+				((position[Math::X] * inverseRadius) + one) * half,
+				((position[Math::Y] * inverseRadius) + one) * half,
+				((position[Math::Z] * inverseRadius) + one) * half,
 				one
 			};
 		};
@@ -2613,7 +2752,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* --- Dome surface (pole to equator) --- */
 		for ( index_data_t stack = 0; stack < stacks; ++stack )
 		{
-			/* beta goes from PI/2 (pole, Y = -radius) to 0 (equator, Y = 0). */
+			/* beta goes from PI/2 (pole, Y = +radius) to 0 (equator, Y = 0). */
 			const auto betaA = halfPi - (static_cast< vertex_data_t >(stack) * dAngle);
 			const auto betaB = halfPi - (static_cast< vertex_data_t >(stack + 1) * dAngle);
 
@@ -2622,8 +2761,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto cosBetaB = std::cos(betaB);
 			const auto sinBetaB = std::sin(betaB);
 
-			const auto yA = -radius * sinBetaA;
-			const auto yB = -radius * sinBetaB;
+			const auto yA = radius * sinBetaA;
+			const auto yB = radius * sinBetaB;
 			const auto rA = radius * cosBetaA;
 			const auto rB = radius * cosBetaB;
 
@@ -2647,10 +2786,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const Math::Vector< 3, vertex_data_t > p2{cosPhiN * rA, yA, sinPhiN * rA};
 				const Math::Vector< 3, vertex_data_t > p3{cosPhiN * rB, yB, sinPhiN * rB};
 
-				const Math::Vector< 3, vertex_data_t > n0{cosPhi * cosBetaA, -sinBetaA, sinPhi * cosBetaA};
-				const Math::Vector< 3, vertex_data_t > n1{cosPhi * cosBetaB, -sinBetaB, sinPhi * cosBetaB};
-				const Math::Vector< 3, vertex_data_t > n2{cosPhiN * cosBetaA, -sinBetaA, sinPhiN * cosBetaA};
-				const Math::Vector< 3, vertex_data_t > n3{cosPhiN * cosBetaB, -sinBetaB, sinPhiN * cosBetaB};
+				const Math::Vector< 3, vertex_data_t > n0{cosPhi * cosBetaA, sinBetaA, sinPhi * cosBetaA};
+				const Math::Vector< 3, vertex_data_t > n1{cosPhi * cosBetaB, sinBetaB, sinPhi * cosBetaB};
+				const Math::Vector< 3, vertex_data_t > n2{cosPhiN * cosBetaA, sinBetaA, sinPhiN * cosBetaA};
+				const Math::Vector< 3, vertex_data_t > n3{cosPhiN * cosBetaB, sinBetaB, sinPhiN * cosBetaB};
 
 				builder.setPosition(p0); builder.setNormal(n0); builder.setTextureCoordinates(texUA, texVA); builder.setVertexColor(volumetricColor(p0)); builder.newVertex();
 				builder.setPosition(p2); builder.setNormal(n2); builder.setTextureCoordinates(texUB, texVA); builder.setVertexColor(volumetricColor(p2)); builder.newVertex();
@@ -2660,9 +2799,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 		}
 
-		/* --- Equator disk cap (Y = 0, normal Y+, facing down in Vulkan) --- */
+		/* --- Equator disk cap (Y = 0, normal Y-, facing down) --- */
 		{
-			const Math::Vector< 3, vertex_data_t > capNormal = Math::Vector< 3, vertex_data_t >::positiveY();
+			const Math::Vector< 3, vertex_data_t > capNormal = Math::Vector< 3, vertex_data_t >::negativeY();
 			const Math::Vector< 3, vertex_data_t > pCenter{0, 0, 0};
 			const Math::Vector< 3, vertex_data_t > texCenter{half, half, 0};
 
@@ -2728,8 +2867,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates an arrow shape (cylinder shaft + cone head).
-	 * @note Ready for vulkan default world axis. Points along -Y (up).
-	 * Base at Y = 0, tip at Y = -(shaftLength + headLength).
+	 * @note Ready for the engine Y-up world axis. Points along +Y (up).
+	 * Base at Y = 0, tip at Y = +(shaftLength + headLength).
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param shaftRadius The radius of the shaft cylinder. Default 0.05.
@@ -2763,25 +2902,25 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto maxR = std::max(shaftRadius, headRadius);
 		const auto invMaxR = one / maxR;
 
-		/* Arrow geometry: base at Y=0, tip at Y=-totalLength.
-		 * Shaft: Y=0 to Y=-shaftLength.
-		 * Head:  Y=-shaftLength to Y=-totalLength. */
+		/* Arrow geometry: base at Y=0, tip at Y=+totalLength.
+		 * Shaft: Y=0 to Y=+shaftLength.
+		 * Head:  Y=+shaftLength to Y=+totalLength. */
 
 		/* Volumetric vertex color. */
-		const auto volumetricColor = [half, one, invMaxR, invTotalLen](const Math::Vector< 3, vertex_data_t > & p) {
+		const auto volumetricColor = [half, one, invMaxR, invTotalLen] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(p[Math::X] * invMaxR + one) * half,
-				(-p[Math::Y] * invTotalLen + one) * half,
-				(p[Math::Z] * invMaxR + one) * half,
+				((position[Math::X] * invMaxR) + one) * half,
+				((position[Math::Y] * invTotalLen) + one) * half,
+				((position[Math::Z] * invMaxR) + one) * half,
 				one
 			};
 		};
 
-		/* Cone surface normal Y component: derived from generatrix slope.
-		 * The cone surface normal has components (headRadius·cos, headLength, headRadius·sin)
-		 * after normalization. */
+		/* Cone surface normal: derived from the generatrix slope. With the apex
+		 * at +Y the outward normal tilts upward:
+		 * (headLength·cos, headRadius, headLength·sin) / slant. */
 		const auto coneSlant = std::sqrt((headRadius * headRadius) + (headLength * headLength));
-		const auto coneNY = -headRadius / coneSlant;
+		const auto coneNY = headRadius / coneSlant;
 		const auto coneNR = headLength / coneSlant;
 
 		builder.beginConstruction(ConstructionMode::Triangles);
@@ -2795,9 +2934,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto cosPhiN = std::cos(phiNext);
 			const auto sinPhiN = std::sin(phiNext);
 
-			/* --- 1. Shaft base cap (Y = 0, normal +Y, facing down) --- */
+			/* --- 1. Shaft base cap (Y = 0, normal -Y, facing down) --- */
 			{
-				const Math::Vector< 3, vertex_data_t > normal{0, one, 0};
+				const Math::Vector< 3, vertex_data_t > normal{0, -one, 0};
 				const Math::Vector< 3, vertex_data_t > center{0, 0, 0};
 				const Math::Vector< 3, vertex_data_t > edgeA{cosPhi * shaftRadius, 0, sinPhi * shaftRadius};
 				const Math::Vector< 3, vertex_data_t > edgeB{cosPhiN * shaftRadius, 0, sinPhiN * shaftRadius};
@@ -2809,33 +2948,33 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.setPosition(edgeB); builder.setTextureCoordinates((cosPhiN * half) + half, (sinPhiN * half) + half); builder.setVertexColor(volumetricColor(edgeB)); builder.newVertex();
 			}
 
-			/* --- 2. Shaft body (cylinder from Y=0 to Y=-shaftLength) --- */
+			/* --- 2. Shaft body (cylinder from Y=0 to Y=+shaftLength) --- */
 			{
 				const Math::Vector< 3, vertex_data_t > nA{cosPhi, 0, sinPhi};
 				const Math::Vector< 3, vertex_data_t > nB{cosPhiN, 0, sinPhiN};
 
-				const Math::Vector< 3, vertex_data_t > topA{cosPhi * shaftRadius, 0, sinPhi * shaftRadius};
-				const Math::Vector< 3, vertex_data_t > topB{cosPhiN * shaftRadius, 0, sinPhiN * shaftRadius};
-				const Math::Vector< 3, vertex_data_t > botA{cosPhi * shaftRadius, -shaftLength, sinPhi * shaftRadius};
-				const Math::Vector< 3, vertex_data_t > botB{cosPhiN * shaftRadius, -shaftLength, sinPhiN * shaftRadius};
+				const Math::Vector< 3, vertex_data_t > baseA{cosPhi * shaftRadius, 0, sinPhi * shaftRadius};
+				const Math::Vector< 3, vertex_data_t > baseB{cosPhiN * shaftRadius, 0, sinPhiN * shaftRadius};
+				const Math::Vector< 3, vertex_data_t > endA{cosPhi * shaftRadius, shaftLength, sinPhi * shaftRadius};
+				const Math::Vector< 3, vertex_data_t > endB{cosPhiN * shaftRadius, shaftLength, sinPhiN * shaftRadius};
 
-				builder.setPosition(topA); builder.setNormal(nA); builder.setTextureCoordinates(0, 0); builder.setVertexColor(volumetricColor(topA)); builder.newVertex();
-				builder.setPosition(botA); builder.setNormal(nA); builder.setTextureCoordinates(0, one); builder.setVertexColor(volumetricColor(botA)); builder.newVertex();
-				builder.setPosition(topB); builder.setNormal(nB); builder.setTextureCoordinates(one, 0); builder.setVertexColor(volumetricColor(topB)); builder.newVertex();
+				builder.setPosition(baseA); builder.setNormal(nA); builder.setTextureCoordinates(0, 0); builder.setVertexColor(volumetricColor(baseA)); builder.newVertex();
+				builder.setPosition(endA); builder.setNormal(nA); builder.setTextureCoordinates(0, one); builder.setVertexColor(volumetricColor(endA)); builder.newVertex();
+				builder.setPosition(baseB); builder.setNormal(nB); builder.setTextureCoordinates(one, 0); builder.setVertexColor(volumetricColor(baseB)); builder.newVertex();
 
-				builder.setPosition(topB); builder.setNormal(nB); builder.setTextureCoordinates(one, 0); builder.setVertexColor(volumetricColor(topB)); builder.newVertex();
-				builder.setPosition(botA); builder.setNormal(nA); builder.setTextureCoordinates(0, one); builder.setVertexColor(volumetricColor(botA)); builder.newVertex();
-				builder.setPosition(botB); builder.setNormal(nB); builder.setTextureCoordinates(one, one); builder.setVertexColor(volumetricColor(botB)); builder.newVertex();
+				builder.setPosition(baseB); builder.setNormal(nB); builder.setTextureCoordinates(one, 0); builder.setVertexColor(volumetricColor(baseB)); builder.newVertex();
+				builder.setPosition(endA); builder.setNormal(nA); builder.setTextureCoordinates(0, one); builder.setVertexColor(volumetricColor(endA)); builder.newVertex();
+				builder.setPosition(endB); builder.setNormal(nB); builder.setTextureCoordinates(one, one); builder.setVertexColor(volumetricColor(endB)); builder.newVertex();
 			}
 
-			/* --- 3. Head base annulus (Y = -shaftLength, normal +Y) --- */
+			/* --- 3. Head base annulus (Y = +shaftLength, normal -Y) --- */
 			{
-				const Math::Vector< 3, vertex_data_t > normal{0, one, 0};
+				const Math::Vector< 3, vertex_data_t > normal{0, -one, 0};
 
-				const Math::Vector< 3, vertex_data_t > innerA{cosPhi * shaftRadius, -shaftLength, sinPhi * shaftRadius};
-				const Math::Vector< 3, vertex_data_t > innerB{cosPhiN * shaftRadius, -shaftLength, sinPhiN * shaftRadius};
-				const Math::Vector< 3, vertex_data_t > outerA{cosPhi * headRadius, -shaftLength, sinPhi * headRadius};
-				const Math::Vector< 3, vertex_data_t > outerB{cosPhiN * headRadius, -shaftLength, sinPhiN * headRadius};
+				const Math::Vector< 3, vertex_data_t > innerA{cosPhi * shaftRadius, shaftLength, sinPhi * shaftRadius};
+				const Math::Vector< 3, vertex_data_t > innerB{cosPhiN * shaftRadius, shaftLength, sinPhiN * shaftRadius};
+				const Math::Vector< 3, vertex_data_t > outerA{cosPhi * headRadius, shaftLength, sinPhi * headRadius};
+				const Math::Vector< 3, vertex_data_t > outerB{cosPhiN * headRadius, shaftLength, sinPhiN * headRadius};
 
 				builder.setNormal(normal);
 
@@ -2848,14 +2987,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.setPosition(outerB); builder.setTextureCoordinates(one, one); builder.setVertexColor(volumetricColor(outerB)); builder.newVertex();
 			}
 
-			/* --- 4. Cone head (Y = -shaftLength to Y = -totalLength) --- */
+			/* --- 4. Cone head (Y = +shaftLength to Y = +totalLength) --- */
 			{
 				const Math::Vector< 3, vertex_data_t > nA{coneNR * cosPhi, coneNY, coneNR * sinPhi};
 				const Math::Vector< 3, vertex_data_t > nB{coneNR * cosPhiN, coneNY, coneNR * sinPhiN};
 
-				const Math::Vector< 3, vertex_data_t > baseA{cosPhi * headRadius, -shaftLength, sinPhi * headRadius};
-				const Math::Vector< 3, vertex_data_t > baseB{cosPhiN * headRadius, -shaftLength, sinPhiN * headRadius};
-				const Math::Vector< 3, vertex_data_t > tip{0, -totalLength, 0};
+				const Math::Vector< 3, vertex_data_t > baseA{cosPhi * headRadius, shaftLength, sinPhi * headRadius};
+				const Math::Vector< 3, vertex_data_t > baseB{cosPhiN * headRadius, shaftLength, sinPhiN * headRadius};
+				const Math::Vector< 3, vertex_data_t > tip{0, totalLength, 0};
 
 				builder.setPosition(baseA); builder.setNormal(nA); builder.setTextureCoordinates(0, one); builder.setVertexColor(volumetricColor(baseA)); builder.newVertex();
 				builder.setPosition(tip); builder.setNormal(nA); builder.setTextureCoordinates(half, 0); builder.setVertexColor(volumetricColor(tip)); builder.newVertex();
@@ -2870,7 +3009,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a tube shape (hollow cylinder with optional annular caps).
-	 * @note Ready for vulkan default world axis. Centered at origin along Y.
+	 * @note Centered at origin along Y.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param outerRadius The outer radius of the tube. Default 1.
@@ -2914,11 +3053,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto invHalfLen = one / halfLen;
 
 		/* Volumetric vertex color. */
-		const auto volumetricColor = [invOuterR, invHalfLen](const Math::Vector< 3, vertex_data_t > & p) {
+		const auto volumetricColor = [invOuterR, invHalfLen] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
-				(p[Math::X] * invOuterR + one) * half,
-				(p[Math::Y] * invHalfLen + one) * half,
-				(p[Math::Z] * invOuterR + one) * half,
+				((position[Math::X] * invOuterR) + one) * half,
+				((position[Math::Y] * invHalfLen) + one) * half,
+				((position[Math::Z] * invOuterR) + one) * half,
 				one
 			};
 		};
@@ -2931,8 +3070,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			{
 				const auto yA = -halfLen + (length * static_cast< vertex_data_t >(stack) / static_cast< vertex_data_t >(stacks));
 				const auto yB = -halfLen + (length * static_cast< vertex_data_t >(stack + 1) / static_cast< vertex_data_t >(stacks));
-				const auto texVA = static_cast< vertex_data_t >(stack) * deltaV;
-				const auto texVB = static_cast< vertex_data_t >(stack + 1) * deltaV;
+				/* V=0 at the +Y end so the texture top faces up. */
+				const auto texVA = one - (static_cast< vertex_data_t >(stack) * deltaV);
+				const auto texVB = one - (static_cast< vertex_data_t >(stack + 1) * deltaV);
 
 				for ( index_data_t slice = 0; slice < slices; ++slice )
 				{
@@ -2955,20 +3095,62 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 					const Math::Vector< 3, vertex_data_t > p2{cosPhiN * radius, yA, sinPhiN * radius};
 					const Math::Vector< 3, vertex_data_t > p3{cosPhiN * radius, yB, sinPhiN * radius};
 
+					/* Both strips wind CCW around their declared normal: the outer
+					 * surface in natural ring order, the inner one with the middle
+					 * pair swapped. */
 					if ( outward )
 					{
-						builder.setPosition(p0); builder.setNormal(nA); builder.setTextureCoordinates(texUA, texVA); builder.setVertexColor(volumetricColor(p0)); builder.newVertex();
-						builder.setPosition(p2); builder.setNormal(nB); builder.setTextureCoordinates(texUB, texVA); builder.setVertexColor(volumetricColor(p2)); builder.newVertex();
-						builder.setPosition(p1); builder.setNormal(nA); builder.setTextureCoordinates(texUA, texVB); builder.setVertexColor(volumetricColor(p1)); builder.newVertex();
-						builder.setPosition(p3); builder.setNormal(nB); builder.setTextureCoordinates(texUB, texVB); builder.setVertexColor(volumetricColor(p3)); builder.newVertex();
+						builder.setPosition(p0);
+						builder.setNormal(nA);
+						builder.setTextureCoordinates(texUA, texVA);
+						builder.setVertexColor(volumetricColor(p0));
+						builder.newVertex();
+
+						builder.setPosition(p1);
+						builder.setNormal(nA);
+						builder.setTextureCoordinates(texUA, texVB);
+						builder.setVertexColor(volumetricColor(p1));
+						builder.newVertex();
+
+						builder.setPosition(p2);
+						builder.setNormal(nB);
+						builder.setTextureCoordinates(texUB, texVA);
+						builder.setVertexColor(volumetricColor(p2));
+						builder.newVertex();
+
+						builder.setPosition(p3);
+						builder.setNormal(nB);
+						builder.setTextureCoordinates(texUB, texVB);
+						builder.setVertexColor(volumetricColor(p3));
+						builder.newVertex();
 					}
 					else
 					{
-						builder.setPosition(p2); builder.setNormal(nB); builder.setTextureCoordinates(texUB, texVA); builder.setVertexColor(volumetricColor(p2)); builder.newVertex();
-						builder.setPosition(p0); builder.setNormal(nA); builder.setTextureCoordinates(texUA, texVA); builder.setVertexColor(volumetricColor(p0)); builder.newVertex();
-						builder.setPosition(p3); builder.setNormal(nB); builder.setTextureCoordinates(texUB, texVB); builder.setVertexColor(volumetricColor(p3)); builder.newVertex();
-						builder.setPosition(p1); builder.setNormal(nA); builder.setTextureCoordinates(texUA, texVB); builder.setVertexColor(volumetricColor(p1)); builder.newVertex();
+						builder.setPosition(p0);
+						builder.setNormal(nA);
+						builder.setTextureCoordinates(texUA, texVA);
+						builder.setVertexColor(volumetricColor(p0));
+						builder.newVertex();
+
+						builder.setPosition(p2);
+						builder.setNormal(nB);
+						builder.setTextureCoordinates(texUB, texVA);
+						builder.setVertexColor(volumetricColor(p2));
+						builder.newVertex();
+
+						builder.setPosition(p1);
+						builder.setNormal(nA);
+						builder.setTextureCoordinates(texUA, texVB);
+						builder.setVertexColor(volumetricColor(p1));
+						builder.newVertex();
+
+						builder.setPosition(p3);
+						builder.setNormal(nB);
+						builder.setTextureCoordinates(texUB, texVB);
+						builder.setVertexColor(volumetricColor(p3));
+						builder.newVertex();
 					}
+
 					builder.resetCurrentTriangle();
 				}
 			}
@@ -2976,7 +3158,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Helper: emit an annular cap at the given Y position. */
 		const auto emitCap = [&](vertex_data_t y, bool faceUp) {
-			const Math::Vector< 3, vertex_data_t > normal{0, faceUp ? -one : one, 0};
+			const Math::Vector< 3, vertex_data_t > normal{0, faceUp ? one : -one, 0};
 			const auto innerScale = innerRadius / outerRadius;
 
 			for ( index_data_t slice = 0; slice < slices; ++slice )
@@ -2993,40 +3175,94 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const Math::Vector< 3, vertex_data_t > innerA{cosPhi * innerRadius, y, sinPhi * innerRadius};
 				const Math::Vector< 3, vertex_data_t > innerB{cosPhiN * innerRadius, y, sinPhiN * innerRadius};
 
-				vertex_data_t texOAU, texOAV, texOBU, texOBV, texIAU, texIAV, texIBU, texIBV;
+				vertex_data_t texOAU;
+				vertex_data_t texOAV;
+				vertex_data_t texOBU;
+				vertex_data_t texOBV;
+				vertex_data_t texIAU;
+				vertex_data_t texIAV;
+				vertex_data_t texIBU;
+				vertex_data_t texIBV;
 
 				if ( capMapping == CapUVMapping::Planar )
 				{
 					/* Planar UV projection: map XZ position [-r, +r] to [0, 1].
 					 * Outer ring maps to the full [0,1] circle, inner ring scales proportionally. */
-					texOAU = cosPhi * half + half;  texOAV = sinPhi * half + half;
-					texOBU = cosPhiN * half + half; texOBV = sinPhiN * half + half;
-					texIAU = cosPhi * innerScale * half + half;  texIAV = sinPhi * innerScale * half + half;
-					texIBU = cosPhiN * innerScale * half + half; texIBV = sinPhiN * innerScale * half + half;
+					texOAU = (cosPhi * half) + half;
+					texOAV = (sinPhi * half) + half;
+					texOBU = (cosPhiN * half) + half;
+					texOBV = (sinPhiN * half) + half;
+					texIAU = (cosPhi * innerScale * half) + half;
+					texIAV = (sinPhi * innerScale * half) + half;
+					texIBU = (cosPhiN * innerScale * half) + half;
+					texIBV = (sinPhiN * innerScale * half) + half;
 				}
 				else /* PerSegment */
 				{
 					/* Each annular quad gets its own [0,1]x[0,1] UV space. */
-					texOAU = 0; texOAV = one;
-					texOBU = one; texOBV = one;
-					texIAU = 0; texIAV = 0;
-					texIBU = one; texIBV = 0;
+					texOAU = 0;
+					texOAV = one;
+					texOBU = one;
+					texOBV = one;
+					texIAU = 0;
+					texIAV = 0;
+					texIBU = one;
+					texIBV = 0;
 				}
 
 				if ( faceUp )
 				{
-					builder.setNormal(normal); builder.setPosition(outerB); builder.setTextureCoordinates(texOBU, texOBV); builder.setVertexColor(volumetricColor(outerB)); builder.newVertex();
-					builder.setNormal(normal); builder.setPosition(outerA); builder.setTextureCoordinates(texOAU, texOAV); builder.setVertexColor(volumetricColor(outerA)); builder.newVertex();
-					builder.setNormal(normal); builder.setPosition(innerB); builder.setTextureCoordinates(texIBU, texIBV); builder.setVertexColor(volumetricColor(innerB)); builder.newVertex();
-					builder.setNormal(normal); builder.setPosition(innerA); builder.setTextureCoordinates(texIAU, texIAV); builder.setVertexColor(volumetricColor(innerA)); builder.newVertex();
+					builder.setNormal(normal);
+					builder.setPosition(outerB);
+					builder.setTextureCoordinates(texOBU, texOBV);
+					builder.setVertexColor(volumetricColor(outerB));
+					builder.newVertex();
+
+					builder.setNormal(normal);
+					builder.setPosition(outerA);
+					builder.setTextureCoordinates(texOAU, texOAV);
+					builder.setVertexColor(volumetricColor(outerA));
+					builder.newVertex();
+
+					builder.setNormal(normal);
+					builder.setPosition(innerB);
+					builder.setTextureCoordinates(texIBU, texIBV);
+					builder.setVertexColor(volumetricColor(innerB));
+					builder.newVertex();
+
+					builder.setNormal(normal);
+					builder.setPosition(innerA);
+					builder.setTextureCoordinates(texIAU, texIAV);
+					builder.setVertexColor(volumetricColor(innerA));
+					builder.newVertex();
 				}
 				else
 				{
-					builder.setNormal(normal); builder.setPosition(outerA); builder.setTextureCoordinates(texOAU, texOAV); builder.setVertexColor(volumetricColor(outerA)); builder.newVertex();
-					builder.setNormal(normal); builder.setPosition(outerB); builder.setTextureCoordinates(texOBU, texOBV); builder.setVertexColor(volumetricColor(outerB)); builder.newVertex();
-					builder.setNormal(normal); builder.setPosition(innerA); builder.setTextureCoordinates(texIAU, texIAV); builder.setVertexColor(volumetricColor(innerA)); builder.newVertex();
-					builder.setNormal(normal); builder.setPosition(innerB); builder.setTextureCoordinates(texIBU, texIBV); builder.setVertexColor(volumetricColor(innerB)); builder.newVertex();
+					builder.setNormal(normal);
+					builder.setPosition(outerA);
+					builder.setTextureCoordinates(texOAU, texOAV);
+					builder.setVertexColor(volumetricColor(outerA));
+					builder.newVertex();
+
+					builder.setNormal(normal);
+					builder.setPosition(outerB);
+					builder.setTextureCoordinates(texOBU, texOBV);
+					builder.setVertexColor(volumetricColor(outerB));
+					builder.newVertex();
+
+					builder.setNormal(normal);
+					builder.setPosition(innerA);
+					builder.setTextureCoordinates(texIAU, texIAV);
+					builder.setVertexColor(volumetricColor(innerA));
+					builder.newVertex();
+
+					builder.setNormal(normal);
+					builder.setPosition(innerB);
+					builder.setTextureCoordinates(texIBU, texIBV);
+					builder.setVertexColor(volumetricColor(innerB));
+					builder.newVertex();
 				}
+
 				builder.resetCurrentTriangle();
 			}
 		};
@@ -3043,11 +3279,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto savedMultiplier = builder.options().textureCoordinatesMultiplier();
 			builder.options().setTextureCoordinatesMultiplier(builder.options().capTextureCoordinatesMultiplier());
 
-			/* Top cap (Y = -halfLen, face up / Y-). */
-			emitCap(-halfLen, true);
+			/* Top cap (Y = +halfLen, face up / Y+). */
+			emitCap(halfLen, true);
 
-			/* Bottom cap (Y = +halfLen, face down / Y+). */
-			emitCap(halfLen, false);
+			/* Bottom cap (Y = -halfLen, face down / Y-). */
+			emitCap(-halfLen, false);
 
 			/* Restore surface UV multiplier. */
 			builder.options().setTextureCoordinatesMultiplier(savedMultiplier);
@@ -3071,6 +3307,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				{
 					/* Cap vertex: uniform tangent so that cross(N, T) = (0,0,1). */
 					const auto tx = normal[Math::Y] < 0 ? one : -one;
+
 					vertex.setTangent(Math::Vector< 3, vertex_data_t >{tx, 0, 0});
 				}
 				else
@@ -3091,8 +3328,33 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	}
 
 	/**
+	 * @brief Converts a shape authored in the historical Y-down frame to the Y-up world.
+	 * @note ⚠️ TECHNICAL DEBT (owner decision, Aug 2026, Y-up migration stage 4): the twelve
+	 * gem-cut generators below still author their facet math with the display side (table,
+	 * or the rose-cut flat base) toward -Y, the "up" of the retired Y-down convention. This
+	 * call mirrors the finished shape (flipYAxis(): positions, normals, tangents — UVs are
+	 * not touched) and restores the front-face orientation the mirror reversed
+	 * (reverseWinding(), which must NOT be flipSurface(): that would negate the freshly
+	 * mirrored normals a second time). A future chantier re-authors the facet math itself
+	 * and deletes this helper along with its call sites (eleven — the Asscher cut
+	 * delegates to the Emerald cut).
+	 * @tparam vertex_data_t The precision type of vertex data.
+	 * @tparam index_data_t The precision type of index data.
+	 * @param shape A reference to the shape to convert.
+	 * @return void
+	 */
+	template< typename vertex_data_t, typename index_data_t >
+	void
+	convertYDownAuthoring (Shape< vertex_data_t, index_data_t > & shape) noexcept
+		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
+	{
+		shape.flipYAxis();
+		shape.reverseWinding();
+		shape.updateProperties();
+	}
+
+	/**
 	 * @brief Generates a brilliant-cut gem shape (diamond approximation).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The girdle radius (widest point). Default 1.
@@ -3106,14 +3368,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateDiamondCutGem (
-		vertex_data_t radius = 1,
-		size_t facets = 8,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55),
-		vertex_data_t crownAngle = 35,
-		vertex_data_t pavilionAngle = 41,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateDiamondCutGem (vertex_data_t radius = 1, size_t facets = 8, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55), vertex_data_t crownAngle = 35, vertex_data_t pavilionAngle = 41, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -3147,14 +3402,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::vector< Vec3 > tableRing(n);
 		std::vector< Vec3 > girdleRing(n);
 
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto theta = static_cast< vertex_data_t >(i) * angleStep;
+			const auto theta = static_cast< vertex_data_t >(index) * angleStep;
 			const auto cosT = std::cos(theta);
 			const auto sinT = std::sin(theta);
 
-			tableRing[i] = Vec3(tableRadius * cosT, -crownHeight, tableRadius * sinT);
-			girdleRing[i] = Vec3(radius * cosT, zero, radius * sinT);
+			tableRing[index] = Vec3(tableRadius * cosT, -crownHeight, tableRadius * sinT);
+			girdleRing[index] = Vec3(radius * cosT, zero, radius * sinT);
 		}
 
 		const Vec3 culet(zero, pavilionDepth, zero);
@@ -3163,25 +3418,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		 * Y range is [-pavilionDepth, crownHeight], so normalize by the max extent. */
 		const auto maxExtent = std::max(radius, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent](const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
 		/* Emit one triangle with flat normal, per-vertex UV, and volumetric vertex color.
-		 * B/C are swapped for winding convention (same as dodecahedron). */
-		const auto emitTriangle = [&](
-			const Vec3 & vA,
-			const Vec3 & vB,
-			const Vec3 & vC,
-			const Vec3 & normal,
-			const Vec3 & tcA,
-			const Vec3 & tcB,
-			const Vec3 & tcC)
+		 * Vertices are written in natural A/B/C order: the callers already list each
+		 * face CCW around its outward normal. */
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -3189,38 +3439,35 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
+			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
 			builder.newVertex();
 		};
 
 		/* Compute per-face tangent-frame UV for an arbitrary polygon.
 		 * Projects vertices onto the face plane using a local tangent frame,
 		 * then remaps to [0,1]x[0,1] (same technique as dodecahedron). */
-		const auto computeFaceUV = [](
-			const Vec3 & normal,
-			const Vec3 & center,
-			const Vec3 * positions,
-			Vec3 * uvs,
-			size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Build local tangent frame on the face plane. */
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -3230,23 +3477,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -3262,30 +3512,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			/* Planar UV for table: U = (cosθ + 1) * 0.5, V = (sinθ + 1) * 0.5 */
 			std::vector< Vec3 > tableUV(n);
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				tableUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				tableUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
 
 			/* Fan from T_0: triangles (T_0, T_i, T_{i+1}) for i=1..n-2 */
-			for ( size_t i = 1; i + 1 < n; ++i )
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
 				emitTriangle(
-					tableRing[0], tableRing[i], tableRing[i + 1],
+					tableRing[0], tableRing[index], tableRing[index + 1],
 					tableNormal,
-					tableUV[0], tableUV[i], tableUV[i + 1]);
+					tableUV[0], tableUV[index], tableUV[index + 1]
+				);
 			}
 		}
 
 		/* === Crown (n quads from table ring to girdle ring) === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
+			const auto i1 = (index + 1) % n;
 
-			const auto & t0 = tableRing[i];
+			const auto & t0 = tableRing[index];
 			const auto & t1 = tableRing[i1];
-			const auto & g0 = girdleRing[i];
+			const auto & g0 = girdleRing[index];
 			const auto & g1 = girdleRing[i1];
 
 			/* Flat normal per quad (outward-pointing). */
@@ -3293,9 +3545,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
 
 			/* Per-face tangent-frame UV for the quad. */
-			const Vec3 positions[4] = {t0, t1, g1, g0};
-			Vec3 uvs[4];
-			computeFaceUV(normal, center, positions, uvs, 4);
+			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
+			std::array< Vec3, 4 > uvs{};
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
 			/* Two triangles: (T_i, G_i, G_{i+1}) and (T_i, G_{i+1}, T_{i+1}) */
 			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
@@ -3303,11 +3556,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		}
 
 		/* === Pavilion (n triangles from girdle to culet) === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
+			const auto i1 = (index + 1) % n;
 
-			const auto & g0 = girdleRing[i];
+			const auto & g0 = girdleRing[index];
 			const auto & g1 = girdleRing[i1];
 
 			/* Flat normal per triangle (outward-pointing). */
@@ -3315,21 +3568,25 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
 
 			/* Per-face tangent-frame UV. */
-			const Vec3 positions[3] = {g0, g1, culet};
-			Vec3 uvs[3];
-			computeFaceUV(normal, center, positions, uvs, 3);
+			std::array< Vec3, 3 > positions{g0, g1, culet};
+			std::array< Vec3, 3 > uvs{};
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
 			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		builder.endConstruction();
 
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
+
 		return shape;
 	}
 
 	/**
 	 * @brief Generates an emerald-cut gem shape (step-cut rectangular gem with beveled corners).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param length The X-axis dimension (longer axis). Default 1.5.
@@ -3344,15 +3601,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateEmeraldCutGem (
-		vertex_data_t length = static_cast< vertex_data_t >(1.5),
-		vertex_data_t width = 1,
-		vertex_data_t depth = 1,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.6),
-		vertex_data_t cornerBevel = static_cast< vertex_data_t >(0.25),
-		size_t steps = 3,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateEmeraldCutGem (vertex_data_t length = static_cast< vertex_data_t >(1.5), vertex_data_t width = 1, vertex_data_t depth = 1, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.6), vertex_data_t cornerBevel = static_cast< vertex_data_t >(0.25), size_t steps = 3, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -3395,25 +3644,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Volumetric vertex color: position -> RGB [0, 1]. */
 		const auto maxExtent = std::max(length * half, std::max(width * half, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
 		/* Emit one triangle with flat normal, per-vertex UV, and volumetric vertex color.
-		 * B/C are swapped for winding convention (same as generateDiamondCutGem). */
-		const auto emitTriangle = [&](
-			const Vec3 & vA,
-			const Vec3 & vB,
-			const Vec3 & vC,
-			const Vec3 & normal,
-			const Vec3 & tcA,
-			const Vec3 & tcB,
-			const Vec3 & tcC)
+		 * Vertices are written in natural A/B/C order: the callers already list each
+		 * face CCW around its outward normal. */
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -3421,35 +3665,33 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
 		/* Compute per-face tangent-frame UV for an arbitrary polygon. */
-		const auto computeFaceUV = [](
-			const Vec3 & normal,
-			const Vec3 & center,
-			const Vec3 * positions,
-			Vec3 * uvs,
-			size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -3458,23 +3700,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -3491,23 +3736,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			/* Planar UV for table: remap XZ to [0,1]. */
 			const auto halfL = (length * half) * tableRatio;
 			const auto halfW = (width * half) * tableRatio;
+
 			std::array< Vec3, 8 > tableUV;
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				tableUV[i] = Vec3(
-					(table[i][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
-					(table[i][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
-					zero);
+				tableUV[index] = Vec3(
+					(table[index][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
+					(table[index][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
+					zero
+				);
 			}
 
 			/* Fan from v0: 6 triangles (v0, vi, vi+1) for i=1..6 */
-			for ( size_t i = 1; i + 1 < 8; ++i )
+			for ( size_t index = 1; index + 1 < 8; ++index )
 			{
 				emitTriangle(
-					table[0], table[i], table[i + 1],
+					table[0], table[index], table[index + 1],
 					tableNormal,
-					tableUV[0], tableUV[i], tableUV[i + 1]);
+					tableUV[0], tableUV[index], tableUV[index + 1]
+				);
 			}
 		}
 
@@ -3525,19 +3773,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto inner = makeOctagonRing(innerScale, innerY);
 			const auto outer = makeOctagonRing(outerScale, outerY);
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				const auto next = (i + 1) % 8;
+				const auto next = (index + 1) % 8;
+				const auto normal = Vec3::crossProduct(inner[next] - inner[index], outer[index] - inner[index]).normalized();
 
-				const auto normal = Vec3::crossProduct(inner[next] - inner[i], outer[i] - inner[i]).normalized();
+				std::array< Vec3, 4 > positions{inner[index], outer[index], outer[next], inner[next]};
+				std::array< Vec3, 4 > uvs;
 
-				const Vec3 positions[4] = {inner[i], outer[i], outer[next], inner[next]};
-				Vec3 uvs[4];
-				const auto center = (inner[i] + outer[i] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto center = (inner[index] + outer[index] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-				emitTriangle(inner[i], outer[i], outer[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(inner[i], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
+				emitTriangle(inner[index], outer[index], outer[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(inner[index], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -3555,19 +3803,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto outer = makeOctagonRing(outerScale, outerY);
 			const auto inner = makeOctagonRing(innerScale, innerY);
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				const auto next = (i + 1) % 8;
+				const auto next = (index + 1) % 8;
 
-				const auto normal = Vec3::crossProduct(outer[next] - outer[i], inner[i] - outer[i]).normalized();
+				const auto normal = Vec3::crossProduct(outer[next] - outer[index], inner[index] - outer[index]).normalized();
 
-				const Vec3 positions[4] = {outer[i], inner[i], inner[next], outer[next]};
-				Vec3 uvs[4];
-				const auto center = (outer[i] + outer[next] + inner[next] + inner[i]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
+				std::array< Vec3, 4 > uvs;
 
-				emitTriangle(outer[i], inner[i], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[i], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
+				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -3581,34 +3830,40 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			const auto halfL = (length * half) * culetRatio;
 			const auto halfW = (width * half) * culetRatio;
+
 			std::array< Vec3, 8 > culetUV;
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				culetUV[i] = Vec3(
-					(culet[i][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
-					(culet[i][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
-					zero);
+				culetUV[index] = Vec3(
+					(culet[index][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
+					(culet[index][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
+					zero
+				);
 			}
 
 			/* Fan from v0: 6 triangles, opposite winding (v0, vi+1, vi) */
-			for ( size_t i = 1; i + 1 < 8; ++i )
+			for ( size_t index = 1; index + 1 < 8; ++index )
 			{
 				emitTriangle(
-					culet[0], culet[i + 1], culet[i],
+					culet[0], culet[index + 1], culet[index],
 					culetNormal,
-					culetUV[0], culetUV[i + 1], culetUV[i]);
+					culetUV[0], culetUV[index + 1], culetUV[index]
+				);
 			}
 		}
 
 		builder.endConstruction();
+
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
 
 		return shape;
 	}
 
 	/**
 	 * @brief Generates an Asscher-cut gem shape (square step-cut with beveled corners).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param size The side length of the square. Default 1.
@@ -3622,14 +3877,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateAssscherCutGem (
-		vertex_data_t size = 1,
-		vertex_data_t depth = 1,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.65),
-		vertex_data_t cornerBevel = static_cast< vertex_data_t >(0.15),
-		size_t steps = 3,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateAsscherCutGem (vertex_data_t size = 1, vertex_data_t depth = 1, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.65), vertex_data_t cornerBevel = static_cast< vertex_data_t >(0.15), size_t steps = 3, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		return generateEmeraldCutGem< vertex_data_t, index_data_t >(size, size, depth, tableRatio, cornerBevel, steps, options);
@@ -3637,7 +3885,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 	/**
 	 * @brief Generates a baguette-cut gem shape (pure rectangular step-cut, no corner bevel).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param length The X-axis dimension. Default 1.5.
@@ -3651,14 +3898,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateBaguetteCutGem (
-		vertex_data_t length = static_cast< vertex_data_t >(1.5),
-		vertex_data_t width = static_cast< vertex_data_t >(0.5),
-		vertex_data_t depth = static_cast< vertex_data_t >(0.6),
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.65),
-		size_t steps = 2,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateBaguetteCutGem (vertex_data_t length = static_cast< vertex_data_t >(1.5), vertex_data_t width = static_cast< vertex_data_t >(0.5), vertex_data_t depth = static_cast< vertex_data_t >(0.6), vertex_data_t tableRatio = static_cast< vertex_data_t >(0.65), size_t steps = 2, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -3678,7 +3918,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto culetRatio = static_cast< vertex_data_t >(0.1);
 
 		/* Build a rectangular ring (4 vertices) at a given scale and height. */
-		const auto makeRectRing = [&](vertex_data_t s, vertex_data_t y) -> std::array< Vec3, 4 > {
+		const auto makeRectRing = [&] (vertex_data_t s, vertex_data_t y) -> std::array< Vec3, 4 > {
 			const auto two = static_cast< vertex_data_t >(2);
 			const auto halfL = (length / two) * s;
 			const auto halfW = (width / two) * s;
@@ -3693,23 +3933,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(length * half, std::max(width * half, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA,
-			const Vec3 & vB,
-			const Vec3 & vC,
-			const Vec3 & normal,
-			const Vec3 & tcA,
-			const Vec3 & tcB,
-			const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -3717,34 +3951,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal,
-			const Vec3 & center,
-			const Vec3 * positions,
-			Vec3 * uvs,
-			size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -3753,23 +3985,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -3785,14 +4020,16 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			const auto halfL = (length * half) * tableRatio;
 			const auto halfW = (width * half) * tableRatio;
+
 			std::array< Vec3, 4 > tableUV;
 
-			for ( size_t i = 0; i < 4; ++i )
+			for ( size_t index = 0; index < 4; ++index )
 			{
-				tableUV[i] = Vec3(
-					(table[i][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
-					(table[i][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
-					zero);
+				tableUV[index] = Vec3(
+					(table[index][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
+					(table[index][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
+					zero
+				);
 			}
 
 			/* Fan from v0: 2 triangles */
@@ -3814,19 +4051,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto inner = makeRectRing(innerScale, innerY);
 			const auto outer = makeRectRing(outerScale, outerY);
 
-			for ( size_t i = 0; i < 4; ++i )
+			for ( size_t index = 0; index < 4; ++index )
 			{
-				const auto next = (i + 1) % 4;
+				const auto next = (index + 1) % 4;
+				const auto normal = Vec3::crossProduct(inner[next] - inner[index], outer[index] - inner[index]).normalized();
 
-				const auto normal = Vec3::crossProduct(inner[next] - inner[i], outer[i] - inner[i]).normalized();
+				std::array< Vec3, 4 > positions{inner[index], outer[index], outer[next], inner[next]};
+				std::array< Vec3, 4 > uvs;
 
-				const Vec3 positions[4] = {inner[i], outer[i], outer[next], inner[next]};
-				Vec3 uvs[4];
-				const auto center = (inner[i] + outer[i] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto center = (inner[index] + outer[index] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-				emitTriangle(inner[i], outer[i], outer[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(inner[i], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
+				emitTriangle(inner[index], outer[index], outer[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(inner[index], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -3844,19 +4081,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto outer = makeRectRing(outerScale, outerY);
 			const auto inner = makeRectRing(innerScale, innerY);
 
-			for ( size_t i = 0; i < 4; ++i )
+			for ( size_t index = 0; index < 4; ++index )
 			{
-				const auto next = (i + 1) % 4;
+				const auto next = (index + 1) % 4;
+				const auto normal = Vec3::crossProduct(outer[next] - outer[index], inner[index] - outer[index]).normalized();
 
-				const auto normal = Vec3::crossProduct(outer[next] - outer[i], inner[i] - outer[i]).normalized();
+				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
+				std::array< Vec3, 4 > uvs;
 
-				const Vec3 positions[4] = {outer[i], inner[i], inner[next], outer[next]};
-				Vec3 uvs[4];
-				const auto center = (outer[i] + outer[next] + inner[next] + inner[i]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-				emitTriangle(outer[i], inner[i], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[i], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -3870,14 +4107,16 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			const auto halfL = (length * half) * culetRatio;
 			const auto halfW = (width * half) * culetRatio;
+
 			std::array< Vec3, 4 > culetUV;
 
-			for ( size_t i = 0; i < 4; ++i )
+			for ( size_t index = 0; index < 4; ++index )
 			{
-				culetUV[i] = Vec3(
-					(culet[i][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
-					(culet[i][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
-					zero);
+				culetUV[index] = Vec3(
+					(culet[index][Math::X] + halfL) / (halfL * static_cast< vertex_data_t >(2)),
+					(culet[index][Math::Z] + halfW) / (halfW * static_cast< vertex_data_t >(2)),
+					zero
+				);
 			}
 
 			emitTriangle(culet[0], culet[3], culet[2], culetNormal, culetUV[0], culetUV[3], culetUV[2]);
@@ -3886,12 +4125,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.endConstruction();
 
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
+
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a princess-cut gem shape (square with chevron pavilion facets).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param size The side length of the square. Default 1.
@@ -3905,14 +4147,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generatePrincessCutGem (
-		vertex_data_t size = 1,
-		vertex_data_t depth = 1,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.6),
-		vertex_data_t chevronDepth = static_cast< vertex_data_t >(0.4),
-		size_t steps = 3,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generatePrincessCutGem (vertex_data_t size = 1, vertex_data_t depth = 1, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.6), vertex_data_t chevronDepth = static_cast< vertex_data_t >(0.4), size_t steps = 3, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -3937,7 +4172,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Build a princess ring with 8 vertices: midpoints and corners scale independently.
 		 * v0,v2,v4,v6 = edge midpoints; v1,v3,v5,v7 = corners. */
-		const auto makePrincessRing = [&](vertex_data_t ms, vertex_data_t cs, vertex_data_t y) -> std::array< Vec3, 8 > {
+		const auto makePrincessRing = [&] (vertex_data_t ms, vertex_data_t cs, vertex_data_t y) -> std::array< Vec3, 8 > {
 			return {{
 				Vec3(zero,	   y, -halfS * ms),
 				Vec3( halfS * cs, y, -halfS * cs),
@@ -3952,18 +4187,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(halfS * static_cast< vertex_data_t >(1.42), std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -3971,31 +4205,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -4004,23 +4239,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -4036,17 +4274,18 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			std::array< Vec3, 8 > tableUV;
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				tableUV[i] = Vec3(
-					(table[i][Math::X] / (halfS * tableRatio) + one) * half,
-					(table[i][Math::Z] / (halfS * tableRatio) + one) * half,
-					zero);
+				tableUV[index] = Vec3(
+					((table[index][Math::X] / (halfS * tableRatio)) + one) * half,
+					((table[index][Math::Z] / (halfS * tableRatio)) + one) * half,
+					zero
+				);
 			}
 
-			for ( size_t i = 1; i + 1 < 8; ++i )
+			for ( size_t index = 1; index + 1 < 8; ++index )
 			{
-				emitTriangle(table[0], table[i], table[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(table[0], table[index], table[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
@@ -4064,17 +4303,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto inner = makePrincessRing(innerS, innerS, innerY);
 			const auto outer = makePrincessRing(outerS, outerS, outerY);
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				const auto next = (i + 1) % 8;
-				const auto normal = Vec3::crossProduct(inner[next] - inner[i], outer[i] - inner[i]).normalized();
-				const Vec3 positions[4] = {inner[i], outer[i], outer[next], inner[next]};
-				Vec3 uvs[4];
-				const auto center = (inner[i] + outer[i] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto next = (index + 1) % 8;
+				const auto normal = Vec3::crossProduct(inner[next] - inner[index], outer[index] - inner[index]).normalized();
 
-				emitTriangle(inner[i], outer[i], outer[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(inner[i], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
+				std::array< Vec3, 4 > positions{inner[index], outer[index], outer[next], inner[next]};
+				std::array< Vec3, 4 > uvs;
+
+				const auto center = (inner[index] + outer[index] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
+				emitTriangle(inner[index], outer[index], outer[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(inner[index], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -4099,17 +4340,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto outer = makePrincessRing(outerMs, outerCs, outerY);
 			const auto inner = makePrincessRing(innerMs, innerCs, innerY);
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				const auto next = (i + 1) % 8;
-				const auto normal = Vec3::crossProduct(outer[next] - outer[i], inner[i] - outer[i]).normalized();
-				const Vec3 positions[4] = {outer[i], inner[i], inner[next], outer[next]};
-				Vec3 uvs[4];
-				const auto center = (outer[i] + outer[next] + inner[next] + inner[i]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto next = (index + 1) % 8;
+				const auto normal = Vec3::crossProduct(outer[next] - outer[index], inner[index] - outer[index]).normalized();
 
-				emitTriangle(outer[i], inner[i], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[i], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
+				std::array< Vec3, 4 > uvs;
+
+				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
+				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -4124,28 +4367,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			std::array< Vec3, 8 > culetUV;
 
-			for ( size_t i = 0; i < 8; ++i )
+			for ( size_t index = 0; index < 8; ++index )
 			{
-				culetUV[i] = Vec3(
-					(culet[i][Math::X] / (halfS * culetRatio) + one) * half,
-					(culet[i][Math::Z] / (halfS * culetRatio) + one) * half,
-					zero);
+				culetUV[index] = Vec3(
+					((culet[index][Math::X] / (halfS * culetRatio)) + one) * half,
+					((culet[index][Math::Z] / (halfS * culetRatio)) + one) * half,
+					zero
+				);
 			}
 
-			for ( size_t i = 1; i + 1 < 8; ++i )
+			for ( size_t index = 1; index + 1 < 8; ++index )
 			{
-				emitTriangle(culet[0], culet[i + 1], culet[i], culetNormal, culetUV[0], culetUV[i + 1], culetUV[i]);
+				emitTriangle(culet[0], culet[index + 1], culet[index], culetNormal, culetUV[0], culetUV[index + 1], culetUV[index]);
 			}
 		}
 
 		builder.endConstruction();
+
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
 
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a trillion-cut gem shape (triangular with beveled corners).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param size The circumscribed circle radius. Default 1.
@@ -4159,14 +4406,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateTrillionCutGem (
-		vertex_data_t size = 1,
-		vertex_data_t depth = static_cast< vertex_data_t >(0.8),
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55),
-		vertex_data_t cornerBevel = static_cast< vertex_data_t >(0.2),
-		size_t steps = 3,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateTrillionCutGem (vertex_data_t size = 1, vertex_data_t depth = static_cast< vertex_data_t >(0.8), vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55), vertex_data_t cornerBevel = static_cast< vertex_data_t >(0.2), size_t steps = 3, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -4177,8 +4417,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		constexpr auto zero = static_cast< vertex_data_t >(0);
 
 		/* 6 vertices per ring: 3 corners beveled into 2 vertices each. */
-		constexpr size_t RingVerts = 6;
-		const auto triangleCount = (2 * (RingVerts - 2)) + (4 * RingVerts * steps);
+		constexpr size_t RingVertices = 6;
+		const auto triangleCount = (2 * (RingVertices - 2)) + (4 * RingVertices * steps);
 
 		Shape< vertex_data_t, index_data_t > shape{static_cast< uint32_t >(triangleCount)};
 		ShapeBuilder< vertex_data_t, index_data_t > builder{shape, options};
@@ -4187,25 +4427,24 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto pavilionDepth = depth * static_cast< vertex_data_t >(0.75);
 		const auto culetRatio = static_cast< vertex_data_t >(0.1);
 		const auto pi = std::numbers::pi_v< vertex_data_t >;
+		const auto halfPi = std::numbers::pi_v< vertex_data_t > * half;
 
 		/* Equilateral triangle corners at 90°, 210°, 330° (pointing +X). */
 		const std::array< Vec3, 3 > cornerDirs = {{
-			Vec3(std::cos(pi * half), zero, std::sin(pi * half)),
-			Vec3(std::cos((pi * half) + (pi * static_cast< vertex_data_t >(2) / static_cast< vertex_data_t >(3))), zero,
-				 std::sin((pi * half) + (pi * static_cast< vertex_data_t >(2) / static_cast< vertex_data_t >(3)))),
-			Vec3(std::cos((pi * half) + (pi * static_cast< vertex_data_t >(4) / static_cast< vertex_data_t >(3))), zero,
-				 std::sin((pi * half) + (pi * static_cast< vertex_data_t >(4) / static_cast< vertex_data_t >(3))))
+			Vec3(std::cos(halfPi), zero, std::sin(halfPi)),
+			Vec3(std::cos(halfPi + (pi * static_cast< vertex_data_t >(2) / static_cast< vertex_data_t >(3))), zero, std::sin(halfPi + (pi * static_cast< vertex_data_t >(2) / static_cast< vertex_data_t >(3)))),
+			Vec3(std::cos(halfPi + (pi * static_cast< vertex_data_t >(4) / static_cast< vertex_data_t >(3))), zero, std::sin(halfPi + (pi * static_cast< vertex_data_t >(4) / static_cast< vertex_data_t >(3))))
 		}};
 
 		/* Build a beveled triangle ring at scale s and height y. */
 		const auto makeTriRing = [&](vertex_data_t s, vertex_data_t y) -> std::array< Vec3, 6 > {
 			std::array< Vec3, 6 > ring;
 
-			for ( size_t c = 0; c < 3; ++c )
+			for ( size_t corderIndex = 0; corderIndex < 3; ++corderIndex )
 			{
-				const auto & curr = cornerDirs[c];
-				const auto & prev = cornerDirs[(c + 2) % 3];
-				const auto & next = cornerDirs[(c + 1) % 3];
+				const auto & curr = cornerDirs[corderIndex];
+				const auto & prev = cornerDirs[(corderIndex + 2) % 3];
+				const auto & next = cornerDirs[(corderIndex + 1) % 3];
 
 				const auto cornerPos = curr * size * s;
 				const auto toPrev = ((prev * size * s) - cornerPos).normalized();
@@ -4213,10 +4452,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 				const auto bevelDist = cornerBevel * size * s;
 
-				ring[c * 2]	 = Vec3(cornerPos[Math::X] + (toPrev[Math::X] * bevelDist), y,
-									   cornerPos[Math::Z] + (toPrev[Math::Z] * bevelDist));
-				ring[(c * 2) + 1] = Vec3(cornerPos[Math::X] + (toNext[Math::X] * bevelDist), y,
-									   cornerPos[Math::Z] + (toNext[Math::Z] * bevelDist));
+				ring[corderIndex * 2]	 = Vec3(cornerPos[Math::X] + (toPrev[Math::X] * bevelDist), y, cornerPos[Math::Z] + (toPrev[Math::Z] * bevelDist));
+				ring[(corderIndex * 2) + 1] = Vec3(cornerPos[Math::X] + (toNext[Math::X] * bevelDist), y, cornerPos[Math::Z] + (toNext[Math::Z] * bevelDist));
 			}
 
 			return ring;
@@ -4224,18 +4461,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(size, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4243,31 +4479,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -4276,23 +4513,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -4303,22 +4543,23 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto table = makeTriRing(tableRatio, -crownHeight);
 
 			const auto edge1 = table[1] - table[0];
-			const auto edge2 = table[RingVerts - 1] - table[0];
+			const auto edge2 = table[RingVertices - 1] - table[0];
 			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
 
-			std::array< Vec3, RingVerts > tableUV;
+			std::array< Vec3, RingVertices > tableUV;
 
-			for ( size_t i = 0; i < RingVerts; ++i )
+			for ( size_t index = 0; index < RingVertices; ++index )
 			{
-				tableUV[i] = Vec3(
-					(table[i][Math::X] / (size * tableRatio) + one) * half,
-					(table[i][Math::Z] / (size * tableRatio) + one) * half,
-					zero);
+				tableUV[index] = Vec3(
+					((table[index][Math::X] / (size * tableRatio)) + one) * half,
+					((table[index][Math::Z] / (size * tableRatio)) + one) * half,
+					zero
+				);
 			}
 
-			for ( size_t i = 1; i + 1 < RingVerts; ++i )
+			for ( size_t index = 1; index + 1 < RingVertices; ++index )
 			{
-				emitTriangle(table[0], table[i], table[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(table[0], table[index], table[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
@@ -4336,17 +4577,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto inner = makeTriRing(innerScale, innerY);
 			const auto outer = makeTriRing(outerScale, outerY);
 
-			for ( size_t i = 0; i < RingVerts; ++i )
+			for ( size_t index = 0; index < RingVertices; ++index )
 			{
-				const auto next = (i + 1) % RingVerts;
-				const auto normal = Vec3::crossProduct(inner[next] - inner[i], outer[i] - inner[i]).normalized();
-				const Vec3 positions[4] = {inner[i], outer[i], outer[next], inner[next]};
-				Vec3 uvs[4];
-				const auto center = (inner[i] + outer[i] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto next = (index + 1) % RingVertices;
+				const auto normal = Vec3::crossProduct(inner[next] - inner[index], outer[index] - inner[index]).normalized();
 
-				emitTriangle(inner[i], outer[i], outer[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(inner[i], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
+				std::array< Vec3, 4 > positions{inner[index], outer[index], outer[next], inner[next]};
+				std::array< Vec3, 4 > uvs;
+
+				const auto center = (inner[index] + outer[index] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
+				emitTriangle(inner[index], outer[index], outer[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(inner[index], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -4364,17 +4607,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto outer = makeTriRing(outerScale, outerY);
 			const auto inner = makeTriRing(innerScale, innerY);
 
-			for ( size_t i = 0; i < RingVerts; ++i )
+			for ( size_t index = 0; index < RingVertices; ++index )
 			{
-				const auto next = (i + 1) % RingVerts;
-				const auto normal = Vec3::crossProduct(outer[next] - outer[i], inner[i] - outer[i]).normalized();
-				const Vec3 positions[4] = {outer[i], inner[i], inner[next], outer[next]};
-				Vec3 uvs[4];
-				const auto center = (outer[i] + outer[next] + inner[next] + inner[i]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto next = (index + 1) % RingVertices;
+				const auto normal = Vec3::crossProduct(outer[next] - outer[index], inner[index] - outer[index]).normalized();
 
-				emitTriangle(outer[i], inner[i], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[i], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
+				std::array< Vec3, 4 > uvs;
+
+				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
+				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -4383,33 +4628,37 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto culet = makeTriRing(culetRatio, pavilionDepth);
 
 			const auto edge1 = culet[1] - culet[0];
-			const auto edge2 = culet[RingVerts - 1] - culet[0];
+			const auto edge2 = culet[RingVertices - 1] - culet[0];
 			const auto culetNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
-			std::array< Vec3, RingVerts > culetUV;
+			std::array< Vec3, RingVertices > culetUV;
 
-			for ( size_t i = 0; i < RingVerts; ++i )
+			for ( size_t index = 0; index < RingVertices; ++index )
 			{
-				culetUV[i] = Vec3(
-					(culet[i][Math::X] / (size * culetRatio) + one) * half,
-					(culet[i][Math::Z] / (size * culetRatio) + one) * half,
-					zero);
+				culetUV[index] = Vec3(
+					((culet[index][Math::X] / (size * culetRatio)) + one) * half,
+					((culet[index][Math::Z] / (size * culetRatio)) + one) * half,
+					zero
+				);
 			}
 
-			for ( size_t i = 1; i + 1 < RingVerts; ++i )
+			for ( size_t index = 1; index + 1 < RingVertices; ++index )
 			{
-				emitTriangle(culet[0], culet[i + 1], culet[i], culetNormal, culetUV[0], culetUV[i + 1], culetUV[i]);
+				emitTriangle(culet[0], culet[index + 1], culet[index], culetNormal, culetUV[0], culetUV[index + 1], culetUV[index]);
 			}
 		}
 
 		builder.endConstruction();
+
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
 
 		return shape;
 	}
 
 	/**
 	 * @brief Generates an oval-cut gem shape (elliptical brilliant cut).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param length The X-axis radius (longer axis). Default 1.
@@ -4424,15 +4673,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateOvalCutGem (
-		vertex_data_t length = 1,
-		vertex_data_t width = static_cast< vertex_data_t >(0.65),
-		size_t facets = 16,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55),
-		vertex_data_t crownAngle = 35,
-		vertex_data_t pavilionAngle = 41,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateOvalCutGem (vertex_data_t length = 1, vertex_data_t width = static_cast< vertex_data_t >(0.65), size_t facets = 16, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55), vertex_data_t crownAngle = 35, vertex_data_t pavilionAngle = 41, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -4464,32 +4705,31 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::vector< Vec3 > tableRing(n);
 		std::vector< Vec3 > girdleRing(n);
 
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto theta = static_cast< vertex_data_t >(i) * angleStep;
+			const auto theta = static_cast< vertex_data_t >(index) * angleStep;
 			const auto cosT = std::cos(theta);
 			const auto sinT = std::sin(theta);
 
-			tableRing[i] = Vec3(length * tableRatio * cosT, -crownHeight, width * tableRatio * sinT);
-			girdleRing[i] = Vec3(length * cosT, zero, width * sinT);
+			tableRing[index] = Vec3(length * tableRatio * cosT, -crownHeight, width * tableRatio * sinT);
+			girdleRing[index] = Vec3(length * cosT, zero, width * sinT);
 		}
 
 		const Vec3 culet(zero, pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4497,31 +4737,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -4530,23 +4771,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -4560,63 +4804,70 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			std::vector< Vec3 > tableUV(n);
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				tableUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				tableUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
 
-			for ( size_t i = 1; i + 1 < n; ++i )
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRing[0], tableRing[i], tableRing[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(tableRing[0], tableRing[index], tableRing[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
 		/* === Crown === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & t0 = tableRing[i];
+			const auto i1 = (index + 1) % n;
+			const auto & t0 = tableRing[index];
 			const auto & t1 = tableRing[i1];
-			const auto & g0 = girdleRing[i];
+			const auto & g0 = girdleRing[index];
 			const auto & g1 = girdleRing[i1];
 
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
 			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
 
-			const Vec3 positions[4] = {t0, t1, g1, g0};
-			Vec3 uvs[4];
-			computeFaceUV(normal, center, positions, uvs, 4);
+			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
+			std::array< Vec3, 4 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
 			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
 			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		/* === Pavilion === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & g0 = girdleRing[i];
+			const auto i1 = (index + 1) % n;
+			const auto & g0 = girdleRing[index];
 			const auto & g1 = girdleRing[i1];
 
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
 			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
 
-			const Vec3 positions[3] = {g0, g1, culet};
-			Vec3 uvs[3];
-			computeFaceUV(normal, center, positions, uvs, 3);
+			std::array< Vec3, 3 > positions{g0, g1, culet};
+			std::array< Vec3, 3 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
 			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		builder.endConstruction();
 
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
+
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a cushion-cut gem shape (rounded rectangle brilliant cut).
-	 * @note Ready for vulkan default world axis. Uses superellipse outline.
+	 * @note Uses superellipse outline.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param length The X-axis radius. Default 1.
@@ -4632,16 +4883,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateCushionCutGem (
-		vertex_data_t length = 1,
-		vertex_data_t width = static_cast< vertex_data_t >(0.85),
-		vertex_data_t power = static_cast< vertex_data_t >(2.5),
-		size_t facets = 16,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55),
-		vertex_data_t crownAngle = 35,
-		vertex_data_t pavilionAngle = 41,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateCushionCutGem (vertex_data_t length = 1, vertex_data_t width = static_cast< vertex_data_t >(0.85), vertex_data_t power = static_cast< vertex_data_t >(2.5), size_t facets = 16, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.55), vertex_data_t crownAngle = 35, vertex_data_t pavilionAngle = 41, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -4673,7 +4915,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Superellipse point: |x/a|^p + |z/b|^p = 1
 		 * x = a * sign(cos) * |cos|^(2/p), z = b * sign(sin) * |sin|^(2/p) */
 		const auto invP = static_cast< vertex_data_t >(2) / power;
-		const auto superEllipsePoint = [invP](vertex_data_t a, vertex_data_t b, vertex_data_t theta) -> std::pair< vertex_data_t, vertex_data_t > {
+
+		const auto superEllipsePoint = [invP] (vertex_data_t a, vertex_data_t b, vertex_data_t theta) -> std::pair< vertex_data_t, vertex_data_t > {
 			const auto cosT = std::cos(theta);
 			const auto sinT = std::sin(theta);
 			const auto signCos = cosT < 0 ? static_cast< vertex_data_t >(-1) : static_cast< vertex_data_t >(1);
@@ -4688,32 +4931,31 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::vector< Vec3 > tableRingVec(n);
 		std::vector< Vec3 > girdleRingVec(n);
 
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto theta = static_cast< vertex_data_t >(i) * angleStep;
+			const auto theta = static_cast< vertex_data_t >(index) * angleStep;
 			const auto [tx, tz] = superEllipsePoint(length * tableRatio, width * tableRatio, theta);
 			const auto [gx, gz] = superEllipsePoint(length, width, theta);
 
-			tableRingVec[i] = Vec3(tx, -crownHeight, tz);
-			girdleRingVec[i] = Vec3(gx, zero, gz);
+			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
 		const Vec3 culet(zero, pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4721,16 +4963,16 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
+			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
 			builder.newVertex();
 		};
 
@@ -4741,11 +4983,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -4754,23 +4999,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -4784,63 +5032,69 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			std::vector< Vec3 > tableUV(n);
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				tableUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				tableUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
 
-			for ( size_t i = 1; i + 1 < n; ++i )
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[i], tableRingVec[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
 		/* === Crown === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & t0 = tableRingVec[i];
+			const auto i1 = (index + 1) % n;
+			const auto & t0 = tableRingVec[index];
 			const auto & t1 = tableRingVec[i1];
-			const auto & g0 = girdleRingVec[i];
+			const auto & g0 = girdleRingVec[index];
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
 			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
 
-			const Vec3 positions[4] = {t0, t1, g1, g0};
-			Vec3 uvs[4];
-			computeFaceUV(normal, center, positions, uvs, 4);
+			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
+			std::array< Vec3, 4 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
 			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
 			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		/* === Pavilion === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & g0 = girdleRingVec[i];
+			const auto i1 = (index + 1) % n;
+			const auto & g0 = girdleRingVec[index];
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
 			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
 
-			const Vec3 positions[3] = {g0, g1, culet};
-			Vec3 uvs[3];
-			computeFaceUV(normal, center, positions, uvs, 3);
+			std::array< Vec3, 3 > positions{g0, g1, culet};
+			std::array< Vec3, 3 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
 			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		builder.endConstruction();
 
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
+
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a marquise-cut gem shape (pointed elliptical brilliant cut).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param length The X-axis radius (longer axis with points). Default 1.2.
@@ -4856,16 +5110,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateMarquiseCutGem (
-		vertex_data_t length = static_cast< vertex_data_t >(1.2),
-		vertex_data_t width = static_cast< vertex_data_t >(0.5),
-		vertex_data_t sharpness = static_cast< vertex_data_t >(1.5),
-		size_t facets = 16,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.5),
-		vertex_data_t crownAngle = 33,
-		vertex_data_t pavilionAngle = 42,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateMarquiseCutGem (vertex_data_t length = static_cast< vertex_data_t >(1.2), vertex_data_t width = static_cast< vertex_data_t >(0.5), vertex_data_t sharpness = static_cast< vertex_data_t >(1.5), size_t facets = 16, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.5), vertex_data_t crownAngle = 33, vertex_data_t pavilionAngle = 42, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -4909,32 +5154,30 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::vector< Vec3 > tableRingVec(n);
 		std::vector< Vec3 > girdleRingVec(n);
 
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto theta = static_cast< vertex_data_t >(i) * angleStep;
+			const auto theta = static_cast< vertex_data_t >(index) * angleStep;
 			const auto [tx, tz] = marquisePoint(length * tableRatio, width * tableRatio, theta);
 			const auto [gx, gz] = marquisePoint(length, width, theta);
 
-			tableRingVec[i] = Vec3(tx, -crownHeight, tz);
-			girdleRingVec[i] = Vec3(gx, zero, gz);
+			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
 		const Vec3 culet(zero, pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4942,31 +5185,32 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			builder.setVertexColor(volumetricColor(vA));
 			builder.newVertex();
 
-			builder.setPosition(vC);
-			builder.setNormal(normal);
-			builder.setTextureCoordinates(tcC);
-			builder.setVertexColor(volumetricColor(vC));
-			builder.newVertex();
-
 			builder.setPosition(vB);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcB);
 			builder.setVertexColor(volumetricColor(vB));
 			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
 
@@ -4975,23 +5219,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
 			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
 
-			std::vector< vertex_data_t > lu(count), lv(count);
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]);
-				uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]);
-				vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]);
+				uMax = std::max(uMax, lu[index]);
+
+				vMin = std::min(vMin, lv[index]);
+				vMax = std::max(vMax, lv[index]);
 			}
 
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
 
-			for ( size_t i = 0; i < count; ++i )
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -5005,63 +5252,70 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			std::vector< Vec3 > tableUV(n);
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				tableUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				tableUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
 
-			for ( size_t i = 1; i + 1 < n; ++i )
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[i], tableRingVec[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
 		/* === Crown === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & t0 = tableRingVec[i];
+			const auto i1 = (index + 1) % n;
+			const auto & t0 = tableRingVec[index];
 			const auto & t1 = tableRingVec[i1];
-			const auto & g0 = girdleRingVec[i];
+			const auto & g0 = girdleRingVec[index];
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
 			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
 
-			const Vec3 positions[4] = {t0, t1, g1, g0};
-			Vec3 uvs[4];
-			computeFaceUV(normal, center, positions, uvs, 4);
+			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
+			std::array< Vec3, 4 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
 			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
 			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		/* === Pavilion === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & g0 = girdleRingVec[i];
+			const auto i1 = (index + 1) % n;
+			const auto & g0 = girdleRingVec[index];
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
 			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
 
-			const Vec3 positions[3] = {g0, g1, culet};
-			Vec3 uvs[3];
-			computeFaceUV(normal, center, positions, uvs, 3);
+			std::array< Vec3, 3 > positions{g0, g1, culet};
+			std::array< Vec3, 3 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
 			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		builder.endConstruction();
 
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
+
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a pear-cut gem shape (teardrop brilliant cut).
-	 * @note Ready for vulkan default world axis. One end rounded, one end pointed.
+	 * @note One end rounded, one end pointed.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param length The X-axis radius (tip-to-round axis). Default 1.
@@ -5077,16 +5331,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generatePearCutGem (
-		vertex_data_t length = 1,
-		vertex_data_t width = static_cast< vertex_data_t >(0.6),
-		vertex_data_t sharpness = static_cast< vertex_data_t >(1.6),
-		size_t facets = 16,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.5),
-		vertex_data_t crownAngle = 34,
-		vertex_data_t pavilionAngle = 42,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generatePearCutGem (vertex_data_t length = 1, vertex_data_t width = static_cast< vertex_data_t >(0.6), vertex_data_t sharpness = static_cast< vertex_data_t >(1.6), size_t facets = 16, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.5), vertex_data_t crownAngle = 34, vertex_data_t pavilionAngle = 42, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -5117,7 +5362,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Pear outline: asymmetric — pointed at +X, rounded at -X.
 		 * Smoothly blend sharpness from max at θ=0 (pointed end) to 1 at θ=π (round end). */
-		const auto pearPoint = [&](vertex_data_t a, vertex_data_t b, vertex_data_t theta) -> std::pair< vertex_data_t, vertex_data_t > {
+		const auto pearPoint = [&] (vertex_data_t a, vertex_data_t b, vertex_data_t theta) -> std::pair< vertex_data_t, vertex_data_t > {
 			const auto cosT = std::cos(theta);
 			const auto sinT = std::sin(theta);
 			const auto blendFactor = (one + cosT) * half;
@@ -5133,66 +5378,73 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::vector< Vec3 > tableRingVec(n);
 		std::vector< Vec3 > girdleRingVec(n);
 
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto theta = static_cast< vertex_data_t >(i) * angleStep;
+			const auto theta = static_cast< vertex_data_t >(index) * angleStep;
 			const auto [tx, tz] = pearPoint(length * tableRatio, width * tableRatio, theta);
 			const auto [gx, gz] = pearPoint(length, width, theta);
 
-			tableRingVec[i] = Vec3(tx, -crownHeight, tz);
-			girdleRingVec[i] = Vec3(gx, zero, gz);
+			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
 		const Vec3 culet(zero, pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
 			builder.setPosition(vA); builder.setNormal(normal); builder.setTextureCoordinates(tcA); builder.setVertexColor(volumetricColor(vA)); builder.newVertex();
-			builder.setPosition(vC); builder.setNormal(normal); builder.setTextureCoordinates(tcC); builder.setVertexColor(volumetricColor(vC)); builder.newVertex();
 			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
+			builder.setPosition(vC); builder.setNormal(normal); builder.setTextureCoordinates(tcC); builder.setVertexColor(volumetricColor(vC)); builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
-			auto uMin = std::numeric_limits< vertex_data_t >::max(), uMax = std::numeric_limits< vertex_data_t >::lowest();
-			auto vMin = std::numeric_limits< vertex_data_t >::max(), vMax = std::numeric_limits< vertex_data_t >::lowest();
-			std::vector< vertex_data_t > lu(count), lv(count);
-			for ( size_t i = 0; i < count; ++i )
+			auto uMin = std::numeric_limits< vertex_data_t >::max();
+			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
+			auto vMin = std::numeric_limits< vertex_data_t >::max();
+			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
+
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]); uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]); vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]); uMax = std::max(uMax, lu[index]);
+				vMin = std::min(vMin, lv[index]); vMax = std::max(vMax, lv[index]);
 			}
+
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
-			for ( size_t i = 0; i < count; ++i )
+
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -5204,53 +5456,65 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto edge2 = tableRingVec[n - 1] - tableRingVec[0];
 			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
 			std::vector< Vec3 > tableUV(n);
-			for ( size_t i = 0; i < n; ++i )
+
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				tableUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				tableUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
-			for ( size_t i = 1; i + 1 < n; ++i )
+
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[i], tableRingVec[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
 		/* === Crown === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & t0 = tableRingVec[i]; const auto & t1 = tableRingVec[i1];
-			const auto & g0 = girdleRingVec[i]; const auto & g1 = girdleRingVec[i1];
+			const auto i1 = (index + 1) % n;
+			const auto & t0 = tableRingVec[index]; const auto & t1 = tableRingVec[i1];
+			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
 			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
-			const Vec3 positions[4] = {t0, t1, g1, g0};
-			Vec3 uvs[4];
-			computeFaceUV(normal, center, positions, uvs, 4);
+
+			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
+			std::array< Vec3, 4 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
 			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
 			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		/* === Pavilion === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & g0 = girdleRingVec[i]; const auto & g1 = girdleRingVec[i1];
+			const auto i1 = (index + 1) % n;
+			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
 			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
-			const Vec3 positions[3] = {g0, g1, culet};
-			Vec3 uvs[3];
-			computeFaceUV(normal, center, positions, uvs, 3);
+
+			std::array< Vec3, 3 > positions{g0, g1, culet};
+			std::array< Vec3, 3 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
+
 			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		builder.endConstruction();
+
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
 
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a heart-cut gem shape (heart-shaped brilliant cut).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param size The overall size of the heart. Default 1.
@@ -5264,14 +5528,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateHeartCutGem (
-		vertex_data_t size = 1,
-		size_t facets = 24,
-		vertex_data_t tableRatio = static_cast< vertex_data_t >(0.5),
-		vertex_data_t crownAngle = 34,
-		vertex_data_t pavilionAngle = 42,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateHeartCutGem (vertex_data_t size = 1, size_t facets = 24, vertex_data_t tableRatio = static_cast< vertex_data_t >(0.5), vertex_data_t crownAngle = 34, vertex_data_t pavilionAngle = 42, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -5300,7 +5557,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		/* Heart curve parametric: x = sin(t)³, z = (13cos(t) - 5cos(2t) - 2cos(3t) - cos(4t)) / 16
 		 * Rotated so bottom tip points to +X (along length axis). */
-		const auto heartPoint = [&](vertex_data_t scale, vertex_data_t t) -> std::pair< vertex_data_t, vertex_data_t > {
+		const auto heartPoint = [&] (vertex_data_t scale, vertex_data_t t) -> std::pair< vertex_data_t, vertex_data_t > {
 			const auto sinT = std::sin(t);
 			const auto cosT = std::cos(t);
 			const auto cos2T = std::cos(static_cast< vertex_data_t >(2) * t);
@@ -5308,10 +5565,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto cos4T = std::cos(static_cast< vertex_data_t >(4) * t);
 
 			const auto hx = sinT * sinT * sinT;
-			const auto hz = (static_cast< vertex_data_t >(13) * cosT
-							- static_cast< vertex_data_t >(5) * cos2T
-							- static_cast< vertex_data_t >(2) * cos3T
-							- cos4T) / static_cast< vertex_data_t >(16);
+			const auto hz = ((static_cast< vertex_data_t >(13) * cosT) - (static_cast< vertex_data_t >(5) * cos2T) - (static_cast< vertex_data_t >(2) * cos3T) - cos4T) / static_cast< vertex_data_t >(16);
 
 			/* Rotate 90°: heart tip points +X, top lobes point -X → z=hx, x=hz (CCW ring) */
 			return {
@@ -5323,66 +5577,88 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::vector< Vec3 > tableRingVec(n);
 		std::vector< Vec3 > girdleRingVec(n);
 
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto theta = static_cast< vertex_data_t >(i) * angleStep;
+			const auto theta = static_cast< vertex_data_t >(index) * angleStep;
 			const auto [tx, tz] = heartPoint(tableRatio, theta);
 			const auto [gx, gz] = heartPoint(one, theta);
 
-			tableRingVec[i] = Vec3(tx, -crownHeight, tz);
-			girdleRingVec[i] = Vec3(gx, zero, gz);
+			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
 		const Vec3 culet(zero, pavilionDepth, zero);
 
 		const auto maxExtent = std::max(size, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
-			builder.setPosition(vA); builder.setNormal(normal); builder.setTextureCoordinates(tcA); builder.setVertexColor(volumetricColor(vA)); builder.newVertex();
-			builder.setPosition(vC); builder.setNormal(normal); builder.setTextureCoordinates(tcC); builder.setVertexColor(volumetricColor(vC)); builder.newVertex();
-			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
+			builder.setPosition(vA);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcA);
+			builder.setVertexColor(volumetricColor(vA));
+			builder.newVertex();
+
+			builder.setPosition(vB);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcB);
+			builder.setVertexColor(volumetricColor(vB));
+			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
-			auto uMin = std::numeric_limits< vertex_data_t >::max(), uMax = std::numeric_limits< vertex_data_t >::lowest();
-			auto vMin = std::numeric_limits< vertex_data_t >::max(), vMax = std::numeric_limits< vertex_data_t >::lowest();
-			std::vector< vertex_data_t > lu(count), lv(count);
-			for ( size_t i = 0; i < count; ++i )
+			auto uMin = std::numeric_limits< vertex_data_t >::max();
+			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
+			auto vMin = std::numeric_limits< vertex_data_t >::max();
+			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
+
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
+
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]); uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]); vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]); uMax = std::max(uMax, lu[index]);
+				vMin = std::min(vMin, lv[index]); vMax = std::max(vMax, lv[index]);
 			}
+
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
-			for ( size_t i = 0; i < count; ++i )
+
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -5393,54 +5669,67 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto edge1 = tableRingVec[1] - tableRingVec[0];
 			const auto edge2 = tableRingVec[n - 1] - tableRingVec[0];
 			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+
 			std::vector< Vec3 > tableUV(n);
-			for ( size_t i = 0; i < n; ++i )
+
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				tableUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				tableUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
-			for ( size_t i = 1; i + 1 < n; ++i )
+
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[i], tableRingVec[i + 1], tableNormal, tableUV[0], tableUV[i], tableUV[i + 1]);
+				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
 			}
 		}
 
 		/* === Crown === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & t0 = tableRingVec[i]; const auto & t1 = tableRingVec[i1];
-			const auto & g0 = girdleRingVec[i]; const auto & g1 = girdleRingVec[i1];
+			const auto i1 = (index + 1) % n;
+			const auto & t0 = tableRingVec[index]; const auto & t1 = tableRingVec[i1];
+			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
 			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
-			const Vec3 positions[4] = {t0, t1, g1, g0};
-			Vec3 uvs[4];
-			computeFaceUV(normal, center, positions, uvs, 4);
+
+			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
+			std::array< Vec3, 4 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
 			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
 			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		/* === Pavilion === */
-		for ( size_t i = 0; i < n; ++i )
+		for ( size_t index = 0; index < n; ++index )
 		{
-			const auto i1 = (i + 1) % n;
-			const auto & g0 = girdleRingVec[i]; const auto & g1 = girdleRingVec[i1];
+			const auto i1 = (index + 1) % n;
+			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
 			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
-			const Vec3 positions[3] = {g0, g1, culet};
-			Vec3 uvs[3];
-			computeFaceUV(normal, center, positions, uvs, 3);
+
+			std::array< Vec3, 3 > positions{g0, g1, culet};
+			std::array< Vec3, 3 > uvs;
+
+			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
+
 			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
 		}
 
 		builder.endConstruction();
+
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
 
 		return shape;
 	}
 
 	/**
 	 * @brief Generates a rose-cut gem shape (domed top with triangular facets, flat bottom).
-	 * @note Ready for vulkan default world axis.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
 	 * @param radius The base radius. Default 1.
@@ -5453,13 +5742,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	[[nodiscard]]
 	Shape< vertex_data_t, index_data_t >
-	generateRoseCutGem (
-		vertex_data_t radius = 1,
-		vertex_data_t height = static_cast< vertex_data_t >(0.6),
-		size_t rings = 3,
-		size_t facets = 12,
-		const ShapeBuilderOptions< vertex_data_t > & options = {}
-	) noexcept
+	generateRoseCutGem (vertex_data_t radius = 1, vertex_data_t height = static_cast< vertex_data_t >(0.6), size_t rings = 3, size_t facets = 12, const ShapeBuilderOptions< vertex_data_t > & options = {}) noexcept
 		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
 	{
 		using Vec3 = Math::Vector< 3, vertex_data_t >;
@@ -5483,52 +5766,72 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		const auto maxExtent = std::max(radius, height);
 		const auto invExtent = one / maxExtent;
-		const auto volumetricColor = [invExtent](const Vec3 & pos) {
+		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
-				(pos[Math::X] * invExtent + one) * half,
-				(pos[Math::Y] * invExtent + one) * half,
-				(pos[Math::Z] * invExtent + one) * half,
+				((position[Math::X] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
 		};
 
-		const auto emitTriangle = [&](
-			const Vec3 & vA, const Vec3 & vB, const Vec3 & vC,
-			const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
-			builder.setPosition(vA); builder.setNormal(normal); builder.setTextureCoordinates(tcA); builder.setVertexColor(volumetricColor(vA)); builder.newVertex();
-			builder.setPosition(vC); builder.setNormal(normal); builder.setTextureCoordinates(tcC); builder.setVertexColor(volumetricColor(vC)); builder.newVertex();
-			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
+			builder.setPosition(vA);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcA);
+			builder.setVertexColor(volumetricColor(vA));
+			builder.newVertex();
+
+			builder.setPosition(vB);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcB);
+			builder.setVertexColor(volumetricColor(vB));
+			builder.newVertex();
+
+			builder.setPosition(vC);
+			builder.setNormal(normal);
+			builder.setTextureCoordinates(tcC);
+			builder.setVertexColor(volumetricColor(vC));
+			builder.newVertex();
 		};
 
-		const auto computeFaceUV = [](
-			const Vec3 & normal, const Vec3 & center,
-			const Vec3 * positions, Vec3 * uvs, size_t count)
+		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
 			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
+
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
 			{
 				const Vec3 rightDir(one, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0));
-				rawT = rightDir - normal * Vec3::dotProduct(rightDir, normal);
+
+				rawT = rightDir - (normal * Vec3::dotProduct(rightDir, normal));
 			}
+
 			const auto T = rawT.normalized();
 			const auto B = Vec3::crossProduct(normal, T);
-			auto uMin = std::numeric_limits< vertex_data_t >::max(), uMax = std::numeric_limits< vertex_data_t >::lowest();
-			auto vMin = std::numeric_limits< vertex_data_t >::max(), vMax = std::numeric_limits< vertex_data_t >::lowest();
-			std::vector< vertex_data_t > lu(count), lv(count);
-			for ( size_t i = 0; i < count; ++i )
+			auto uMin = std::numeric_limits< vertex_data_t >::max();
+			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
+			auto vMin = std::numeric_limits< vertex_data_t >::max();
+			auto vMax = std::numeric_limits< vertex_data_t >::lowest();
+			std::vector< vertex_data_t > lu(count);
+			std::vector< vertex_data_t > lv(count);
+
+			for ( size_t index = 0; index < count; ++index )
 			{
-				lu[i] = Vec3::dotProduct(positions[i] - center, T);
-				lv[i] = Vec3::dotProduct(positions[i] - center, B);
-				uMin = std::min(uMin, lu[i]); uMax = std::max(uMax, lu[i]);
-				vMin = std::min(vMin, lv[i]); vMax = std::max(vMax, lv[i]);
+				lu[index] = Vec3::dotProduct(positions[index] - center, T);
+				lv[index] = Vec3::dotProduct(positions[index] - center, B);
+
+				uMin = std::min(uMin, lu[index]); uMax = std::max(uMax, lu[index]);
+				vMin = std::min(vMin, lv[index]); vMax = std::max(vMax, lv[index]);
 			}
+
 			const auto invScale = one / std::max(uMax - uMin, vMax - vMin);
-			for ( size_t i = 0; i < count; ++i )
+
+			for ( size_t index = 0; index < count; ++index )
 			{
-				uvs[i] = Vec3((lu[i] - uMin) * invScale, (lv[i] - vMin) * invScale, 0);
+				uvs[index] = Vec3((lu[index] - uMin) * invScale, (lv[index] - vMin) * invScale, 0);
 			}
 		};
 
@@ -5536,19 +5839,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		 * Dome points downward (+Y) like a pavilion; flat base at Y=0 faces sky. */
 		std::vector< std::vector< Vec3 > > domeRings(rings + 1);
 
-		for ( size_t r = 0; r <= rings; ++r )
+		for ( size_t ring = 0; ring <= rings; ++ring )
 		{
-			const auto t = static_cast< vertex_data_t >(r) / static_cast< vertex_data_t >(rings);
+			const auto t = static_cast< vertex_data_t >(ring) / static_cast< vertex_data_t >(rings);
 			const auto ringRadius = radius * (one - t);
 			/* Dome profile: parabolic height = h * t² for gentle dome (downward). */
 			const auto ringY = height * t * t;
 
-			domeRings[r].resize(n);
+			domeRings[ring].resize(n);
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				domeRings[r][i] = Vec3(ringRadius * std::cos(theta), ringY, ringRadius * std::sin(theta));
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				domeRings[ring][index] = Vec3(ringRadius * std::cos(theta), ringY, ringRadius * std::sin(theta));
 			}
 		}
 
@@ -5565,35 +5869,38 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			std::vector< Vec3 > baseUV(n);
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto theta = static_cast< vertex_data_t >(i) * angleStep;
-				baseUV[i] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
+				const auto theta = static_cast< vertex_data_t >(index) * angleStep;
+
+				baseUV[index] = Vec3((std::cos(theta) + one) * half, (std::sin(theta) + one) * half, zero);
 			}
 
-			for ( size_t i = 1; i + 1 < n; ++i )
+			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(baseRing[0], baseRing[i], baseRing[i + 1], baseNormal, baseUV[0], baseUV[i], baseUV[i + 1]);
+				emitTriangle(baseRing[0], baseRing[index], baseRing[index + 1], baseNormal, baseUV[0], baseUV[index], baseUV[index + 1]);
 			}
 		}
 
 		/* === Dome bands (pavilion-style: outer=top/large, inner=bottom/small) === */
-		for ( size_t r = 0; r + 1 < rings; ++r )
+		for ( size_t ringIndex = 0; ringIndex + 1 < rings; ++ringIndex )
 		{
-			const auto & outer = domeRings[r];
-			const auto & inner = domeRings[r + 1];
+			const auto & outer = domeRings[ringIndex];
+			const auto & inner = domeRings[ringIndex + 1];
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto next = (i + 1) % n;
-				const auto normal = Vec3::crossProduct(inner[i] - outer[i], outer[next] - outer[i]).normalized();
-				const Vec3 positions[4] = {outer[i], inner[i], inner[next], outer[next]};
-				Vec3 uvs[4];
-				const auto center = (outer[i] + outer[next] + inner[next] + inner[i]) / static_cast< vertex_data_t >(4);
-				computeFaceUV(normal, center, positions, uvs, 4);
+				const auto next = (index + 1) % n;
+				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
+				const auto normal = Vec3::crossProduct(inner[index] - outer[index], outer[next] - outer[index]).normalized();
 
-				emitTriangle(outer[i], inner[i], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[i], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
+				std::array< Vec3, 4 > uvs;
+
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
+
+				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
+				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
 			}
 		}
 
@@ -5601,21 +5908,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			const auto & lastRing = domeRings[rings - 1];
 
-			for ( size_t i = 0; i < n; ++i )
+			for ( size_t index = 0; index < n; ++index )
 			{
-				const auto next = (i + 1) % n;
-				const auto center = (lastRing[i] + lastRing[next] + apex) / static_cast< vertex_data_t >(3);
-				const auto normal = Vec3::crossProduct(apex - lastRing[i], lastRing[next] - lastRing[i]).normalized();
+				const auto next = (index + 1) % n;
+				const auto center = (lastRing[index] + lastRing[next] + apex) / static_cast< vertex_data_t >(3);
+				const auto normal = Vec3::crossProduct(apex - lastRing[index], lastRing[next] - lastRing[index]).normalized();
 
-				const Vec3 positions[3] = {lastRing[i], lastRing[next], apex};
-				Vec3 uvs[3];
-				computeFaceUV(normal, center, positions, uvs, 3);
+				std::array< Vec3, 3 > positions{lastRing[index], lastRing[next], apex};
+				std::array< Vec3, 3 > uvs;
 
-				emitTriangle(lastRing[i], apex, lastRing[next], normal, uvs[0], uvs[2], uvs[1]);
+				computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
+
+				emitTriangle(lastRing[index], apex, lastRing[next], normal, uvs[0], uvs[2], uvs[1]);
 			}
 		}
 
 		builder.endConstruction();
+
+		/* The facets above are still authored Y-down (display side toward -Y) — see
+		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
+		convertYDownAuthoring(shape);
 
 		return shape;
 	}

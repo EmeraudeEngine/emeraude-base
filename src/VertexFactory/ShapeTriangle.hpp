@@ -209,6 +209,20 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Reverses the triangle winding order without touching the surface vectors.
+			 * @note Companion of a mirror transformation (e.g. Shape::flipYAxis()) which already
+			 * produced the correct mirrored normal and tangent: only the front-face orientation
+			 * is left to restore. flip() would negate the vectors a second time.
+			 * @return void
+			 */
+			void
+			reverseWinding () noexcept
+			{
+				std::swap(m_vertexIndexes[0], m_vertexIndexes[1]);
+				std::swap(m_vertexColorIndexes[0], m_vertexColorIndexes[1]);
+			}
+
+			/**
 			 * @brief Flips the Y-Axis of tangent, normal and binormal vectors.
 			 * @return void
 			 */

@@ -559,14 +559,14 @@ TYPED_TEST(MathSpace3D, AACuboidCornerPoints)
 {
 	const AACuboid< TypeParam > cuboid{{1, 1, 1}, {-1, -1, -1}};
 
-	ASSERT_EQ(cuboid.bottomSouthEast(), Point< TypeParam >(1, 1, 1));
-	ASSERT_EQ(cuboid.bottomNorthEast(), Point< TypeParam >(1, 1, -1));
-	ASSERT_EQ(cuboid.bottomSouthWest(), Point< TypeParam >(-1, 1, 1));
-	ASSERT_EQ(cuboid.bottomNorthWest(), Point< TypeParam >(-1, 1, -1));
-	ASSERT_EQ(cuboid.topSouthEast(), Point< TypeParam >(1, -1, 1));
-	ASSERT_EQ(cuboid.topNorthEast(), Point< TypeParam >(1, -1, -1));
-	ASSERT_EQ(cuboid.topSouthWest(), Point< TypeParam >(-1, -1, 1));
-	ASSERT_EQ(cuboid.topNorthWest(), Point< TypeParam >(-1, -1, -1));
+	ASSERT_EQ(cuboid.maxYSouthEast(), Point< TypeParam >(1, 1, 1));
+	ASSERT_EQ(cuboid.maxYNorthEast(), Point< TypeParam >(1, 1, -1));
+	ASSERT_EQ(cuboid.maxYSouthWest(), Point< TypeParam >(-1, 1, 1));
+	ASSERT_EQ(cuboid.maxYNorthWest(), Point< TypeParam >(-1, 1, -1));
+	ASSERT_EQ(cuboid.minYSouthEast(), Point< TypeParam >(1, -1, 1));
+	ASSERT_EQ(cuboid.minYNorthEast(), Point< TypeParam >(1, -1, -1));
+	ASSERT_EQ(cuboid.minYSouthWest(), Point< TypeParam >(-1, -1, 1));
+	ASSERT_EQ(cuboid.minYNorthWest(), Point< TypeParam >(-1, -1, -1));
 }
 
 TYPED_TEST(MathSpace3D, AACuboidCentroid)

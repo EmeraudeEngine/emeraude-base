@@ -1292,6 +1292,68 @@ TYPED_TEST(MathMatrix, RotationMatrixDeterminant)
 	}
 }
 
+/*
+ * ⚠️⚠️ SIGN-PINNING TESTS FOR THE WORLD CONVENTION (flipped Aug 2026).
+ *
+ * These pin the signs that make the renderer orientation-PRESERVING. The engine world convention is moving
+ * from Y-down to Y-up: `perspectiveProjection()` and `orthographicProjection()` will gain a NEGATIVE
+ * [Col1Row1], which flips the eye->NDC map from orientation-REVERSING (today's mirror) to
+ * orientation-preserving.
+ *
+ * All four failed together in the commit that flipped the projection, which is exactly what they
+ * were written for: the change had to be a deliberate, visible act rather than a silent drift. If
+ * one of them fails again, the convention has moved — do NOT "repair" it by relaxing the assertion.
+ *
+ * @note Plain TEST rather than TYPED_TEST: the suite instantiates over `int` as well, and a
+ * projection matrix is meaningless there (fastCotan has no integral overload).
+ */
+TEST(MathMatrixYConventionPin, PerspectiveCol1Row1IsPositive)
+{
+	const auto projection = Matrix< 4, float >::perspectiveProjection(1.0F, 1.5F, 0.1F, 100.0F);
+
+	/* Y-up world: the projection carries the flip that reconciles it with Vulkan's Y-down NDC. */
+	ASSERT_LT(projection[M4x4Col1Row1], 0.0F);
+}
+
+TEST(MathMatrixYConventionPin, OrthographicCol1Row1IsPositive)
+{
+	const auto projection = Matrix< 4, float >::orthographicProjection(-10.0F, 10.0F, -10.0F, 10.0F, 0.1F, 100.0F);
+
+	/* Moves in LOCKSTEP with the perspective one, or shadow maps and every 2D target would stay
+	 * mirrored while the main pass is fixed. */
+	ASSERT_LT(projection[M4x4Col1Row1], 0.0F);
+}
+
+TEST(MathMatrixYConventionPin, EyeToNDCReversesOrientation)
+{
+	const auto projection = Matrix< 4, float >::perspectiveProjection(1.0F, 1.0F, 0.1F, 100.0F);
+
+	/* The linear part of eye->NDC is diag([0][0], [1][1], [2][2]). Its determinant sign is what
+	 * decides mirroring: POSITIVE means orientation-preserving, which is the point of the Y-up
+	 * convention. It was NEGATIVE — a mirror — until Aug 2026. */
+	const auto linearDeterminant = projection[M4x4Col0Row0] * projection[M4x4Col1Row1] * projection[M4x4Col2Row2];
+
+	ASSERT_GT(linearDeterminant, 0.0F);
+}
+
+TEST(MathMatrixYConventionPin, PositiveEyeYProjectsToPositiveNDCY)
+{
+	const auto projection = Matrix< 4, float >::perspectiveProjection(1.0F, 1.0F, 0.1F, 100.0F);
+
+	/* A point one unit along +Y in eye space, two units in front of the camera (forward is -Z). */
+	const Vector< 4, float > eyePoint{0.0F, 1.0F, -2.0F, 1.0F};
+	const auto clipPoint = projection * eyePoint;
+
+	/* w = -z_eye must be positive for anything the camera can see. */
+	ASSERT_GT(clipPoint[3], 0.0F);
+
+	/* Vulkan NDC y points DOWN, so a NEGATIVE NDC y means the SCREEN TOP — which is where a point
+	 * one unit along +Y must land now that +Y is up. It landed at the bottom before Aug 2026. */
+	const auto ndcY = clipPoint[1] / clipPoint[3];
+
+	ASSERT_LT(ndcY, 0.0F);
+}
+
 TYPED_TEST(MathMatrix, TransformHierarchy)
 {
 	if constexpr ( !std::is_integral_v< TypeParam > )

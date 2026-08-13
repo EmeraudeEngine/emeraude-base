@@ -25,6 +25,8 @@
  */
 
 /* Third-party inclusions. */
+#include <array>
+
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
@@ -87,8 +89,10 @@ TYPED_TEST(MathCartesianFrame, CartesianFrameDefault)
 		constexpr auto AxisInv = Vector< 3, TypeParam >::negativeY();
 
 		ASSERT_EQ(cartesianFrame.YAxis(), Axis);
-		ASSERT_EQ(cartesianFrame.downwardVector(), Axis);
-		ASSERT_EQ(cartesianFrame.upwardVector(), AxisInv);
+		/* ⚠️ Y-UP: the frame's Y column IS the up direction now. These two swapped bodies in the
+		 * Aug 2026 convention flip; before it, downwardVector() returned the column. */
+		ASSERT_EQ(cartesianFrame.upwardVector(), Axis);
+		ASSERT_EQ(cartesianFrame.downwardVector(), AxisInv);
 	}
 
 	/* Check the local Z axis. */
@@ -162,8 +166,8 @@ TYPED_TEST(MathCartesianFrame, CartesianFrameYaw90)
 			constexpr auto AxisInv = Vector< 3, TypeParam >::negativeY();
 
 			ASSERT_EQ(cartesianFrame.YAxis(), Axis);
-			ASSERT_EQ(cartesianFrame.downwardVector(), Axis);
-			ASSERT_EQ(cartesianFrame.upwardVector(), AxisInv);
+			ASSERT_EQ(cartesianFrame.upwardVector(), Axis);
+			ASSERT_EQ(cartesianFrame.downwardVector(), AxisInv);
 		}
 
 		/* Check the local Z axis. */
@@ -176,6 +180,62 @@ TYPED_TEST(MathCartesianFrame, CartesianFrameYaw90)
 			ASSERT_EQ(cartesianFrame.forwardVector(), AxisInv);
 		}
 	}
+}
+
+/*
+ * Pole singularity of the frame's Y-axis derivation, exercised through the public
+ * setBackwardVector(). Before the guard, a backward vector NEAR the Y axis — exactly what a
+ * 90-degree pitch through sin/cos produces, e.g. (0, 1, -4.37e-8) — missed the two exact-equality
+ * special cases, fell into the general path, and produced a cross product too short for normalize()
+ * to touch (Vector::normalize() leaves a near-null vector UNCHANGED rather than emitting a NaN).
+ * The frame silently collapsed to ~1e-7 length instead of failing. The head-pitch clamp lands here
+ * every time the view goes fully up or down.
+ */
+TYPED_TEST(MathCartesianFrame, FrameStaysOrthonormalAtThePole)
+{
+	using Vec = Vector< 3, TypeParam >;
+
+	const std::array< Vec, 6 > backwards{
+		Vec{0, 1, 0},                                                            /* exactly +Y */
+		Vec{0, -1, 0},                                                           /* exactly -Y */
+		Vec{0, 1, static_cast< TypeParam >(-4.37e-8)},                           /* what a 90 deg pitch really yields */
+		Vec{0, -1, static_cast< TypeParam >(4.37e-8)},
+		Vec{static_cast< TypeParam >(1e-9), 1, static_cast< TypeParam >(1e-9)},
+		Vec{static_cast< TypeParam >(-1e-9), -1, static_cast< TypeParam >(-1e-9)}
+	};
+
+	for ( const auto & backward : backwards )
+	{
+		CartesianFrame< TypeParam > frame;
+		frame.setBackwardVector(backward);
+
+		const auto upward = frame.upwardVector();
+		const auto right = frame.rightVector();
+
+		/* The whole point: unit vectors, never collapsed ones. */
+		ASSERT_NEAR(static_cast< double >(upward.length()), 1.0, 1e-5);
+		ASSERT_NEAR(static_cast< double >(right.length()), 1.0, 1e-5);
+
+		/* And still an orthogonal basis. */
+		ASSERT_NEAR(static_cast< double >(Vec::dotProduct(upward, frame.backwardVector())), 0.0, 1e-4);
+		ASSERT_NEAR(static_cast< double >(Vec::dotProduct(upward, right)), 0.0, 1e-4);
+	}
+}
+
+TYPED_TEST(MathCartesianFrame, PoleRollConventionIsPinned)
+{
+	using Vec = Vector< 3, TypeParam >;
+
+	/* Convention carried over from the exact-match special cases this replaced. The pole is a true
+	 * singularity — the roll is discontinuous there and depends on the side of approach — so this
+	 * pins a CHOICE. Changing it rotates the view 180 degrees when looking fully up or down. */
+	CartesianFrame< TypeParam > up;
+	up.setBackwardVector(Vec{0, 1, 0});
+	ASSERT_NEAR(static_cast< double >(up.upwardVector()[Z]), 1.0, 1e-6);
+
+	CartesianFrame< TypeParam > down;
+	down.setBackwardVector(Vec{0, -1, 0});
+	ASSERT_NEAR(static_cast< double >(down.upwardVector()[Z]), -1.0, 1e-6);
 }
 
 TYPED_TEST(MathCartesianFrame, CartesianFrameTransformation)
@@ -579,7 +639,7 @@ TYPED_TEST(MathCartesianFrame, RollLocal)
 		frame.roll(Radian< TypeParam >(90), true);
 
 		// After 90 degree roll, downward should point left
-		ASSERT_NEAR(frame.downwardVector()[X], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
+		ASSERT_NEAR(frame.upwardVector()[X], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
 	}
 }
 

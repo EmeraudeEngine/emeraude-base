@@ -65,6 +65,28 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - **Matrix**: Transformation matrices
 - **Quaternion**: 3D rotations (includes `toRotationMatrix4()` for standard column-major output)
 - **CartesianFrame**: Coordinate system (position + orthonormal basis), `fromQuaternion()` factory, `toQuaternion()` extractor
+
+> [!CRITICAL]
+> **`CartesianFrame` stores `m_upward` (Y+) and `m_backward` (Z+). Read the PARAMETER, not the name
+> you remember.** The `m_downward` → `m_upward` rename of the Y-up migration (53 sites) left a trail
+> of parameters, locals and comments still saying "downward" while feeding the UP axis. Cleaned up
+> Aug 2026; if you meet one again, it is stale, not a hint.
+>
+> **Three accessors, and they are NOT interchangeable any more:**
+> - `localYAxis()` → `m_upward` — the Y **basis column**, no up/down meaning. Use it for anything
+>   structural: composing `(right, Y, backward)`, mirroring a stored axis, a gizmo handle, a local-Y
+>   translation.
+> - `upwardVector()` → `m_upward`, `downwardVector()` → `m_upward.inversed()`. Reserve these for
+>   callers that genuinely mean gravity's direction or its opposite.
+>
+> ⚠️ Its doc used to claim `localYAxis()` was "the same value as `downwardVector()` today, the two
+> are about to swap". **The swap happened**: they are now OPPOSITE. Believing that note inverts the
+> axis silently.
+>
+> ⚠️ **Fixed Aug 2026 — `setBackwardVector(x, y, z)` called ITSELF** (missing braces around the three
+> scalars): infinite recursion, stack overflow at the first real call. It shipped that way and never
+> crashed only because nothing in the whole cascade ever called that overload. A defect no test can
+> reach is still a defect.
 - **TransformUtils**: `TRSDecomposition<T>`, `decomposeTRS(Matrix4)`, `composeTRS(T,R,S)` — roundtrip-safe TRS matrix decomposition
 - **Primitives**: Point, Line, Segment, Sphere, Capsule, Triangle, AACuboid
 - **Collision/Intersection**: Geometric detection between primitives

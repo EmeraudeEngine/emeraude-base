@@ -122,7 +122,7 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Returns the point array.
-			 * @note The layout is [bottomSouthEast, bottomNorthEast, bottomSouthWest, bottomNorthWest, topSouthEast, topNorthEast, topSouthWest, topNorthWest].
+			 * @note The layout is [maxYSouthEast, maxYNorthEast, maxYSouthWest, maxYNorthWest, minYSouthEast, minYNorthEast, minYSouthWest, minYNorthWest].
 			 * @return std::array< Point< precision_t >, 4 > &
 			 */
 			[[nodiscard]]
@@ -130,20 +130,20 @@ namespace EmEn::Base::Math::Space3D
 			points () noexcept
 			{
 				return {
-					this->bottomSouthEast(),
-					this->bottomNorthEast(),
-					this->bottomSouthWest(),
-					this->bottomNorthWest(),
-					this->topSouthEast(),
-					this->topNorthEast(),
-					this->topSouthWest(),
-					this->topNorthWest()
+					this->maxYSouthEast(),
+					this->maxYNorthEast(),
+					this->maxYSouthWest(),
+					this->maxYNorthWest(),
+					this->minYSouthEast(),
+					this->minYNorthEast(),
+					this->minYSouthWest(),
+					this->minYNorthWest()
 				};
 			}
 
 			/**
 			 * @brief Returns the point array.
-			 * @note The layout is [bottomSouthEast, bottomNorthEast, bottomSouthWest, bottomNorthWest, topSouthEast, topNorthEast, topSouthWest, topNorthWest].
+			 * @note The layout is [maxYSouthEast, maxYNorthEast, maxYSouthWest, maxYNorthWest, minYSouthEast, minYNorthEast, minYSouthWest, minYNorthWest].
 			 * @return std::array< Point< precision_t >, 4 > &
 			 */
 			[[nodiscard]]
@@ -151,14 +151,14 @@ namespace EmEn::Base::Math::Space3D
 			points () const noexcept
 			{
 				return {
-					this->bottomSouthEast(),
-					this->bottomNorthEast(),
-					this->bottomSouthWest(),
-					this->bottomNorthWest(),
-					this->topSouthEast(),
-					this->topNorthEast(),
-					this->topSouthWest(),
-					this->topNorthWest()
+					this->maxYSouthEast(),
+					this->maxYNorthEast(),
+					this->maxYSouthWest(),
+					this->maxYNorthWest(),
+					this->minYSouthEast(),
+					this->minYNorthEast(),
+					this->minYSouthWest(),
+					this->minYNorthWest()
 				};
 			}
 
@@ -370,63 +370,15 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
-			 * @brief Returns the point at X+, Y- and Z+.
-			 * @return Point< precision_t >
-			 */
-			[[nodiscard]]
-			constexpr
-			Point< precision_t >
-			bottomSouthEast () const noexcept
-			{
-				return {m_maximum[X], m_maximum[Y], m_maximum[Z]};
-			}
-
-			/**
-			 * @brief Returns the point at X+, Y- and Z-.
-			 * @return Point< precision_t >
-			 */
-			[[nodiscard]]
-			constexpr
-			Point< precision_t >
-			bottomNorthEast () const noexcept
-			{
-				return {m_maximum[X], m_maximum[Y], m_minimum[Z]};
-			}
-
-			/**
-			 * @brief Returns the point at X-, Y- and Z+.
-			 * @return Point< precision_t >
-			 */
-			[[nodiscard]]
-			constexpr
-			Point< precision_t >
-			bottomSouthWest () const noexcept
-			{
-				return {m_minimum[X], m_maximum[Y], m_maximum[Z]};
-			}
-
-			/**
-			 * @brief Returns the point at X-, Y- and Z-.
-			 * @return Point< precision_t >
-			 */
-			[[nodiscard]]
-			constexpr
-			Point< precision_t >
-			bottomNorthWest () const noexcept
-			{
-				return {m_minimum[X], m_maximum[Y], m_minimum[Z]};
-			}
-
-			/**
 			 * @brief Returns the point at X+, Y+ and Z+.
 			 * @return Point< precision_t >
 			 */
 			[[nodiscard]]
 			constexpr
 			Point< precision_t >
-			topSouthEast () const noexcept
+			maxYSouthEast () const noexcept
 			{
-				return {m_maximum[X], m_minimum[Y], m_maximum[Z]};
+				return {m_maximum[X], m_maximum[Y], m_maximum[Z]};
 			}
 
 			/**
@@ -436,9 +388,9 @@ namespace EmEn::Base::Math::Space3D
 			[[nodiscard]]
 			constexpr
 			Point< precision_t >
-			topNorthEast () const noexcept
+			maxYNorthEast () const noexcept
 			{
-				return {m_maximum[X], m_minimum[Y], m_minimum[Z]};
+				return {m_maximum[X], m_maximum[Y], m_minimum[Z]};
 			}
 
 			/**
@@ -448,9 +400,9 @@ namespace EmEn::Base::Math::Space3D
 			[[nodiscard]]
 			constexpr
 			Point< precision_t >
-			topSouthWest () const noexcept
+			maxYSouthWest () const noexcept
 			{
-				return {m_minimum[X], m_minimum[Y], m_maximum[Z]};
+				return {m_minimum[X], m_maximum[Y], m_maximum[Z]};
 			}
 
 			/**
@@ -460,7 +412,55 @@ namespace EmEn::Base::Math::Space3D
 			[[nodiscard]]
 			constexpr
 			Point< precision_t >
-			topNorthWest () const noexcept
+			maxYNorthWest () const noexcept
+			{
+				return {m_minimum[X], m_maximum[Y], m_minimum[Z]};
+			}
+
+			/**
+			 * @brief Returns the point at X+, Y- and Z+.
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			minYSouthEast () const noexcept
+			{
+				return {m_maximum[X], m_minimum[Y], m_maximum[Z]};
+			}
+
+			/**
+			 * @brief Returns the point at X+, Y- and Z-.
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			minYNorthEast () const noexcept
+			{
+				return {m_maximum[X], m_minimum[Y], m_minimum[Z]};
+			}
+
+			/**
+			 * @brief Returns the point at X-, Y- and Z+.
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			minYSouthWest () const noexcept
+			{
+				return {m_minimum[X], m_minimum[Y], m_maximum[Z]};
+			}
+
+			/**
+			 * @brief Returns the point at X-, Y- and Z-.
+			 * @return Point< precision_t >
+			 */
+			[[nodiscard]]
+			constexpr
+			Point< precision_t >
+			minYNorthWest () const noexcept
 			{
 				return {m_minimum[X], m_minimum[Y], m_minimum[Z]};
 			}

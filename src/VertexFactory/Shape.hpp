@@ -990,14 +990,15 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Moves axis origin the bottom of the geometry.
+			 * @brief Moves the axis origin to the bottom of the geometry, so the shape
+			 * rests on the Y=0 plane and extends toward +Y.
 			 * @param updateProperties Enable the shape properties update. Default true.
 			 * @return void
 			 */
 			void
 			setCenterAtBottom (bool updateProperties = true)
 			{
-				/* Find the lowest position. */
+				/* Find the lowest position (the bottom, Y-up world). */
 				auto bottom = std::numeric_limits< vertex_data_t >::max();
 
 				for ( const auto & vertexRef : m_vertices )
@@ -1008,7 +1009,7 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
-				this->transform(Math::Matrix< 4, vertex_data_t >::translation(0, bottom, 0), updateProperties);
+				this->transform(Math::Matrix< 4, vertex_data_t >::translation(0, -bottom, 0), updateProperties);
 			}
 
 			/**
@@ -1168,7 +1169,39 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Flip the Y-Axis of every vertex attributes.
+			 * @brief Reverses the winding order of every triangle without touching normals or tangents.
+			 * @note Companion of flipYAxis(): a mirror already yields the correct mirrored normals
+			 * and tangents but reverses the front-face orientation, which this call restores.
+			 * flipSurface() would negate the vectors a second time.
+			 * @return void
+			 */
+			void
+			reverseWinding () noexcept
+			{
+				for ( auto & triangle : m_triangles )
+				{
+					triangle.reverseWinding();
+				}
+			}
+
+			/**
+			 * @brief Negates the V texture coordinate of every vertex.
+			 * @note Used to be folded into flipYAxis(); a caller that mirrors geometry does not
+			 * necessarily want its UVs mirrored too.
+			 * @return void
+			 */
+			void
+			flipTextureV () noexcept
+			{
+				for ( auto & vertex : m_vertices )
+				{
+					vertex.flipTextureV();
+				}
+			}
+
+			/**
+			 * @brief Flip the Y-Axis of every GEOMETRIC vertex attribute.
+			 * @note Texture coordinates are not touched — see flipTextureV().
 			 * @return void
 			 */
 			void
