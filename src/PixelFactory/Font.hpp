@@ -35,11 +35,6 @@
 #include <sstream>
 #include <string>
 
-/* Third-party inclusions. */
-#include "ft2build.h"
-#include FT_FREETYPE_H
-#include FT_GLYPH_H
-
 /* Local inclusions. */
 #include "FileIO.hpp"
 #include "Pixmap.hpp"
@@ -549,117 +544,13 @@ namespace EmEn::Base::PixelFactory
 			 * @param fontSize The desired font size.
 			 * @param fixedWidth Enable each glyph to be the same width at the end of the process.
 			 * @return bool
+			 * @note Defined in Font.cpp: FreeType is kept out of this header so a consumer never
+			 * defines FT_* symbols in its own binary, where they would interpose the system FreeType
+			 * used by any library the process loads. See
+			 * emeraude-base/cmake/HideThirdPartyExports.cmake.
 			 */
 			bool
-			readTrueTypeFile (const std::filesystem::path & filepath, uint32_t fontSize, bool fixedWidth)
-			{
-				FT_Library library{};
-				FT_Face face{};
-
-				/* Try to init FreeType 2. */
-				if ( FT_Init_FreeType(&library) > 0 )
-				{
-					std::cerr << "[ERROR] Font::readTrueTypeFile(), FreeType 2 init failed !" "\n";
-
-					return false;
-				}
-
-				/* Load the font face. Face index 0 (always available). */
-				if ( FT_New_Face(library, filepath.string().data(), 0, &face) > 0 )
-				{
-					std::cerr << "[ERROR] Font::readTrueTypeFile(), Font file " << filepath << " cannot be open !" "\n";
-
-					return false;
-				}
-
-				/* Prepare output sizes.
-				 * NOTE: 0 means square. */
-				if ( FT_Set_Pixel_Sizes(face, 0, static_cast< FT_UInt >(fontSize)) > 0 )
-				{
-					std::cerr << "[ERROR] Font::readTrueTypeFile(), the size request with this font is not available !" "\n";
-
-					return false;
-				}
-
-				auto & glyphs = this->getGlyphArray(fontSize);
-
-				const auto success = glyphs.writeGlyphData([&] (size_t index) {
-					/* Gets the correct glyph index inside the font for the iso code. */
-					const auto glyphIndex = FT_Get_Char_Index(face, static_cast< FT_ULong >(index));
-
-					/* Gets the glyph loaded.
-					 * NOTE: Only one font can be loaded at a time. */
-					if ( FT_Load_Glyph(face, glyphIndex, FT_LOAD_RENDER) > 0 )
-					{
-						std::cerr << "[ERROR] Glyph " << glyphIndex << " failed to load !" "\n";
-
-						return Pixmap< precision_t >{};
-					}
-
-					//const auto glyphWidth = face->glyph->bitmap.width;
-					//const auto glyphHeight = face->glyph->bitmap.rows;
-					//const auto size = glyphWidth * glyphHeight;
-
-					/*if ( size > 0 )
-					{
-						auto newWidth = glyphWidth + 2;
-
-						// Checks for overflow
-						newWidth = std::min(newWidth, size);
-
-						Pixmap glyph{};
-
-						if ( glyph.initialize(glyphWidth, glyphHeight, ChannelMode::Grayscale) )
-						{
-							const auto bufferSize = static_cast< uint32_t >(face->glyph->bitmap.width * face->glyph->bitmap.rows) * sizeof(uint8_t);
-
-							glyph.fill(face->glyph->bitmap.buffer, bufferSize);
-						}
-						else
-						{
-							return {};
-						}
-
-						const auto offsetY = (m_maxHeight - face->glyph->bitmap_top) - (m_maxHeight / 4);
-
-						if ( offsetY > m_maxHeight )
-						{
-							return {};
-						}
-
-						//int32_t offsetY = 0;
-						//if ( face->glyph->bitmap_top != face->glyph->bitmap.rows )
-						//	offsetY = (m_maxHeight - face->glyph->bitmap_top) / 2;
-						//else
-						//	offsetY = m_maxHeight - face->glyph->bitmap.rows;
-
-						auto & currentGlyph = m_glyphs.at(charNum);
-
-						currentGlyph.initialize(newWidth, m_maxHeight, ChannelMode::Grayscale);
-
-						const Processor proc{currentGlyph};
-						proc.blit(glyph, {1UL, static_cast< uint32_t >(offsetY), glyph.width(), glyph.height()});
-
-						// Sets the highest width of a char.
-						m_maxWidth = std::max< uint32_t >(newWidth, m_maxWidth);
-					}
-					else
-					{
-						auto currentGlyph = m_glyphs.at(charNum);
-
-						// Empty char.
-						currentGlyph.initialize(m_maxWidth / 2, m_maxHeight, ChannelMode::Grayscale);
-						currentGlyph.fill(Color(0.0F, 0.0F, 0.0F));
-					}*/
-
-					return Pixmap< precision_t >{};
-				}, fixedWidth);
-
-				FT_Done_Face(face);
-				FT_Done_FreeType(library);
-
-				return success;
-			}
+			readTrueTypeFile (const std::filesystem::path & filepath, uint32_t fontSize, bool fixedWidth);
 
 			/**
 			 * @brief Determines the type of the font file.

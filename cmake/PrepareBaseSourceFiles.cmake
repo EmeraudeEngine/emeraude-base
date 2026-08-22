@@ -4,14 +4,20 @@
 # Per-module split (Ave robustus! gap #1): each module's compiled sources live in their own
 # EMERAUDE_BASE_<MODULE>_SOURCES list, built as an OBJECT library (emeraude::base::<module>) and
 # aggregated into the emeraude::base umbrella. Header-only modules (math, algorithms, animation,
-# pixel, platform) have no sources here — they are INTERFACE targets. EMERAUDE_BASE_SOURCES is the
+# platform) have no sources here — they are INTERFACE targets. EMERAUDE_BASE_SOURCES is the
 # not-yet-split remainder (currently empty: every compiled file belongs to a module).
+#
+# pixel became a compiled module in 2026-08: the image codecs must NOT be inlined into a consumer,
+# or that consumer defines libpng/libjpeg/libtiff/FreeType symbols in its own binary, where they
+# interpose the system copies used by anything the process loads. See
+# cmake/HideThirdPartyExports.cmake for the measured defect this closes.
 
 # core — the flat src/ root utilities + the logging hook.
 set(EMERAUDE_BASE_CORE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/FastJSON.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/FileTimestamps.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/INIParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Locale.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Logging/Logging.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ObservableTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ObserverTrait.cpp
@@ -81,6 +87,15 @@ set(EMERAUDE_BASE_NETWORK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/URIDomain.cpp
 )
 
+# pixel module — PixelFactory (mostly header-only; the third-party image codecs are compiled here
+# so libpng/libjpeg/libtiff/FreeType never reach a consumer's own binary).
+set(EMERAUDE_BASE_PIXEL_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/FileFormatJpeg.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/FileFormatPNG.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/FileFormatTIFF.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/Font.cpp
+)
+
 # vertex module — VertexFactory (mostly header-only; one compiled generator).
 set(EMERAUDE_BASE_VERTEX_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/TreeGenerator.cpp
@@ -88,6 +103,7 @@ set(EMERAUDE_BASE_VERTEX_SOURCES
 
 # wave module — sndfile, samplerate, TinySoundFont.
 set(EMERAUDE_BASE_WAVE_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/FileFormatSNDFile.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/Processor.cpp
 )
 

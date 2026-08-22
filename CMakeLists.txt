@@ -192,6 +192,9 @@ set(EMERAUDE_BASE_CMAKE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cmake" CACHE PATH "emer
 # Script to enable PCH conditionally.
 include(EnablePrecompiledHeaders)
 
+# Script to keep the vendored third-party archives out of a shared library's export table.
+include(HideThirdPartyExports)
+
 # Download + extract the prebuilt archive when EMERAUDE_EXT_LIBS_PATH is absent.
 # Skipped automatically when it is a symlink (developer pointing at a local build).
 include(InstallDependencies)
@@ -385,11 +388,11 @@ emeraude_base_object_module(debug ${EMERAUDE_BASE_DEBUG_SOURCES})
 emeraude_base_object_module(compression ${EMERAUDE_BASE_COMPRESSION_SOURCES})
 emeraude_base_object_module(io ${EMERAUDE_BASE_IO_SOURCES})
 emeraude_base_object_module(network ${EMERAUDE_BASE_NETWORK_SOURCES})
+emeraude_base_object_module(pixel ${EMERAUDE_BASE_PIXEL_SOURCES})
 emeraude_base_object_module(vertex ${EMERAUDE_BASE_VERTEX_SOURCES})
 emeraude_base_object_module(wave ${EMERAUDE_BASE_WAVE_SOURCES})
 
 # A header-only module: an INTERFACE library inheriting the shared include paths + standard.
-# (pixel's PNG/JPEG/Freetype headers come from the same ext-deps system include carried by flags.)
 function(emeraude_base_interface_module name)
 	add_library(emeraude_base_${name} INTERFACE)
 	target_link_libraries(emeraude_base_${name} INTERFACE emeraude_base_flags)
@@ -399,7 +402,6 @@ endfunction()
 emeraude_base_interface_module(math)
 emeraude_base_interface_module(algorithms)
 emeraude_base_interface_module(animation)
-emeraude_base_interface_module(pixel)
 
 # umbrella — aggregates every module's compiled objects (consumers may also link any
 # emeraude::base::<module> directly). flags + platform are PUBLIC so consumers inherit the
@@ -413,6 +415,7 @@ add_library(emeraude_base ${EMERAUDE_BASE_LIBRARY_TYPE} ${EMERAUDE_BASE_SOURCES}
 	$<TARGET_OBJECTS:emeraude_base_compression>
 	$<TARGET_OBJECTS:emeraude_base_io>
 	$<TARGET_OBJECTS:emeraude_base_network>
+	$<TARGET_OBJECTS:emeraude_base_pixel>
 	$<TARGET_OBJECTS:emeraude_base_vertex>
 	$<TARGET_OBJECTS:emeraude_base_wave>
 )
@@ -457,6 +460,16 @@ endif ()
 
 unset(TARGET_BINARY_FOR_SETUP)
 
+# Every third-party archive is attached at this point: keep them out of the export table when the
+# umbrella is built SHARED, so its static copies never interpose the system libraries used by any
+# plugin the host process loads (the STATIC default has no export table at all — nothing to do).
+# jsoncpp is the documented exception: Json::Value is part of the surface a consumer resolves from
+# the binary, and jsoncpp has no system twin, so there is nothing it could interpose.
+# See cmake/HideThirdPartyExports.cmake.
+if ( EMERAUDE_BASE_LIBRARY_TYPE STREQUAL "SHARED" )
+	emeraude_base_target_hide_third_party_exports(emeraude_base EXCEPT jsoncpp)
+endif ()
+
 # The Setup*.cmake scripts attach each dependency's compile definitions (LZMA_API_STATIC,
 # ASIO_STANDALONE, JSON_USE_EXCEPTION, …) to the umbrella as PUBLIC usage requirements. But every
 # subsystem is compiled in its own OBJECT library that inherits compile flags from
@@ -471,6 +484,17 @@ if ( _EMERAUDE_BASE_DEP_DEFS )
 	target_compile_definitions(emeraude_base_flags INTERFACE ${_EMERAUDE_BASE_DEP_DEFS})
 endif ()
 unset(_EMERAUDE_BASE_DEP_DEFS)
+
+# Same reasoning for the include directories a Setup script attaches to the umbrella: a module that
+# needs a third-party header must see it while it COMPILES, and a module inherits from
+# emeraude_base_flags only. SetupFreetype's "include/freetype2" is the case that matters (the pixel
+# module compiles Font.cpp against ft2build.h); mirroring generically also covers whatever a future
+# Setup script adds — nothing has to be listed here twice.
+get_target_property(_EMERAUDE_BASE_DEP_INCLUDES emeraude_base INTERFACE_INCLUDE_DIRECTORIES)
+if ( _EMERAUDE_BASE_DEP_INCLUDES )
+	target_include_directories(emeraude_base_flags SYSTEM INTERFACE ${_EMERAUDE_BASE_DEP_INCLUDES})
+endif ()
+unset(_EMERAUDE_BASE_DEP_INCLUDES)
 
 # emeraude_base_config.hpp — generated after SetupSndFile so LIBSNDFILE_ENABLED is resolved.
 configure_file(

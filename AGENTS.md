@@ -159,6 +159,88 @@ by every consumer.
     under `_FORTIFY_SOURCE=2` (fixed by `+=` on a named local, no `reserve` needed) — both triggers
     and their correct fixes are in [`docs/caution-points.md`](docs/caution-points.md).
 
+## 3b. Third-party symbols must never leave the binary that links them
+
+emeraude-base owns the vendored external dependencies, so it also owns the rule that keeps them
+from leaking. **`cmake/HideThirdPartyExports.cmake`** exposes
+`emeraude_base_target_hide_third_party_exports(<target> [EXCEPT <stem>…])`, which adds
+`--exclude-libs` for every archive in `EMERAUDE_EXT_LIBS_LIB_DIR` so their symbols become **local**
+in the produced binary.
+
+> [!CAUTION]
+> **The defect it closes, measured 2026-08-22.** On ELF the dynamic namespace is **flat**. The
+> engine's shared library exported **372 `png_*` symbols** from its static libpng **1.6.58**, while
+> the same process also loaded the system **libpng16.so.16 (1.6.48)** behind CEF (cairo and
+> FreeType pull it in). libEmeraude sits earlier in the global search scope, so **cairo, FreeType
+> and gdk-pixbuf all called OUR libpng**. Two consequences: libdecor compares what the global scope
+> resolves `png_free` to against what its GTK3 plugin's own chain resolves it to, finds two
+> different addresses, prints `Plugin "GTK3 plugin" uses conflicting symbol "png_free".` and falls
+> back to cairo decorations; and — the silent half — the system libpng reaches its own entry points
+> through the PLT (107 `JUMP_SLOT` relocations, no `-Bsymbolic`), so 1.6.48 code paths could execute
+> 1.6.58 implementations on 1.6.48-allocated structures. Same exposure for zlib, FreeType, libjpeg,
+> harfbuzz, brotli, lzma, zstd, bz2, tiff, sndfile/FLAC/ogg/vorbis/opus, and **LibreSSL**, whose
+> OpenSSL-compatible names would interpose the system OpenSSL used by CEF and glib.
+>
+> Result on the engine: **44127 → 15518 exported symbols**, every `png_`/`jpeg_`/`FT_`/`sf_`/
+> `TIFF`/`ktx`/`meshopt_`/`ufbx_`/`SSL_`/`EVP_` symbol gone, `EmEn::` and `glfw*` untouched.
+
+**Two halves, both required.**
+
+1. **Hide at link.** Every binary of the process calls the helper — not just the shared library. An
+   ELF **executable** exports a symbol it defines as soon as a shared object of its link closure
+   references it: `fontconfig → libfreetype.so.6 → libpng16` made projet-alpha export **250 `png_*`
+   symbols** and kept libdecor refusing its plugin *after* the engine was clean.
+2. **Never inline a third-party codec into a header.** A codec defined in a header is compiled into
+   **every consumer**, which then defines those symbols in its own binary. `FileFormatPNG`,
+   `FileFormatJpeg`, `FileFormatTIFF`, `Font::readTrueTypeFile` and `FileFormatSNDFile< int16_t >`
+   are therefore **defined in `.cpp`** and explicitly instantiated there — which is what turned
+   `pixel` into an OBJECT module. **A new third-party-backed codec follows the same rule.**
+
+> [!IMPORTANT]
+> `EXCEPT` is for an archive whose symbols a consumer legitimately resolves **from** the binary.
+> Today there is exactly one: **jsoncpp** (measured — projet-alpha references `Json::Value` from
+> libEmeraude), and it is safe precisely because jsoncpp has **no system twin** to interpose. A C
+> library that exists on the system must never be excepted.
+
+> [!NOTE]
+> **Not needed on the other platforms, and for a stated reason.** MSVC: nothing is auto-exported
+> (`EMERAUDE_USE_EXPLICIT_EXPORTS` / `EMEN_API` drives the `.def`). Apple: dyld's **two-level
+> namespace** records which library must provide each symbol, so a static copy inside a dylib cannot
+> interpose anything — and ld64 has no `--exclude-libs`. The helper is a no-op on both.
+
+**How to check it stayed fixed** (any ELF binary of the cascade):
+
+```bash
+nm -D --defined-only libEmeraude.so.0 | grep -cE ' (png_|jpeg_|FT_|sf_|deflate|SSL_)'   # must print 0
+nm -D --defined-only projet-alpha     | grep -cE ' (png_|jpeg_|FT_|deflate)'            # must print 0
+```
+
+## 3c. The C numeric locale is a cascade invariant
+
+`EmEn::Base::Locale::enforceNumericC()` (`src/Locale.hpp`) forces `LC_NUMERIC` to `"C"` and
+**returns true when it had drifted**, so the caller can log a warning naming whatever ran in between.
+
+> [!CAUTION]
+> `LC_NUMERIC` decides the decimal separator of the entire C numeric family — `printf("%f")`,
+> `strtod()`, `atof()`, `std::to_string()`, `std::stof()` — which is what the cascade uses to
+> serialise floats (settings, scene files, cache keys, Saphir-generated shader code). A third-party
+> library calling `setlocale(LC_ALL, "")` switches it to the user's locale, and in `fr_BE`, `fr_FR`
+> or `de_DE` that separator is a **COMMA**: every float written changes format and `strtod("1.5")`
+> stops at the dot. **No test on a `C` or `en_US` machine catches it.** GTK's `gtk_init()` performs
+> exactly that call, and the CEF/GTK stack pulls it into the process.
+>
+> Only `LC_NUMERIC` is forced — `LC_CTYPE`, `LC_TIME` and `LC_MESSAGES` stay localised. C++ streams
+> are unaffected either way: they carry a copy of the global `std::locale`, never the C locale.
+
+**One call is not enough, by construction.** The engine calls it in `Core::initializeBaseLevel()`,
+but an application initialises CEF *after* the engine and Chromium loads GTK lazily, so the
+invariant must be **re-asserted after initialising any library known to touch the locale** —
+projet-alpha does it right after `CefInitialize()` in both boot files. Measured 2026-08-22: at
+steady state the process runs `LC_CTYPE=fr_BE.UTF-8` with `LC_NUMERIC=C`, because Chromium resets
+that one category itself; the explicit call turns that luck into a contract. For new code the
+structural answer is to not depend on the locale at all — `std::to_chars()` / `std::from_chars()`
+are locale-independent by specification.
+
 ## 4. Core Axioms
 
 1. **Agnostic foundation.** Base depends on NOTHING high-level. No engine subsystem
@@ -207,6 +289,15 @@ translucency of its **entire vegetation** as 16-bit TIFF. Ten files, all under
 renders lit, detailed and pure WHITE, however much work goes into instancing. Pre-converting the
 asset was excluded by a standing owner rule: a load failure is an engine defect to fix, never an
 asset to pre-chew.
+
+> [!IMPORTANT]
+> **The codecs backed by a third-party library are COMPILED, not header-only** (since 2026-08):
+> `FileFormatPNG.cpp`, `FileFormatJpeg.cpp`, `FileFormatTIFF.cpp` and `Font.cpp` hold the bodies and
+> the explicit instantiations (`< uint8_t, uint32_t >`; `Font< uint8_t >`), and their headers include
+> neither `png.h`, `jpeglib.h`, `tiffio.h` nor FreeType. Targa and HDR stay header-only — they are
+> in-house, with nothing to leak. Adding a pixel type therefore means **adding an instantiation
+> line** in the matching `.cpp`; forget it and the failure is a LINK error naming the exact symbol,
+> never a silent fallback. The reason this is not negotiable is in § 3b.
 
 > [!WARNING]
 > **TIFF is read-only here, and deliberately.** It is an interchange format — DCC tools emit it,

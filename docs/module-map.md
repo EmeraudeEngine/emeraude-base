@@ -18,7 +18,7 @@ linking one module target standalone may also require its siblings — the umbre
 | math | `emeraude::base::math` | INTERFACE | — | DONE |
 | algorithms | `emeraude::base::algorithms` | INTERFACE | — | DONE |
 | animation | `emeraude::base::animation` | INTERFACE | — | DONE |
-| pixel | `emeraude::base::pixel` | INTERFACE | PNG, JPEG, Freetype | DONE (header-only — PixelFactory is all templates; corrected from OBJECT) |
+| pixel | `emeraude::base::pixel` | OBJECT | PNG, JPEG, TIFF, Freetype | DONE (**became OBJECT in 2026-08**: PixelFactory stays all templates, but the third-party codecs — `FileFormatPNG/Jpeg/TIFF`, `Font::readTrueTypeFile` — are compiled here and explicitly instantiated, so no consumer inlines libpng/libjpeg/libtiff/FreeType into its own binary. See [`../cmake/HideThirdPartyExports.cmake`](../cmake/HideThirdPartyExports.cmake)) |
 | core | `emeraude::base::core` | OBJECT | — | DONE |
 | hash | `emeraude::base::hash` | OBJECT | — | DONE |
 | gametools | `emeraude::base::gametools` | OBJECT | — | DONE |

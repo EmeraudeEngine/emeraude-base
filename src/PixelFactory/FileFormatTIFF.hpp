@@ -20,21 +20,18 @@
  *
  * Complete project and additional information can be found at :
  * https://github.com/EmeraudeEngine/emeraude-base
+ *
+ * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
 #pragma once
 
 /* STL inclusions. */
 #include <cstdint>
-#include <cstring>
-#include <vector>
-
-/* Third-party inclusions. */
-#include <tiffio.h>
+#include <type_traits>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
-#include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
@@ -57,6 +54,11 @@ namespace EmEn::Base::PixelFactory
 	 * 16-bit source is DOWN-CONVERTED to 8 bits per channel. Should a pipeline ever need the full
 	 * precision, that is a separate reader, not a flag on this one.
 	 *
+	 * @note Every libtiff call lives in FileFormatTIFF.cpp, and this is a requirement rather than a
+	 * matter of taste: an inline codec makes every consumer define libtiff symbols in its OWN binary,
+	 * where — on ELF, whose dynamic namespace is flat — they interpose the system libtiff used by any
+	 * library the process loads. See emeraude-base/cmake/HideThirdPartyExports.cmake.
+	 *
 	 * @tparam pixel_data_t The pixel component type for the pixmap depth precision. Default uint8_t.
 	 * @tparam dimension_t The type of unsigned integer used for pixmap dimension. Default uint32_t.
 	 * @extends EmEn::Base::PixelFactory::FileFormatInterface The base IO class.
@@ -69,198 +71,20 @@ namespace EmEn::Base::PixelFactory
 
 			FileFormatTIFF () noexcept = default;
 
-			/** @copydoc EmEn::Base::PixelFactory::FileFormatInterface::readStream() */
+			/**
+			 * @copydoc EmEn::Base::PixelFactory::FileFormatInterface::readStream()
+			 * @note Defined in FileFormatTIFF.cpp, which explicitly instantiates this class for the
+			 * pixel types the RGBA entry point produces (8-bit only). An instantiation the file does
+			 * not list fails at LINK time, and the linker names the missing symbol.
+			 */
 			[[nodiscard]]
-			bool
-			readStream (IO::ByteStream & stream, Pixmap< pixel_data_t, dimension_t > & pixmap) noexcept override
-			{
-				pixmap.clear();
-
-				if constexpr ( !std::is_same_v< pixel_data_t, uint8_t > )
-				{
-					Logging::error("PixelFactory::FileFormatTIFF", "readStream(), TIFF requires an 8-bit pixmap !");
-
-					return false;
-				}
-				else
-				{
-					/* libtiff talks to a client through these callbacks, so the stream stays the
-					 * single I/O path of the library — no temporary file, no whole-file copy. */
-					auto * handle = TIFFClientOpen(
-						"ByteStream", "r", reinterpret_cast< thandle_t >(&stream),
-						&FileFormatTIFF::readProc,
-						&FileFormatTIFF::writeProc,
-						&FileFormatTIFF::seekProc,
-						&FileFormatTIFF::closeProc,
-						&FileFormatTIFF::sizeProc,
-						nullptr, nullptr
-					);
-
-					if ( handle == nullptr )
-					{
-						Logging::error("PixelFactory::FileFormatTIFF", "readStream(), data is not a TIFF stream !");
-
-						return false;
-					}
-
-					uint32_t width = 0;
-					uint32_t height = 0;
-
-					if ( TIFFGetField(handle, TIFFTAG_IMAGEWIDTH, &width) != 1 || TIFFGetField(handle, TIFFTAG_IMAGELENGTH, &height) != 1 || width == 0 || height == 0 )
-					{
-						Logging::error("PixelFactory::FileFormatTIFF", "readStream(), unable to read the image dimensions !");
-
-						TIFFClose(handle);
-
-						return false;
-					}
-
-					/* ⚠️ The guard is not paranoia: TIFF dimensions come straight from the file, and
-					 * the RGBA buffer below is width × height × 4 bytes. A crafted or corrupt header
-					 * would otherwise ask for an allocation of arbitrary size. */
-					if ( !TIFFRGBAImageOK(handle, nullptr) )
-					{
-						Logging::error("PixelFactory::FileFormatTIFF", "readStream(), this TIFF cannot be read as RGBA !");
-
-						TIFFClose(handle);
-
-						return false;
-					}
-
-					std::vector< uint32_t > raster;
-
-					raster.resize(static_cast< size_t >(width) * static_cast< size_t >(height), 0U);
-
-					if ( raster.size() != static_cast< size_t >(width) * static_cast< size_t >(height) )
-					{
-						Logging::error("PixelFactory::FileFormatTIFF", "readStream(), unable to allocate the raster !");
-
-						TIFFClose(handle);
-
-						return false;
-					}
-
-					/* ORIENTATION_TOPLEFT is what makes the output canonical. The plain
-					 * TIFFReadRGBAImage() returns the image BOTTOM-UP, which renders as a
-					 * vertically mirrored texture — right shape, wrong content, and nothing in the
-					 * log to say so. */
-					if ( TIFFReadRGBAImageOriented(handle, width, height, raster.data(), ORIENTATION_TOPLEFT, 0) != 1 )
-					{
-						Logging::error("PixelFactory::FileFormatTIFF", "readStream(), unable to decode the image !");
-
-						TIFFClose(handle);
-
-						return false;
-					}
-
-					TIFFClose(handle);
-
-					if ( !pixmap.initialize(width, height, ChannelMode::RGBA) )
-					{
-						Logging::error("PixelFactory::FileFormatTIFF", "readStream(), unable to allocate the pixmap !");
-
-						return false;
-					}
-
-					/* libtiff packs each pixel into a uint32_t with its own ABGR byte order, which
-					 * is NOT the memory layout of an RGBA pixmap. The TIFFGet* accessors are the
-					 * only portable way to unpack it — a memcpy would produce channel-swapped
-					 * colours on one endianness and correct ones on the other. */
-					auto & buffer = pixmap.data();
-
-					for ( size_t index = 0; index < raster.size(); ++index )
-					{
-						const auto packed = raster[index];
-						const auto offset = index * 4;
-
-						buffer[offset] = static_cast< pixel_data_t >(TIFFGetR(packed));
-						buffer[offset + 1] = static_cast< pixel_data_t >(TIFFGetG(packed));
-						buffer[offset + 2] = static_cast< pixel_data_t >(TIFFGetB(packed));
-						buffer[offset + 3] = static_cast< pixel_data_t >(TIFFGetA(packed));
-					}
-
-					return true;
-				}
-			}
+			bool readStream (IO::ByteStream & stream, Pixmap< pixel_data_t, dimension_t > & pixmap) noexcept override;
 
 			/**
 			 * @copydoc EmEn::Base::PixelFactory::FileFormatInterface::writeStream()
 			 * @note Always fails: this codec reads TIFF, it does not produce it. See the class note.
 			 */
 			[[nodiscard]]
-			bool
-			writeStream (IO::ByteStream & /*stream*/, const Pixmap< pixel_data_t, dimension_t > & /*pixmap*/, const WriteOptions & /*options*/ = {}) const noexcept override
-			{
-				Logging::error("PixelFactory::FileFormatTIFF", "writeStream(), writing TIFF is not supported. Use PNG for lossless output, or HDR for floating point.");
-
-				return false;
-			}
-
-		private:
-
-			static
-			tmsize_t
-			readProc (thandle_t handle, void * data, tmsize_t size) noexcept
-			{
-				auto * stream = reinterpret_cast< IO::ByteStream * >(handle);
-
-				if ( stream == nullptr || size <= 0 )
-				{
-					return 0;
-				}
-
-				return stream->read(data, static_cast< size_t >(size)) ? size : 0;
-			}
-
-			static
-			tmsize_t
-			writeProc (thandle_t /*handle*/, void * /*data*/, tmsize_t /*size*/) noexcept
-			{
-				/* Read-only client: libtiff must never believe it can append to this stream. */
-				return 0;
-			}
-
-			static
-			toff_t
-			seekProc (thandle_t handle, toff_t offset, int whence) noexcept
-			{
-				auto * stream = reinterpret_cast< IO::ByteStream * >(handle);
-
-				if ( stream == nullptr )
-				{
-					return static_cast< toff_t >(-1);
-				}
-
-				const auto position = stream->seek(static_cast< int64_t >(offset), whence);
-
-				if ( position < 0 )
-				{
-					return static_cast< toff_t >(-1);
-				}
-
-				return static_cast< toff_t >(position);
-			}
-
-			static
-			int
-			closeProc (thandle_t /*handle*/) noexcept
-			{
-				/* The stream is owned by the caller and outlives the TIFF handle. */
-				return 0;
-			}
-
-			static
-			toff_t
-			sizeProc (thandle_t handle) noexcept
-			{
-				const auto * stream = reinterpret_cast< const IO::ByteStream * >(handle);
-
-				if ( stream == nullptr )
-				{
-					return 0;
-				}
-
-				return static_cast< toff_t >(stream->size());
-			}
+			bool writeStream (IO::ByteStream & stream, const Pixmap< pixel_data_t, dimension_t > & pixmap, const WriteOptions & options = {}) const noexcept override;
 	};
 }
