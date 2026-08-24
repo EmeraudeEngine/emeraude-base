@@ -1295,10 +1295,14 @@ TYPED_TEST(MathMatrix, RotationMatrixDeterminant)
 /*
  * ⚠️⚠️ SIGN-PINNING TESTS FOR THE WORLD CONVENTION (flipped Aug 2026).
  *
- * These pin the signs that make the renderer orientation-PRESERVING. The engine world convention is moving
- * from Y-down to Y-up: `perspectiveProjection()` and `orthographicProjection()` will gain a NEGATIVE
- * [Col1Row1], which flips the eye->NDC map from orientation-REVERSING (today's mirror) to
- * orientation-preserving.
+ * These pin the signs that make the renderer orientation-PRESERVING. The engine world convention
+ * MOVED from Y-down to Y-up in Aug 2026: `perspectiveProjection()` and `orthographicProjection()`
+ * now carry a NEGATIVE [Col1Row1], which flipped the eye->NDC map from orientation-REVERSING (the
+ * old mirror) to orientation-preserving.
+ *
+ * ⚠️ The four test NAMES below were renamed in Aug 2026 to match what they assert: they still
+ * carried the pre-flip wording ("IsPositive", "ReversesOrientation") over bodies asserting the
+ * exact opposite, which is worse than no name at all.
  *
  * All four failed together in the commit that flipped the projection, which is exactly what they
  * were written for: the change had to be a deliberate, visible act rather than a silent drift. If
@@ -1307,7 +1311,7 @@ TYPED_TEST(MathMatrix, RotationMatrixDeterminant)
  * @note Plain TEST rather than TYPED_TEST: the suite instantiates over `int` as well, and a
  * projection matrix is meaningless there (fastCotan has no integral overload).
  */
-TEST(MathMatrixYConventionPin, PerspectiveCol1Row1IsPositive)
+TEST(MathMatrixYConventionPin, PerspectiveCol1Row1IsNegative)
 {
 	const auto projection = Matrix< 4, float >::perspectiveProjection(1.0F, 1.5F, 0.1F, 100.0F);
 
@@ -1315,7 +1319,7 @@ TEST(MathMatrixYConventionPin, PerspectiveCol1Row1IsPositive)
 	ASSERT_LT(projection[M4x4Col1Row1], 0.0F);
 }
 
-TEST(MathMatrixYConventionPin, OrthographicCol1Row1IsPositive)
+TEST(MathMatrixYConventionPin, OrthographicCol1Row1IsNegative)
 {
 	const auto projection = Matrix< 4, float >::orthographicProjection(-10.0F, 10.0F, -10.0F, 10.0F, 0.1F, 100.0F);
 
@@ -1324,7 +1328,7 @@ TEST(MathMatrixYConventionPin, OrthographicCol1Row1IsPositive)
 	ASSERT_LT(projection[M4x4Col1Row1], 0.0F);
 }
 
-TEST(MathMatrixYConventionPin, EyeToNDCReversesOrientation)
+TEST(MathMatrixYConventionPin, EyeToNDCPreservesOrientation)
 {
 	const auto projection = Matrix< 4, float >::perspectiveProjection(1.0F, 1.0F, 0.1F, 100.0F);
 
@@ -1336,7 +1340,7 @@ TEST(MathMatrixYConventionPin, EyeToNDCReversesOrientation)
 	ASSERT_GT(linearDeterminant, 0.0F);
 }
 
-TEST(MathMatrixYConventionPin, PositiveEyeYProjectsToPositiveNDCY)
+TEST(MathMatrixYConventionPin, PositiveEyeYProjectsToScreenTop)
 {
 	const auto projection = Matrix< 4, float >::perspectiveProjection(1.0F, 1.0F, 0.1F, 100.0F);
 

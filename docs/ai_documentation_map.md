@@ -21,7 +21,7 @@ Index of the AI-facing documentation for **emeraude-base**.
 | [`plans/ave-robustus.md`](plans/ave-robustus.md) | **Long-term governance plan** "Ave robustus!" — robustness of software intent (completeness + execution hardening). Feature freeze + "no fix without a test" in effect. *(VALIDATED 2026-05-31)* |
 | [`plans/ave-robustus-inventory.md`](plans/ave-robustus-inventory.md) | Phase 0 deliverable: full promised-vs-delivered inventory of all 15 modules (severity tiers, gaps A/B, correctness bugs, open decisions). |
 | `cpp-conventions.md` | *(planned, migrate from engine)* Code style shared across the project. |
-| `coordinate-system.md` | *(planned, migrate from engine)* Math conventions (right-handed, Y-down). |
+| `coordinate-system.md` | *(planned, migrate from engine)* Math conventions (right-handed, Y-up). |
 
 ## Per-module context
 

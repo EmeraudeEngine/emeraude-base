@@ -79,7 +79,8 @@ namespace EmEn::Base::VertexFactory
 	 * noise generation (Perlin and Diamond-Square algorithms), and direct height manipulation.
 	 *
 	 * The grid is always square (same number of divisions on both axes) and centered at the origin.
-	 * It uses a **Right-Handed Y-DOWN** coordinate system where Y represents height/elevation.
+	 * It uses a **Right-Handed Y-UP** coordinate system where Y represents height/elevation:
+	 * a HIGHER Y is higher ground.
 	 *
 	 * Key features:
 	 * - Configurable grid size and subdivision count

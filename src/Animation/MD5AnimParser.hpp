@@ -329,8 +329,15 @@ namespace EmEn::Base::Animation
 
 			/**
 			 * @brief Converts an MD5 position from ID Tech coordinate space to engine space.
-			 * @note MD5 uses right-handed Y-up. Engine uses Y-down.
-			 * Combined transform: (md5.y, -md5.z, md5.x) * IDTechUnitScale.
+			 * @note MD5 uses right-handed Y-up; so does the engine, since the Aug 2026 Y-up flip.
+			 * Combined transform AS IMPLEMENTED: (md5.y, -md5.z, md5.x) * IDTechUnitScale.
+			 * 🔴 KNOWN DEFECT — OPEN (Y-up residue). That transform is a REFLECTION (det -1), the
+			 * retired Y-down form. VertexFactory/FileFormatMDx.hpp — which converts the MD5 MESH —
+			 * was migrated to (md5.y, md5.z, md5.x), a ROTATION (det +1). The two now disagree, so
+			 * a clip parsed here does not live in the same frame as the mesh it animates. This
+			 * parser IS reachable: projet-alpha's animation-debug demo calls it. The fix is to drop
+			 * the Z negation HERE and in md5ToEngineQuaternion() below — they move together, always.
+			 * NOT applied yet, it needs a visual check. See emeraude-engine's TODO.md § Y-UP RESIDUES.
 			 */
 			static
 			Math::Vector< 3, precision_t >
@@ -346,6 +353,8 @@ namespace EmEn::Base::Animation
 			/**
 			 * @brief Converts an MD5 quaternion from ID Tech coordinate space to engine space.
 			 * @note R_engine = M * R_md5 * M^T where M maps (x,y,z)_md5 → (y,-z,x)_engine.
+			 * 🔴 Same OPEN Y-up residue as md5ToEnginePosition() above: this M is a REFLECTION and
+			 * must become (y,z,x) at the very same time as that one, never separately.
 			 */
 			static
 			Math::Quaternion< precision_t >
