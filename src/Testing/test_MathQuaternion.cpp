@@ -549,13 +549,23 @@ TYPED_TEST(MathQuaternion, RotatedVector)
 	quat.fromAngleAxis(Angle, Vector< 3, TypeParam >{0, 0, 1});
 
 	const Vector< 3, TypeParam > vec{1, 0, 0};
-	// Use operator* instead of rotatedVector to test
-	const auto result = quat * vec;
+
+	/* ⚠️ This test is named after rotatedVector() but called operator* instead, with the comment
+	 * "Use operator* instead of rotatedVector to test" — because rotatedVector() did not compile
+	 * on a const quaternion (it called the mutating conjugate()). The function is fixed, so the
+	 * test now exercises what its name promises, and cross-checks the two paths agree. */
+	const Quaternion< TypeParam > constQuat{quat};
+	const auto result = constQuat.rotatedVector(vec);
+	const auto viaOperator = quat * vec;
 
 	// (1,0,0) rotated 90° around Z should be (0,1,0)
 	ASSERT_NEAR(result[X], TypeParam{0}, static_cast< TypeParam >(0.01));
 	ASSERT_NEAR(result[Y], TypeParam{1}, static_cast< TypeParam >(0.01));
 	ASSERT_NEAR(result[Z], TypeParam{0}, static_cast< TypeParam >(0.01));
+
+	ASSERT_NEAR(result[X], viaOperator[X], static_cast< TypeParam >(0.01));
+	ASSERT_NEAR(result[Y], viaOperator[Y], static_cast< TypeParam >(0.01));
+	ASSERT_NEAR(result[Z], viaOperator[Z], static_cast< TypeParam >(0.01));
 }
 
 TYPED_TEST(MathQuaternion, RotationPreservesLength)

@@ -1236,7 +1236,12 @@ namespace EmEn::Base::Math
 			constexpr Vector< 3, precision_t >
 			rotatedVector (const Vector< 3, precision_t > & vector) const noexcept
 			{
-				return (*this * Quaternion(vector, 0) * this->conjugate()).complex();
+				/* ⚠️ conjugated() (const, returns a copy), NEVER conjugate() (mutates in place and
+				 * returns a reference). This line called the mutating one until Aug 2026, so the whole
+				 * method failed to compile on a const quaternion — which is every real caller — and
+				 * would have corrupted the result anyway, since it mutates an operand of its own
+				 * expression under unspecified evaluation order. */
+				return (*this * Quaternion(vector, 0) * this->conjugated()).complex();
 			}
 
 			/**

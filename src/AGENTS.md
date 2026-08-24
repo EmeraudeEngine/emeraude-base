@@ -287,6 +287,8 @@ Two coexisting conventions in `Quaternion.hpp`:
 
 When doing Quaternion ↔ Matrix4 roundtrips, always use `toRotationMatrix4()` + `Quaternion(Matrix4)`. Using `rotationMatrix()` in a roundtrip will produce the transposed rotation.
 
+⚠️ **`conjugate()` MUTATES, `conjugated()` returns a copy** — same `inverse()` / `inversed()` pattern as `Vector`. `rotatedVector()` called the mutating one until Aug 2026, so it did not compile on a `const` quaternion (i.e. on every realistic caller) and would have mutated an operand of its own expression under unspecified evaluation order. It had therefore **never been called anywhere in the cascade**, and `MathQuaternion.RotatedVector` — the test named after it — quietly exercised `operator*` instead, with a comment saying so. Both are fixed; the test now calls the function it is named after and cross-checks the two paths agree. **A test that avoids its subject to keep compiling is reporting a defect, not working around one.**
+
 ### Observer/Observable Pattern
 ```cpp
 // Observable in Resources

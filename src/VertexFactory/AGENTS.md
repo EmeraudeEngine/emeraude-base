@@ -113,14 +113,26 @@ WaveFactory and PixelFactory.
 > every ID model inside out (`boss1.md2` shows its inner limb faces and a hollow head). It survived
 > the Y-up flip untouched. Do not "simplify" it away along with the determinant.
 >
-> ⚠️⚠️ **The MD5 conversion lived in FOUR places and only two were named.** `md5ToEnginePosition()`,
+> ⚠️⚠️ **The MD5 conversion lived in FIVE places and only two were named.** `md5ToEnginePosition()`,
 > `md5ToEngineRotation()` (the joint orientations — `M` must stay identical to the position one),
-> the normal negation above, and a **fourth copy inlined in the skinning loop** — the one that
-> actually builds the visible mesh. Updating the named helpers and missing the inline copy is what
-> left the skinned CyberDemon upside down while MDL/MD2/MD3 were already upright. The inline copy
-> now calls `md5ToEnginePosition()`; keep it that way.
+> the normal negation above, a **fourth copy inlined in the skinning loop** — the one that actually
+> builds the visible mesh — and a **fifth in a different module entirely**,
+> `Animation/MD5AnimParser.hpp` (`.md5anim` clips). Updating the named helpers and missing the
+> inline copy is what left the skinned CyberDemon upside down while MDL/MD2/MD3 were already
+> upright. The inline copy now calls `md5ToEnginePosition()`; keep it that way.
 >
-> **Verification is visual, per format** — no unit test sees any of this:
+> ⚠️⚠️ **The fifth site was missed by the migration and by the inventory that recorded four.** The
+> ANIMATION parser kept `(y, -z, x)` while the MESH path moved to `(y, z, x)`, so clips lived in a
+> mirrored frame relative to the mesh they animated. Fixed Aug 2026, and now pinned by
+> `MD5AnimParser.conversionIsARotationNotAReflection` — **the search key for "where is this
+> conversion?" is the module list above, not a grep for `FileFormatMDx`.**
+>
+> ⚠️ That test needs DIFFERENT discriminating axes for its two halves, which is a trap in itself:
+> for POSITIONS only md5 Z separates the two transforms; for ROTATIONS md5 Z is precisely the axis
+> that CANNOT, because conjugating a rotation by a reflection that negates the rotation's own axis
+> leaves it unchanged (`S·R(Y,θ)·Sᵀ == R(Y,θ)`). The rotation half turns about md5 X instead.
+>
+> **Beyond that pin, verification is visual, per format** — no unit test sees the mesh path:
 > `geometry-loader --demo-options 7` = QuakePlayer (MDL), `8` = boss1 (MD2), `6` = cyberdemon (MD5).
 > Upright, solid (no inner faces), correctly lit.
 
