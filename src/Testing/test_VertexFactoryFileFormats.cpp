@@ -37,6 +37,7 @@
 
 /* Local inclusions. */
 #include "IO/MemoryStream.hpp"
+#include "VertexFactory/FileIO.hpp"
 #include "VertexFactory/FileFormatMDx.hpp"
 #include "VertexFactory/FileFormatNative.hpp"
 #include "VertexFactory/FileFormatOBJ.hpp"
@@ -636,5 +637,26 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_FALSE(StreamIO::read(mdxGarbage, FileFormatType::MDx, mdxResult));
 		std::vector< std::byte > mdxBuffer;
 		EXPECT_FALSE(StreamIO::write(objResult.shape, FileFormatType::MDx, mdxBuffer));
+	}
+
+	TEST(VertexFactoryFileIO, readableExtensionPredicate)
+	{
+		/* The predicate mirrors the FileIO::read() dispatch : every readable
+		 * extension answers true, anything else answers false. */
+		for ( const auto & extension : FileIO::ReadableExtensions )
+		{
+			EXPECT_TRUE(FileIO::isReadableExtension(extension)) << extension;
+		}
+
+		/* Composite/scene formats belong to the engine scene loaders, not here. */
+		EXPECT_FALSE(FileIO::isReadableExtension("gltf"));
+		EXPECT_FALSE(FileIO::isReadableExtension("glb"));
+		EXPECT_FALSE(FileIO::isReadableExtension("fbx"));
+		EXPECT_FALSE(FileIO::isReadableExtension("png"));
+		EXPECT_FALSE(FileIO::isReadableExtension(""));
+
+		/* The contract is lowercase without the leading dot. */
+		EXPECT_FALSE(FileIO::isReadableExtension("OBJ"));
+		EXPECT_FALSE(FileIO::isReadableExtension(".obj"));
 	}
 }

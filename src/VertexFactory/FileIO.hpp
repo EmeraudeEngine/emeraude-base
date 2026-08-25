@@ -27,7 +27,10 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
+#include <array>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 /* Local inclusions for usages. */
@@ -41,6 +44,27 @@
 
 namespace EmEn::Base::VertexFactory::FileIO
 {
+	/** @brief Lowercase extensions, without the leading dot, the read() function handles.
+	 * @note Keep in sync with the read() dispatch below : the branches instantiate
+	 * different codec types, they cannot iterate this array themselves. */
+	constexpr std::array< std::string_view, 7 > ReadableExtensions{
+		"ee3d", "obj", "stl", "mdl", "md2", "md3", "md5mesh"
+	};
+
+	/**
+	 * @brief Returns whether a file extension is handled by the read() function.
+	 * @param extension The file extension, lowercase, without the leading dot,
+	 * as returned by IO::getFileExtension(filepath, true).
+	 * @return bool
+	 */
+	[[nodiscard]]
+	inline
+	bool
+	isReadableExtension (std::string_view extension) noexcept
+	{
+		return std::ranges::find(ReadableExtensions, extension) != ReadableExtensions.cend();
+	}
+
 	/**
 	 * @brief Reads a file into a shape load result structure.
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
