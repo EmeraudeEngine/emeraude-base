@@ -809,6 +809,9 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 		float squaredRadius;
 		float minY;
 		float maxY;
+		float sumU;
+		float sumV;
+		float sumAbsNormal;
 	};
 
 	const auto measure = [] (const Shape< float, uint32_t > & shape, const GemFingerprint & expected) {
@@ -818,6 +821,9 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 		double squared = 0.0;
 		auto minY = 1.0E9F;
 		auto maxY = -1.0E9F;
+		double sumU = 0.0;
+		double sumV = 0.0;
+		double sumNormal = 0.0;
 
 		for ( const auto & vertex : shape.vertices() )
 		{
@@ -832,6 +838,10 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 
 			minY = std::min(minY, position[EmEn::Base::Math::Y]);
 			maxY = std::max(maxY, position[EmEn::Base::Math::Y]);
+
+			sumU += vertex.textureCoordinates()[EmEn::Base::Math::X];
+			sumV += vertex.textureCoordinates()[EmEn::Base::Math::Y];
+			sumNormal += std::abs(vertex.normal()[0]) + std::abs(vertex.normal()[1]) + std::abs(vertex.normal()[2]);
 		}
 
 		EXPECT_EQ(shape.vertices().size(), expected.vertices) << expected.label << ": vertex count";
@@ -842,20 +852,27 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 		EXPECT_NEAR(static_cast< float >(squared), expected.squaredRadius, 0.05F) << expected.label << ": squared radius";
 		EXPECT_NEAR(minY, expected.minY, 1.0E-3F) << expected.label << ": lowest point";
 		EXPECT_NEAR(maxY, expected.maxY, 1.0E-3F) << expected.label << ": highest point";
+
+		/* ⚠️ UVs are pinned too: flipYAxis() never touched them, so a re-authoring that negates the
+		 * geometry's Y must ALSO leave them alone — including the up vector of the per-face tangent
+		 * frame, which has to be negated in step or the whole texture layout shifts. */
+		EXPECT_NEAR(static_cast< float >(sumU), expected.sumU, 0.02F) << expected.label << ": sum U";
+		EXPECT_NEAR(static_cast< float >(sumV), expected.sumV, 0.02F) << expected.label << ": sum V";
+		EXPECT_NEAR(static_cast< float >(sumNormal), expected.sumAbsNormal, 0.05F) << expected.label << ": normal magnitude";
 	};
 
-	measure(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), {"diamond", 64, 30, 27.2806F, 14.5165F, 27.2806F, 47.6881F, -0.8693F, 0.3151F});
-	measure(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), {"emerald", 208, 108, 92.9500F, 56.0000F, 59.1500F, 95.2635F, -0.7500F, 0.2500F});
-	measure(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), {"asscher", 208, 108, 63.8250F, 56.0000F, 63.8250F, 72.1698F, -0.7500F, 0.2500F});
-	measure(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), {"baguette", 72, 36, 35.2500F, 12.0000F, 11.7500F, 26.6750F, -0.4500F, 0.1500F});
-	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 259, 108, 58.7500F, 76.2500F, 58.7250F, 81.6254F, -0.7500F, 0.2500F});
-	measure(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), {"trillion", 186, 80, 59.7035F, 39.1333F, 67.2572F, 77.3970F, -0.6000F, 0.2000F});
-	measure(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), {"oval", 130, 62, 57.5805F, 24.2122F, 37.7791F, 68.1099F, -0.7172F, 0.2600F});
-	measure(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), {"cushion", 128, 62, 60.1210F, 26.8556F, 51.1028F, 87.8102F, -0.8041F, 0.2915F});
-	measure(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), {"marquise", 128, 62, 66.3609F, 25.4934F, 24.4129F, 75.8148F, -0.7653F, 0.2760F});
-	measure(ShapeGenerator::generatePearCutGem< float, uint32_t >(), {"pear", 130, 62, 56.7627F, 24.7455F, 30.9320F, 63.5274F, -0.7203F, 0.2698F});
-	measure(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), {"heart", 192, 94, 73.9566F, 18.0895F, 56.0259F, 85.5350F, -0.4502F, 0.1012F});
-	measure(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), {"rose", 144, 70, 52.2487F, 23.2000F, 52.2487F, 70.6133F, -0.6000F, -0.0000F});
+	measure(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), {"diamond", 64, 30, 27.2806F, 14.5165F, 27.2806F, 47.6881F, -0.8693F, 0.3151F, 30.9053F, 27.2401F, 97.7243F});
+	measure(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), {"emerald", 208, 108, 92.9500F, 56.0000F, 59.1500F, 95.2635F, -0.7500F, 0.2500F, 68.4912F, 90.0019F, 312.2845F});
+	measure(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), {"asscher", 208, 108, 63.8250F, 56.0000F, 63.8250F, 72.1698F, -0.7500F, 0.2500F, 72.8138F, 81.5072F, 314.2193F});
+	measure(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), {"baguette", 72, 36, 35.2500F, 12.0000F, 11.7500F, 26.6750F, -0.4500F, 0.1500F, 16.3229F, 34.7119F, 95.3668F});
+	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 259, 108, 58.7500F, 76.2500F, 58.7250F, 81.6254F, -0.7500F, 0.2500F, 81.3251F, 113.7478F, 357.4344F});
+	measure(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), {"trillion", 186, 80, 59.7035F, 39.1333F, 67.2572F, 77.3970F, -0.6000F, 0.2000F, 54.0730F, 80.3151F, 280.4762F});
+	measure(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), {"oval", 130, 62, 57.5805F, 24.2122F, 37.7791F, 68.1099F, -0.7172F, 0.2600F, 73.0000F, 45.7343F, 195.4180F});
+	measure(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), {"cushion", 128, 62, 60.1210F, 26.8556F, 51.1028F, 87.8102F, -0.8041F, 0.2915F, 72.0000F, 39.5208F, 189.3309F});
+	measure(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), {"marquise", 128, 62, 66.3609F, 25.4934F, 24.4129F, 75.8148F, -0.7653F, 0.2760F, 66.4783F, 54.2025F, 194.6529F});
+	measure(ShapeGenerator::generatePearCutGem< float, uint32_t >(), {"pear", 130, 62, 56.7627F, 24.7455F, 30.9320F, 63.5274F, -0.7203F, 0.2698F, 72.9965F, 46.7586F, 197.5193F});
+	measure(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), {"heart", 192, 94, 73.9566F, 18.0895F, 56.0259F, 85.5350F, -0.4502F, 0.1012F, 90.7030F, 82.8046F, 267.7740F});
+	measure(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), {"rose", 144, 70, 52.2487F, 23.2000F, 52.2487F, 70.6133F, -0.6000F, -0.0000F, 69.2448F, 58.5524F, 203.2891F});
 }
 
 /*

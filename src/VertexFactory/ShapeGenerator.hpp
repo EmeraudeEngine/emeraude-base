@@ -3423,11 +3423,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto cosT = std::cos(theta);
 			const auto sinT = std::sin(theta);
 
-			tableRing[index] = Vec3(tableRadius * cosT, -crownHeight, tableRadius * sinT);
+			tableRing[index] = Vec3(tableRadius * cosT, crownHeight, tableRadius * sinT);
 			girdleRing[index] = Vec3(radius * cosT, zero, radius * sinT);
 		}
 
-		const Vec3 culet(zero, pavilionDepth, zero);
+		const Vec3 culet(zero, -pavilionDepth, zero);
 
 		/* Volumetric vertex color: position [-radius, radius] -> RGB [0, 1].
 		 * Y range is [-pavilionDepth, crownHeight], so normalize by the max extent. */
@@ -3437,17 +3437,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent](const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -3502,7 +3492,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			/* Build local tangent frame on the face plane. */
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -3545,12 +3535,12 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.beginConstruction(ConstructionMode::Triangles);
 
-		/* === Table (flat n-gon at Y = -crownHeight, facing sky Y-) === */
+		/* === Table (flat n-gon at Y = +crownHeight, facing the sky, +Y) === */
 		{
-			/* Compute flat normal from cross product (sky-facing = Y-). */
+			/* Compute flat normal from cross product (sky-facing = +Y). */
 			const auto edge1 = tableRing[1] - tableRing[0];
 			const auto edge2 = tableRing[n - 1] - tableRing[0];
-			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto tableNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
 			/* Planar UV for table: U = (cosθ + 1) * 0.5, V = (sinθ + 1) * 0.5 */
 			std::vector< Vec3 > tableUV(n);
@@ -3566,9 +3556,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			for ( size_t index = 1; index + 1 < n; ++index )
 			{
 				emitTriangle(
-					tableRing[0], tableRing[index], tableRing[index + 1],
+					tableRing[index], tableRing[0], tableRing[index + 1],
 					tableNormal,
-					tableUV[0], tableUV[index], tableUV[index + 1]
+					tableUV[index], tableUV[0], tableUV[index + 1]
 				);
 			}
 		}
@@ -3585,7 +3575,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			/* Flat normal per quad (outward-pointing). */
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
-			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
+			const auto normal = Vec3::crossProduct(g0 - t0, t1 - t0).normalized();
 
 			/* Per-face tangent-frame UV for the quad. */
 			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
@@ -3594,8 +3584,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
 			/* Two triangles: (T_i, G_i, G_{i+1}) and (T_i, G_{i+1}, T_{i+1}) */
-			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
-			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(g0, t0, g1, normal, uvs[3], uvs[0], uvs[2]);
+			emitTriangle(g1, t0, t1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		/* === Pavilion (n triangles from girdle to culet) === */
@@ -3608,7 +3598,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			/* Flat normal per triangle (outward-pointing). */
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
-			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
+			const auto normal = Vec3::crossProduct(g1 - g0, culet - g0).normalized();
 
 			/* Per-face tangent-frame UV. */
 			std::array< Vec3, 3 > positions{g0, g1, culet};
@@ -3616,14 +3606,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
-			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(culet, g0, g1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
@@ -3691,17 +3677,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -3747,7 +3723,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -3790,13 +3766,13 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		builder.beginConstruction(ConstructionMode::Triangles);
 
-		/* === Table (flat octagon at Y = -crownHeight, facing sky Y-) === */
+		/* === Table (flat octagon at Y = +crownHeight, facing the sky, +Y) === */
 		{
-			const auto table = makeOctagonRing(tableRatio, -crownHeight);
+			const auto table = makeOctagonRing(tableRatio, crownHeight);
 
 			const auto edge1 = table[1] - table[0];
 			const auto edge2 = table[7] - table[0];
-			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto tableNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
 			/* Planar UV for table: remap XZ to [0,1]. */
 			const auto halfL = (length * half) * tableRatio;
@@ -3817,9 +3793,9 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			for ( size_t index = 1; index + 1 < 8; ++index )
 			{
 				emitTriangle(
-					table[0], table[index], table[index + 1],
+					table[index], table[0], table[index + 1],
 					tableNormal,
-					tableUV[0], tableUV[index], tableUV[index + 1]
+					tableUV[index], tableUV[0], tableUV[index + 1]
 				);
 			}
 		}
@@ -3832,8 +3808,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			const auto innerScale = tableRatio + (t0 * (one - tableRatio));
 			const auto outerScale = tableRatio + (t1 * (one - tableRatio));
-			const auto innerY = -crownHeight + (t0 * crownHeight);
-			const auto outerY = -crownHeight + (t1 * crownHeight);
+			const auto innerY = crownHeight - (t0 * crownHeight);
+			const auto outerY = crownHeight - (t1 * crownHeight);
 
 			const auto inner = makeOctagonRing(innerScale, innerY);
 			const auto outer = makeOctagonRing(outerScale, outerY);
@@ -3841,7 +3817,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			for ( size_t index = 0; index < 8; ++index )
 			{
 				const auto next = (index + 1) % 8;
-				const auto normal = Vec3::crossProduct(inner[next] - inner[index], outer[index] - inner[index]).normalized();
+				const auto normal = Vec3::crossProduct(outer[index] - inner[index], inner[next] - inner[index]).normalized();
 
 				std::array< Vec3, 4 > positions{inner[index], outer[index], outer[next], inner[next]};
 				std::array< Vec3, 4 > uvs;
@@ -3849,8 +3825,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto center = (inner[index] + outer[index] + outer[next] + inner[next]) / static_cast< vertex_data_t >(4);
 				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-				emitTriangle(inner[index], outer[index], outer[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(inner[index], outer[next], inner[next], normal, uvs[0], uvs[2], uvs[3]);
+				emitTriangle(outer[index], inner[index], outer[next], normal, uvs[1], uvs[0], uvs[2]);
+				emitTriangle(outer[next], inner[index], inner[next], normal, uvs[2], uvs[0], uvs[3]);
 			}
 		}
 
@@ -3862,8 +3838,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			const auto outerScale = one + (t0 * (culetRatio - one));
 			const auto innerScale = one + (t1 * (culetRatio - one));
-			const auto outerY = t0 * pavilionDepth;
-			const auto innerY = t1 * pavilionDepth;
+			const auto outerY = -(t0 * pavilionDepth);
+			const auto innerY = -(t1 * pavilionDepth);
 
 			const auto outer = makeOctagonRing(outerScale, outerY);
 			const auto inner = makeOctagonRing(innerScale, innerY);
@@ -3872,7 +3848,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			{
 				const auto next = (index + 1) % 8;
 
-				const auto normal = Vec3::crossProduct(outer[next] - outer[index], inner[index] - outer[index]).normalized();
+				const auto normal = Vec3::crossProduct(inner[index] - outer[index], outer[next] - outer[index]).normalized();
 
 				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
 				std::array< Vec3, 4 > uvs;
@@ -3880,18 +3856,18 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
 				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				emitTriangle(inner[index], outer[index], inner[next], normal, uvs[1], uvs[0], uvs[2]);
+				emitTriangle(inner[next], outer[index], outer[next], normal, uvs[2], uvs[0], uvs[3]);
 			}
 		}
 
-		/* === Culet (flat octagon at Y = +pavilionDepth, opposite winding) === */
+		/* === Culet (flat octagon at Y = -pavilionDepth, opposite winding) === */
 		{
-			const auto culet = makeOctagonRing(culetRatio, pavilionDepth);
+			const auto culet = makeOctagonRing(culetRatio, -pavilionDepth);
 
 			const auto edge1 = culet[1] - culet[0];
 			const auto edge2 = culet[7] - culet[0];
-			const auto culetNormal = Vec3::crossProduct(edge2, edge1).normalized();
+			const auto culetNormal = Vec3::crossProduct(edge1, edge2).normalized();
 
 			const auto halfL = (length * half) * culetRatio;
 			const auto halfW = (width * half) * culetRatio;
@@ -3911,18 +3887,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			for ( size_t index = 1; index + 1 < 8; ++index )
 			{
 				emitTriangle(
-					culet[0], culet[index + 1], culet[index],
+					culet[index + 1], culet[0], culet[index],
 					culetNormal,
-					culetUV[0], culetUV[index + 1], culetUV[index]
+					culetUV[index + 1], culetUV[0], culetUV[index]
 				);
 			}
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
