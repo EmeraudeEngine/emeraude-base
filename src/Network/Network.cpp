@@ -32,9 +32,6 @@
 /* STL inclusions. */
 #include <iostream>
 
-/* Third-party inclusions. */
-#include "Network/asio_throw_exception.hpp"
-
 /* Local inclusions. */
 #include "HTTPRequest.hpp"
 #include "HTTPResponse.hpp"

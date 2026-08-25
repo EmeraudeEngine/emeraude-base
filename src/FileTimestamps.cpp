@@ -27,7 +27,7 @@
 #include "FileTimestamps.hpp"
 
 /* Project configuration. */
-#include "emeraude_base_config.hpp"
+#include "emeraude_platform.hpp"
 
 /* STL inclusions. */
 #include <chrono>
@@ -53,9 +53,6 @@
 
 	#include <windows.h>
 #endif
-
-/* Project configuration file. */
-/* Platform-specific includes. */
 
 namespace EmEn::Base
 {

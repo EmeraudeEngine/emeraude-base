@@ -26,9 +26,6 @@
 
 #include "ZLIB.hpp"
 
-/* Project configuration. */
-#include "emeraude_base_config.hpp"
-
 /* STL inclusions. */
 #include <iostream>
 #include <string>

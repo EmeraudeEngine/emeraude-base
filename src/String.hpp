@@ -33,7 +33,6 @@
 #include <array>
 #include <cerrno>
 #include <charconv>
-#include <cmath>
 #include <cstring>
 #include <limits>
 #include <sstream>

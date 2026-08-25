@@ -27,7 +27,6 @@
 #pragma once
 
 /* STL inclusions. */
-#include <cmath>
 #include <sstream>
 #include <string>
 

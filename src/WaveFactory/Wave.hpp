@@ -33,7 +33,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <iostream>
 #include <limits>
 #include <sstream>

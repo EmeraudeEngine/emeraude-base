@@ -26,9 +26,6 @@
 
 #include "HTTPSClient.hpp"
 
-/* Project configuration. */
-#include "emeraude_base_config.hpp"
-
 /* STL inclusions. */
 #include <cstdlib>
 #include <array>

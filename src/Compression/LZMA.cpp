@@ -26,9 +26,6 @@
 
 #include "LZMA.hpp"
 
-/* Project configuration. */
-#include "emeraude_base_config.hpp"
-
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
 

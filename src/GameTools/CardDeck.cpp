@@ -26,9 +26,6 @@
 
 #include "CardDeck.hpp"
 
-/* Local inclusions. */
-#include "BaseUtility.hpp"
-
 namespace EmEn::Base::GameTools
 {
 	CardDeck::CardDeck (size_t handCount, size_t cardCount) noexcept

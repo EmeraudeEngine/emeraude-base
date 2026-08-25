@@ -28,7 +28,6 @@
 
 /* STL inclusions. */
 #include <chrono>
-#include <ctime>
 
 /* Local inclusions for inheritances. */
 #include "Abstract.hpp"

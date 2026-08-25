@@ -30,7 +30,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <list>
 #include <numbers>
 #include <numeric>
 #include <queue>

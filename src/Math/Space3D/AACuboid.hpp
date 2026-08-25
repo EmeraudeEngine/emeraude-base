@@ -29,7 +29,6 @@
 /* STL inclusions. */
 #include <cstddef>
 #include <cmath>
-#include <algorithm>
 #include <limits>
 #include <ostream>
 #include <sstream>

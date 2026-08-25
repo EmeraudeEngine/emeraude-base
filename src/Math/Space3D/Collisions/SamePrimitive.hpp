@@ -28,7 +28,6 @@
 
 /* STL inclusions. */
 #include <array>
-#include <iostream>
 
 /* Local inclusions for usages. */
 #include "Math/Space3D/AACuboid.hpp"

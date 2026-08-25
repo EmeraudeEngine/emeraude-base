@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cstddef>
 #include <random>
 
@@ -45,7 +46,7 @@ namespace EmEn::Base::GameTools
 			 * @param faceCount The number of faces. Default 6.
 			 */
 			explicit Dice (size_t faceCount = 6) noexcept
-				: m_faceCount(std::max(2UL, faceCount))
+				: m_faceCount(std::max< size_t >(2, faceCount))
 			{
 				this->reset();
 			}
@@ -58,7 +59,7 @@ namespace EmEn::Base::GameTools
 			size_t
 			roll () noexcept
 			{
-				return std::uniform_int_distribution{1UL, m_faceCount}(m_randomEngine);
+				return std::uniform_int_distribution< size_t >{1, m_faceCount}(m_randomEngine);
 			}
 
 			/**

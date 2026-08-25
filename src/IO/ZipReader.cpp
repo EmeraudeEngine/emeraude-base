@@ -27,7 +27,7 @@
 #include "ZipReader.hpp"
 
 /* Project configuration. */
-#include "emeraude_base_config.hpp"
+#include "emeraude_platform.hpp"
 
 /* STL inclusions. */
 #include <algorithm>
