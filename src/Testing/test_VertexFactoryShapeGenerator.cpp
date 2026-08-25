@@ -801,7 +801,6 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 	struct GemFingerprint
 	{
 		const char * label;
-		size_t vertices;
 		size_t triangles;
 		float sumAbsX;
 		float sumAbsY;
@@ -829,8 +828,16 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 		double sumU2 = 0.0;
 		double sumV2 = 0.0;
 
-		for ( const auto & vertex : shape.vertices() )
+		/* ⚠️⚠️ Iterate TRIANGLE CORNERS, never the vertex array. That array is the result of
+		 * DEDUPLICATION, which depends on the emission order — and re-authoring changes that order
+		 * legitimately. The trillion cut lost 6 shared vertices with its geometry perfectly intact,
+		 * and every sum taken over the vertex array moved with it, reporting a shape change that had
+		 * not happened. Corners describe what is actually drawn. */
+		for ( const auto & triangle : shape.triangles() )
 		{
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+			const auto & vertex = shape.vertices()[triangle.vertexIndex(corner)];
 			const auto & position = vertex.position();
 
 			sumX += std::abs(position[EmEn::Base::Math::X]);
@@ -851,9 +858,11 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 			sumU2 += static_cast< double >(u) * u;
 			sumV2 += static_cast< double >(v) * v;
 			sumNormal += std::abs(vertex.normal()[0]) + std::abs(vertex.normal()[1]) + std::abs(vertex.normal()[2]);
+			}
 		}
 
-		EXPECT_EQ(shape.vertices().size(), expected.vertices) << expected.label << ": vertex count";
+		/* ⚠️ The vertex count is NOT pinned: it counts SHARED vertices, so it moves with the emission
+		 * order without the shape changing at all. The triangle count is the real one. */
 		EXPECT_EQ(shape.triangles().size(), expected.triangles) << expected.label << ": triangle count";
 		EXPECT_NEAR(static_cast< float >(sumX), expected.sumAbsX, 0.01F) << expected.label << ": sum |x|";
 		EXPECT_NEAR(static_cast< float >(sumY), expected.sumAbsY, 0.01F) << expected.label << ": sum |y|";
@@ -879,18 +888,18 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 		EXPECT_NEAR(static_cast< float >(sumV2), expected.sumVSquared, 0.02F) << expected.label << ": sum V squared";
 	};
 
-	measure(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), {"diamond", 64, 30, 27.2806F, 14.5165F, 27.2806F, 47.6881F, -0.8693F, 0.3151F, 30.9053F, 27.2401F, 97.7243F, 26.4328F, 19.8502F});
-	measure(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), {"emerald", 208, 108, 92.9500F, 56.0000F, 59.1500F, 95.2635F, -0.7500F, 0.2500F, 68.4912F, 90.0019F, 312.2845F, 57.2024F, 73.7103F});
-	measure(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), {"asscher", 208, 108, 63.8250F, 56.0000F, 63.8250F, 72.1698F, -0.7500F, 0.2500F, 72.8138F, 81.5072F, 314.2193F, 64.6456F, 66.6326F});
-	measure(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), {"baguette", 72, 36, 35.2500F, 12.0000F, 11.7500F, 26.6750F, -0.4500F, 0.1500F, 16.3229F, 34.7119F, 95.3668F, 12.0528F, 29.6349F});
-	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 259, 108, 58.7500F, 76.2500F, 58.7250F, 81.6254F, -0.7500F, 0.2500F, 81.3251F, 113.7478F, 357.4344F, 61.8659F, 97.2739F});
-	measure(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), {"trillion", 186, 80, 59.7035F, 39.1333F, 67.2572F, 77.3970F, -0.6000F, 0.2000F, 54.0730F, 80.3151F, 280.4762F, 43.7257F, 65.7905F});
-	measure(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), {"oval", 130, 62, 57.5805F, 24.2122F, 37.7791F, 68.1099F, -0.7172F, 0.2600F, 73.0000F, 45.7343F, 195.4180F, 71.0000F, 29.9959F});
-	measure(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), {"cushion", 128, 62, 60.1210F, 26.8556F, 51.1028F, 87.8102F, -0.8041F, 0.2915F, 72.0000F, 39.5208F, 189.3309F, 70.0000F, 23.8133F});
-	measure(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), {"marquise", 128, 62, 66.3609F, 25.4934F, 24.4129F, 75.8148F, -0.7653F, 0.2760F, 66.4783F, 54.2025F, 194.6529F, 60.2550F, 38.7517F});
-	measure(ShapeGenerator::generatePearCutGem< float, uint32_t >(), {"pear", 130, 62, 56.7627F, 24.7455F, 30.9320F, 63.5274F, -0.7203F, 0.2698F, 72.9965F, 46.7586F, 197.5193F, 70.9930F, 30.4524F});
-	measure(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), {"heart", 192, 94, 73.9566F, 18.0895F, 56.0259F, 85.5350F, -0.4502F, 0.1012F, 90.7030F, 82.8046F, 267.7740F, 78.5517F, 61.8397F});
-	measure(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), {"rose", 144, 70, 52.2487F, 23.2000F, 52.2487F, 70.6133F, -0.6000F, -0.0000F, 69.2448F, 58.5524F, 203.2891F, 62.1836F, 43.4098F});
+	measure(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), {"diamond", 30, 38.8425F, 20.1882F, 36.6425F, 62.9202F, -0.8693F, 0.3151F, 42.6508F, 42.0401F, 133.1029F, 35.6921F, 31.5052F});
+	measure(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), {"emerald", 108, 142.1375F, 90.0000F, 90.7375F, 148.0905F, -0.7500F, 0.2500F, 111.9034F, 136.7632F, 480.4268F, 94.2063F, 112.6996F});
+	measure(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), {"asscher", 108, 97.7062F, 90.0000F, 97.9312F, 113.1222F, -0.7500F, 0.2500F, 118.4708F, 124.0118F, 483.3290F, 105.5247F, 101.9094F});
+	measure(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), {"baguette", 36, 52.8750F, 18.0000F, 17.6250F, 40.0125F, -0.4500F, 0.1500F, 24.4843F, 50.5692F, 143.0502F, 18.0792F, 43.1324F});
+	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 108, 74.3800F, 90.0000F, 75.6800F, 100.1408F, -0.7500F, 0.2500F, 95.8312F, 146.2238F, 440.9015F, 68.8232F, 127.3519F});
+	measure(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), {"trillion", 80, 76.6292F, 52.8000F, 83.5006F, 97.9768F, -0.6000F, 0.2000F, 72.0935F, 104.5209F, 358.7052F, 57.1323F, 85.2410F});
+	measure(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), {"oval", 62, 83.5075F, 34.8703F, 50.3768F, 91.4993F, -0.7172F, 0.2600F, 106.0761F, 73.6062F, 268.0640F, 102.1493F, 49.6606F});
+	measure(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), {"cushion", 62, 88.0344F, 39.0970F, 69.6632F, 118.3826F, -0.8041F, 0.2915F, 106.0761F, 67.1626F, 264.3181F, 102.1493F, 42.1261F});
+	measure(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), {"marquise", 62, 96.5835F, 37.0853F, 33.1720F, 102.5398F, -0.7653F, 0.2760F, 97.7936F, 84.9843F, 271.1887F, 87.5318F, 61.4567F});
+	measure(ShapeGenerator::generatePearCutGem< float, uint32_t >(), {"pear", 62, 80.4862F, 35.8075F, 41.9581F, 83.7875F, -0.7203F, 0.2698F, 106.0709F, 75.6656F, 270.7177F, 102.1389F, 50.9361F});
+	measure(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), {"heart", 94, 103.5804F, 24.7672F, 76.3816F, 111.8631F, -0.4502F, 0.1012F, 137.8396F, 129.9527F, 376.2547F, 119.3239F, 96.1479F});
+	measure(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), {"rose", 70, 85.8850F, 28.0000F, 78.6171F, 113.5733F, -0.6000F, -0.0000F, 101.0012F, 95.2091F, 287.7543F, 89.7843F, 72.1867F});
 }
 
 /*
