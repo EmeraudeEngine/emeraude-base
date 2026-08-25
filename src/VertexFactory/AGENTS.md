@@ -321,9 +321,23 @@ move). Deriving it makes the drift **structurally impossible** rather than merel
 > uses the same criterion to decide which triangles carry evidence: one the library cannot normalize
 > has no normal to judge.
 
-⚠️ Still open, and untouched by the above: the gem facet math is authored **Y-down** and converted by
-`convertYDownAuthoring()`. That is a readability debt with **no visual effect** — the produced
-geometry is correct. Do not confuse it with the normals defect, which was real.
+> [!CAUTION]
+> **`Shape::flipYAxis()` does NOT mirror the vertex colours**, and the gem cuts paint a VOLUMETRIC
+> colour — position mapped to RGB — so their green channel encodes Y. It walks `m_vertices` and
+> `m_triangles`; the colours live in the separate `m_vertexColors`. Every gem therefore shipped with
+> green describing the PRE-mirror frame, inverted against its own geometry, and it was visible: the
+> vertex-colour row of `parametric-geometries` iterates every shape, gems included, so they were
+> shaded upside down beside shapes that were not.
+> Fixed by negating the Y fed to `volumetricColor()` in the eleven generators. ⚠️ That negation is
+> paired with the `convertYDownAuthoring()` call and must disappear WITH it, never before.
+> Pinned by `gemVertexColoursAgreeWithGeometry`, which carries a non-mirrored control.
+
+⚠️ Still open: the gem facet math is authored **Y-down** and converted by `convertYDownAuthoring()`.
+The produced GEOMETRY is correct — measured, and pinned by `gemCutsKeepTheirGeometry`, a golden that
+exists precisely so the eventual re-authoring can be proven a no-op on the shape. ⚠️ It is a
+readability debt, but do not repeat the claim that it has "no visual effect": the vertex-colour
+defect above hung off exactly this arrangement and did reach the screen. Anything else the mirror
+touches indirectly deserves the same suspicion.
 
 ## Critical Attention Points
 

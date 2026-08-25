@@ -778,3 +778,152 @@ TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
 	EXPECT_GT(seamAtZeroU, 0) << "no U = 0 vertex on the seam";
 	EXPECT_GT(seamAtOneU, 0) << "no U = 1 vertex on the seam: the seam is not duplicated";
 }
+
+/*
+ * ⚠️⚠️ GOLDEN GEOMETRY for the twelve gem cuts, captured 2026-08-25 BEFORE re-authoring their facet
+ * math from the retired Y-down frame to Y-up.
+ *
+ * That re-authoring is COSMETIC: measured, the geometry these generators produce is already correct
+ * -- `convertYDownAuthoring()` does its job. So the refactor must be a NO-OP on the output, and this
+ * is what says so. Every invariant here is ORDER-INDEPENDENT (counts, sums of absolute coordinates,
+ * squared radius, vertical extent) precisely because re-authoring legitimately changes the emission
+ * order: reversing a mirror reverses the winding, so each face gets listed the other way round.
+ *
+ * ⚠️ A gate on winding and normals alone would NOT catch a botched re-authoring: a facet ring
+ * displaced along Y still comes out convex and consistently wound. That is why this pins the shape
+ * itself rather than only its orientation.
+ *
+ * If one of these fails after a deliberate change to a cut's proportions, re-capture the row -- but
+ * never re-capture to make a refactor pass.
+ */
+TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
+{
+	struct GemFingerprint
+	{
+		const char * label;
+		size_t vertices;
+		size_t triangles;
+		float sumAbsX;
+		float sumAbsY;
+		float sumAbsZ;
+		float squaredRadius;
+		float minY;
+		float maxY;
+	};
+
+	const auto measure = [] (const Shape< float, uint32_t > & shape, const GemFingerprint & expected) {
+		double sumX = 0.0;
+		double sumY = 0.0;
+		double sumZ = 0.0;
+		double squared = 0.0;
+		auto minY = 1.0E9F;
+		auto maxY = -1.0E9F;
+
+		for ( const auto & vertex : shape.vertices() )
+		{
+			const auto & position = vertex.position();
+
+			sumX += std::abs(position[EmEn::Base::Math::X]);
+			sumY += std::abs(position[EmEn::Base::Math::Y]);
+			sumZ += std::abs(position[EmEn::Base::Math::Z]);
+			squared += static_cast< double >(position[0]) * position[0]
+			         + static_cast< double >(position[1]) * position[1]
+			         + static_cast< double >(position[2]) * position[2];
+
+			minY = std::min(minY, position[EmEn::Base::Math::Y]);
+			maxY = std::max(maxY, position[EmEn::Base::Math::Y]);
+		}
+
+		EXPECT_EQ(shape.vertices().size(), expected.vertices) << expected.label << ": vertex count";
+		EXPECT_EQ(shape.triangles().size(), expected.triangles) << expected.label << ": triangle count";
+		EXPECT_NEAR(static_cast< float >(sumX), expected.sumAbsX, 0.01F) << expected.label << ": sum |x|";
+		EXPECT_NEAR(static_cast< float >(sumY), expected.sumAbsY, 0.01F) << expected.label << ": sum |y|";
+		EXPECT_NEAR(static_cast< float >(sumZ), expected.sumAbsZ, 0.01F) << expected.label << ": sum |z|";
+		EXPECT_NEAR(static_cast< float >(squared), expected.squaredRadius, 0.05F) << expected.label << ": squared radius";
+		EXPECT_NEAR(minY, expected.minY, 1.0E-3F) << expected.label << ": lowest point";
+		EXPECT_NEAR(maxY, expected.maxY, 1.0E-3F) << expected.label << ": highest point";
+	};
+
+	measure(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), {"diamond", 64, 30, 27.2806F, 14.5165F, 27.2806F, 47.6881F, -0.8693F, 0.3151F});
+	measure(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), {"emerald", 208, 108, 92.9500F, 56.0000F, 59.1500F, 95.2635F, -0.7500F, 0.2500F});
+	measure(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), {"asscher", 208, 108, 63.8250F, 56.0000F, 63.8250F, 72.1698F, -0.7500F, 0.2500F});
+	measure(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), {"baguette", 72, 36, 35.2500F, 12.0000F, 11.7500F, 26.6750F, -0.4500F, 0.1500F});
+	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 259, 108, 58.7500F, 76.2500F, 58.7250F, 81.6254F, -0.7500F, 0.2500F});
+	measure(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), {"trillion", 186, 80, 59.7035F, 39.1333F, 67.2572F, 77.3970F, -0.6000F, 0.2000F});
+	measure(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), {"oval", 130, 62, 57.5805F, 24.2122F, 37.7791F, 68.1099F, -0.7172F, 0.2600F});
+	measure(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), {"cushion", 128, 62, 60.1210F, 26.8556F, 51.1028F, 87.8102F, -0.8041F, 0.2915F});
+	measure(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), {"marquise", 128, 62, 66.3609F, 25.4934F, 24.4129F, 75.8148F, -0.7653F, 0.2760F});
+	measure(ShapeGenerator::generatePearCutGem< float, uint32_t >(), {"pear", 130, 62, 56.7627F, 24.7455F, 30.9320F, 63.5274F, -0.7203F, 0.2698F});
+	measure(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), {"heart", 192, 94, 73.9566F, 18.0895F, 56.0259F, 85.5350F, -0.4502F, 0.1012F});
+	measure(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), {"rose", 144, 70, 52.2487F, 23.2000F, 52.2487F, 70.6133F, -0.6000F, -0.0000F});
+}
+
+/*
+ * ⚠️⚠️ The gem cuts paint a VOLUMETRIC vertex colour -- position mapped to RGB -- so the green
+ * channel encodes Y and must agree with the geometry it is attached to.
+ *
+ * It did not. Those generators author their facets in the retired Y-down frame and mirror the
+ * finished shape with convertYDownAuthoring(), which calls Shape::flipYAxis(). That mirrors
+ * positions, normals and tangents -- but the vertex colours live in a SEPARATE vector
+ * (Shape::m_vertexColors) which it never touches. The colours therefore kept describing the
+ * pre-mirror frame, green inverted against the final geometry.
+ *
+ * ⚠️ Visible, not theoretical: `parametric-geometries` has a vertex-colour row that iterates every
+ * shape, gems included, so they were shaded upside down next to shapes that were not.
+ *
+ * A non-mirrored generator is included as a CONTROL: a probe that fails it is a broken probe.
+ */
+TEST(VertexFactoryShapeGenerator, gemVertexColoursAgreeWithGeometry)
+{
+	const auto expectGreenGrowsWithY = [] (const Shape< float, uint32_t > & shape, const char * label) {
+		auto minY = 1.0E9F;
+		auto maxY = -1.0E9F;
+
+		for ( const auto & vertex : shape.vertices() )
+		{
+			minY = std::min(minY, vertex.position()[EmEn::Base::Math::Y]);
+			maxY = std::max(maxY, vertex.position()[EmEn::Base::Math::Y]);
+		}
+
+		const auto middle = (minY + maxY) * 0.5F;
+
+		double greenAbove = 0.0;
+		double greenBelow = 0.0;
+		auto countAbove = 0;
+		auto countBelow = 0;
+
+		for ( const auto & triangle : shape.triangles() )
+		{
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				const auto y = shape.vertices()[triangle.vertexIndex(corner)].position()[EmEn::Base::Math::Y];
+				const auto green = shape.vertexColors()[triangle.vertexColorIndex(corner)][EmEn::Base::Math::Y];
+
+				if ( y > middle ) { greenAbove += green; ++countAbove; } else { greenBelow += green; ++countBelow; }
+			}
+		}
+
+		ASSERT_GT(countAbove, 0) << label << ": nothing above mid-height, the check would be vacuous";
+		ASSERT_GT(countBelow, 0) << label << ": nothing below mid-height, the check would be vacuous";
+
+		EXPECT_GT(greenAbove / countAbove, greenBelow / countBelow)
+			<< label << ": the volumetric green is BRIGHTER at the bottom than at the top, so the "
+			<< "colour describes a mirrored frame. flipYAxis() does not touch m_vertexColors.";
+	};
+
+	/* Control: never mirrored, so it must pass whatever happens to the gems. */
+	expectGreenGrowsWithY(ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16, 8, uvOptions()), "sphere [control]");
+
+	expectGreenGrowsWithY(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), "diamond cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), "emerald cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), "asscher cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), "baguette cut");
+	expectGreenGrowsWithY(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), "princess cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), "trillion cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), "oval cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), "cushion cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), "marquise cut");
+	expectGreenGrowsWithY(ShapeGenerator::generatePearCutGem< float, uint32_t >(), "pear cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), "heart cut");
+	expectGreenGrowsWithY(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), "rose cut");
+}

@@ -3437,7 +3437,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent](const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -3681,7 +3691,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -3982,7 +4002,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -4248,7 +4278,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -4534,7 +4574,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -4804,7 +4854,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5042,7 +5102,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5276,7 +5346,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5513,7 +5593,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5718,7 +5808,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5904,7 +6004,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				((position[Math::Y] * invExtent) + one) * half,
+				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
+				 * volumetric — it maps the position into RGB — but it is written BEFORE
+				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
+				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
+				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
+				 * green describing the pre-mirror frame, inverted against the final geometry — which
+				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
+				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
+				 * convertYDownAuthoring() call, never before it. Pinned by
+				 * gemVertexColoursAgreeWithGeometry. */
+				((-position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
