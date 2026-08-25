@@ -232,6 +232,33 @@ Y-up world gives the two rules every hand-authored generator must follow:
 > Pinned by `sphereMapsUToLongitudeAndVToLatitude`. ⚠️ Not a Y-up residue: it predates the flip and
 > depends on no axis sign.
 
+### Sphere longitude: direction and seam
+
+> [!IMPORTANT]
+> **U grows EASTWARD, and the seam sits on `+Z`.** With north at `+Y`, east is the POSITIVE rotation
+> about `+Y` (the right-hand rule — which is why the Earth turns counter-clockwise seen from above
+> the north pole). Measured: `U = 0` and `U = 1` both fall on `+Z`, `U = 0.5` on `-Z`. On an
+> equirectangular map the U edges are the ANTIMERIDIAN and `U = 0.5` is the prime meridian, so
+> Greenwich faces `-Z`, the engine's FORWARD, and the seam falls mid-Pacific where cartographers
+> already put it so it cuts no land.
+> Pinned by `sphereUGrowsEastwardNotWestward` and `sphereSeamSitsOnPositiveZ`.
+
+> [!CAUTION]
+> **`generateSphere` parameterises theta the OTHER WAY, on purpose-looking but load-bearing detail.**
+> It uses `sTheta = -sin(theta)`, so a growing theta walks `+Z -> -X -> -Z -> +X`: the NEGATIVE
+> rotation about `+Y`. Pairing U with a growing theta therefore grows it WESTWARD and MIRRORS every
+> texture. U is deliberately run backwards against theta to compensate. Do not "tidy" that away.
+> ⚠️⚠️ **A polar screenshot cannot catch this.** A mirrored globe still converges cleanly at the pole
+> and still shows a plausible Arctic; only the east-west handedness gives it away. This defect was
+> declared fixed on the strength of exactly such a capture, and the owner caught it on screen
+> afterwards. Judge handedness, never convergence.
+
+> [!IMPORTANT]
+> **Seam vertices are DUPLICATED** at the same position, one carrying `U = 0` and one `U = 1`. That
+> is what stops U interpolating from 1 back to 0 across the last quad and squeezing the whole map
+> into one slice. A generator sharing a single vertex there is broken even though its UVs look fine
+> in isolation.
+
 ## Winding convention (front faces are CCW)
 
 A front face winds **counter-clockwise around its own outward normal** —

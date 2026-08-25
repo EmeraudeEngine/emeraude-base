@@ -933,7 +933,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			/* Many sources of OpenGL sphere drawing code uses a triangle fan
 			 * for the caps of the sphere. This however introduces texturing
 			 * artifacts at the poles on some OpenGL implementations. */
-			auto texCoordU = static_cast< vertex_data_t >(0);
+			/* ⚠️⚠️ U runs BACKWARDS against theta, and that is deliberate. This parameterisation
+			 * uses sTheta = -sin(theta), so a growing theta walks +Z -> -X -> -Z -> +X, which is the
+			 * NEGATIVE rotation about +Y. East is the POSITIVE one (the right-hand rule, which is
+			 * why the Earth turns counter-clockwise seen from above the north pole), so pairing U
+			 * with a growing theta would grow it WESTWARD and mirror every texture.
+			 * ⚠️ A mirrored globe still converges cleanly at the pole and still shows a plausible
+			 * Arctic — a polar screenshot does NOT catch this, only the handedness does. Pinned by
+			 * sphereUGrowsEastwardNotWestward. */
+			auto texCoordU = static_cast< vertex_data_t >(1);
 
 			for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex)
 			{
@@ -965,7 +973,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				normalY = cosineRHO;
 				normalZ = cTheta * sineRHO;
 
-				texCoordU += deltaU;
+				texCoordU -= deltaU;
 
 				positions[2] = {normalX * radius, normalY * radius, normalZ * radius};
 				textureCoordinates[2] = {texCoordU, texCoordV, 0};

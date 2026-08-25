@@ -26,6 +26,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <map>
@@ -634,4 +635,146 @@ TEST(VertexFactoryShapeGenerator, sphereMapsUToLongitudeAndVToLatitude)
 	EXPECT_NEAR(vMax - vMin, 0.0F, Tolerance)
 		<< "V must stay constant along a latitude ring (measured span " << (vMax - vMin)
 		<< "). A wide span means V carries the LONGITUDE: the coordinates are transposed.";
+}
+
+/*
+ * ⚠️⚠️ A sweeping U is not enough: it must sweep the RIGHT WAY ROUND, or the texture is mirrored.
+ *
+ * Untransposing the coordinates left this second defect standing, and it survived a polar screenshot
+ * because a mirrored globe still converges cleanly at the pole and still shows a plausible Arctic --
+ * only the handedness gives it away. The owner caught it on screen; this pins it.
+ *
+ * The rule: with north at +Y, EAST is the POSITIVE rotation about +Y (the right-hand rule, which is
+ * why the Earth turns counter-clockwise seen from above the north pole). So walking a latitude ring
+ * in the direction of increasing U must turn positively about +Y, i.e. cross(p1, p2) . +Y > 0.
+ */
+TEST(VertexFactoryShapeGenerator, sphereUGrowsEastwardNotWestward)
+{
+	using V3 = EmEn::Base::Math::Vector< 3, float >;
+
+	constexpr auto Slices = 16;
+	constexpr auto Stacks = 8;
+
+	const auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, Slices, Stacks, uvOptions());
+
+	/* Collect one latitude ring away from the poles, keyed like the test above. */
+	std::map< int, std::vector< std::pair< float, V3 > > > rings;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & position = vertex.position();
+
+		if ( std::abs(position[EmEn::Base::Math::Y]) > 0.9F )
+		{
+			continue;
+		}
+
+		rings[static_cast< int >(std::lround(position[EmEn::Base::Math::Y] * 1000.0F))]
+			.emplace_back(vertex.textureCoordinates()[EmEn::Base::Math::X], position);
+	}
+
+	const std::vector< std::pair< float, V3 > > * widest = nullptr;
+
+	for ( const auto & [key, ring] : rings )
+	{
+		if ( widest == nullptr || ring.size() > widest->size() )
+		{
+			widest = &ring;
+		}
+	}
+
+	ASSERT_NE(widest, nullptr) << "no latitude ring found, the check would be vacuous";
+
+	auto sorted = *widest;
+
+	std::sort(sorted.begin(), sorted.end(), [] (const auto & lhs, const auto & rhs) {
+		return lhs.first < rhs.first;
+	});
+
+	/* Consecutive samples only, and only those genuinely apart in U: a seam vertex duplicated at the
+	 * same longitude carries no direction and would just add noise. */
+	auto eastward = 0;
+	auto westward = 0;
+
+	for ( size_t index = 0; index + 1 < sorted.size(); ++index )
+	{
+		if ( sorted[index + 1].first - sorted[index].first < 1.0E-4F )
+		{
+			continue;
+		}
+
+		const auto & a = sorted[index].second;
+		const auto & b = sorted[index + 1].second;
+
+		/* Y component of the cross product: the sign of the rotation about +Y. */
+		const auto turn = V3::crossProduct(a, b)[EmEn::Base::Math::Y];
+
+		if ( turn > 0.0F ) { ++eastward; } else if ( turn < 0.0F ) { ++westward; }
+	}
+
+	EXPECT_GT(eastward, 0) << "no usable pair on the ring, the check was vacuous";
+
+	EXPECT_EQ(westward, 0)
+		<< westward << " step(s) of increasing U turn NEGATIVELY about +Y, i.e. westward. "
+		<< "The texture is MIRRORED on the sphere: U must grow eastward, the positive rotation.";
+}
+
+/*
+ * The seam has to live SOMEWHERE, so where it lives is a convention -- and an unwritten convention
+ * is one nobody can preserve. This states it.
+ *
+ * U = 0 and U = 1 both fall on +Z, and U = 0.5 on -Z. On an equirectangular map the U edges are the
+ * ANTIMERIDIAN (180 degrees) and U = 0.5 is the prime meridian, so this puts Greenwich on -Z -- the
+ * engine's FORWARD -- and the seam on +Z. That is a good place for it: cartographers already put
+ * the antimeridian mid-Pacific precisely so it cuts no land, so the seam falls where there is
+ * nothing to misalign.
+ *
+ * ⚠️ The seam vertices are DUPLICATED at the same position, one carrying U = 0 and one U = 1. That
+ * is what stops the texture being smeared backwards across the last quad. A generator that emitted
+ * a single shared vertex there would interpolate U from 1 back to 0 across one slice and squeeze
+ * the entire map into it.
+ */
+TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
+{
+	constexpr auto Tolerance = 1.0E-3F;
+
+	const auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16, 8, uvOptions());
+
+	auto seamAtZeroU = 0;
+	auto seamAtOneU = 0;
+	auto middleFound = false;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & position = vertex.position();
+
+		/* Equatorial band only: near the poles every U converges and says nothing. */
+		if ( std::abs(position[EmEn::Base::Math::Y]) > 0.4F )
+		{
+			continue;
+		}
+
+		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
+
+		if ( u < Tolerance || u > 1.0F - Tolerance )
+		{
+			EXPECT_NEAR(position[EmEn::Base::Math::X], 0.0F, 0.01F) << "the seam must sit on the Z axis";
+			EXPECT_GT(position[EmEn::Base::Math::Z], 0.0F) << "the seam must sit on +Z, not -Z";
+
+			if ( u < Tolerance ) { ++seamAtZeroU; } else { ++seamAtOneU; }
+		}
+
+		if ( std::abs(u - 0.5F) < Tolerance )
+		{
+			EXPECT_LT(position[EmEn::Base::Math::Z], 0.0F)
+				<< "U = 0.5 is the prime meridian and must face -Z, the engine's forward";
+			middleFound = true;
+		}
+	}
+
+	EXPECT_TRUE(middleFound) << "no U = 0.5 vertex found, the check was vacuous";
+
+	/* Both sides of the seam must exist, or the texture wraps backwards across the last quad. */
+	EXPECT_GT(seamAtZeroU, 0) << "no U = 0 vertex on the seam";
+	EXPECT_GT(seamAtOneU, 0) << "no U = 1 vertex on the seam: the seam is not duplicated";
 }
