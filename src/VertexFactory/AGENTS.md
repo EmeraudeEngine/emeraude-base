@@ -210,7 +210,7 @@ Y-up world gives the two rules every hand-authored generator must follow:
 > **The V pairing is a defect class of its own, distinct from winding, from vertex coordinates and
 > from declared normals.** The Y-up switch reversed the emission order of `generateCuboid`'s faces
 > (winding) but left every `setTextureCoordinates` paired with the position it had in the Y-down
-> era, so all six faces rendered **V-flipped** while compiling clean and passing 1975/1975 tests.
+> era, so all six faces rendered **V-flipped** while compiling clean and passing the whole unit suite.
 > No assertion on the **geometry** can see it — the shape, its normals and its winding are all
 > correct, only the image is upside down. But an assertion on the **pairing** catches it outright,
 > and there is now one: `test_VertexFactoryShapeGenerator.cpp` walks every vertex of a shape, keeps
@@ -220,6 +220,39 @@ Y-up world gives the two rules every hand-authored generator must follow:
 > `generatePlane`. `generateHollowedCube` is deliberately excluded: its UVs are parameterised
 > per beam (`U` = beam width, `V` = length/width ratio) and assembled through `ShapeAssembler`
 > rotations, so its `V` is not tied to world `Y`.
+
+## Winding convention (front faces are CCW)
+
+A front face winds **counter-clockwise around its own outward normal** —
+`VK_FRONT_FACE_COUNTER_CLOCKWISE`, the pipeline default. The `emitTriangle(A, B, C)` helpers emit in
+**natural A/B/C order**: the historical B/C swap was a mirror compensation and is gone.
+
+> [!IMPORTANT]
+> **Verify a winding by COMPUTING it, never by eye.** Take `cross(B-A, C-A)` and check it against the
+> generator's own declared outward normal. Gated by
+> `loopDrivenGeneratorsWindCCWAroundTheirNormals`, which covers every loop-driven generator
+> (sphere, cylinder, cone, disk, torus, capsule, hemisphere, tube, arrow) with `cuboid`, `plane` and
+> `triangle` as **CONTROLS** — a probe that fails a control is a broken probe, not a discovery.
+> All nine measured 100% correct in Aug 2026: the migration plan had listed them as "still mirrored"
+> for weeks, and they were not.
+
+> [!CAUTION]
+> **Two triangle families carry NO evidence about winding. Excluding them is not optional.**
+> 1. **Degenerate** triangles (zero area) — the collapsed quads at a sphere's poles.
+> 2. Triangles **straddling a normal discontinuity** — a cap fan sharing a rim vertex with the side.
+>    Averaging a radial normal with a cap normal yields a direction that is NOT the face's outward
+>    normal, so the comparison is meaningless. **Omitting this filter reported 13 false positives on
+>    `generateArrow` alone**, indistinguishable at a glance from a genuine mirror defect. With it,
+>    the arrow is 15/15 clean.
+
+> [!CAUTION]
+> **The check is only valid while the normals are INDEPENDENT of the winding.** `ShapeGenerator`
+> calls neither `computeVertexNormal()` nor `computeTriangleNormal()` — every normal is authored from
+> the parametric surface — which is what makes it evidence rather than a tautology. That property is
+> itself pinned by `theWindingCheckRejectsAMirroredShape`: it applies `Shape::reverseWinding()`
+> (indices swapped, normals untouched) and requires **every** triangle carrying evidence to flip its
+> verdict. If someone ever derives the normals from the winding, that test fails instead of the gate
+> silently passing forever while measuring nothing. **Never delete it to "simplify" the suite.**
 
 ## Critical Attention Points
 

@@ -102,6 +102,88 @@ namespace
 
 		EXPECT_GT(verticalVertexCount, 0U) << label << ": no vertical face found, the check was vacuous.";
 	}
+
+	struct WindingCounts
+	{
+		unsigned agreeing{0};
+		unsigned disagreeing{0};
+	};
+
+	/**
+	 * @brief Counts the triangles whose geometric winding agrees with their own vertex normals.
+	 *
+	 * A front face winds COUNTER-CLOCKWISE around its outward normal
+	 * (`VK_FRONT_FACE_COUNTER_CLOCKWISE`, the pipeline default), so `cross(B-A, C-A)` must fall on
+	 * the same side as the normals the generator authored. This is the winding check
+	 * `docs/coordinate-system.md` mandates: COMPUTE it, never judge it by eye.
+	 *
+	 * ⚠️ **Not circular, and that is load-bearing.** `ShapeGenerator` never calls
+	 * `computeVertexNormal()` or `computeTriangleNormal()` — every normal is set explicitly from the
+	 * parametric surface, so the normals are independent evidence about the emission order. If a
+	 * generator ever starts deriving its normals FROM the winding, this check silently becomes
+	 * vacuous and `theWindingCheckRejectsAMirroredShape` below is what will catch it.
+	 *
+	 * ⚠️⚠️ Two families of triangle carry NO evidence and are skipped, otherwise the result is noise:
+	 *  - **degenerate** ones (zero area) — the collapsed quads at a sphere's poles;
+	 *  - ones **straddling a normal discontinuity** — a cap fan sharing a rim vertex with the side.
+	 *    Averaging a radial normal with a cap normal gives a direction that is NOT the face's
+	 *    outward normal. Skipping this filter reported 13 false positives on `generateArrow` alone,
+	 *    which read exactly like a real mirror defect.
+	 */
+	WindingCounts
+	countWindingAgreement (const Shape< float, uint32_t > & shape) noexcept
+	{
+		using V3 = EmEn::Base::Math::Vector< 3, float >;
+
+		WindingCounts counts;
+
+		for ( const auto & triangle : shape.triangles() )
+		{
+			const auto & a = shape.vertices()[triangle.vertexIndex(0)];
+			const auto & b = shape.vertices()[triangle.vertexIndex(1)];
+			const auto & c = shape.vertices()[triangle.vertexIndex(2)];
+
+			const auto geometric = V3::crossProduct(b.position() - a.position(), c.position() - a.position());
+
+			if ( geometric.length() < 1.0E-7F )
+			{
+				continue;
+			}
+
+			const auto normalA = a.normal();
+			const auto normalB = b.normal();
+			const auto normalC = c.normal();
+
+			if ( V3::dotProduct(normalA, normalB) < 0.5F || V3::dotProduct(normalA, normalC) < 0.5F || V3::dotProduct(normalB, normalC) < 0.5F )
+			{
+				continue;
+			}
+
+			if ( V3::dotProduct(geometric, normalA + normalB + normalC) > 0.0F )
+			{
+				++counts.agreeing;
+			}
+			else
+			{
+				++counts.disagreeing;
+			}
+		}
+
+		return counts;
+	}
+
+	void
+	expectFrontFacesWindCCWAroundTheirNormal (const Shape< float, uint32_t > & shape, const char * label)
+	{
+		const auto counts = countWindingAgreement(shape);
+
+		EXPECT_EQ(counts.disagreeing, 0U)
+			<< label << ": " << counts.disagreeing << " triangle(s) wind CLOCKWISE around their own "
+			<< "outward normal, i.e. mirror-wound. Front faces must be CCW.";
+
+		EXPECT_GT(counts.agreeing, 0U)
+			<< label << ": no triangle carried usable evidence, the check was vacuous.";
+	}
 }
 
 /*
@@ -302,4 +384,58 @@ TEST(VertexFactoryShapeGenerator, cuboidTopFaceAgreesWithPlane)
 	}
 
 	EXPECT_EQ(topVertexCount, 4U) << "the cube must expose exactly four +Y-facing vertices.";
+}
+
+/*
+ * ⚠️⚠️ WINDING GATE for the loop-driven generators.
+ *
+ * These were listed as "still mirror-wound" by the Y-up migration plan for weeks. MEASURED
+ * 2026-08-25: all of them are CORRECT, so this test locks that in rather than fixing anything.
+ * The three already-audited shapes are kept as CONTROLS: a probe that fails them is a broken probe,
+ * not a discovery.
+ */
+TEST(VertexFactoryShapeGenerator, loopDrivenGeneratorsWindCCWAroundTheirNormals)
+{
+	/* Controls — audited and shipped before this gate existed. */
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F, uvOptions()), "cuboid [control]");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generatePlane< float, uint32_t >(1.0F, 1.0F, 1, 1, uvOptions()), "plane [control]");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateTriangle< float, uint32_t >(1.0F, uvOptions()), "triangle [control]");
+
+	/* The loop-driven generators. */
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16, 8, uvOptions()), "sphere");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateCylinder< float, uint32_t >(1.0F, 1.0F, 2.0F, 16, 4, CapUVMapping::None, uvOptions()), "cylinder");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateCone< float, uint32_t >(1.0F, 2.0F, 16, 4, CapUVMapping::None, uvOptions()), "cone");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateDisk< float, uint32_t >(1.0F, 0.5F, 16, 1, CapUVMapping::Planar, uvOptions()), "disk");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateTorus< float, uint32_t >(1.0F, 0.3F, 16, 16, uvOptions()), "torus");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateCapsule< float, uint32_t >(0.5F, 2.0F, 16, 8, uvOptions()), "capsule");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateHemisphere< float, uint32_t >(1.0F, 16, 8, uvOptions()), "hemisphere");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateTube< float, uint32_t >(1.0F, 0.8F, 2.0F, 16, 4, CapUVMapping::Planar, uvOptions()), "tube");
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateArrow< float, uint32_t >(0.05F, 0.15F, 0.7F, 0.3F, 16, uvOptions()), "arrow");
+}
+
+/*
+ * ⚠️⚠️ The gate above is only worth its runtime if it can FAIL. This proves it permanently.
+ *
+ * `Shape::reverseWinding()` swaps the triangle indices and deliberately leaves the normals alone,
+ * which is exactly the mirror-wound state the Y-up migration had to eradicate. Every triangle that
+ * carried evidence must flip its verdict — not merely "some should fail".
+ *
+ * Without this, a future refactor that made the normals derive from the winding would turn the gate
+ * into a tautology that passes forever while measuring nothing.
+ */
+TEST(VertexFactoryShapeGenerator, theWindingCheckRejectsAMirroredShape)
+{
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16, 8, uvOptions());
+
+	const auto before = countWindingAgreement(shape);
+
+	ASSERT_EQ(before.disagreeing, 0U);
+	ASSERT_GT(before.agreeing, 0U);
+
+	shape.reverseWinding();
+
+	const auto after = countWindingAgreement(shape);
+
+	EXPECT_EQ(after.agreeing, 0U) << "a mirror-wound shape must not agree with its own normals anywhere";
+	EXPECT_EQ(after.disagreeing, before.agreeing) << "every triangle that carried evidence must flip its verdict";
 }
