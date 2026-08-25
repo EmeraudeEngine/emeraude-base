@@ -254,6 +254,39 @@ A front face winds **counter-clockwise around its own outward normal** —
 > verdict. If someone ever derives the normals from the winding, that test fails instead of the gate
 > silently passing forever while measuring nothing. **Never delete it to "simplify" the suite.**
 
+### The gem cuts are the exception: judge them against the SOLID, never their own normals
+
+The twelve gem-cut generators pass a **separately computed** normal to their `emitTriangle()`, built
+from a different vertex pair than the triangle it is attached to. The two drifted: measured Aug 2026,
+**11 of the 12 cuts carried facet normals pointing INTO the solid** (princess: every single facet),
+while their **winding was correct everywhere**.
+
+> [!CAUTION]
+> **Judging a gem with `countWindingAgreement()` reports the exact opposite of the truth** — it
+> compares against precisely the normals that are wrong, so correct winding reads as "mirror-wound".
+> That is why `gemCutsWindAndFaceOutward` references `faceCentre - centroid` instead, which owes
+> nothing to the authored normals. ⚠️ That reference is valid for **convex** shapes only; every cut
+> here is convex, but do not reuse it on a shape with a concavity.
+
+**The fix, applied to all eleven generators:** a flat facet's normal IS its own geometric normal, so
+`emitTriangle()` now derives it from the triangle being emitted and keeps the authored one only as a
+degenerate fallback and for the per-face UV tangent frame (deliberately untouched, so UVs did not
+move). Deriving it makes the drift **structurally impossible** rather than merely fixed.
+
+> [!CAUTION]
+> **Guard on the normalization RESULT, never on the input length.** `Vector::normalized()` gives up
+> when `lengthSquared()` trips `Utility::isZero()` and returns the **ZERO vector**. A sliver can
+> therefore clear a `length() > 1e-7` test and still come back with no normal at all — worse than an
+> inward one, since it kills lighting outright. Two princess-cut culet slivers did exactly that
+> (`length` 1.25e-4, `lengthSquared` 1.56e-8). A successful normalization has `lengthSquared() == 1`,
+> so testing the **result** against `0.5` is unambiguous and needs no epsilon of its own. The gate
+> uses the same criterion to decide which triangles carry evidence: one the library cannot normalize
+> has no normal to judge.
+
+⚠️ Still open, and untouched by the above: the gem facet math is authored **Y-down** and converted by
+`convertYDownAuthoring()`. That is a readability debt with **no visual effect** — the produced
+geometry is correct. Do not confuse it with the normals defect, which was real.
+
 ## Critical Attention Points
 
 - **MDx is read-only by design** — do not add a write path; document the boundary instead.

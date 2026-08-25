@@ -3431,8 +3431,26 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Emit one triangle with flat normal, per-vertex UV, and volumetric vertex color.
 		 * Vertices are written in natural A/B/C order: the callers already list each
 		 * face CCW around its outward normal. */
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched.
+			 * ⚠️⚠️ Guard on the normalization RESULT, never on the input length. `normalized()` gives
+			 * up when `lengthSquared()` trips `Utility::isZero()`, so a sliver can pass a
+			 * `length() > 1e-7` test and still come back as the ZERO vector — which is worse than an
+			 * inward normal, since it kills lighting outright. Two princess-cut culet slivers did
+			 * exactly that. A successful normalization has `lengthSquared() == 1`, so testing the
+			 * result against 0.5 is unambiguous and needs no epsilon of its own. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -3657,8 +3675,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		/* Emit one triangle with flat normal, per-vertex UV, and volumetric vertex color.
 		 * Vertices are written in natural A/B/C order: the callers already list each
 		 * face CCW around its outward normal. */
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -3943,8 +3973,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -4197,8 +4239,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -4471,8 +4525,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -4729,8 +4795,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -4955,8 +5033,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -5177,8 +5267,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -5402,8 +5504,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal — see the identical note on the
+			 * other gem cuts. The authored normal pointed INTO the solid on most facets; the winding
+			 * was correct throughout. Gated by `gemCutsWindAndFaceOutward`. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA); builder.setNormal(normal); builder.setTextureCoordinates(tcA); builder.setVertexColor(volumetricColor(vA)); builder.newVertex();
 			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
 			builder.setPosition(vC); builder.setNormal(normal); builder.setTextureCoordinates(tcC); builder.setVertexColor(volumetricColor(vC)); builder.newVertex();
@@ -5601,8 +5709,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);
@@ -5775,8 +5895,20 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			);
 		};
 
-		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & normal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
+		const auto emitTriangle = [&] (const Vec3 & vA, const Vec3 & vB, const Vec3 & vC, const Vec3 & authoredNormal, const Vec3 & tcA, const Vec3 & tcB, const Vec3 & tcC)
 		{
+			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal. Deriving it from the very
+			 * triangle being emitted is what stops the two from drifting apart: the authored normal
+			 * is built from a DIFFERENT vertex pair than the triangle, and on 11 of the 12 cuts it
+			 * ended up pointing INTO the solid (princess: every single facet), so those facets were
+			 * lit as if facing away. ⚠️ The WINDING was correct throughout — judging these shapes
+			 * against their own normals therefore reports the exact opposite conclusion, and did.
+			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
+			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
+			 * per-face UV tangent frame, deliberately left untouched. */
+			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
+			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+
 			builder.setPosition(vA);
 			builder.setNormal(normal);
 			builder.setTextureCoordinates(tcA);

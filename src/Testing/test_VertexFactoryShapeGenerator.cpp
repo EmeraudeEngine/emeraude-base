@@ -172,6 +172,91 @@ namespace
 		return counts;
 	}
 
+	struct OutwardCounts
+	{
+		unsigned windingOutward{0};
+		unsigned windingInward{0};
+		unsigned normalsOutward{0};
+		unsigned normalsInward{0};
+	};
+
+	/**
+	 * @brief Measures a CONVEX shape against a reference independent of its authored normals.
+	 *
+	 * For a convex solid the outward direction at a face is `faceCentre - centroid`, which owes
+	 * nothing to what the generator wrote into its normals. That independence is the whole point
+	 * here: the gem generators are the one family whose authored normals cannot be trusted as the
+	 * reference, so `countWindingAgreement()` — which compares against exactly those normals —
+	 * reports a defect for every facet whose normal points the wrong way and tells you nothing
+	 * about the winding. Measured Aug 2026: judged that way, 11 of the 12 cuts looked
+	 * "mirror-wound" and NONE of them was.
+	 *
+	 * ⚠️ Valid for CONVEX shapes only. Every gem cut here is convex; do not reuse this on a shape
+	 * with a concavity, where a face centre can legitimately sit behind the centroid.
+	 */
+	OutwardCounts
+	countOutwardAgreement (const Shape< float, uint32_t > & shape) noexcept
+	{
+		using V3 = EmEn::Base::Math::Vector< 3, float >;
+
+		OutwardCounts counts;
+
+		V3 centroid{0.0F, 0.0F, 0.0F};
+
+		for ( const auto & vertex : shape.vertices() )
+		{
+			centroid += vertex.position();
+		}
+
+		centroid /= static_cast< float >(shape.vertices().size());
+
+		for ( const auto & triangle : shape.triangles() )
+		{
+			const auto & a = shape.vertices()[triangle.vertexIndex(0)];
+			const auto & b = shape.vertices()[triangle.vertexIndex(1)];
+			const auto & c = shape.vertices()[triangle.vertexIndex(2)];
+
+			/* ⚠️⚠️ Judge normalizability the way the library does, not with an epsilon of our own.
+			 * `normalized()` gives up when `lengthSquared()` trips `Utility::isZero()`, so a sliver
+			 * can clear a `length() > 1e-7` test and still have NO normal at all — the generators
+			 * fall back to the authored one there, and its direction is arbitrary. A triangle the
+			 * library cannot normalize carries no evidence, exactly like a degenerate one. */
+			const auto geometric = V3::crossProduct(b.position() - a.position(), c.position() - a.position()).normalized();
+
+			if ( geometric.lengthSquared() < 0.5F )
+			{
+				continue;
+			}
+
+			const auto outward = ((a.position() + b.position() + c.position()) / 3.0F) - centroid;
+
+			if ( outward.length() < 1.0E-5F )
+			{
+				continue;
+			}
+
+			(V3::dotProduct(geometric, outward) > 0.0F ? counts.windingOutward : counts.windingInward)++;
+			(V3::dotProduct(a.normal(), outward) > 0.0F ? counts.normalsOutward : counts.normalsInward)++;
+		}
+
+		return counts;
+	}
+
+	void
+	expectConvexShapeFacesOutward (const Shape< float, uint32_t > & shape, const char * label)
+	{
+		const auto counts = countOutwardAgreement(shape);
+
+		EXPECT_GT(counts.windingOutward, 0U) << label << ": no usable face, the check was vacuous.";
+
+		EXPECT_EQ(counts.windingInward, 0U)
+			<< label << ": " << counts.windingInward << " face(s) wind the wrong way round the solid.";
+
+		EXPECT_EQ(counts.normalsInward, 0U)
+			<< label << ": " << counts.normalsInward << " facet normal(s) point INTO the solid, so those "
+			<< "facets are lit as if facing away. A flat facet's normal must be its own geometric normal.";
+	}
+
 	void
 	expectFrontFacesWindCCWAroundTheirNormal (const Shape< float, uint32_t > & shape, const char * label)
 	{
@@ -438,4 +523,31 @@ TEST(VertexFactoryShapeGenerator, theWindingCheckRejectsAMirroredShape)
 
 	EXPECT_EQ(after.agreeing, 0U) << "a mirror-wound shape must not agree with its own normals anywhere";
 	EXPECT_EQ(after.disagreeing, before.agreeing) << "every triangle that carried evidence must flip its verdict";
+}
+
+/*
+ * ⚠️⚠️ GEM CUT GATE — winding AND normal direction, judged against the solid itself.
+ *
+ * The gem generators are the one family whose authored normals are not a usable reference: they
+ * pass a separately-computed normal to their emitTriangle(), which is free to disagree with the
+ * winding of the triangle it is attached to. Measured Aug 2026: 11 of the 12 cuts carried facet
+ * normals pointing INTO the solid (princess: every single one), while their winding was correct
+ * everywhere. Judging them against their own normals reports the exact opposite conclusion.
+ *
+ * So this gate uses `faceCentre - centroid`, which is independent of both.
+ */
+TEST(VertexFactoryShapeGenerator, gemCutsWindAndFaceOutward)
+{
+	expectConvexShapeFacesOutward(ShapeGenerator::generateDiamondCutGem< float, uint32_t >(), "diamond cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), "emerald cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), "asscher cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), "baguette cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), "princess cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), "trillion cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), "oval cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), "cushion cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateMarquiseCutGem< float, uint32_t >(), "marquise cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generatePearCutGem< float, uint32_t >(), "pear cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), "heart cut");
+	expectConvexShapeFacesOutward(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), "rose cut");
 }
