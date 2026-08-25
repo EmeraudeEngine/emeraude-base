@@ -322,22 +322,46 @@ move). Deriving it makes the drift **structurally impossible** rather than merel
 > has no normal to judge.
 
 > [!CAUTION]
-> **`Shape::flipYAxis()` does NOT mirror the vertex colours**, and the gem cuts paint a VOLUMETRIC
-> colour — position mapped to RGB — so their green channel encodes Y. It walks `m_vertices` and
-> `m_triangles`; the colours live in the separate `m_vertexColors`. Every gem therefore shipped with
-> green describing the PRE-mirror frame, inverted against its own geometry, and it was visible: the
-> vertex-colour row of `parametric-geometries` iterates every shape, gems included, so they were
-> shaded upside down beside shapes that were not.
-> Fixed by negating the Y fed to `volumetricColor()` in the eleven generators. ⚠️ That negation is
-> paired with the `convertYDownAuthoring()` call and must disappear WITH it, never before.
-> Pinned by `gemVertexColoursAgreeWithGeometry`, which carries a non-mirrored control.
+> **`Shape::flipYAxis()` does NOT mirror the vertex colours.** It walks `m_vertices` and
+> `m_triangles`; the colours live in the separate `m_vertexColors`. The gem cuts paint a VOLUMETRIC
+> colour — position mapped to RGB — so while they were authored Y-down and mirrored afterwards,
+> their green channel described the PRE-mirror frame, inverted against their own geometry. It was
+> visible: the vertex-colour row of `parametric-geometries` iterates every shape, gems included.
+> Fixed, then made moot by the re-authoring below. **Keep the rule**: anything derived from a
+> position before a mirror is stale after it, and `flipYAxis()` will not tell you.
 
-⚠️ Still open: the gem facet math is authored **Y-down** and converted by `convertYDownAuthoring()`.
-The produced GEOMETRY is correct — measured, and pinned by `gemCutsKeepTheirGeometry`, a golden that
-exists precisely so the eventual re-authoring can be proven a no-op on the shape. ⚠️ It is a
-readability debt, but do not repeat the claim that it has "no visual effect": the vertex-colour
-defect above hung off exactly this arrangement and did reach the screen. Anything else the mirror
-touches indirectly deserves the same suspicion.
+### The gem cuts are authored Y-UP (since Aug 2026)
+
+All eleven gem generators author their facet math directly in the Y-up world: table above, culet
+below. `convertYDownAuthoring()` and its eleven call sites are **deleted**.
+
+> [!IMPORTANT]
+> **Removing a mirror reverses handedness, and that has FOUR consequences, not one.** Each was
+> needed at every converted site; missing any single one corrupts the output:
+> 1. the authored `Y` literals negate;
+> 2. every `emitTriangle()` swaps its first two vertices **and their UVs together** — that is what
+>    `reverseWinding()` used to do;
+> 3. the operands of each cross product feeding a per-face normal swap, since
+>    `cross(M·e₁, M·e₂) = −M·cross(e₁, e₂)`;
+> 4. **the bitangent** of the per-face tangent frame: `cross(normal, T)` becomes `cross(T, normal)`.
+>    Forget it and `v` silently becomes `1 − v`.
+>
+> The stored normals need no attention at all: `emitTriangle()` derives the flat normal from the
+> triangle it emits, so swapping the emission order corrects them by construction.
+
+Guarded by `gemCutsKeepTheirGeometry`, which pins every cut through invariants taken over TRIANGLE
+CORNERS. Two lessons are built into it, both learned the hard way during the conversion:
+
+> [!CAUTION]
+> **An invariant symmetric under the transformation it is meant to detect is not an invariant.**
+> The plain sum of `V` cannot see the bitangent flip, because `Σ(1 − v) = n − Σv`, which equals `Σv`
+> on every symmetric facet. Three cuts were converted with `V` flipped and the sums saw nothing;
+> only the princess, whose chevrons are asymmetric, gave it away. The SQUARED sums do not cancel.
+>
+> **Never measure over `shape.vertices()`.** That array is the result of DEDUPLICATION, which
+> depends on the emission order — exactly what re-authoring changes. The trillion came out with six
+> fewer shared vertices, identical triangles and identical geometry, and every vertex-array sum moved
+> with the count, accusing a correct conversion. The vertex count is a packing detail, not a shape.
 
 ## Critical Attention Points
 

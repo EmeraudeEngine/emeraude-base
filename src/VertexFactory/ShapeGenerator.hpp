@@ -3343,32 +3343,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	}
 
 	/**
-	 * @brief Converts a shape authored in the historical Y-down frame to the Y-up world.
-	 * @note ⚠️ TECHNICAL DEBT (owner decision, Aug 2026, Y-up migration stage 4): the twelve
-	 * gem-cut generators below still author their facet math with the display side (table,
-	 * or the rose-cut flat base) toward -Y, the "up" of the retired Y-down convention. This
-	 * call mirrors the finished shape (flipYAxis(): positions, normals, tangents — UVs are
-	 * not touched) and restores the front-face orientation the mirror reversed
-	 * (reverseWinding(), which must NOT be flipSurface(): that would negate the freshly
-	 * mirrored normals a second time). A future chantier re-authors the facet math itself
-	 * and deletes this helper along with its call sites (eleven — the Asscher cut
-	 * delegates to the Emerald cut).
-	 * @tparam vertex_data_t The precision type of vertex data.
-	 * @tparam index_data_t The precision type of index data.
-	 * @param shape A reference to the shape to convert.
-	 * @return void
-	 */
-	template< typename vertex_data_t, typename index_data_t >
-	void
-	convertYDownAuthoring (Shape< vertex_data_t, index_data_t > & shape) noexcept
-		requires (std::is_floating_point_v< vertex_data_t > && std::is_unsigned_v< index_data_t > )
-	{
-		shape.flipYAxis();
-		shape.reverseWinding();
-		shape.updateProperties();
-	}
-
-	/**
 	 * @brief Generates a brilliant-cut gem shape (diamond approximation).
 	 * @tparam vertex_data_t The precision type of vertex data. Default float.
 	 * @tparam index_data_t The precision type of index data. Default uint32_t.
@@ -5006,11 +4980,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto [tx, tz] = superEllipsePoint(length * tableRatio, width * tableRatio, theta);
 			const auto [gx, gz] = superEllipsePoint(length, width, theta);
 
-			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			tableRingVec[index] = Vec3(tx, crownHeight, tz);
 			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
-		const Vec3 culet(zero, pavilionDepth, zero);
+		const Vec3 culet(zero, -pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
@@ -5018,17 +4992,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5072,7 +5036,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -5083,7 +5047,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 
 			const auto T = rawT.normalized();
-			const auto B = Vec3::crossProduct(normal, T);
+			const auto B = Vec3::crossProduct(T, normal);
 
 			auto uMin = std::numeric_limits< vertex_data_t >::max();
 			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
@@ -5119,7 +5083,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			const auto edge1 = tableRingVec[1] - tableRingVec[0];
 			const auto edge2 = tableRingVec[n - 1] - tableRingVec[0];
-			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto tableNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
 			std::vector< Vec3 > tableUV(n);
 
@@ -5132,7 +5096,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
+				emitTriangle(tableRingVec[index], tableRingVec[0], tableRingVec[index + 1], tableNormal, tableUV[index], tableUV[0], tableUV[index + 1]);
 			}
 		}
 
@@ -5146,15 +5110,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
-			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
+			const auto normal = Vec3::crossProduct(g0 - t0, t1 - t0).normalized();
 
 			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
 			std::array< Vec3, 4 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
-			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(g0, t0, g1, normal, uvs[3], uvs[0], uvs[2]);
+			emitTriangle(g1, t0, t1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		/* === Pavilion === */
@@ -5165,21 +5129,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
-			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
+			const auto normal = Vec3::crossProduct(g1 - g0, culet - g0).normalized();
 
 			std::array< Vec3, 3 > positions{g0, g1, culet};
 			std::array< Vec3, 3 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
-			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(culet, g0, g1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
@@ -5251,28 +5211,18 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto [tx, tz] = marquisePoint(length * tableRatio, width * tableRatio, theta);
 			const auto [gx, gz] = marquisePoint(length, width, theta);
 
-			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			tableRingVec[index] = Vec3(tx, crownHeight, tz);
 			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
-		const Vec3 culet(zero, pavilionDepth, zero);
+		const Vec3 culet(zero, -pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5314,7 +5264,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -5325,7 +5275,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 
 			const auto T = rawT.normalized();
-			const auto B = Vec3::crossProduct(normal, T);
+			const auto B = Vec3::crossProduct(T, normal);
 
 			auto uMin = std::numeric_limits< vertex_data_t >::max();
 			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
@@ -5361,7 +5311,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			const auto edge1 = tableRingVec[1] - tableRingVec[0];
 			const auto edge2 = tableRingVec[n - 1] - tableRingVec[0];
-			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto tableNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
 			std::vector< Vec3 > tableUV(n);
 
@@ -5374,7 +5324,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
+				emitTriangle(tableRingVec[index], tableRingVec[0], tableRingVec[index + 1], tableNormal, tableUV[index], tableUV[0], tableUV[index + 1]);
 			}
 		}
 
@@ -5388,15 +5338,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
-			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
+			const auto normal = Vec3::crossProduct(g0 - t0, t1 - t0).normalized();
 
 			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
 			std::array< Vec3, 4 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
-			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(g0, t0, g1, normal, uvs[3], uvs[0], uvs[2]);
+			emitTriangle(g1, t0, t1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		/* === Pavilion === */
@@ -5407,21 +5357,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & g1 = girdleRingVec[i1];
 
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
-			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
+			const auto normal = Vec3::crossProduct(g1 - g0, culet - g0).normalized();
 
 			std::array< Vec3, 3 > positions{g0, g1, culet};
 			std::array< Vec3, 3 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
-			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(culet, g0, g1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
@@ -5497,11 +5443,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto [tx, tz] = pearPoint(length * tableRatio, width * tableRatio, theta);
 			const auto [gx, gz] = pearPoint(length, width, theta);
 
-			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			tableRingVec[index] = Vec3(tx, crownHeight, tz);
 			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
-		const Vec3 culet(zero, pavilionDepth, zero);
+		const Vec3 culet(zero, -pavilionDepth, zero);
 
 		const auto maxExtent = std::max(length, std::max(width, std::max(crownHeight, pavilionDepth)));
 		const auto invExtent = one / maxExtent;
@@ -5509,17 +5455,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5541,7 +5477,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -5552,7 +5488,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 
 			const auto T = rawT.normalized();
-			const auto B = Vec3::crossProduct(normal, T);
+			const auto B = Vec3::crossProduct(T, normal);
 			auto uMin = std::numeric_limits< vertex_data_t >::max();
 			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
@@ -5583,7 +5519,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			const auto edge1 = tableRingVec[1] - tableRingVec[0];
 			const auto edge2 = tableRingVec[n - 1] - tableRingVec[0];
-			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto tableNormal = Vec3::crossProduct(edge2, edge1).normalized();
 			std::vector< Vec3 > tableUV(n);
 
 			for ( size_t index = 0; index < n; ++index )
@@ -5595,7 +5531,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
+				emitTriangle(tableRingVec[index], tableRingVec[0], tableRingVec[index + 1], tableNormal, tableUV[index], tableUV[0], tableUV[index + 1]);
 			}
 		}
 
@@ -5606,15 +5542,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & t0 = tableRingVec[index]; const auto & t1 = tableRingVec[i1];
 			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
-			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
+			const auto normal = Vec3::crossProduct(g0 - t0, t1 - t0).normalized();
 
 			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
 			std::array< Vec3, 4 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
-			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(g0, t0, g1, normal, uvs[3], uvs[0], uvs[2]);
+			emitTriangle(g1, t0, t1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		/* === Pavilion === */
@@ -5623,21 +5559,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto i1 = (index + 1) % n;
 			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
-			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
+			const auto normal = Vec3::crossProduct(g1 - g0, culet - g0).normalized();
 
 			std::array< Vec3, 3 > positions{g0, g1, culet};
 			std::array< Vec3, 3 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
-			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(culet, g0, g1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
@@ -5712,11 +5644,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto [tx, tz] = heartPoint(tableRatio, theta);
 			const auto [gx, gz] = heartPoint(one, theta);
 
-			tableRingVec[index] = Vec3(tx, -crownHeight, tz);
+			tableRingVec[index] = Vec3(tx, crownHeight, tz);
 			girdleRingVec[index] = Vec3(gx, zero, gz);
 		}
 
-		const Vec3 culet(zero, pavilionDepth, zero);
+		const Vec3 culet(zero, -pavilionDepth, zero);
 
 		const auto maxExtent = std::max(size, std::max(crownHeight, pavilionDepth));
 		const auto invExtent = one / maxExtent;
@@ -5724,17 +5656,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5776,7 +5698,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -5787,7 +5709,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 
 			const auto T = rawT.normalized();
-			const auto B = Vec3::crossProduct(normal, T);
+			const auto B = Vec3::crossProduct(T, normal);
 			auto uMin = std::numeric_limits< vertex_data_t >::max();
 			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
@@ -5819,7 +5741,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			const auto edge1 = tableRingVec[1] - tableRingVec[0];
 			const auto edge2 = tableRingVec[n - 1] - tableRingVec[0];
-			const auto tableNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto tableNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
 			std::vector< Vec3 > tableUV(n);
 
@@ -5832,7 +5754,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(tableRingVec[0], tableRingVec[index], tableRingVec[index + 1], tableNormal, tableUV[0], tableUV[index], tableUV[index + 1]);
+				emitTriangle(tableRingVec[index], tableRingVec[0], tableRingVec[index + 1], tableNormal, tableUV[index], tableUV[0], tableUV[index + 1]);
 			}
 		}
 
@@ -5843,15 +5765,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & t0 = tableRingVec[index]; const auto & t1 = tableRingVec[i1];
 			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (t0 + t1 + g0 + g1) / static_cast< vertex_data_t >(4);
-			const auto normal = Vec3::crossProduct(t1 - t0, g0 - t0).normalized();
+			const auto normal = Vec3::crossProduct(g0 - t0, t1 - t0).normalized();
 
 			std::array< Vec3, 4 > positions{t0, t1, g1, g0};
 			std::array< Vec3, 4 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-			emitTriangle(t0, g0, g1, normal, uvs[0], uvs[3], uvs[2]);
-			emitTriangle(t0, g1, t1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(g0, t0, g1, normal, uvs[3], uvs[0], uvs[2]);
+			emitTriangle(g1, t0, t1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		/* === Pavilion === */
@@ -5860,21 +5782,17 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto i1 = (index + 1) % n;
 			const auto & g0 = girdleRingVec[index]; const auto & g1 = girdleRingVec[i1];
 			const auto center = (g0 + g1 + culet) / static_cast< vertex_data_t >(3);
-			const auto normal = Vec3::crossProduct(culet - g0, g1 - g0).normalized();
+			const auto normal = Vec3::crossProduct(g1 - g0, culet - g0).normalized();
 
 			std::array< Vec3, 3 > positions{g0, g1, culet};
 			std::array< Vec3, 3 > uvs;
 
 			computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
-			emitTriangle(g0, culet, g1, normal, uvs[0], uvs[2], uvs[1]);
+			emitTriangle(culet, g0, g1, normal, uvs[2], uvs[0], uvs[1]);
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
@@ -5920,17 +5838,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto volumetricColor = [invExtent] (const Vec3 & position) {
 			return Vec4(
 				((position[Math::X] * invExtent) + one) * half,
-				/* ⚠️⚠️ NEGATED, and it must stay so while this generator authors Y-down. The colour is
-				 * volumetric — it maps the position into RGB — but it is written BEFORE
-				 * convertYDownAuthoring() mirrors the shape, and that mirror does NOT reach the
-				 * colours: Shape::flipYAxis() walks m_vertices and m_triangles, while the colours
-				 * live in the separate m_vertexColors. Feeding the authored Y would therefore leave
-				 * green describing the pre-mirror frame, inverted against the final geometry — which
-				 * is exactly what shipped, visible in the vertex-colour row of parametric-geometries.
-				 * ⚠️ When this generator is finally re-authored Y-up, this negation goes away WITH the
-				 * convertYDownAuthoring() call, never before it. Pinned by
-				 * gemVertexColoursAgreeWithGeometry. */
-				((-position[Math::Y] * invExtent) + one) * half,
+				((position[Math::Y] * invExtent) + one) * half,
 				((position[Math::Z] * invExtent) + one) * half,
 				one
 			);
@@ -5972,7 +5880,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		const auto computeFaceUV = [] (const Vec3 & normal, const Vec3 & center, const Vec3 * positions, Vec3 * uvs, size_t count)
 		{
 			/* Project world-Y onto face plane for consistent texture orientation. */
-			const Vec3 upDir(static_cast< vertex_data_t >(0), -one, static_cast< vertex_data_t >(0));
+			const Vec3 upDir(static_cast< vertex_data_t >(0), one, static_cast< vertex_data_t >(0));
 			auto rawT = upDir - (normal * Vec3::dotProduct(upDir, normal));
 
 			if ( Vec3::dotProduct(rawT, rawT) < static_cast< vertex_data_t >(0.0001) )
@@ -5983,7 +5891,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 
 			const auto T = rawT.normalized();
-			const auto B = Vec3::crossProduct(normal, T);
+			const auto B = Vec3::crossProduct(T, normal);
 			auto uMin = std::numeric_limits< vertex_data_t >::max();
 			auto uMax = std::numeric_limits< vertex_data_t >::lowest();
 			auto vMin = std::numeric_limits< vertex_data_t >::max();
@@ -6016,8 +5924,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			const auto t = static_cast< vertex_data_t >(ring) / static_cast< vertex_data_t >(rings);
 			const auto ringRadius = radius * (one - t);
-			/* Dome profile: parabolic height = h * t² for gentle dome (downward). */
-			const auto ringY = height * t * t;
+			/* Dome profile: parabolic height = h * t² for a gentle dome. */
+			const auto ringY = -(height * t * t);
 
 			domeRings[ring].resize(n);
 
@@ -6029,7 +5937,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			}
 		}
 
-		const Vec3 apex(zero, height, zero);
+		const Vec3 apex(zero, -height, zero);
 
 		builder.beginConstruction(ConstructionMode::Triangles);
 
@@ -6038,7 +5946,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto & baseRing = domeRings[0];
 			const auto edge1 = baseRing[1] - baseRing[0];
 			const auto edge2 = baseRing[n - 1] - baseRing[0];
-			const auto baseNormal = Vec3::crossProduct(edge1, edge2).normalized();
+			const auto baseNormal = Vec3::crossProduct(edge2, edge1).normalized();
 
 			std::vector< Vec3 > baseUV(n);
 
@@ -6051,7 +5959,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			for ( size_t index = 1; index + 1 < n; ++index )
 			{
-				emitTriangle(baseRing[0], baseRing[index], baseRing[index + 1], baseNormal, baseUV[0], baseUV[index], baseUV[index + 1]);
+				emitTriangle(baseRing[index], baseRing[0], baseRing[index + 1], baseNormal, baseUV[index], baseUV[0], baseUV[index + 1]);
 			}
 		}
 
@@ -6065,15 +5973,15 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			{
 				const auto next = (index + 1) % n;
 				const auto center = (outer[index] + outer[next] + inner[next] + inner[index]) / static_cast< vertex_data_t >(4);
-				const auto normal = Vec3::crossProduct(inner[index] - outer[index], outer[next] - outer[index]).normalized();
+				const auto normal = Vec3::crossProduct(outer[next] - outer[index], inner[index] - outer[index]).normalized();
 
 				std::array< Vec3, 4 > positions{outer[index], inner[index], inner[next], outer[next]};
 				std::array< Vec3, 4 > uvs;
 
 				computeFaceUV(normal, center, positions.data(), uvs.data(), 4);
 
-				emitTriangle(outer[index], inner[index], inner[next], normal, uvs[0], uvs[1], uvs[2]);
-				emitTriangle(outer[index], inner[next], outer[next], normal, uvs[0], uvs[2], uvs[3]);
+				emitTriangle(inner[index], outer[index], inner[next], normal, uvs[1], uvs[0], uvs[2]);
+				emitTriangle(inner[next], outer[index], outer[next], normal, uvs[2], uvs[0], uvs[3]);
 			}
 		}
 
@@ -6085,22 +5993,18 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			{
 				const auto next = (index + 1) % n;
 				const auto center = (lastRing[index] + lastRing[next] + apex) / static_cast< vertex_data_t >(3);
-				const auto normal = Vec3::crossProduct(apex - lastRing[index], lastRing[next] - lastRing[index]).normalized();
+				const auto normal = Vec3::crossProduct(lastRing[next] - lastRing[index], apex - lastRing[index]).normalized();
 
 				std::array< Vec3, 3 > positions{lastRing[index], lastRing[next], apex};
 				std::array< Vec3, 3 > uvs;
 
 				computeFaceUV(normal, center, positions.data(), uvs.data(), 3);
 
-				emitTriangle(lastRing[index], apex, lastRing[next], normal, uvs[0], uvs[2], uvs[1]);
+				emitTriangle(apex, lastRing[index], lastRing[next], normal, uvs[2], uvs[0], uvs[1]);
 			}
 		}
 
 		builder.endConstruction();
-
-		/* The facets above are still authored Y-down (display side toward -Y) — see
-		 * convertYDownAuthoring() for the mechanical conversion and the debt it carries. */
-		convertYDownAuthoring(shape);
 
 		return shape;
 	}
