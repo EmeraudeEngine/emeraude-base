@@ -28,6 +28,8 @@
 /* STL inclusions. */
 #include <cmath>
 #include <cstdint>
+#include <map>
+#include <vector>
 
 /* Local inclusions. */
 #include "Math/Vector.hpp"
@@ -550,4 +552,86 @@ TEST(VertexFactoryShapeGenerator, gemCutsWindAndFaceOutward)
 	expectConvexShapeFacesOutward(ShapeGenerator::generatePearCutGem< float, uint32_t >(), "pear cut");
 	expectConvexShapeFacesOutward(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), "heart cut");
 	expectConvexShapeFacesOutward(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), "rose cut");
+}
+
+/*
+ * ⚠️⚠️ generateSphere had its texture coordinates TRANSPOSED until Aug 2026: the accumulator named
+ * U advanced per STACK (latitude) and the one named V per SLICE (longitude), so each landed in the
+ * other's slot and every texture came out rotated a quarter turn on the sphere. The latitude also
+ * ran 1 at the +Y pole instead of 0.
+ *
+ * ⚠️ It is NOT a Y-up residue -- it predates the flip and depends on no axis sign. It survived the
+ * whole migration audit because the obvious probe cannot see it: comparing V against Y on a sphere
+ * reads a flat 0.5 above and below the equator when V is actually longitude, which looks like a
+ * symmetric shape rather than a defect.
+ *
+ * The ring test below is what actually discriminates: within ONE latitude ring, longitude must vary
+ * and latitude must not. Transposed, the ring shows the exact opposite.
+ */
+TEST(VertexFactoryShapeGenerator, sphereMapsUToLongitudeAndVToLatitude)
+{
+	constexpr auto Slices = 16;
+	constexpr auto Stacks = 8;
+	constexpr auto Tolerance = 1.0E-4F;
+
+	const auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, Slices, Stacks, uvOptions());
+
+	float minY = 1.0E9F;
+	float maxY = -1.0E9F;
+	float vAtMinY = -1.0F;
+	float vAtMaxY = -1.0F;
+
+	std::map< int, std::vector< std::pair< float, float > > > rings;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto y = vertex.position()[EmEn::Base::Math::Y];
+		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
+		const auto v = vertex.textureCoordinates()[EmEn::Base::Math::Y];
+
+		if ( y < minY ) { minY = y; vAtMinY = v; }
+		if ( y > maxY ) { maxY = y; vAtMaxY = v; }
+
+		rings[static_cast< int >(std::lround(y * 1000.0F))].emplace_back(u, v);
+	}
+
+	/* V = 0 is the image TOP and must pair with the +Y pole, as for every other generator. */
+	EXPECT_NEAR(vAtMaxY, 0.0F, Tolerance) << "the +Y pole must carry V = 0, the image top";
+	EXPECT_NEAR(vAtMinY, 1.0F, Tolerance) << "the -Y pole must carry V = 1, the image bottom";
+
+	/* The most populated ring away from the poles, where a ring is a genuine circle of vertices
+	 * rather than a collapsed point. */
+	const std::vector< std::pair< float, float > > * widest = nullptr;
+
+	for ( const auto & [key, ring] : rings )
+	{
+		if ( std::abs(static_cast< float >(key) / 1000.0F) < 0.9F && (widest == nullptr || ring.size() > widest->size()) )
+		{
+			widest = &ring;
+		}
+	}
+
+	ASSERT_NE(widest, nullptr) << "no latitude ring found, the check would be vacuous";
+
+	float uMin = 1.0E9F;
+	float uMax = -1.0E9F;
+	float vMin = 1.0E9F;
+	float vMax = -1.0E9F;
+
+	for ( const auto & [u, v] : *widest )
+	{
+		uMin = std::min(uMin, u);
+		uMax = std::max(uMax, u);
+		vMin = std::min(vMin, v);
+		vMax = std::max(vMax, v);
+	}
+
+	/* THE discriminator: along a latitude ring the longitude sweeps and the latitude holds. */
+	EXPECT_GT(uMax - uMin, 0.5F)
+		<< "U must sweep the longitude along a latitude ring (measured span " << (uMax - uMin)
+		<< "). A near-zero span means U carries the LATITUDE: the coordinates are transposed.";
+
+	EXPECT_NEAR(vMax - vMin, 0.0F, Tolerance)
+		<< "V must stay constant along a latitude ring (measured span " << (vMax - vMin)
+		<< "). A wide span means V carries the LONGITUDE: the coordinates are transposed.";
 }

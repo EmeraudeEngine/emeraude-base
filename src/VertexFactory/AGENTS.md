@@ -221,6 +221,17 @@ Y-up world gives the two rules every hand-authored generator must follow:
 > per beam (`U` = beam width, `V` = length/width ratio) and assembled through `ShapeAssembler`
 > rotations, so its `V` is not tied to world `Y`.
 
+> [!CAUTION]
+> **A sphere is the one shape where a `V`-versus-`Y` probe cannot see a UV defect.** `generateSphere`
+> carried TRANSPOSED coordinates until Aug 2026 — the accumulator named `U` advanced per STACK
+> (latitude), the one named `V` per SLICE (longitude) — so every texture came out rotated a quarter
+> turn. Comparing `V` against `Y` reads a flat 0.5 above and below the equator when `V` is really
+> longitude: it looks like a symmetric shape, not a defect, which is how this survived a full audit.
+> **The discriminator is a LATITUDE RING**: along one, longitude must sweep and latitude must hold.
+> Transposed, the ring gives span `U` = 0 and span `V` = 1 — the perfect signature.
+> Pinned by `sphereMapsUToLongitudeAndVToLatitude`. ⚠️ Not a Y-up residue: it predates the flip and
+> depends on no axis sign.
+
 ## Winding convention (front faces are CCW)
 
 A front face winds **counter-clockwise around its own outward normal** —

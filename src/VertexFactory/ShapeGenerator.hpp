@@ -909,7 +909,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		std::array< Math::Vector< 3, vertex_data_t >, 4 > normals{};
 		std::array< Math::Vector< 3, vertex_data_t >, 4 > textureCoordinates{};
 
-		auto texCoordU = static_cast< vertex_data_t >(1);
+		/* ⚠️⚠️ U is LONGITUDE (slices, dTheta), V is LATITUDE (stacks, dRHO) — and V = 0 sits at the
+		 * +Y pole, per the convention in VertexFactory/AGENTS.md. Until Aug 2026 this generator had
+		 * them TRANSPOSED: the accumulator named U advanced per STACK and the one named V per SLICE,
+		 * so each landed in the other's slot and every texture came out rotated a quarter turn on
+		 * the sphere. The latitude also ran 1 at the pole instead of 0.
+		 * ⚠️ NOT a Y-up residue — it predates the flip and depends on no axis sign. It hid because a
+		 * V-versus-Y probe reads a flat 0.5/0.5 on a sphere when V is actually longitude. */
+		auto texCoordV = static_cast< vertex_data_t >(0);
 
 		builder.beginConstruction(ConstructionMode::TriangleStrip);
 
@@ -926,7 +933,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			/* Many sources of OpenGL sphere drawing code uses a triangle fan
 			 * for the caps of the sphere. This however introduces texturing
 			 * artifacts at the poles on some OpenGL implementations. */
-			auto texCoordV = static_cast< vertex_data_t >(0);
+			auto texCoordU = static_cast< vertex_data_t >(0);
 
 			for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex)
 			{
@@ -947,7 +954,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				normalZ = cTheta * sineRHOdRHO;
 
 				positions[1] = {normalX * radius, normalY * radius, normalZ * radius};
-				textureCoordinates[1] = {texCoordU - deltaV, texCoordV, 0};
+				textureCoordinates[1] = {texCoordU, texCoordV + deltaV, 0};
 				normals[1] = {normalX, normalY, normalZ};
 
 				theta = sliceIndex + 1 == slices ? 0 : static_cast< vertex_data_t >(sliceIndex + 1) * dTheta;
@@ -958,7 +965,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				normalY = cosineRHO;
 				normalZ = cTheta * sineRHO;
 
-				texCoordV += deltaU;
+				texCoordU += deltaU;
 
 				positions[2] = {normalX * radius, normalY * radius, normalZ * radius};
 				textureCoordinates[2] = {texCoordU, texCoordV, 0};
@@ -969,7 +976,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				normalZ = cTheta * sineRHOdRHO;
 
 				positions[3] = {normalX * radius, normalY * radius, normalZ * radius};
-				textureCoordinates[3] = {texCoordU - deltaV, texCoordV, 0};
+				textureCoordinates[3] = {texCoordU, texCoordV + deltaV, 0};
 				normals[3] = {normalX, normalY, normalZ};
 
 				/* Draw quad. The strip goes out as [0]/[2]/[1]/[3] so that both
@@ -1003,7 +1010,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 				builder.resetCurrentTriangle();
 			}
 
-			texCoordU -= deltaV;
+			texCoordV += deltaV;
 		}
 
 		builder.endConstruction();
