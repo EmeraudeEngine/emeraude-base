@@ -780,14 +780,17 @@ TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
 }
 
 /*
- * ⚠️⚠️ GOLDEN GEOMETRY for the twelve gem cuts, captured 2026-08-25 BEFORE re-authoring their facet
- * math from the retired Y-down frame to Y-up.
+ * ⚠️⚠️ GOLDEN GEOMETRY for the twelve gem cuts, captured 2026-08-25 from the code as it stood BEFORE
+ * their facet math was re-authored from the retired Y-down frame to Y-up.
  *
- * That re-authoring is COSMETIC: measured, the geometry these generators produce is already correct
- * -- `convertYDownAuthoring()` does its job. So the refactor must be a NO-OP on the output, and this
- * is what says so. Every invariant here is ORDER-INDEPENDENT (counts, sums of absolute coordinates,
- * squared radius, vertical extent) precisely because re-authoring legitimately changes the emission
- * order: reversing a mirror reverses the winding, so each face gets listed the other way round.
+ * That re-authoring had to be a NO-OP on the output -- the geometry was already correct, the mirror
+ * step merely produced it a different way -- and these values are what said so. They are still the
+ * reference: any future change to a cut's proportions is a deliberate act that re-captures a row,
+ * never a quiet drift.
+ *
+ * Every invariant is ORDER-INDEPENDENT and taken over TRIANGLE CORNERS, because re-authoring
+ * legitimately changed both the emission order (reversing a mirror reverses the winding, so each
+ * face gets listed the other way round) and the vertex sharing that follows from it.
  *
  * ⚠️ A gate on winding and normals alone would NOT catch a botched re-authoring: a facet ring
  * displaced along Y still comes out convex and consistently wound. That is why this pins the shape
@@ -906,11 +909,15 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
  * ⚠️⚠️ The gem cuts paint a VOLUMETRIC vertex colour -- position mapped to RGB -- so the green
  * channel encodes Y and must agree with the geometry it is attached to.
  *
- * It did not. Those generators author their facets in the retired Y-down frame and mirror the
- * finished shape with convertYDownAuthoring(), which calls Shape::flipYAxis(). That mirrors
- * positions, normals and tangents -- but the vertex colours live in a SEPARATE vector
- * (Shape::m_vertexColors) which it never touches. The colours therefore kept describing the
- * pre-mirror frame, green inverted against the final geometry.
+ * It did not, back when those generators authored their facets Y-down and mirrored the finished
+ * shape with convertYDownAuthoring() -> Shape::flipYAxis(). That mirrors positions, normals and
+ * tangents -- but the vertex colours live in a SEPARATE vector (Shape::m_vertexColors) which it
+ * never touches, so the colours kept describing the pre-mirror frame, green inverted against the
+ * final geometry.
+ *
+ * ⚠️ The helper is gone and the generators are authored Y-up, so the defect cannot recur that way.
+ * The test stays because the RULE outlives it: anything derived from a position before a transform
+ * is stale after it, and flipYAxis() will not tell you.
  *
  * ⚠️ Visible, not theoretical: `parametric-geometries` has a vertex-colour row that iterates every
  * shape, gems included, so they were shaded upside down next to shapes that were not.
