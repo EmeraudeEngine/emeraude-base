@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <cstdlib>
+#include <algorithm>
 #include <array>
 #include <fstream>
 
@@ -179,9 +180,9 @@ namespace EmEn::Base::Network
 	}
 
 	bool
-	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath) const noexcept
+	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress) const noexcept
 	{
-		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath);
+		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath, progress ? &progress : nullptr);
 
 		if ( !result.has_value() )
 		{
@@ -285,7 +286,7 @@ namespace EmEn::Base::Network
 	}
 
 	std::optional< HTTPResult >
-	HTTPSClient::run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath) const noexcept
+	HTTPSClient::run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const DownloadProgress * progress) const noexcept
 	{
 		const auto deadline = std::chrono::steady_clock::now() + m_options.totalTimeout;
 
@@ -293,7 +294,7 @@ namespace EmEn::Base::Network
 
 		for ( uint8_t redirect = 0; redirect <= m_options.maxRedirects; ++redirect )
 		{
-			auto result = this->performHop(method, currentURI, sink, filepath, deadline);
+			auto result = this->performHop(method, currentURI, sink, filepath, deadline, progress);
 
 			if ( !result.has_value() )
 			{
@@ -344,7 +345,7 @@ namespace EmEn::Base::Network
 	}
 
 	std::optional< HTTPResult >
-	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline) const noexcept
+	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline, const DownloadProgress * progress) const noexcept
 	{
 		std::string host;
 		uint16_t port = 0;
@@ -419,6 +420,12 @@ namespace EmEn::Base::Network
 
 		std::array< char, TransportReadBufferSize > buffer{};
 
+		/* Progress total: the Content-Length of a 2xx hop, when the body is framed by it (a
+		 * Transfer-Encoding header takes precedence and leaves the total unknown). Resolved
+		 * once, when the headers are complete. */
+		std::optional< uint64_t > progressTotal;
+		bool progressTotalResolved = false;
+
 		auto result = HTTPResponseParser::Result::NeedMoreData;
 
 		while ( result == HTTPResponseParser::Result::NeedMoreData )
@@ -465,6 +472,28 @@ namespace EmEn::Base::Network
 					}
 
 					parser.body().clear();
+
+					if ( progress != nullptr )
+					{
+						if ( !progressTotalResolved )
+						{
+							progressTotalResolved = true;
+
+							if ( parser.response().value(HTTPResponse::TransferEncoding).empty() )
+							{
+								const auto contentLength = parser.response().value(HTTPResponse::ContentLength);
+
+								if ( !contentLength.empty() && std::ranges::all_of(contentLength, [] (char character) {
+									return character >= '0' && character <= '9';
+								}) && contentLength.size() <= 19 )
+								{
+									progressTotal = std::stoull(contentLength);
+								}
+							}
+						}
+
+						(*progress)(parser.bodyBytesDecoded(), progressTotal);
+					}
 				}
 			}
 		}

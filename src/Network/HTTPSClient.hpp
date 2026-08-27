@@ -30,6 +30,7 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <string>
 
@@ -47,6 +48,15 @@
 
 namespace EmEn::Base::Network
 {
+	/**
+	 * @brief Progress hook of HTTPSClient::download(): decoded body bytes so far, and the total when known.
+	 * @note Called on the thread that runs download(), after each transport read that carried body
+	 * bytes of the final 2xx hop (redirect hops report nothing). The total is the Content-Length of
+	 * that hop; it is std::nullopt for a chunked or read-until-close body. The last call carries the
+	 * final byte count. Must be cheap and must not block: it sits in the read loop.
+	 */
+	using DownloadProgress = std::function< void (uint64_t bytesReceived, std::optional< uint64_t > bytesTotal) >;
+
 	/**
 	 * @brief The result of a completed HTTP exchange: parsed response + decoded body.
 	 * @note HTTPResponse itself is header-only data; the body is carried alongside.
@@ -145,10 +155,11 @@ namespace EmEn::Base::Network
 			 * @brief Downloads a resource to a file, streaming the body (never held whole in memory).
 			 * @param uri The target URI (https scheme).
 			 * @param filepath The destination file path.
+			 * @param progress An optional progress hook, see DownloadProgress. Default none.
 			 * @return bool True on a 2xx response fully written to the file.
 			 */
 			[[nodiscard]]
-			bool download (const URI & uri, const std::filesystem::path & filepath) const noexcept;
+			bool download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress = {}) const noexcept;
 
 		private:
 
@@ -166,10 +177,11 @@ namespace EmEn::Base::Network
 			 * @param uri The initial target URI.
 			 * @param sink Where the final response body goes.
 			 * @param filepath The destination file when sink is File.
+			 * @param progress The progress hook of a File sink, nullptr otherwise.
 			 * @return std::optional< HTTPResult > The final response (body empty when streamed to file).
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath) const noexcept;
+			std::optional< HTTPResult > run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const DownloadProgress * progress = nullptr) const noexcept;
 
 			/**
 			 * @brief Performs a single request/response exchange (one connection, no redirect).
@@ -178,10 +190,11 @@ namespace EmEn::Base::Network
 			 * @param sink Where the body goes.
 			 * @param filepath The destination file when sink is File.
 			 * @param deadline The absolute total-budget deadline.
+			 * @param progress The progress hook of a File sink, nullptr otherwise. Reported only on a 2xx.
 			 * @return std::optional< HTTPResult >
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline) const noexcept;
+			std::optional< HTTPResult > performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline, const DownloadProgress * progress = nullptr) const noexcept;
 
 			/**
 			 * @brief Resolves the proxy to use for a target host (explicit option or environment).

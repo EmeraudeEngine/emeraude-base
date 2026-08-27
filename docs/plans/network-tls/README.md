@@ -337,3 +337,14 @@ Each failure is a `false` / `std::nullopt` to the caller — never an exception,
 leaves no file behind. On the engine side every one of them ends as `DownloadStatus::Error` and the
 resource falls back to its default (`ResourceTrait::failLoading()`).
 
+## Post-freeze increment — `download()` progress hook (2026-08-27)
+
+First feature added after the plan's closure: `HTTPSClient::download(uri, filepath, progress)` takes
+an optional `DownloadProgress` (`bytesReceived`, `std::optional< uint64_t > bytesTotal`), invoked on
+the calling thread after each transport read that carried body bytes of the final 2xx hop; the total
+is the hop's `Content-Length` when the body is framed by it, `std::nullopt` for chunked /
+read-until-close. Redirect hops report nothing. Three tests: Content-Length (monotonic, final ==
+size, total known throughout), chunked (total unknown, final == decoded size), and the hook-less
+call unchanged. Consumer: the engine's `Net::Manager` throttles it to one `Progress` notification
+per ticket per main-loop cycle.
+

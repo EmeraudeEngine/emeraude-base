@@ -28,10 +28,13 @@
 
 /* STL inclusions. */
 #include <cstdlib>
+#include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 /* Local inclusions. */
 #include "Network/HTTPSClient.hpp"
@@ -324,6 +327,114 @@ TEST(NetworkHTTPSClient, downloadStreamsToFile)
 	}
 
 	EXPECT_EQ(content.str(), payload);
+
+	std::filesystem::remove(filepath);
+}
+
+TEST(NetworkHTTPSClient, downloadReportsProgressWithContentLength)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	std::string payload;
+
+	while ( payload.size() < 300000 )
+	{
+		payload += "0123456789abcdef";
+	}
+
+	HTTPSTestServer server{credentials, [&payload] (const std::string & /*request*/) {
+		return plainResponse(payload);
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-progress-test.bin";
+
+	std::vector< uint64_t > received;
+	std::vector< std::optional< uint64_t > > totals;
+
+	ASSERT_TRUE(client.download(serverURI(server, "/big.bin"), filepath, [&received, &totals] (uint64_t bytesReceived, std::optional< uint64_t > bytesTotal) {
+		received.push_back(bytesReceived);
+		totals.push_back(bytesTotal);
+	}));
+
+	/* Several transport reads for 300 KB: the hook fires more than once, monotonically. */
+	ASSERT_GE(received.size(), 2U);
+	EXPECT_TRUE(std::is_sorted(received.cbegin(), received.cend()));
+	EXPECT_EQ(received.back(), payload.size());
+
+	/* Content-Length framing: the total is known from the first call and never changes. */
+	for ( const auto & total : totals )
+	{
+		ASSERT_TRUE(total.has_value());
+		EXPECT_EQ(*total, payload.size());
+	}
+
+	std::filesystem::remove(filepath);
+}
+
+TEST(NetworkHTTPSClient, downloadReportsProgressWithoutTotalWhenChunked)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return std::string{
+			"HTTP/1.1 200 OK\r\n"
+			"Transfer-Encoding: chunked\r\n"
+			"Connection: close\r\n"
+			"\r\n"
+			"6\r\nHello \r\n"
+			"6\r\nchunks\r\n"
+			"0\r\n\r\n"
+		};
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-progress-chunked-test.bin";
+
+	uint64_t lastReceived = 0;
+	bool anyTotalKnown = false;
+	size_t calls = 0;
+
+	ASSERT_TRUE(client.download(serverURI(server, "/chunked"), filepath, [&] (uint64_t bytesReceived, std::optional< uint64_t > bytesTotal) {
+		lastReceived = bytesReceived;
+		anyTotalKnown = anyTotalKnown || bytesTotal.has_value();
+		calls++;
+	}));
+
+	EXPECT_GE(calls, 1U);
+	EXPECT_EQ(lastReceived, std::string{"Hello chunks"}.size());
+	EXPECT_FALSE(anyTotalKnown);
+
+	std::filesystem::remove(filepath);
+}
+
+TEST(NetworkHTTPSClient, downloadWithoutHookStillWorks)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return plainResponse("no hook");
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-nohook-test.bin";
+
+	ASSERT_TRUE(client.download(serverURI(server, "/plain"), filepath));
 
 	std::filesystem::remove(filepath);
 }
