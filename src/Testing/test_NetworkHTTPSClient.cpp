@@ -465,6 +465,233 @@ TEST(NetworkHTTPSClient, downloadFailsOnErrorStatus)
 	EXPECT_FALSE(std::filesystem::exists(filepath));
 }
 
+TEST(NetworkHTTPSClient, refusesHostWithInjectedCRLF)
+{
+	/* The host reaches a CONNECT request line, a Host: header and SNI. Percent-decoding used to
+	 * let CR/LF through, i.e. request smuggling. URIDomain must refuse the host outright. */
+	const Network::URI uri{"https://exam%0d%0aX-Smuggled:%20yes%0d%0aple.com/asset.bin"};
+
+	EXPECT_TRUE(uri.uriDomain().hostname().name().empty());
+
+	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
+
+	Network::HTTPSClient client{tlsContext};
+
+	EXPECT_FALSE(client.get(uri).has_value());
+}
+
+TEST(NetworkHTTPSClient, refusesHostWithControlCharacters)
+{
+	for ( const auto * raw : {"https://ex%00ample.com/", "https://ex%20ample.com/", "https://ex%09ample.com/"} )
+	{
+		const Network::URI uri{raw};
+
+		EXPECT_TRUE(uri.uriDomain().hostname().name().empty()) << raw;
+	}
+}
+
+TEST(NetworkHTTPSClient, refusesOutOfRangePortInsteadOfFallingBackTo443)
+{
+	/* "https://host:99999/" used to connect to 443 — a typo or a hostile input silently reaching
+	 * a different service. A declared-but-invalid port must refuse the URI. */
+	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
+
+	Network::HTTPSClient client{tlsContext};
+
+	EXPECT_FALSE(client.get(Network::URI{"https://localhost:99999/x"}).has_value());
+	EXPECT_FALSE(client.get(Network::URI{"https://localhost:abc/x"}).has_value());
+}
+
+TEST(NetworkHTTPSClient, ipv6LiteralIsResolvedWithoutItsBrackets)
+{
+	/* The authority keeps the brackets ("[::1]"), getaddrinfo() must not see them. Port 1 is
+	 * closed, so a stripped literal fails at CONNECT — never at resolution. */
+	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
+
+	Network::HTTPSClientOptions options;
+	options.transportTimeouts.connectTimeout = std::chrono::milliseconds{2000};
+
+	Network::HTTPSClient client{tlsContext, options};
+
+	EXPECT_FALSE(client.get(Network::URI{"https://[::1]:1/x"}).has_value());
+}
+
+TEST(NetworkHTTPSClient, truncatedUntilCloseBodyIsRejected)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	/* No Content-Length, no Transfer-Encoding: the body ends when the connection ends. The server
+	 * then drops the connection WITHOUT close_notify — a truncated body must not be "complete". */
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return std::string{
+			"HTTP/1.1 200 OK\r\n"
+			"Content-Type: application/octet-stream\r\n"
+			"Connection: close\r\n"
+			"\r\n"
+			"half-an-asset"
+		};
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	server.setAbortWithoutCloseNotify(true);
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-truncated-untilclose.bin";
+
+	EXPECT_FALSE(client.download(serverURI(server, "/asset.bin"), filepath));
+	EXPECT_FALSE(std::filesystem::exists(filepath));
+}
+
+TEST(NetworkHTTPSClient, inMemoryBodyIsCapped)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	std::string payload(200000, 'x');
+
+	HTTPSTestServer server{credentials, [&payload] (const std::string & /*request*/) {
+		return plainResponse(payload);
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClientOptions options;
+	options.maxInMemoryBodySize = 64 * 1024;
+
+	Network::HTTPSClient client{tlsContext, options};
+
+	/* Over the ceiling: refused rather than buffered whole. */
+	EXPECT_FALSE(client.get(serverURI(server, "/big.txt")).has_value());
+}
+
+TEST(NetworkHTTPSClient, downloadIsCappedByMaxDownloadSize)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	std::string payload(200000, 'y');
+
+	HTTPSTestServer server{credentials, [&payload] (const std::string & /*request*/) {
+		return plainResponse(payload);
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClientOptions options;
+	options.maxDownloadSize = 64 * 1024;
+
+	Network::HTTPSClient client{tlsContext, options};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-capped.bin";
+
+	EXPECT_FALSE(client.download(serverURI(server, "/big.bin"), filepath));
+	EXPECT_FALSE(std::filesystem::exists(filepath));
+}
+
+TEST(NetworkHTTPSClient, headStaysHeadAcrossA303)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	/* RFC 9110 §15.4.4 exempts HEAD from the 303 method rewrite. */
+	HTTPSTestServer server{credentials, [] (const std::string & request) -> std::string {
+		if ( requestTarget(request) == "/start" )
+		{
+			return redirectResponse(303, "/final");
+		}
+
+		if ( request.rfind("HEAD ", 0) != 0 )
+		{
+			return plainResponse("the 303 turned HEAD into GET");
+		}
+
+		return std::string{
+			"HTTP/1.1 200 OK\r\n"
+			"Content-Type: text/plain\r\n"
+			"Content-Length: 12\r\n"
+			"Connection: close\r\n"
+			"\r\n"
+		};
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto result = client.head(serverURI(server, "/start"));
+
+	ASSERT_TRUE(result.has_value());
+	EXPECT_EQ(result->response.codeResponse(), 200);
+	EXPECT_TRUE(result->body.empty());
+}
+
+TEST(NetworkHTTPSClient, emptyHeaderValueDoesNotRejectTheResponse)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	/* RFC 9110 §5.5 allows an empty field value; it used to make the whole response unparseable. */
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return std::string{
+			"HTTP/1.1 200 OK\r\n"
+			"X-Cache:\r\n"
+			"Content-Type: text/plain\r\n"
+			"Content-Length: 2\r\n"
+			"Connection: close\r\n"
+			"\r\n"
+			"ok"
+		};
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto result = client.get(serverURI(server, "/empty-header"));
+
+	ASSERT_TRUE(result.has_value());
+	EXPECT_EQ(result->body, "ok");
+	EXPECT_TRUE(result->response.value("X-Cache").empty());
+}
+
+TEST(NetworkHTTPSClient, downloadOfAnEmptyBodyStillReportsProgressOnce)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return plainResponse({});
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-empty.bin";
+
+	size_t calls = 0;
+	uint64_t received = 42;
+
+	ASSERT_TRUE(client.download(serverURI(server, "/empty.bin"), filepath, [&calls, &received] (uint64_t bytesReceived, std::optional< uint64_t > /*bytesTotal*/) {
+		calls++;
+		received = bytesReceived;
+	}));
+
+	EXPECT_EQ(calls, 1U);
+	EXPECT_EQ(received, 0U);
+
+	std::filesystem::remove(filepath);
+}
+
 TEST(NetworkHTTPSClient, refusesPlainHTTPScheme)
 {
 	asio::ssl::context tlsContext{asio::ssl::context::tls_client};

@@ -27,6 +27,10 @@
 #include "URIDomain.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
+#include <ranges>
+
+/* STL inclusions. */
 #include <cctype>
 #include <sstream>
 #include <string>
@@ -47,6 +51,42 @@ namespace EmEn::Base::Network
 		 * @param string The string.
 		 * @return bool
 		 */
+		/**
+		 * @brief Returns whether a decoded host is a legal one: a bracketed IP literal, or a
+		 * hostname made of unreserved DNS characters only.
+		 * @note Refuses CR/LF/NUL/space/'@'/':' — the bytes that turn a host into an injection
+		 * into the CONNECT line, the Host: header or SNI (see the caller).
+		 */
+		bool
+		isValidHost (const std::string & host) noexcept
+		{
+			if ( host.empty() )
+			{
+				return true;
+			}
+
+			if ( host.front() == '[' )
+			{
+				if ( host.back() != ']' || host.size() < 4 )
+				{
+					return false;
+				}
+
+				return std::ranges::all_of(host.begin() + 1, host.end() - 1, [] (char character) {
+					return std::isxdigit(static_cast< unsigned char >(character)) != 0 || character == ':' || character == '.' || character == '%';
+				});
+			}
+
+			if ( host.size() > 253 )
+			{
+				return false;
+			}
+
+			return std::ranges::all_of(host, [] (char character) {
+				return std::isalnum(static_cast< unsigned char >(character)) != 0 || character == '.' || character == '-' || character == '_';
+			});
+		}
+
 		bool
 		isAllDigits (const std::string & string) noexcept
 		{
@@ -94,8 +134,9 @@ namespace EmEn::Base::Network
 			return;
 		}
 
-		/* userinfo — everything before the first '@' (host never contains one). */
-		if ( const auto at = rawString.find('@'); at != std::string::npos )
+		/* userinfo — everything before the LAST '@' (RFC 3986 §3.2: the host itself never
+		 * contains one, but userinfo may carry an encoded '@'). */
+		if ( const auto at = rawString.rfind('@'); at != std::string::npos )
 		{
 			this->parseUserInfos(rawString.substr(0, at));
 
@@ -138,6 +179,11 @@ namespace EmEn::Base::Network
 			host = rawString.substr(0, colon);
 			port = rawString.substr(colon + 1);
 		}
+		else if ( const auto trailing = rawString.rfind(':'); trailing != std::string::npos && trailing + 1 == rawString.size() && rawString.find('[') == std::string::npos )
+		{
+			/* "host:" — same case, isAllDigits("") being false. */
+			host = rawString.substr(0, trailing);
+		}
 		else
 		{
 			host = rawString;
@@ -156,25 +202,37 @@ namespace EmEn::Base::Network
 				}
 				else
 				{
+					/* NOTE: a declared-but-invalid port must not silently become the scheme's
+					 * default port downstream — it is recorded as such. */
+					m_portDeclaredInvalid = true;
+
 					Logging::error(Tag, "URIDomain(), port '" + port + "' out of range, ignored.");
 				}
 			}
 			else
 			{
+				m_portDeclaredInvalid = true;
+
 				Logging::error(Tag, "URIDomain(), non-numeric port '" + port + "', ignored.");
 			}
 		}
 
 		/* Host is case-insensitive (RFC 3986 §6.2.2.1) and percent-decoded. A
 		 * bracketed IP-literal keeps its brackets and is not further decoded. */
-		if ( !host.empty() && host.front() == '[' )
+		const auto decodedHost = host.empty() || host.front() == '[' ? host : PercentEncoding::decode(host);
+
+		/* ⚠️ The decoded host reaches a CONNECT request line, a Host: header, SNI and the resolver.
+		 * Percent-decoding can produce CR, LF, NUL, spaces or a second ':' — i.e. request smuggling
+		 * and header injection — so anything that is not a legal host is refused here, once, for
+		 * every consumer. */
+		if ( !isValidHost(decodedHost) )
 		{
-			m_hostname = Hostname::fromString(toLowerASCII(host));
+			Logging::error(Tag, "URIDomain(), illegal host '" + PercentEncoding::encode(decodedHost, PercentEncoding::Component::Userinfo) + "' refused.");
+
+			return;
 		}
-		else
-		{
-			m_hostname = Hostname::fromString(toLowerASCII(PercentEncoding::decode(host)));
-		}
+
+		m_hostname = Hostname::fromString(toLowerASCII(decodedHost));
 	}
 
 	void

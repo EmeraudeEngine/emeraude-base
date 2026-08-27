@@ -175,6 +175,18 @@ namespace EmEn::Base::Testing
 			 * @param credentials The PEM credentials (see generateServerCredentials()).
 			 * @param handler Builds the raw response bytes for a raw request [std::move].
 			 */
+			/**
+			 * @brief Makes every session end by dropping the TCP connection WITHOUT a TLS
+			 * close_notify — the truncation-attack signature a client must not accept as a
+			 * clean end of stream.
+			 * @return void
+			 */
+			void
+			setAbortWithoutCloseNotify (bool state) noexcept
+			{
+				m_abortWithoutCloseNotify = state;
+			}
+
 			HTTPSTestServer (const ServerCredentials & credentials, RequestHandler handler, bool proxyMode = false) noexcept
 				: m_handler(std::move(handler)),
 				m_proxyMode(proxyMode)
@@ -382,6 +394,17 @@ namespace EmEn::Base::Testing
 
 				asio::write(stream, asio::buffer(response), error);
 
+				if ( m_abortWithoutCloseNotify )
+				{
+					/* Hard reset: no close_notify, no FIN — exactly what a truncation attack (or a
+					 * crashing origin) looks like on the wire. */
+					asio::error_code ignored;
+					stream.lowest_layer().set_option(asio::socket_base::linger{true, 0}, ignored);
+					stream.lowest_layer().close(ignored);
+
+					return;
+				}
+
 				stream.shutdown(error);
 			}
 
@@ -396,5 +419,6 @@ namespace EmEn::Base::Testing
 			std::atomic< size_t > m_tunnelCount{0};
 			uint16_t m_port{0};
 			bool m_proxyMode{false};
+			std::atomic< bool > m_abortWithoutCloseNotify{false};
 	};
 }

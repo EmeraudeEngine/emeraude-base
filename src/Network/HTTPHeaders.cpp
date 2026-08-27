@@ -72,9 +72,12 @@ namespace EmEn::Base::Network
 
 		for ( const auto & line : lines )
 		{
-			const auto chunks = String::explode(line, ':', false, 1);
+			/* NOTE: split on the FIRST colon manually. String::explode() with keepEmpty=false
+			 * drops an empty tail, which used to turn a legal empty field value ("X-Cache:",
+			 * RFC 9110 §5.5) into a parse error that rejected the whole response. */
+			const auto separator = line.find(':');
 
-			if ( chunks.size() != 2 )
+			if ( separator == std::string::npos || separator == 0 )
 			{
 				Logging::warning("Network::HTTPHeaders", "parse(), unable to parse header line : " + line);
 
@@ -83,7 +86,7 @@ namespace EmEn::Base::Network
 				continue;
 			}
 
-			this->add(String::trim(chunks[0]), String::trim(chunks[1]));
+			this->add(String::trim(line.substr(0, separator)), String::trim(line.substr(separator + 1)));
 		}
 
 		return errors == 0;

@@ -52,6 +52,41 @@ namespace EmEn::Base::Network
 
 	}
 
+	namespace
+	{
+		/**
+		 * @brief Returns the host stripped of its IPv6 brackets, for the resolver and the
+		 * certificate check.
+		 * @note A URI carries an IPv6 literal bracketed ("[::1]") because the authority grammar
+		 * needs it; getaddrinfo() and X509_check_ip() want the bare address.
+		 */
+		std::string
+		unbracket (const std::string & host) noexcept
+		{
+			if ( host.size() >= 2 && host.front() == '[' && host.back() == ']' )
+			{
+				return host.substr(1, host.size() - 2);
+			}
+
+			return host;
+		}
+
+		/**
+		 * @brief Returns whether a host is an IP literal rather than a name.
+		 * @note RFC 6066 §3 forbids an IP literal in SNI, and an IP target must be verified
+		 * against the certificate's iPAddress SAN (X509_check_ip), not X509_check_host.
+		 */
+		bool
+		isIPLiteral (const std::string & host) noexcept
+		{
+			asio::error_code error;
+
+			static_cast< void >(asio::ip::make_address(host, error));
+
+			return !error;
+		}
+	}
+
 	TLSConnection::~TLSConnection ()
 	{
 		this->disconnect();
@@ -84,7 +119,9 @@ namespace EmEn::Base::Network
 		asio::error_code resolveError{asio::error::would_block};
 		asio::ip::tcp::resolver::results_type endpoints;
 
-		resolver.async_resolve(host, std::to_string(port), [&resolveError, &endpoints] (const asio::error_code & error, asio::ip::tcp::resolver::results_type results) {
+		const auto resolvableHost = unbracket(host);
+
+		resolver.async_resolve(resolvableHost, std::to_string(port), [&resolveError, &endpoints] (const asio::error_code & error, asio::ip::tcp::resolver::results_type results) {
 			resolveError = error;
 			endpoints = std::move(results);
 		});
@@ -120,8 +157,11 @@ namespace EmEn::Base::Network
 	bool
 	TLSConnection::tunnelThroughProxy (const std::string & targetHost, uint16_t targetPort) noexcept
 	{
-		/* Plaintext CONNECT over the raw socket (before any TLS). */
-		const auto authority = targetHost + ':' + std::to_string(targetPort);
+		/* Plaintext CONNECT over the raw socket (before any TLS). RFC 7230 §5.4: an IPv6
+		 * literal keeps its brackets in an authority. The host itself was validated by
+		 * URIDomain (no CR/LF/NUL can reach this request line). */
+		const auto bare = unbracket(targetHost);
+		const auto authority = ( bare.find(':') != std::string::npos ? '[' + bare + ']' : bare ) + ':' + std::to_string(targetPort);
 		const auto request = "CONNECT " + authority + " HTTP/1.1\r\nHost: " + authority + "\r\n\r\n";
 
 		asio::error_code writeError{asio::error::would_block};
@@ -198,11 +238,16 @@ namespace EmEn::Base::Network
 	bool
 	TLSConnection::performHandshake (const std::string & targetHost) noexcept
 	{
-		/* TLS setup: SNI, chain verification against the context trust store,
-		 * hostname verification (X509_check_host). Always enforced. */
-		if ( SSL_set_tlsext_host_name(m_stream.native_handle(), targetHost.c_str()) != 1 )
+		/* TLS setup: SNI, chain verification against the context trust store, and identity
+		 * verification. Always enforced. */
+		const auto verifiedHost = unbracket(targetHost);
+		const auto targetIsIP = isIPLiteral(verifiedHost);
+
+		/* RFC 6066 §3: an IP literal must NOT be sent as SNI — some servers reject the
+		 * handshake outright when it is. */
+		if ( !targetIsIP && SSL_set_tlsext_host_name(m_stream.native_handle(), verifiedHost.c_str()) != 1 )
 		{
-			Logging::error(Tag, "performHandshake(), unable to set the SNI hostname '" + targetHost + "' !");
+			Logging::error(Tag, "performHandshake(), unable to set the SNI hostname '" + verifiedHost + "' !");
 
 			return false;
 		}
@@ -213,7 +258,36 @@ namespace EmEn::Base::Network
 
 		if ( !setupError )
 		{
-			m_stream.set_verify_callback(asio::ssl::host_name_verification{targetHost}, setupError);
+			if ( targetIsIP )
+			{
+				/* An IP target is verified against the certificate's iPAddress SAN: X509_check_host,
+				 * which asio::ssl::host_name_verification uses, would reject a correctly-issued
+				 * IP-SAN certificate. Only the leaf (depth 0) carries the identity. */
+				m_stream.set_verify_callback([verifiedHost] (bool preverified, asio::ssl::verify_context & context) {
+					if ( !preverified )
+					{
+						return false;
+					}
+
+					if ( X509_STORE_CTX_get_error_depth(context.native_handle()) != 0 )
+					{
+						return true;
+					}
+
+					auto * certificate = X509_STORE_CTX_get_current_cert(context.native_handle());
+
+					if ( certificate == nullptr )
+					{
+						return false;
+					}
+
+					return X509_check_ip_asc(certificate, verifiedHost.c_str(), 0) == 1;
+				}, setupError);
+			}
+			else
+			{
+				m_stream.set_verify_callback(asio::ssl::host_name_verification{verifiedHost}, setupError);
+			}
 		}
 
 		if ( setupError )
@@ -341,12 +415,24 @@ namespace EmEn::Base::Network
 			return bytesRead;
 		}
 
-		/* Clean end of stream: TLS close_notify or TCP EOF. */
-		if ( readError == asio::ssl::error::stream_truncated || readError == asio::error::eof )
+		/* Clean end of stream: the peer sent close_notify (or the TCP stream ended after it). */
+		if ( readError == asio::error::eof )
 		{
 			m_connected = false;
 
 			return 0;
+		}
+
+		/* ⚠️ stream_truncated means the connection was cut WITHOUT close_notify — the signature of
+		 * a truncation attack. Reporting it as a clean end lets a half-delivered body framed by
+		 * "read until close" be accepted as complete. It is an error, not an end. */
+		if ( readError == asio::ssl::error::stream_truncated )
+		{
+			m_connected = false;
+
+			Logging::error(Tag, "read(), the peer closed the connection without close_notify: the response is truncated.");
+
+			return std::nullopt;
 		}
 
 		Logging::error(Tag, "read(), unable to read from the peer : " + readError.message());

@@ -173,14 +173,16 @@ namespace EmEn::Base::Network::TrustStore
 
 		size_t importedCount = 0;
 
-		/* ROOT holds the trusted anchors; CA holds intermediates that help
-		 * building chains when a server sends an incomplete one. */
+		/* ⚠️ ROOT only. The Windows "CA" store holds intermediates, is per-user and is writable
+		 * without administrator rights; importing it with X509_STORE_add_cert would install every
+		 * one of those certificates as a TRUST ANCHOR — any process running as the user could then
+		 * mint a chain this client accepts, bypassing the Windows disallowed-certificate list and
+		 * the EKU constraints. Chain completion is the server's job (RFC 8446 §4.4.2). */
 		const auto rootOpened = importWindowsSystemStore(store, L"ROOT", importedCount);
-		const auto caOpened = importWindowsSystemStore(store, L"CA", importedCount);
 
-		if ( !rootOpened && !caOpened )
+		if ( !rootOpened )
 		{
-			Logging::error(Tag, "applySystemTrustStore(), unable to open the Windows system certificate stores !");
+			Logging::error(Tag, "applySystemTrustStore(), unable to open the Windows ROOT certificate store !");
 
 			return false;
 		}

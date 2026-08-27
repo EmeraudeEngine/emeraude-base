@@ -348,3 +348,25 @@ size, total known throughout), chunked (total unknown, final == decoded size), a
 call unchanged. Consumer: the engine's `Net::Manager` throttles it to one `Progress` notification
 per ticket per main-loop cycle.
 
+## Hardening pass — 2026-08-27 (post-closure audit)
+
+A hostile review of the shipped stack found the following; all are fixed, each with a regression
+test (suite 2009/2009, live 3/3):
+
+| Was | Now |
+|---|---|
+| The host was percent-**decoded** and never validated, then concatenated into the proxy `CONNECT` line, `Host:` and SNI → CRLF injection / request smuggling from a URL or a hostile `Location` | `URIDomain` validates the decoded host once, for every consumer: a bracketed IP literal, or `[A-Za-z0-9.\-_]` up to 253 bytes. Anything else (CR, LF, NUL, space, `@`, a second `:`) leaves the host empty and the URI unusable |
+| `maxBodySize` defaulted to `UINT64_MAX`, and the body was drained only for a File sink on a 2xx → a 404 body, a redirect body or a `head()` body accumulated whole in RAM | Two explicit ceilings in `HTTPSClientOptions`: `maxInMemoryBodySize` (64 MiB) and `maxDownloadSize` (4 GiB), applied per sink; a body that is not kept is cleared on every iteration |
+| The Windows **`CA`** store (intermediates, per-user, writable without admin) was imported through `X509_STORE_add_cert`, i.e. as **trust anchors** | `ROOT` only. Chain completion is the server's job (RFC 8446 §4.4.2) |
+| `ssl::error::stream_truncated` (connection cut **without** `close_notify`) was reported as a clean EOF → a half-delivered read-until-close body passed as `Complete` | It is an error. `TLSConnection::read()` returns `std::nullopt` and says so; `download()` fails and leaves no file |
+| An IPv6 literal kept its brackets all the way to `getaddrinfo` → `https://[::1]/` could never connect; SNI was sent for IP literals (RFC 6066 forbids it) and they were verified with `X509_check_host` | The brackets are stripped for the resolver and the identity check, kept for the CONNECT authority; SNI is skipped for an IP literal, which is verified with `X509_check_ip_asc` against the iPAddress SAN |
+| `download()` opened (and truncated) the destination before the status was known, never checked the final flush, and left a partial file on a transport failure → a full disk reported success | The file is removed on every failure exit, and `flush()`/`close()` are checked before success |
+| A declared-but-invalid port (`:99999`, `:abc`) was dropped and the scheme's default used → `https://host:99999/` connected to 443 | `URIDomain::hasInvalidPort()` records it and the client refuses the URI |
+| A `303` rewrote **HEAD** into GET (RFC 9110 §15.4.4 exempts it), whose body was then buffered | HEAD survives a 303 |
+| One header with an empty value (`X-Cache:`, legal per RFC 9110 §5.5) rejected the whole response | The header line is split on its first colon; an empty value is kept |
+| A zero-length 2xx body never called the progress hook, though the contract promises a terminal call | One final call is emitted |
+
+Not fixed here, tracked separately: `totalTimeout` is still not a hard budget (per-operation timeouts
+add up, DNS is not cancellable), error reporting is still `bool`/`nullopt` with no cause, and the URI
+layer still decodes `%2F` and re-orders query parameters (breaks signed URLs).
+

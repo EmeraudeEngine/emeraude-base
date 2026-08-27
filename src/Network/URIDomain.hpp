@@ -274,6 +274,20 @@ namespace EmEn::Base::Network
 				return m_hostname.empty();
 			}
 
+			/**
+			 * @brief Returns whether the authority declared a port that could not be used.
+			 * @note Distinguishes "no port given" (a consumer may apply the scheme's default) from
+			 * "port present but out of range / non-numeric" (the URI must be refused, never
+			 * silently downgraded to the default port).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			hasInvalidPort () const noexcept
+			{
+				return m_portDeclaredInvalid;
+			}
+
 		private:
 
 			/**
@@ -297,6 +311,7 @@ namespace EmEn::Base::Network
 			std::map< std::string, std::string > m_options;
 			Hostname m_hostname;
 			uint32_t m_port{0};
+			bool m_portDeclaredInvalid{false};
 	};
 
 	/**

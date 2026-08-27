@@ -78,8 +78,26 @@ namespace EmEn::Base::Network
 		/** @brief Total budget for a whole request including all redirect hops. */
 		std::chrono::milliseconds totalTimeout{120000};
 
-		/** @brief Parser hardening limits (header/chunk caps, body cap). */
+		/**
+		 * @brief Parser hardening limits (header/chunk caps, body cap).
+		 * @note The body cap defaults to maxInMemoryBodySize below: an in-memory body is held
+		 * whole, so it must never be unbounded.
+		 */
 		HTTPResponseParserLimits parserLimits{};
+
+		/**
+		 * @brief Ceiling for a body held in memory — get(), and any redirect or error body.
+		 * @note Applied to parserLimits.maxBodySize when it was left at its (unbounded) default,
+		 * so a hostile or misbehaving server cannot make the process grow without limit.
+		 */
+		uint64_t maxInMemoryBodySize{64ULL * 1024 * 1024};
+
+		/**
+		 * @brief Ceiling for a body streamed to a file by download().
+		 * @note Much larger than the in-memory one: the body never sits in RAM. Still bounded, so
+		 * an endless response cannot fill the disk silently.
+		 */
+		uint64_t maxDownloadSize{4ULL * 1024 * 1024 * 1024};
 
 		/** @brief Value sent as the User-Agent header. */
 		std::string userAgent{"EmeraudeBase/1.0"};

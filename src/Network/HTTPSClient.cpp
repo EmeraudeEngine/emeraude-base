@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <array>
 #include <fstream>
+#include <limits>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
@@ -68,6 +69,13 @@ namespace EmEn::Base::Network
 			host = uri.uriDomain().hostname().name();
 
 			if ( host.empty() )
+			{
+				return false;
+			}
+
+			/* A port that was written but rejected by the parser (out of range, non-numeric) must
+			 * NOT fall back to 443: "https://host:99999/" would silently connect elsewhere. */
+			if ( uri.uriDomain().hasInvalidPort() )
 			{
 				return false;
 			}
@@ -186,6 +194,11 @@ namespace EmEn::Base::Network
 
 		if ( !result.has_value() )
 		{
+			/* performHop() already discarded its own partial file; make sure a file left by a
+			 * previous attempt is not mistaken for this one's result. */
+			std::error_code removeError;
+			std::filesystem::remove(filepath, removeError);
+
 			return false;
 		}
 
@@ -329,7 +342,8 @@ namespace EmEn::Base::Network
 			 *  - 303 always becomes GET;
 			 *  - 301/302 turn a POST into GET (established practice);
 			 *  - 307/308 preserve the method (and would preserve the body). */
-			if ( statusCode == 303 )
+			/* RFC 9110 §15.4.4 exempts HEAD from the 303 rewrite. */
+			if ( statusCode == 303 && method != HTTPRequest::Method::HEAD )
 			{
 				method = HTTPRequest::Method::GET;
 			}
@@ -397,7 +411,16 @@ namespace EmEn::Base::Network
 			return std::nullopt;
 		}
 
-		HTTPResponseParser parser{m_options.parserLimits};
+		/* Body ceiling per sink: a file body may be large because it never sits in RAM; anything
+		 * held in memory (get(), a redirect body, an error body) gets the in-memory ceiling. */
+		auto parserLimits = m_options.parserLimits;
+
+		if ( parserLimits.maxBodySize == std::numeric_limits< uint64_t >::max() )
+		{
+			parserLimits.maxBodySize = sink == BodySink::File ? m_options.maxDownloadSize : m_options.maxInMemoryBodySize;
+		}
+
+		HTTPResponseParser parser{parserLimits};
 
 		if ( method == HTTPRequest::Method::HEAD )
 		{
@@ -418,6 +441,20 @@ namespace EmEn::Base::Network
 			}
 		}
 
+		/* Anything that leaves this function without a complete 2xx body must not leave a
+		 * truncated file behind: the caller asked for a file, not for a fragment. */
+		const auto discardPartialFile = [&fileStream, sink, &filepath] () noexcept {
+			if ( sink != BodySink::File )
+			{
+				return;
+			}
+
+			fileStream.close();
+
+			std::error_code removeError;
+			std::filesystem::remove(filepath, removeError);
+		};
+
 		std::array< char, TransportReadBufferSize > buffer{};
 
 		/* Progress total: the Content-Length of a 2xx hop, when the body is framed by it (a
@@ -434,6 +471,8 @@ namespace EmEn::Base::Network
 			{
 				Logging::error(Tag, "performHop(), the total time budget expired.");
 
+				discardPartialFile();
+
 				return std::nullopt;
 			}
 
@@ -441,6 +480,8 @@ namespace EmEn::Base::Network
 
 			if ( !bytesRead.has_value() )
 			{
+				discardPartialFile();
+
 				return std::nullopt;
 			}
 
@@ -467,6 +508,8 @@ namespace EmEn::Base::Network
 					if ( fileStream.fail() )
 					{
 						Logging::error(Tag, "performHop(), unable to write to '" + filepath.string() + "'.");
+
+						discardPartialFile();
 
 						return std::nullopt;
 					}
@@ -496,11 +539,49 @@ namespace EmEn::Base::Network
 					}
 				}
 			}
+
+			/* A body that is not kept must not accumulate: an error body during a download, a
+			 * redirect body, or a HEAD/Discard body would otherwise be buffered whole. */
+			if ( sink != BodySink::Memory )
+			{
+				parser.body().clear();
+			}
 		}
 
 		if ( result != HTTPResponseParser::Result::Complete )
 		{
+			discardPartialFile();
+
 			return std::nullopt;
+		}
+
+		if ( sink == BodySink::File )
+		{
+			/* ⚠️ The destructor flushes and SWALLOWS the error: a full disk would be reported as a
+			 * successful download. The last flush is checked here instead. */
+			fileStream.flush();
+			fileStream.close();
+
+			if ( fileStream.fail() )
+			{
+				Logging::error(Tag, "performHop(), unable to flush '" + filepath.string() + "' (disk full?).");
+
+				discardPartialFile();
+
+				return std::nullopt;
+			}
+
+			/* A zero-length 2xx body never entered the write branch: the hook still owes the
+			 * consumer its terminal call. */
+			if ( progress != nullptr && parser.bodyBytesDecoded() == 0 )
+			{
+				const auto statusCode = parser.response().codeResponse();
+
+				if ( statusCode >= 200 && statusCode <= 299 )
+				{
+					(*progress)(0, progressTotal);
+				}
+			}
 		}
 
 		HTTPResult httpResult;
