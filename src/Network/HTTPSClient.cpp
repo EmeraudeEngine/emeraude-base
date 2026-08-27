@@ -188,8 +188,17 @@ namespace EmEn::Base::Network
 	}
 
 	bool
-	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress) const noexcept
+	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress, DownloadReport * report) const noexcept
 	{
+		if ( report != nullptr )
+		{
+			*report = {};
+		}
+
+		/* The transport records its own coarse reason; anything it did not classify is a protocol
+		 * or local-I/O problem, which run() distinguishes through m_lastOutcome. */
+		m_lastOutcome = DownloadOutcome::Protocol;
+
 		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath, progress ? &progress : nullptr);
 
 		if ( !result.has_value() )
@@ -199,10 +208,21 @@ namespace EmEn::Base::Network
 			std::error_code removeError;
 			std::filesystem::remove(filepath, removeError);
 
+			if ( report != nullptr )
+			{
+				report->outcome = m_lastOutcome;
+			}
+
 			return false;
 		}
 
 		const auto statusCode = result->response.codeResponse();
+
+		if ( report != nullptr )
+		{
+			report->statusCode = static_cast< uint16_t >(statusCode);
+			report->contentType = result->response.value(HTTPResponse::ContentType);
+		}
 
 		if ( statusCode < 200 || statusCode > 299 )
 		{
@@ -210,6 +230,11 @@ namespace EmEn::Base::Network
 
 			std::error_code removeError;
 			std::filesystem::remove(filepath, removeError);
+
+			if ( report != nullptr )
+			{
+				report->outcome = DownloadOutcome::HTTPStatus;
+			}
 
 			return false;
 		}
@@ -364,6 +389,8 @@ namespace EmEn::Base::Network
 		std::string host;
 		uint16_t port = 0;
 
+		m_lastOutcome = DownloadOutcome::BadScheme;
+
 		if ( !extractHTTPSTarget(uri, host, port) )
 		{
 			Logging::error(Tag, "performHop(), only https URIs with a host are supported (got '" + uri.scheme() + "').");
@@ -403,8 +430,15 @@ namespace EmEn::Base::Network
 
 		if ( !connected )
 		{
+			/* Nothing was ever spoken to, or the peer refused the handshake: TLSConnection logged
+			 * which of the two it was. */
+			m_lastOutcome = DownloadOutcome::Unreachable;
+
 			return std::nullopt;
 		}
+
+		/* Past the handshake: anything from here is protocol or local I/O. */
+		m_lastOutcome = DownloadOutcome::Protocol;
 
 		if ( !connection.write(request.data(), request.size()) )
 		{
@@ -435,6 +469,8 @@ namespace EmEn::Base::Network
 
 			if ( !fileStream.is_open() )
 			{
+				m_lastOutcome = DownloadOutcome::LocalIO;
+
 				Logging::error(Tag, "performHop(), unable to open '" + filepath.string() + "' for writing.");
 
 				return std::nullopt;
@@ -469,6 +505,8 @@ namespace EmEn::Base::Network
 		{
 			if ( std::chrono::steady_clock::now() >= deadline )
 			{
+				m_lastOutcome = DownloadOutcome::Timeout;
+
 				Logging::error(Tag, "performHop(), the total time budget expired.");
 
 				discardPartialFile();
@@ -507,6 +545,8 @@ namespace EmEn::Base::Network
 
 					if ( fileStream.fail() )
 					{
+						m_lastOutcome = DownloadOutcome::LocalIO;
+
 						Logging::error(Tag, "performHop(), unable to write to '" + filepath.string() + "'.");
 
 						discardPartialFile();
@@ -564,6 +604,8 @@ namespace EmEn::Base::Network
 
 			if ( fileStream.fail() )
 			{
+				m_lastOutcome = DownloadOutcome::LocalIO;
+
 				Logging::error(Tag, "performHop(), unable to flush '" + filepath.string() + "' (disk full?).");
 
 				discardPartialFile();

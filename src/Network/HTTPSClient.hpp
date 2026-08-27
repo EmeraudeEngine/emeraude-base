@@ -58,6 +58,60 @@ namespace EmEn::Base::Network
 	using DownloadProgress = std::function< void (uint64_t bytesReceived, std::optional< uint64_t > bytesTotal) >;
 
 	/**
+	 * @brief Why a download ended the way it did.
+	 * @note A bool cannot tell a 404 from an expired certificate, and the consumer has to show
+	 * the user something actionable. Coarse on purpose: one value per thing a caller would do
+	 * differently.
+	 */
+	enum class DownloadOutcome : uint8_t
+	{
+		Success,        /* 2xx, body complete, file written. */
+		BadScheme,      /* Not https, or a port that was declared and invalid. */
+		Unreachable,    /* DNS, connect, proxy tunnel: nothing was ever spoken to. */
+		TLSFailure,     /* Handshake or certificate verification refused the peer. */
+		Timeout,        /* A per-operation or total deadline expired. */
+		Protocol,       /* Malformed, truncated, too large, or a redirect that could not be followed. */
+		HTTPStatus,     /* The exchange completed, the status was not 2xx (see downloadStatusCode). */
+		LocalIO         /* The destination file could not be opened, written or flushed. */
+	};
+
+	/**
+	 * @brief Returns the textual name of a download outcome.
+	 * @param outcome The outcome.
+	 * @return const char *
+	 */
+	[[nodiscard]]
+	constexpr
+	const char *
+	to_cstring (DownloadOutcome outcome) noexcept
+	{
+		switch ( outcome )
+		{
+			case DownloadOutcome::Success : return "Success";
+			case DownloadOutcome::BadScheme : return "BadScheme";
+			case DownloadOutcome::Unreachable : return "Unreachable";
+			case DownloadOutcome::TLSFailure : return "TLSFailure";
+			case DownloadOutcome::Timeout : return "Timeout";
+			case DownloadOutcome::Protocol : return "Protocol";
+			case DownloadOutcome::HTTPStatus : return "HTTPStatus";
+			case DownloadOutcome::LocalIO : return "LocalIO";
+		}
+
+		return "Unknown";
+	}
+
+	/**
+	 * @brief What a download reports back beyond success: why it failed, the HTTP status it got,
+	 * and the media type the server declared (a cache keyed by URL has no filename to trust).
+	 */
+	struct DownloadReport final
+	{
+		DownloadOutcome outcome{DownloadOutcome::Success};
+		std::string contentType;
+		uint16_t statusCode{0};
+	};
+
+	/**
 	 * @brief The result of a completed HTTP exchange: parsed response + decoded body.
 	 * @note HTTPResponse itself is header-only data; the body is carried alongside.
 	 */
@@ -177,7 +231,7 @@ namespace EmEn::Base::Network
 			 * @return bool True on a 2xx response fully written to the file.
 			 */
 			[[nodiscard]]
-			bool download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress = {}) const noexcept;
+			bool download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress = {}, DownloadReport * report = nullptr) const noexcept;
 
 		private:
 
@@ -235,6 +289,10 @@ namespace EmEn::Base::Network
 			 */
 			[[nodiscard]]
 			static bool resolveRedirect (const URI & current, const std::string & location, URI & resolved) noexcept;
+
+			/* Coarse reason of the transfer in progress, set along its failure paths. Mutable
+			 * because the whole client API is const — it describes the last call, not the object. */
+			mutable DownloadOutcome m_lastOutcome{DownloadOutcome::Success};
 
 			asio::ssl::context & m_tlsContext;
 			HTTPSClientOptions m_options;

@@ -692,6 +692,67 @@ TEST(NetworkHTTPSClient, downloadOfAnEmptyBodyStillReportsProgressOnce)
 	std::filesystem::remove(filepath);
 }
 
+TEST(NetworkHTTPSClient, downloadReportsWhyItFailed)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return std::string{
+			"HTTP/1.1 404 Not Found\r\n"
+			"Content-Type: text/plain\r\n"
+			"Content-Length: 9\r\n"
+			"Connection: close\r\n"
+			"\r\n"
+			"not found"
+		};
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-report-test.bin";
+
+	/* A 404 must be distinguishable from a certificate failure and from a timeout. */
+	Network::DownloadReport report;
+
+	EXPECT_FALSE(client.download(serverURI(server, "/missing.bin"), filepath, {}, &report));
+	EXPECT_EQ(report.outcome, Network::DownloadOutcome::HTTPStatus);
+	EXPECT_EQ(report.statusCode, 404);
+	EXPECT_EQ(report.contentType, "text/plain");
+
+	/* Not https at all. */
+	Network::DownloadReport schemeReport;
+	EXPECT_FALSE(client.download(Network::URI{"http://localhost/x"}, filepath, {}, &schemeReport));
+	EXPECT_EQ(schemeReport.outcome, Network::DownloadOutcome::BadScheme);
+
+	/* Nothing listening. */
+	Network::HTTPSClientOptions quick;
+	quick.transportTimeouts.connectTimeout = std::chrono::milliseconds{1500};
+
+	Network::HTTPSClient quickClient{tlsContext, quick};
+
+	Network::DownloadReport unreachableReport;
+	EXPECT_FALSE(quickClient.download(Network::URI{"https://127.0.0.1:1/x"}, filepath, {}, &unreachableReport));
+	EXPECT_EQ(unreachableReport.outcome, Network::DownloadOutcome::Unreachable);
+
+	/* A success reports Success and the media type. */
+	HTTPSTestServer okServer{credentials, [] (const std::string & /*request*/) {
+		return plainResponse("payload");
+	}};
+	ASSERT_TRUE(okServer.isListening());
+
+	Network::DownloadReport okReport;
+	ASSERT_TRUE(client.download(serverURI(okServer, "/ok.bin"), filepath, {}, &okReport));
+	EXPECT_EQ(okReport.outcome, Network::DownloadOutcome::Success);
+	EXPECT_EQ(okReport.statusCode, 200);
+	EXPECT_EQ(okReport.contentType, "text/plain");
+
+	std::filesystem::remove(filepath);
+}
+
 TEST(NetworkHTTPSClient, refusesPlainHTTPScheme)
 {
 	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
