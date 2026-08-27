@@ -47,7 +47,6 @@ namespace EmEn
 	constexpr unsigned int BaseVersionPatch{@PROJECT_VERSION_PATCH@};
 	constexpr auto BaseVersionString{"@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@"};
 
-	constexpr auto InternetCheckDomain{"@EMERAUDE_INTERNET_CHECK_DOMAIN@"};
 	constexpr auto DefaultUserAgent{"@PROJECT_NAME@/@PROJECT_VERSION@ (" PLATFORM_TARGETED ")"};
 
 #ifdef DEBUG

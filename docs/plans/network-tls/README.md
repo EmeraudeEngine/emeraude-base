@@ -161,10 +161,11 @@ Step 1 executed on the Linux host:
 - **API surface: synchronous facade, asio inside.** `request(HTTPRequest) →
   std::optional<HTTPResponse>`-style blocking calls plus a `download(uri, path)` on the new
   client (`HTTPSClient::download`); asio-async machinery + timeouts live behind the facade;
-  the caller (engine) owns its threading. ⚠️ **As shipped, the legacy free function
-  `Network::download()` was NOT upgraded** — it still speaks cleartext and uses the throwing
-  Asio overloads (abort under `ASIO_NO_EXCEPTIONS`); the engine still calls it. Its fate is an
-  open owner decision (engine `docs/todo/net-manager-download-chain-broken.md`).
+  the caller (engine) owns its threading. The legacy free function `Network::download()` was
+  **not** upgraded but **removed** (2026-08-27, with `hasInternetConnexion()`, `Network.hpp/.cpp`
+  and the `EMERAUDE_INTERNET_CHECK_DOMAIN` option): it spoke cleartext and used the throwing Asio
+  overloads (abort under `ASIO_NO_EXCEPTIONS`). The engine's `Net::Manager` now downloads through
+  `HTTPSClient::download()`.
 - **Timeouts: full configurable set** (connect / TLS handshake / response / total) with sane
   defaults — stated as the only production-grade option, unobjected.
 

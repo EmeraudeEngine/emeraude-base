@@ -59,7 +59,7 @@ These emerged from the audit and matter for sequencing:
 | Query string → key/values | `Query::fromString` | No percent-decode, no `+`→space; 🐞 `operator<<` pre-sizes then appends → spurious empty `=` entries | A + 🐞 | round-trip query has no stray entries; `a=%20` decoded |
 | Parse HTTP req/resp headers | `HTTPHeaders::parse` | Works on clean input; any bad line fails whole parse; no size limits (header bombs) | A | oversized/folded header handled; bomb rejected |
 | `download(uri,file)` | `Network.cpp:57` | Synchronous; **no TLS**, **redirects unhandled** (`continue`s), needs Content-Length, resolves by scheme name | A | HTTPS / redirecting / chunked URL works or fails cleanly |
-| `hasInternetConnexion()` | `Network.cpp:46` | DNS-resolve only (no connect); ASIO failure → `std::abort()` | A | captive portal not reported "connected"; resolver failure returns false, not abort |
+| `hasInternetConnexion()` (**removed 2026-08-27** with `Network.cpp`) | `Network.cpp:46` | DNS-resolve only (no connect); ASIO failure → `std::abort()` | A | captive portal not reported "connected"; resolver failure returns false, not abort |
 | Exception-free operation | `asio_throw_exception.hpp` | ASIO throw path → `std::abort()` (process death) | A | internal ASIO error returns an error, never aborts |
 | `URL` class | `URL.hpp` | `@deprecated` thin shim over URI, inherits all fragility | A | — |
 

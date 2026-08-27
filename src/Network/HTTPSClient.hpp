@@ -98,8 +98,8 @@ namespace EmEn::Base::Network
 	 * (TLSConnection) and the response codec (HTTPResponseParser) into the synchronous
 	 * facade decided 2026-07-04 (see docs/plans/network-tls/README.md). The public API is
 	 * protocol-agnostic (h2-ready): HTTP/1.1, chunked and keep-alive are internal.
-	 * @note HTTPS only for now: a http:// target is refused (plaintext HTTP is a separate
-	 * concern; the legacy Network::download covers it). Redirects: https→https always,
+	 * @note HTTPS only: a http:// target is refused (plaintext HTTP is a separate concern; the
+	 * legacy Network::download() that once covered it was removed 2026-08-27). Redirects: https→https always,
 	 * http→https upgrade honored on a Location, https→http downgrade refused. Proxy
 	 * support is the next increment (needs a two-phase TLSConnection connect).
 	 * @note One connection per hop (no keep-alive reuse yet — a later optimization).

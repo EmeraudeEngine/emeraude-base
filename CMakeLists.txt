@@ -54,7 +54,6 @@ option(EMERAUDE_USE_STATIC_RUNTIME "Build with the static MSVC runtime (Windows 
 option(EMERAUDE_ENABLE_OPENMP "Enable OpenMP (used by VertexFactory)." On)
 
 # Consumed by emeraude_base_config.hpp.in
-set(EMERAUDE_INTERNET_CHECK_DOMAIN "example.com" CACHE STRING "Domain used to check internet connectivity.")
 option(EMERAUDE_DEBUG_OBSERVER_PATTERN "Debug output for the observer pattern." Off)
 option(EMERAUDE_DEBUG_PIXEL_FACTORY "Debug output for PixelFactory." Off)
 option(EMERAUDE_DEBUG_VERTEX_FACTORY "Debug output for VertexFactory." Off)

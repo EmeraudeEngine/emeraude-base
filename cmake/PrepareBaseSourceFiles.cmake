@@ -78,7 +78,6 @@ set(EMERAUDE_BASE_NETWORK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponse.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponseParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPSClient.cpp
-	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Network.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/PercentEncoding.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Query.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/TLSConnection.cpp
