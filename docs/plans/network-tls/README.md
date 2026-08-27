@@ -315,3 +315,25 @@ Non-blocking follow-ups carried past closure:
      encoded delimiters, UTF-8/IDN/punycode, embedded NUL, matrix params, 5000-deep `/..`
      underflow guard) + `PercentEncoding` round-trip/malformed. Suite **1954/1954** Release
      AND ASan/UBSan; cascade links. Owner validates Windows/macOS later.
+
+## Live-network validation (2026-08-27, Linux)
+
+The three opt-in tests (`EMERAUDE_RUN_LIVE_NETWORK_TESTS`) ran against real endpoints and
+**passed 3/3** (`NetworkHTTPSClientLive.downloadsMrBeanImageToFile`, `getReturnsImageContentType`,
+`rejectsUntrustedRealServer`), on top of the engine's own live use the same day (`Net::Manager`:
+13 566-byte and 184-byte files over TLS with 150 system CAs, an expired-certificate host refused).
+
+Diagnostics as they reach a consumer (`Logging::error`, one line each), recorded so nobody has to
+provoke them again:
+
+| Situation | Line |
+|---|---|
+| HTTP 404 (or any non-2xx on `download()`) | `[Network::HTTPSClient] download(), the server answered with status 404.` — the destination file is removed |
+| Unresolvable host | `[Network::TLSConnection] establishTcp(), unable to resolve 'no-such-host.invalid' : Host not found (authoritative)` |
+| Port closed / host down | `[Network::TLSConnection] establishTcp(), unable to reach '127.0.0.1:9' : Connection refused` |
+| Untrusted / expired certificate | handshake failure reported by `TLSConnection`, `download()` returns false; nothing written |
+
+Each failure is a `false` / `std::nullopt` to the caller — never an exception, never an abort — and
+leaves no file behind. On the engine side every one of them ends as `DownloadStatus::Error` and the
+resource falls back to its default (`ResourceTrait::failLoading()`).
+
