@@ -155,12 +155,16 @@ Step 1 executed on the Linux host:
   method semantics (303→GET, 307/308 preserve method+body), configurable cap (default 5),
   **https→http downgrade refused** (propagated as an error), http→https upgrade allowed.
 - **Proxy: basic HTTP(S) proxy IN scope** (owner-ruled, over the AI's leaner no-proxy
-  recommendation): CONNECT tunneling for https targets, `http_proxy`/`https_proxy`/`no_proxy`
-  environment variables. Accepted cost: additional test/fuzz surface.
+  recommendation): CONNECT tunneling for https targets, `https_proxy`/`no_proxy` environment
+  variables (`http_proxy` is deliberately not read: the client is HTTPS-only, so the variable
+  can never apply). Accepted cost: additional test/fuzz surface.
 - **API surface: synchronous facade, asio inside.** `request(HTTPRequest) →
-  std::optional<HTTPResponse>`-style blocking calls plus the existing `download(uri, path)`
-  upgraded to HTTPS; asio-async machinery + timeouts live behind the facade; the caller
-  (engine) owns its threading. Consistent with the existing `Network::download()` surface.
+  std::optional<HTTPResponse>`-style blocking calls plus a `download(uri, path)` on the new
+  client (`HTTPSClient::download`); asio-async machinery + timeouts live behind the facade;
+  the caller (engine) owns its threading. ⚠️ **As shipped, the legacy free function
+  `Network::download()` was NOT upgraded** — it still speaks cleartext and uses the throwing
+  Asio overloads (abort under `ASIO_NO_EXCEPTIONS`); the engine still calls it. Its fate is an
+  open owner decision (engine `docs/todo/net-manager-download-chain-broken.md`).
 - **Timeouts: full configurable set** (connect / TLS handshake / response / total) with sane
   defaults — stated as the only production-grade option, unobjected.
 

@@ -45,7 +45,7 @@ namespace EmEn::Base::Network
 			static constexpr auto Date{"Date"};
 			static constexpr auto Server{"Server"};
 			static constexpr auto LastModified{"Last-Modified"};
-			static constexpr auto ETag{"DateETag"};
+			static constexpr auto ETag{"ETag"};
 			static constexpr auto AcceptRanges{"Accept-Ranges"};
 			static constexpr auto ContentLength{"Content-Length"};
 			static constexpr auto Connection {"Connection"};

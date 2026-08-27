@@ -58,7 +58,7 @@ ext-deps-generator  →  emeraude-base  →  emeraude-engine  →  your applicat
 | **WaveFactory** | audio load/process, procedural synthesis, MIDI/SoundFont rendering. |
 | **VertexFactory** | procedural mesh generation, mesh loaders (OBJ / STL / FBX / glTF / MDx / native `ee3d`), shape processing & analysis. |
 | **IO / Compression / Hash** | filesystem helpers, ZIP archives, stream compression, checksums & digests. |
-| **Network** | HTTP/download, sockets and connectivity checks (Asio-based). |
+| **Network** | HTTPS client over TLS (LibreSSL via `asio::ssl`, system trust store, bounded redirects, CONNECT proxy), RFC 3986 URI layer, legacy plaintext download and connectivity check (Asio-based). |
 | **Animation / Algorithms / GameTools** | interpolation & skeletal data types, generic algorithms, gameplay helpers. |
 | **Toolbox** | ThreadPool, JSON / INI parsing, `Variant`, observer pattern, traits, string & time utilities. |
 | **Testing / Benchmarking / Fuzzing / Debug** | GoogleTest & Google Benchmark harnesses, fuzzing entry points, diagnostics. |

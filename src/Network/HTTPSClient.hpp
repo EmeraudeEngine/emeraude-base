@@ -195,8 +195,8 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Resolves a redirect target against the current URI (absolute or absolute-path).
-			 * @note Full RFC 3986 relative resolution arrives with the URI completion step;
-			 * this handles absolute URLs and absolute-path references (the common cases).
+			 * @note Full RFC 3986 §5 relative resolution, delegated to URI::resolve(): absolute
+			 * URLs, absolute-path and relative-path references, dot-segment removal included.
 			 * @param current The URI that produced the redirect.
 			 * @param location The raw Location header value.
 			 * @param resolved The resolved target [out].
