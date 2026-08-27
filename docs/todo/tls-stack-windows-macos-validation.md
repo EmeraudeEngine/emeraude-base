@@ -1,14 +1,14 @@
 ---
 id: tls-stack-windows-macos-validation
-title: Run the network stack on Windows and macOS — Windows still has not
+title: Run the network stack on Windows and macOS — down to the ExternalData chain
 status: open
-priority: high
+priority: medium
 scope: src/Network
 opened: 2026-07-04
 tags: [tls, cross-platform, handover]
 ---
 
-# Run the network stack on Windows and macOS — Windows still has not
+# Run the network stack on Windows and macOS — down to the `ExternalData` chain
 
 ## Why
 
@@ -17,18 +17,22 @@ no longer a testing detail: the engine's resource downloading (`Net::Manager`) r
 so on an unverified platform **a `"Source": "ExternalData"` resource has never been fetched by
 anyone**.
 
-Priority raised from medium to high on 2026-08-27 for that reason. **Kept high on 2026-08-28**:
-macOS cleared steps 1-3, Windows has still executed nothing at all.
+Priority raised from medium to high on 2026-08-27 for that reason. **Lowered back to medium on
+2026-08-28**: both platforms ran that day — macOS steps 1-3 through an out-of-tree harness, Windows
+steps 1-4 through app_system's JS path — and the trust store, the TLS client and a live download now
+work on all three. What the title says is what is left: **the `ExternalData` chain itself has still
+never run on either platform**, which is the exact reason this item was raised to high. Do not close
+it on the strength of the green rows above.
 
 ## Progress
 
 | Step | macOS 26.5.2 / arm64 | Windows |
 |---|---|---|
-| 1. It builds | ✅ 2026-08-28 | ❌ |
-| 2. The trust store | ✅ `NetworkTrustStore.*` 6/6, `/etc/ssl/cert.pem` loaded (128 certs) | ❌ |
-| 3. The client, hermetic then live | ✅ `Network*` 78 passed / 3 skipped, then the 3 live ones passed | ❌ |
-| 4. The downloader from the console | ❌ not yet — needs a full engine + app build | ❌ |
-| 5. The `ExternalData` chain | ❌ not yet | ❌ |
+| 1. It builds | ✅ 2026-08-28 | ✅ 2026-08-28 |
+| 2. The trust store | ✅ `NetworkTrustStore.*` 6/6, `/etc/ssl/cert.pem` loaded (128 certs) | ✅ **43 CAs imported from the `ROOT` store** — the hand-written CryptoAPI import works |
+| 3. The client, hermetic then live | ✅ `Network*` 78 passed / 3 skipped, then the 3 live ones passed | ✅ `Network*` **78/78**, plus a live HTTPS download with a clean cache |
+| 4. The downloader from the console | ❌ not yet — needs a full engine + app build | ✅ live download, cache clean |
+| 5. The `ExternalData` chain | ❌ not yet | ❌ **the last gap on Windows** |
 
 macOS notes worth keeping:
 
@@ -82,23 +86,36 @@ the engine is not above it.
   and was only ever exercised against a pty, which refuses the rate — so only the *failure* branch
   has run, never the success one.
 
-### Windows — nothing has ever executed
+### Windows — ran 2026-08-28, one gap left
 
-- [ ] **W1** Steps 1-5 below, in order, both `EMERAUDE_USE_FULL_EXPORTS` and app_system's `LEAN`.
-- [ ] **W2 ⚠️ Measure the `close()` stall BEFORE trusting the fix.** `shutdown()` on an unconnected
-  datagram socket returns `WSAENOTCONN`, so Winsock very likely had the macOS symptom (a `close()`
-  that waits out the whole receive timeout). `shutdown_semantics.cpp` answers it in one run. The fix
-  is platform-neutral and should already cover it — confirm, do not assume.
-- [ ] **W3** `tools/net-check` § 3: Winsock is documented as `DWORD` and is the one stack with no
-  measurement at all behind that claim.
-- [ ] **W4** The `NetworkInterfaces` Windows leg (`GetAdaptersAddresses(AF_UNSPEC)`, netmask from
-  `OnLinkPrefixLength`, per-family index) — never run. Check a multi-homed host.
-- [ ] **W5** `SerialPort.windows.cpp` at 250000 bauds — **the Windows leg was never even read**
-  during the 2026-08-28 sitting. Linux and macOS both turned out to be silently wrong here.
+Done through app_system's own JS path (`--mode=test`, dev-check fixtures over CDP), which is the
+layer **macOS has never run** — the two platforms validated different things, neither substitutes
+for the other.
+
+- [x] **W1** Steps 1-4. Step 5 remains — see W8.
+- [x] **W2** The `close()` stall: **measured, not assumed**. Pre-fix symptom visible (~107 ms, one
+  drain-loop block); post-fix `close()` returns in **62 ms with a `receive()` parked on 3000 ms, and
+  the same 62 ms at 1000 ms** — bounded by the poll slice, independent of the receive timeout. The
+  deadline-based timeout accounting also holds: 201/200, 1001/1000, 3013/3000 ms.
+- [x] **W3** The `DWORD` branch of `MulticastOptionValue` — TTL 255 and loopback both took.
+- [x] **W4** `NetworkInterfaces` on Windows: enumerated, joins on the real NIC.
+- [x] **W5 — resolved, and it needed no work.** `SerialPort.windows.cpp` assigns
+  `dcb.BaudRate = config.baudRate` directly: an arbitrary `DWORD`, **no `CBR_*` table**, so the
+  silent-fallback bug that hit both POSIX legs structurally cannot occur. Untested against real
+  hardware, but there is no lookup to be wrong.
 - [ ] **W6** `TCPServer` binding `"::"` — no explicit `v6_only`, so IPv4 peers are silently refused
-  on Windows while accepted on Linux (see the traps below).
-- [ ] **W7** The hermetic TLS suite runs a listening socket on 127.0.0.1: expect a firewall prompt,
-  and do not read a blocked one as a client bug.
+  on Windows while accepted on Linux (see the traps below). **Still unfixed.**
+- [x] **W7** The hermetic suite's listening socket on 127.0.0.1 — no firewall problem in practice.
+- [ ] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
+  that matters most for shipping: it is the path a `"Source": "ExternalData"` resource takes.
+
+> [!NOTE]
+> What the Windows run found first was **not** in this cascade: app_system's
+> `SharedDataManager::createJob<>()` locked a non-recursive mutex twice, which MS-STL turns into a
+> `std::system_error` thrown inside a `noexcept` binding — instant renderer death on **every**
+> `JobInterface` module, network or not. glibc self-deadlocks rather than throwing, so Linux would
+> have hung instead of crashing. Fixed in app_system. Noted here because it blocked the run, and
+> because it is a good reminder that a green Linux run does not clear this class of mistake.
 
 ## The handover — what to run there, in this order
 
@@ -191,9 +208,11 @@ Drop a store declaring an https resource, then
   (Winsock: `WSAENOTCONN`); **Linux is the lenient outlier** that wakes the reader anyway, which
   is exactly why the two-phase `close()` looked portable. Measured on macOS: `UDPClient::close()`
   waited out the full 10 s receive timeout instead of returning. Fixed platform-neutrally
-  (`m_closing` + 50 ms poll slices), so Windows inherits the fix — **but nobody has confirmed the
-  symptom there**, and it is worth measuring rather than assuming. `TCPClient` shuts down a
-  **connected** socket and is not concerned; `TCPServer` uses Asio `acceptor->cancel()`.
+  (`m_closing` + 50 ms poll slices). **Confirmed on Windows by measurement the same day**: the
+  pre-fix symptom was visible (~107 ms), and post-fix `close()` returns in 62 ms whether the parked
+  `receive()` had a 1000 ms or a 3000 ms timeout — bounded by the slice, not the timeout.
+  `TCPClient` shuts down a **connected** socket and is not concerned; `TCPServer` uses Asio
+  `acceptor->cancel()`.
   Same sitting, same class of bug: a moved-from `UDPClient` **segfaulted on destruction** on every
   platform (`close()` dereferenced the mutex the move gave away) — also fixed.
 - **UDP multicast on macOS 15+** needs the *Local Network* privacy entitlement
