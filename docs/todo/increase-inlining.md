@@ -27,5 +27,5 @@ applies verbatim: *"emeraude-base first. The engine and projet-alpha inherit the
 The item was inherited from the engine's historical root `TODO.md`, written before `EmEn::Libs`
 was extracted into this repository.
 
-It is consolidation, not a feature, so it does not conflict with the freeze in effect until
-"Ave robustus!" is formally closed ([`ave-robustus-formal-closure.md`](ave-robustus-formal-closure.md)).
+It is consolidation, not a feature. (It was opened under the "Ave robustus!" feature freeze,
+which the owner lifted on 2026-08-27 with the plan's closure — no constraint remains.)

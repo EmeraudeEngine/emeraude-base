@@ -255,7 +255,7 @@ Every step of this plan is landed and verified — trust store, TLS transport, H
 HTTPS client with bounded no-downgrade redirects and timeouts, proxy (CONNECT tunnel +
 env), RFC 3986 URI conformance, and the response-parser fuzz target. This closes the last
 open item of the "Ave robustus!" plan (see [`../ave-robustus.md`](../ave-robustus.md) §6).
-**Formal plan closure and the feature-freeze lift are the owner's call (plan §0).**
+**The owner declared the plan complete and lifted the feature freeze on 2026-08-27.**
 
 ### Live end-to-end check (opt-in)
 

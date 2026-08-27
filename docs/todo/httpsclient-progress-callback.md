@@ -1,11 +1,10 @@
 ---
 id: httpsclient-progress-callback
 title: HTTPSClient::download() — progress callback for consumers that display transfers
-status: blocked
+status: open
 priority: low
 scope: src/Network
 opened: 2026-08-27
-blocked-by: [ave-robustus-formal-closure]
 tags: [network, https, feature]
 ---
 
@@ -18,7 +17,7 @@ The engine's `Net::Manager` now downloads through `HTTPSClient::download(uri, fi
 between. The manager therefore dropped its `Progress` notification and its byte accumulators —
 an application that wants a progress bar for a large resource has nothing to bind to.
 
-This is a **new feature** of emeraude-base, so it waits for the feature freeze to be lifted.
+This is a new feature of emeraude-base; the feature freeze that held it was lifted on 2026-08-27 (plan closure), so it is open.
 
 ## What remains
 
