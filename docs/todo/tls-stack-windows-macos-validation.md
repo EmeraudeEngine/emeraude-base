@@ -100,18 +100,25 @@ the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
   `.part`, and the cache genuinely re-read after a relaunch. ⚠️ **Two engine defects had to be fixed
   before any of it could pass**, both platform-independent — see § *What the macOS ExternalData run
   found* below.
-- [ ] **M2 ⚠️ A SIGNED, PACKAGED binary**, for the macOS 15+ *Local Network* authorisation.
-  Everything on 2026-08-28 ran from an already-authorised Terminal, which is precisely why it
-  proves nothing. See the sibling item. ⚠️ **The precondition was missing and is now in place**:
-  `app_system/resources/mac/Info.plist` had **no `NSLocalNetworkUsageDescription` at all** — with
-  the key absent the system cannot even present the prompt, so a bundle test run before 2026-08-28
-  would have measured the missing key, not the stack. Two things that run must still answer: does
-  TCC attribute the **renderer helper's** multicast to the main bundle (the key is deliberately in
-  the main plist only, so the answer is a clean measurement rather than a guess), and does an
-  **ad-hoc, linker-signed** bundle even qualify — the local build is `adhoc`, `Info.plist=not
-  bound`, `Sealed Resources=none`, which is not what a shipped bundle looks like.
-  ⚠️ **Orthogonal to M1**: the `external-data-check` fixture is an HTTPS *unicast* download, which
-  the Local Network authorisation does not gate. A green step 5 says nothing about M2.
+- [x] **M2 — MEASURED 2026-08-28, and the packaged bundle FAILS.** A real Developer-ID-signed,
+  hardened-runtime bundle (`satisfies its Designated Requirement`, Info.plist bound, 1675 files
+  sealed, `NSLocalNetworkUsageDescription` present) launched through **LaunchServices** has **every
+  outbound local-network send refused** by macOS — multicast *and* LAN unicast — while inbound
+  multicast still arrives, and **no authorisation prompt is ever shown**. The same binary launched
+  from a terminal works (7 LAN hosts answered), because a terminal-launched process inherits
+  Terminal's own grant: that is why every previous run in this file proved nothing, now demonstrated
+  rather than suspected. Ruled out by measurement: the key in the main plist, the key in **all five**
+  helper plists, and running from `/Applications`. What is left needs the machine's owner, since an
+  AI can neither read the SIP-protected `TCC.db` nor click the pane — *System Settings → Privacy &
+  Security → Local Network*: is the app listed with its switch off (cached deny) or absent
+  (refused without ever being offered)? Full detail and the next avenue in the sibling item.
+  ⚠️ **Shipping blocker for macOS printer discovery**, not a validation detail.
+  Two things worth carrying elsewhere came out of it: a **dev build cannot be code-signed at all**
+  (`Contents/Resources/bin` is an absolute symlink out of the bundle →
+  `invalid destination for symbolic link in bundle`), so `APP_SYSTEM_PUBLIC_RELEASE=ON` is a signing
+  prerequisite and not just a JS freeze; and app_system's `UDPModule` was reporting a **refused send
+  as a success** (`bytesSent:-1` with `error:false`), which is platform-neutral and would have made
+  this investigation unreadable. Both fixed/recorded — see `app_system/docs/packaging.md § macOS`.
 - [x] **M3 — done 2026-08-28.** `--mode=test`, driven over CDP like the Windows run. dev-check mDNS
   card: bind `0.0.0.0:5353` beside `mDNSResponder`, TTL 255 + loopback, join on **both** real NICs
   with zero failures, DNS-SD answered by **5 LAN hosts**, idempotent re-join, tolerant drop,
