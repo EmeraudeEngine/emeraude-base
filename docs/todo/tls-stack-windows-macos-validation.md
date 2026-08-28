@@ -20,9 +20,10 @@ anyone**.
 Priority raised from medium to high on 2026-08-27 for that reason. **Lowered back to medium on
 2026-08-28**: both platforms ran that day — macOS steps 1-3 through an out-of-tree harness, Windows
 steps 1-4 through app_system's JS path — and the trust store, the TLS client and a live download now
-work on all three. What the title says is what is left: **the `ExternalData` chain itself has still
-never run on either platform**, which is the exact reason this item was raised to high. Do not close
-it on the strength of the green rows above.
+work on all three. What the title said was what was left: the `ExternalData` chain itself. **macOS ran it on
+2026-08-28** (steps 4 and 5, through the replayable fixture `app_system/tools/external-data-check/`)
+and it took **two engine fixes** to get a single green row — see § *What the macOS ExternalData run
+found*. Windows is now the only platform where that chain has never run.
 
 ## Progress
 
@@ -31,8 +32,8 @@ it on the strength of the green rows above.
 | 1. It builds | ✅ 2026-08-28 | ✅ 2026-08-28 |
 | 2. The trust store | ✅ `NetworkTrustStore.*` 6/6, `/etc/ssl/cert.pem` loaded (128 certs) | ✅ **43 CAs imported from the `ROOT` store** — the hand-written CryptoAPI import works |
 | 3. The client, hermetic then live | ✅ `Network*` 78 passed / 3 skipped, then the 3 live ones passed | ✅ `Network*` **78/78**, plus a live HTTPS download with a clean cache |
-| 4. The downloader from the console | ❌ not yet — needs a full engine + app build | ✅ live download, cache clean |
-| 5. The `ExternalData` chain | ❌ not yet | ❌ **the last gap on Windows** |
+| 4. The downloader from the console | ✅ 2026-08-28 — `Done` + 13566 B, badssl → `TLSFailure`, cache clean | ✅ live download, cache clean |
+| 5. The `ExternalData` chain | ✅ 2026-08-28 — 6/6 via `app_system/tools/external-data-check/`, **2 engine defects fixed to get there** | ❌ **the last gap on Windows** |
 
 macOS notes worth keeping:
 
@@ -77,10 +78,15 @@ the engine is not above it.
 
 ### macOS — steps 4-5, plus what a terminal cannot prove
 
-- [ ] **M1** Steps 4 and 5 below (the downloader from the remote console, then the `ExternalData`
-  resource chain). **Never run on macOS** — the unit suites do not cover `Net::Manager`, its cache
-  directory, `index.json`, or the `.part` sweep. Step 5 is no longer improvised: run
-  `app_system/tools/external-data-check/` verbatim and fill its results table.
+- [x] **M1 — done 2026-08-28**, through `app_system/tools/external-data-check/` (its results table
+  carries the detail). Step 4: `isEnabled()` true, `download(README.md)` → `Done` + filepath +
+  13566 B, `download(https://expired.badssl.com/x.bin)` → `Error` + `"reason":"TLSFailure"`,
+  `listCache()`/`clearCache()` both clean, `index.json` written with no `.tmp` sibling surviving.
+  Step 5: 6/6 rows — store registers, nominal `Loaded` with **8169 B exactly**, expired certificate
+  `Failed`/`TLSFailure`, cleartext refused at `download()`, cache left with exactly one entry and no
+  `.part`, and the cache genuinely re-read after a relaunch. ⚠️ **Two engine defects had to be fixed
+  before any of it could pass**, both platform-independent — see § *What the macOS ExternalData run
+  found* below.
 - [ ] **M2 ⚠️ A SIGNED, PACKAGED binary**, for the macOS 15+ *Local Network* authorisation.
   Everything on 2026-08-28 ran from an already-authorised Terminal, which is precisely why it
   proves nothing. See the sibling item. ⚠️ **The precondition was missing and is now in place**:
@@ -125,6 +131,11 @@ for the other.
 - [x] **W7** The hermetic suite's listening socket on 127.0.0.1 — no firewall problem in practice.
 - [ ] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
   that matters most for shipping: it is the path a `"Source": "ExternalData"` resource takes.
+  ⚠️ **Pull the engine first.** The macOS run of 2026-08-28 found two defects on this exact path
+  that were blocking it on *every* platform (a sterile container binding, and `TLSFailure` reported
+  as `Unreachable`) — on an older engine this step cannot pass here either, and the symptoms look
+  like a Windows network problem. Then run `app_system/tools/external-data-check/` verbatim and fill
+  the Windows column of its results table; read its Traps section first, four of them cost real time.
   Run `app_system/tools/external-data-check/` verbatim and fill its results table.
 
 > [!NOTE]
@@ -224,6 +235,38 @@ README:
 - Installing the store by dropping it into a `data-stores/` directory **cannot work**:
   `Core/Resources/UseDynamicScan` defaults to `true`, and in that mode `readResourceIndexes()` is
   never called at all. A dynamic scan can only produce `LocalData` entries anyway.
+
+## What the macOS `ExternalData` run found (2026-08-28)
+
+Neither defect is macOS-specific. Both sat on the shared path, in front of all three platforms, and
+were only exposed because this was the **first time anyone drove that chain from a resource store**
+rather than exercising `HTTPSClient` through the unit suites. Linux's own green history does not
+clear them: it had never run this path either.
+
+1. ⚠️⚠️ **`Core.openFiles(store.json)` registered resources that no container could ever see.**
+   `listResources` answered `[]`, `openFiles` answered success, and nothing was logged anywhere —
+   the most expensive shape a bug can take. `Resources::Manager::getLocalStore()` returned `nullptr`
+   for any store the boot-time discovery had not produced; a container captures that pointer **once**,
+   at registration, and keeps it for life; the later `Manager::update()` then created a *fresh* map
+   under the same name that only the manager could see. Because app_system ships no store
+   sub-directories at all, **all 34 containers were sterile** and the entire runtime `update()` path
+   was dead code. Fixed engine-side (`getLocalStore()` creates on demand and is documented as never
+   returning null). See `emeraude-engine/src/Resources/AGENTS.md`.
+2. ⚠️ **`DownloadOutcome::TLSFailure` was never produced.** An expired certificate came back as
+   `Unreachable`: `TLSConnection::connect()` returns a single bool for "never reached the peer" and
+   "peer refused the handshake", and `HTTPSClient` labelled both the same — the enum's own comment
+   says it is coarse *"one value per thing a caller would do differently"*, and this is precisely the
+   distinction a caller must not lose, since `Unreachable` invites a retry that a refused certificate
+   must never get. It also made **step 5's own discriminator unusable**: the fixture said to treat
+   `Unreachable` as "badssl was down, void run", which would have voided every correct run forever.
+   Fixed via `TLSConnection::handshakeRefused()`. Measured: the same load reports `failed: TLSFailure`
+   where it reported `failed: Unreachable` on the build before, with the identical
+   `certificate verify failed` line above it.
+
+> [!NOTE]
+> Step 2 of this checklist (the trust store) was already green on macOS and stays green — it was
+> never wrong. What defect 2 broke was our ability to *tell* a working trust store from an
+> unreachable host, which is the whole point of the negative test.
 
 ## ⚠️ Traps recorded on Linux, likely to bite differently there
 

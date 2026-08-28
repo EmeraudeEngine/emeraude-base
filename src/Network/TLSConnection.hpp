@@ -150,6 +150,22 @@ namespace EmEn::Base::Network
 				return m_connected;
 			}
 
+			/**
+			 * @brief Returns whether a failed connect() got as far as the TLS handshake.
+			 * @note Only meaningful after connect() or connectViaProxy() returned false: it tells
+			 * apart "nothing was ever spoken to" (DNS, TCP, proxy tunnel) from "the peer was
+			 * reached and the handshake or the certificate verification refused it". A caller
+			 * retries the former and must never retry the latter, so collapsing the two into one
+			 * bool loses the only distinction that changes what the caller does.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			handshakeRefused () const noexcept
+			{
+				return m_handshakeRefused;
+			}
+
 		private:
 
 			/**
@@ -191,5 +207,6 @@ namespace EmEn::Base::Network
 			asio::ssl::stream< asio::ip::tcp::socket > m_stream;
 			TLSConnectionOptions m_options;
 			bool m_connected{false};
+			bool m_handshakeRefused{false};
 	};
 }

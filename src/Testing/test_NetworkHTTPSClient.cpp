@@ -81,6 +81,22 @@ namespace
 		return context;
 	}
 
+	/** @brief Builds a client TLS context trusting NOTHING the test server can present.
+	 * @note Used to make the handshake fail on chain verification while the peer IS reachable -
+	 * the only way to tell DownloadOutcome::TLSFailure from Unreachable hermetically. */
+	asio::ssl::context
+	makeUntrustingClientContext () noexcept
+	{
+		asio::ssl::context context{asio::ssl::context::tls_client};
+
+		/* No certificate authority added on purpose: the server's self-signed certificate has
+		 * nothing to chain to. Verification stays ON - that is the point of the test. */
+		asio::error_code error;
+		context.set_verify_mode(asio::ssl::verify_peer, error);
+
+		return context;
+	}
+
 	/** @brief Extracts the request-target of a raw HTTP request (test helper). */
 	std::string
 	requestTarget (const std::string & rawRequest) noexcept
@@ -749,6 +765,40 @@ TEST(NetworkHTTPSClient, downloadReportsWhyItFailed)
 	EXPECT_EQ(okReport.outcome, Network::DownloadOutcome::Success);
 	EXPECT_EQ(okReport.statusCode, 200);
 	EXPECT_EQ(okReport.contentType, "text/plain");
+
+	std::filesystem::remove(filepath);
+}
+
+TEST(NetworkHTTPSClient, downloadReportsTLSFailureWhenTheCertificateIsRefused)
+{
+	/* Regression test for a value that existed, was documented, and was NEVER produced: until
+	 * 2026-08-28 a refused certificate came back as DownloadOutcome::Unreachable, because
+	 * TLSConnection::connect() returns one bool for "never reached the peer" and "peer refused the
+	 * handshake". A caller retries Unreachable and must never retry a refused certificate, so the
+	 * two must not collapse. The sibling assertion in downloadReportsWhyItFailed covers the other
+	 * side (nothing listening on port 1 -> still Unreachable). */
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return plainResponse("never reached");
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	/* The server is up and reachable; only the trust chain is missing. */
+	auto tlsContext = makeUntrustingClientContext();
+
+	Network::HTTPSClient client{tlsContext};
+
+	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-tlsfailure-test.bin";
+
+	std::filesystem::remove(filepath);
+
+	Network::DownloadReport report;
+
+	EXPECT_FALSE(client.download(serverURI(server, "/x.bin"), filepath, {}, &report));
+	EXPECT_EQ(report.outcome, Network::DownloadOutcome::TLSFailure);
+	EXPECT_FALSE(std::filesystem::exists(filepath));
 
 	std::filesystem::remove(filepath);
 }

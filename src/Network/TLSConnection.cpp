@@ -326,8 +326,17 @@ namespace EmEn::Base::Network
 			return false;
 		}
 
-		if ( !this->establishTcp(hostname, port) || !this->performHandshake(hostname) )
+		if ( !this->establishTcp(hostname, port) )
 		{
+			return false;
+		}
+
+		if ( !this->performHandshake(hostname) )
+		{
+			/* The peer was reached and refused us: that is not the same failure as never
+			 * having reached it, and only the caller can act on the difference. */
+			m_handshakeRefused = true;
+
 			return false;
 		}
 
@@ -348,8 +357,15 @@ namespace EmEn::Base::Network
 
 		/* Reach the proxy, open the plaintext CONNECT tunnel to the target, then
 		 * run the end-to-end TLS handshake with the target through the tunnel. */
-		if ( !this->establishTcp(proxyHost, proxyPort) || !this->tunnelThroughProxy(targetHost, targetPort) || !this->performHandshake(targetHost) )
+		if ( !this->establishTcp(proxyHost, proxyPort) || !this->tunnelThroughProxy(targetHost, targetPort) )
 		{
+			return false;
+		}
+
+		if ( !this->performHandshake(targetHost) )
+		{
+			m_handshakeRefused = true;
+
 			return false;
 		}
 

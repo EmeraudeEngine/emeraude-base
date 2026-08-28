@@ -715,9 +715,12 @@ namespace EmEn::Base::Network
 
 		if ( !connected )
 		{
-			/* Nothing was ever spoken to, or the peer refused the handshake: TLSConnection logged
-			 * which of the two it was. */
-			outcome = DownloadOutcome::Unreachable;
+			/* Tell the two apart instead of calling both Unreachable. DownloadOutcome::TLSFailure
+			 * documents itself as "handshake or certificate verification refused the peer", and
+			 * until 2026-08-28 nothing in this file ever produced it - an expired certificate came
+			 * back as Unreachable, which invites the retry that must never happen and hides the
+			 * one thing the caller has to show the user. */
+			outcome = connection.handshakeRefused() ? DownloadOutcome::TLSFailure : DownloadOutcome::Unreachable;
 
 			return std::nullopt;
 		}
