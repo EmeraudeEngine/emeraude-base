@@ -60,21 +60,34 @@ The runtime harness now lives IN the tree — no need to rewrite it: `emeraude-e
 assertions). Path given plainly, not as a link: this repository is also consumed standalone, where
 the engine is not above it.
 
-### Linux — a re-run, it was green
+### Linux — done, 2026-08-28
 
-- [ ] **L1 ⚠️ `IP_MULTICAST_TTL` / `IP_MULTICAST_LOOP` changed width on this platform**, from
-  `unsigned char` to `int` (`MulticastOptionValue`, top of `UDPClient.cpp`) — `int` is what `ip(7)`
-  documents, and both widths were measured as accepted on macOS, but **Linux has not run since the
-  change**. `tools/net-check` § 3 settles it in one command; then re-run the app-level mDNS fixture
-  (`--mode=test` → UDP Client card) for the full round trip.
-- [ ] **L2** The sliced `waitReadable()` (50 ms `PollSliceMs`) replaced the single `select()` on
-  every platform. Confirm no regression in the mDNS round trip and that `close()` still returns a
-  parked `receive()` — Linux got it from `shutdown()` before, it now also gets it from the flag.
-- [ ] **L3** `tools/net-check` under ASan+UBSan, for the moved-from and close-race sections.
-- [ ] **L4** Replay step 5 through the new fixture (`app_system/tools/external-data-check/`) to seed
-  the reference row of its results table. Linux *has* run this chain (2026-08-27) but through an
-  ad-hoc store, so there is no row the other two machines can be compared against.
-- [ ] Nothing changed in `SerialPort.linux.cpp`; a build check is enough.
+Every box below is ticked, and the last one closed on 2026-08-28. **The list had been left
+unchecked while the work was already recorded elsewhere** (the sibling multicast item and
+`app_system/src/AGENTS.md`), which understated Linux and would have sent the next session
+re-running it. Ticked with its evidence, so the claim can be audited rather than trusted.
+
+- [x] **L1 `IP_MULTICAST_TTL` / `IP_MULTICAST_LOOP` width change** (`unsigned char` → `int`,
+  `MulticastOptionValue`). `tools/net-check`: the `int` width is accepted and the TTL reads back as
+  **255** through it — and this kernel, like macOS 26, accepts **both** widths, which is why each
+  platform keeps the type its own manual specifies. App-level mDNS round trip re-run too.
+- [x] **L2 The sliced `waitReadable()`** (50 ms `PollSliceMs`). No regression in the mDNS round
+  trip; `close()` returns a parked `receive()` in ~300 ms, bounded by the poll slice and no longer
+  by `shutdown()`'s leniency. Deadline accounting: **0 % drift over 1200 ms**.
+- [x] **L3 `tools/net-check` under ASan+UBSan** — **48 pass / 0 fail / 1 warn**, identical to the
+  plain run. It also surfaced a defect of its own, as old as `NetworkInterfaces`:
+  `enumerateMulticastCapable()` dropped `lo` because it trusted `IFF_MULTICAST`, which Linux never
+  sets on loopback while supporting multicast there. Fixed, Linux-scoped.
+- [x] **L4 Step 5 through the fixture** (`app_system/tools/external-data-check/`) — **6/6 green**,
+  2026-08-28, on engine `034342c5` + base `0fc2516`, i.e. the only column taken after both fixes.
+  It is the reference row of that results table. Registration went through `Core.openFiles` on an
+  application owning **no `data-stores/` at all**, which closes the half Windows had to leave open.
+- [x] `SerialPort.linux.cpp` unchanged; covered by a full 1070/1070 Release build.
+
+⚠️ **What is NOT covered on Linux, and does not belong to this checklist**: this repository's own
+**JS path for TCP client/server** (`--mode=test` → the dev-check TCP card). Linux has only ever run
+the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
+`app_system/src/AGENTS.md`.
 
 ### macOS — steps 4-5, plus what a terminal cannot prove
 
