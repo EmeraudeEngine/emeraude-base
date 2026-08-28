@@ -100,25 +100,27 @@ the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
   `.part`, and the cache genuinely re-read after a relaunch. ⚠️ **Two engine defects had to be fixed
   before any of it could pass**, both platform-independent — see § *What the macOS ExternalData run
   found* below.
-- [x] **M2 — MEASURED 2026-08-28, and the packaged bundle FAILS.** A real Developer-ID-signed,
-  hardened-runtime bundle (`satisfies its Designated Requirement`, Info.plist bound, 1675 files
-  sealed, `NSLocalNetworkUsageDescription` present) launched through **LaunchServices** has **every
-  outbound local-network send refused** by macOS — multicast *and* LAN unicast — while inbound
-  multicast still arrives, and **no authorisation prompt is ever shown**. The same binary launched
-  from a terminal works (7 LAN hosts answered), because a terminal-launched process inherits
-  Terminal's own grant: that is why every previous run in this file proved nothing, now demonstrated
-  rather than suspected. Ruled out by measurement: the key in the main plist, the key in **all five**
-  helper plists, and running from `/Applications`. What is left needs the machine's owner, since an
-  AI can neither read the SIP-protected `TCC.db` nor click the pane — *System Settings → Privacy &
-  Security → Local Network*: is the app listed with its switch off (cached deny) or absent
-  (refused without ever being offered)? Full detail and the next avenue in the sibling item.
-  ⚠️ **Shipping blocker for macOS printer discovery**, not a validation detail.
-  Two things worth carrying elsewhere came out of it: a **dev build cannot be code-signed at all**
-  (`Contents/Resources/bin` is an absolute symlink out of the bundle →
-  `invalid destination for symbolic link in bundle`), so `APP_SYSTEM_PUBLIC_RELEASE=ON` is a signing
-  prerequisite and not just a JS freeze; and app_system's `UDPModule` was reporting a **refused send
-  as a success** (`bytesSent:-1` with `error:false`), which is platform-neutral and would have made
-  this investigation unreadable. Both fixed/recorded — see `app_system/docs/packaging.md § macOS`.
+- [x] **M2 — MEASURED 2026-08-28. The packaged bundle needs the *Local Network* grant, and works
+  with it.** A real Developer-ID-signed, hardened-runtime bundle (`satisfies its Designated
+  Requirement`, Info.plist bound, 1675 files sealed, `NSLocalNetworkUsageDescription` present)
+  launched through LaunchServices, **while denied**, has every outbound local-network send refused —
+  multicast *and* LAN unicast — while joins report success and inbound multicast still arrives.
+  ⚠️ That is the failure shape to recognise: only egress dies, nothing says "permission". Once the
+  owner authorised *Local Network*, the same bundle relaunched the same way completed the full
+  DNS-SD round trip (**6 LAN hosts**). Signing and packaging are therefore not the obstacle, and
+  there is no multicast entitlement to chase.
+  The corollary is now demonstrated in both directions: **a terminal run proves nothing** — the same
+  signed binary worked from a terminal while the app itself was still denied, inheriting Terminal's
+  grant. Ruled out as causes: the helper plists (all five, no effect) and `/Applications`.
+  ⚠️ **Left open, and it is the shipping-relevant half**: no prompt was ever observed — the grant
+  was applied by hand — so whether macOS asks a real user on first use is unverified. Either way the
+  app must survive the denied state, where discovery silently finds nothing.
+  Two by-products carried elsewhere: a **dev build cannot be code-signed at all**
+  (`Contents/Resources/bin` is an absolute symlink out of the bundle), so
+  `APP_SYSTEM_PUBLIC_RELEASE=ON` is a signing prerequisite and not just a JS freeze; and
+  app_system's `UDPModule` was reporting a **refused send as a success**, platform-neutral, which
+  made this whole investigation read as "sends succeed but nothing arrives". Both fixed/recorded —
+  see `app_system/docs/packaging.md § macOS`.
 - [x] **M3 — done 2026-08-28.** `--mode=test`, driven over CDP like the Windows run. dev-check mDNS
   card: bind `0.0.0.0:5353` beside `mDNSResponder`, TTL 255 + loopback, join on **both** real NICs
   with zero failures, DNS-SD answered by **5 LAN hosts**, idempotent re-join, tolerant drop,
