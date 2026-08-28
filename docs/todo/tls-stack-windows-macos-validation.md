@@ -149,12 +149,16 @@ for the other.
   `dcb.BaudRate = config.baudRate` directly: an arbitrary `DWORD`, **no `CBR_*` table**, so the
   silent-fallback bug that hit both POSIX legs structurally cannot occur. Untested against real
   hardware, but there is no lookup to be wrong.
-- [ ] **W6** `TCPServer` binding `"::"` — **fixed 2026-08-28, needs measuring HERE.** `listen()`
-  now requests `IPV6_V6ONLY` off explicitly when binding the IPv6 any-address, and **fails** if the
-  stack refuses rather than coming up IPv6-only. Written and compiled on macOS, where the symptom
-  never existed (`net.inet6.ip6.v6only = 0`), so Windows is the only machine that can confirm it:
-  `TCP.server.listen(port, backlog, "::")` then connect an **IPv4** client to `127.0.0.1:port`.
-  Before the fix that connection was refused on Windows and accepted everywhere else.
+- [x] **W6 — CLOSED 2026-08-28 by retraction, not by a fix.** Measured on Windows: the **pre-fix**
+  acceptor already accepted an IPv4 peer on a `"::"` listener (4/4), identical to the post-fix one.
+  Reading the option back says why — a raw `::socket(AF_INET6)` does default to `IPV6_V6ONLY = 1`
+  there, but Asio clears it on every `AF_INET6` socket it creates on Windows, so the acceptor reports
+  0 before any `bind()`. `TCPServer` goes through Asio, therefore the silent IPv4 refusal **could not
+  happen on this path**. The explicit `v6_only(false)` added that day is kept — it states the intent
+  in our own code instead of depending on an Asio internal — but it **corrects nothing observable**,
+  and the "IPv4 peers are silently refused on Windows" claim belongs to **raw Winsock**. Recorded
+  here, and retracted in `emeraude-engine/src/Net/AGENTS.md` and in the `TCPServer` sources, so the
+  symptom is not hunted a third time.
 - [x] **W7** The hermetic suite's listening socket on 127.0.0.1 — no firewall problem in practice.
 - [ ] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
   that matters most for shipping: it is the path a `"Source": "ExternalData"` resource takes.
