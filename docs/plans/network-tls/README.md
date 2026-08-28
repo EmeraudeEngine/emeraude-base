@@ -370,3 +370,47 @@ Not fixed here, tracked separately: `totalTimeout` is still not a hard budget (p
 add up, DNS is not cancellable), error reporting is still `bool`/`nullopt` with no cause, and the URI
 layer still decodes `%2F` and re-orders query parameters (breaks signed URLs).
 
+## Post-freeze increment — `request()`, the API-traffic entry point (2026-08-28)
+
+Owner-asked: *"is the engine able to talk to a web API at C++ level, without CEF?"* The answer was
+**half** — the stack could read (`get`, `head`, `download`) but could not write: no `POST`, no
+request body, and no caller headers, so no authenticated API was reachable. The request was built
+from four hard-coded lines (`Host`, `User-Agent`, `Accept-Encoding`, `Connection`).
+
+### What landed
+
+| | |
+|---|---|
+| `HTTPRequestOptions` | `headers` (ordered `vector<pair>`, because a field may repeat and a signing scheme can be order-sensitive), `body`, `contentType` |
+| `HTTPSClient::request(method, uri, options, report*)` | Any method; `get()`/`head()` are now façades over it. The response is held in memory under `maxInMemoryBodySize` |
+| `HTTPSClient::isRequestHeaderAcceptable(name, value)` | **Static and public, so it is testable on its own.** RFC 9110 §5.6.2 token names; CR, LF, NUL, every C0 but HTAB, and DEL refused in values; the framing headers (`Host`, `Content-Length`, `Connection`, `Transfer-Encoding`, `Accept-Encoding`) refused outright — a duplicate framing header is a request-smuggling primitive. `User-Agent` is deliberately NOT reserved: overriding it is legitimate, and the caller's replaces the option rather than duplicating the line |
+| `DownloadOutcome::BadRequest` | New value: the CALLER's request was refused before a byte left, which a caller must not confuse with the network being down |
+| Redirect hygiene | A 301/302/303 that rewrites the method to GET also **drops the body** (a write must not be replayed); a redirect that changes host or port **drops every caller header** (an `Authorization` forwarded to a `Location` target is the classic credential leak) |
+| Content-Length framing | `POST`/`PUT`/`PATCH` always send it, even at 0 — a server reading a POST without it waits for a body that never comes |
+| A non-2xx | **Not a failure** for `request()`, unlike `download()`: an API says what went wrong in its body. `report.outcome` labels it `HTTPStatus` and the response is still returned |
+
+### ⚠️ A data race fixed on the way
+
+`m_lastOutcome` was a `mutable` member written by these `const` methods. `Net::Manager` runs
+several `download()` calls **concurrently on one shared client**, so that member was a genuine
+race, and a failing transfer could report the reason belonging to another one. It is now an
+out-parameter threaded through `run()`/`performHop()`, which makes every call self-contained.
+**Never put it back on the object.**
+
+### Verification
+
+18 new tests in `src/Testing/test_NetworkHTTPSClientRequest.cpp`; suite **2028/2028** (Release,
+Linux/GCC, 2026-08-28), 3 live tests skipped by design.
+
+⚠️ `HTTPSTestServer` had to be extended: it stopped reading at the header terminator, so a request
+body was only whatever happened to share the last TLS record — a test asserting on it would have
+passed or failed by timing. It now reads out what `Content-Length` announced
+(`Testing::declaredContentLength()`).
+
+### Still not done
+
+- **No keep-alive**: one TLS connection per hop, so an API hit in rapid succession pays a full
+  handshake each time. Fixing it is a `TLSConnection` change.
+- `Method::DELETE` is untested on purpose: `DELETE` is a `winnt.h` macro and the test TU pulls in
+  gtest. ⚠️ The enumerator itself (`HTTPRequest::Method::DELETE`) is a latent MSVC hazard for any
+  TU that sees `windows.h` before `HTTPRequest.hpp` — it has not bitten yet because none does.

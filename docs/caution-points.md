@@ -100,6 +100,46 @@ intent — and the expression is evaluated once instead of four times.
 **Rule:** never let an integer maximum reach a floating-point division implicitly. Cast at the
 source, where the precision loss is a deliberate, reviewable decision.
 
+## Network
+
+### ⚠️⚠️ A `mutable` member is NOT a per-call output — it was a data race for a year (fixed Aug 2026)
+
+`HTTPSClient` recorded why a transfer failed in `mutable DownloadOutcome m_lastOutcome`, written by
+methods that are all `const`. The reasoning was "the API is const, the object is logically
+unchanged". It was wrong for a reason the const-ness hides: **`Net::Manager` runs several
+`download()` calls concurrently on ONE shared client**, so two workers wrote that member at the
+same time and a failing transfer could report the reason belonging to another transfer.
+
+The tell was there in the header — the comment said *"it describes the last call, not the object"*.
+**A value that describes A CALL belongs to the call**: it is an out-parameter, a return value, or a
+local. It is never a member, however `mutable`. Fixed by threading it through
+`run()`/`performHop()`.
+
+⚠️ The same shape is still present elsewhere in the cascade wherever a `const` method caches "the
+last error" on the object. Look for `mutable` next to a word like *last*, *cached*, *current*.
+
+### ⚠️ Anything concatenated into a request line must be validated, not just the host
+
+The 2026-08-27 audit fixed CRLF injection through the **host** (`URIDomain` validates it once). The
+2026-08-28 `request()` increment re-opened the same class from a new direction: caller-supplied
+**header names and values**, and the **media type**, all reach the wire through `request += …`.
+A single `\r\n` in any of them injects arbitrary headers, and with a body, splits the request.
+
+`HTTPSClient::isRequestHeaderAcceptable()` is the gate, and it is applied in `run()` **before the
+first connection is opened** — refusing at concatenation time would already have resolved and
+contacted the target, which the caller cannot tell apart from a transport failure.
+
+⚠️ **The media type does not travel through `options.headers`**, so it needed its own explicit
+check. Any future field that reaches the request the same way needs one too: the validation is not
+automatic, it is a list.
+
+### ⚠️ A test server that stops at the header terminator cannot prove a request body
+
+`HTTPSTestServer` read until `\r\n\r\n` and handed that to the handler. A POST body therefore
+appeared only if it happened to share the last TLS record with the headers — so a test asserting on
+it passed or failed **by timing**, which is worse than not testing it. It now reads out what
+`Content-Length` announced (`Testing::declaredContentLength()`).
+
 ## VertexFactory
 
 ### `exceedsStream()` is a PRE-READ bound — using it after the parse rejects every valid file (Aug 2026)

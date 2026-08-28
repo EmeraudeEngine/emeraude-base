@@ -93,9 +93,18 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - **Bezier curves**: Smooth interpolation
 - All current and future 2D/3D math logic
 
-**Network/** - Web logic generalization
-- Network protocol helpers
-- Communication abstractions
+**Network/** - The HTTPS/TLS client stack (production, Linux + macOS + Windows verified 2026-08-28)
+- `HTTPSClient` — blocking, redirect-following HTTPS/1.1 over LibreSSL. Three entry points:
+  `get()`/`head()`, `download()` (streams to a file, progress hook), and `request()` (arbitrary
+  method, caller headers, request body — the **API-traffic** path, added 2026-08-28)
+- `TLSConnection` (transport + proxy CONNECT), `TrustStore` (system anchors + optional CA bundle),
+  `HTTPResponseParser` (chunked, read-until-close, hardened ceilings), `URI`/`URIDomain` (validated
+  host, no CRLF injection), `HTTPRequest`/`HTTPResponse`/`HTTPHeaders`, `PercentEncoding`, `Query`
+- ⚠️ **HTTPS only** — plaintext `http://` is refused by decision; the legacy `Network::download()`
+  was removed 2026-08-27
+- ⚠️ `HTTPSClient::isRequestHeaderAcceptable()` gates every caller-supplied header: the request is
+  built by concatenation, so a CR/LF in a value is a header-injection primitive
+- Engine consumers: `EmEn::Net::Manager` (downloads) and `EmEn::Net::APIClient` (web APIs)
 
 **PixelFactory/** - Image manipulation (uses unified ByteStream I/O)
 - Load/save image formats (JPEG, PNG, Targa) via `FileIO`/`StreamIO`

@@ -31,10 +31,13 @@
  * server on 127.0.0.1. Test-binary only — never part of the library. */
 
 /* STL inclusions. */
+#include <array>
 #include <atomic>
+#include <cctype>
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <thread>
 
 /* Third-party inclusions.
@@ -54,6 +57,70 @@
 
 namespace EmEn::Base::Testing
 {
+	/**
+	 * @brief Returns the Content-Length a raw request announced, 0 when it declared none.
+	 * @note Hand-rolled and case-insensitive: the header codec under test must not be the thing
+	 * that decides what the test server reads.
+	 * @param rawRequest The raw request text: headers, then possibly a partial body.
+	 * @return size_t
+	 */
+	[[nodiscard]]
+	inline
+	size_t
+	declaredContentLength (const std::string & rawRequest) noexcept
+	{
+		const auto headerEnd = rawRequest.find("\r\n\r\n");
+
+		if ( headerEnd == std::string::npos )
+		{
+			return 0;
+		}
+
+		std::string headers{rawRequest, 0, headerEnd};
+
+		for ( auto & character : headers )
+		{
+			character = static_cast< char >(std::tolower(static_cast< unsigned char >(character)));
+		}
+
+		constexpr std::string_view Needle{"\r\ncontent-length:"};
+
+		const auto position = headers.find(Needle);
+
+		if ( position == std::string::npos )
+		{
+			return 0;
+		}
+
+		size_t length = 0;
+		bool digitSeen = false;
+
+		for ( auto index = position + Needle.size(); index < headers.size(); ++index )
+		{
+			const auto character = headers[index];
+
+			if ( character == ' ' || character == '\t' )
+			{
+				if ( digitSeen )
+				{
+					break;
+				}
+
+				continue;
+			}
+
+			if ( character < '0' || character > '9' )
+			{
+				break;
+			}
+
+			length = (length * 10) + static_cast< size_t >(character - '0');
+			digitSeen = true;
+		}
+
+		return length;
+	}
+
 	/** @brief Ephemeral PEM credentials for a hermetic TLS test server. */
 	struct ServerCredentials final
 	{
@@ -383,6 +450,34 @@ namespace EmEn::Base::Testing
 				if ( error || request.find("\r\n\r\n") == std::string::npos )
 				{
 					return;
+				}
+
+				/* ⚠️ The loop above stops at the header terminator, so a request BODY is only
+				 * whatever happened to share the last TLS record — a test asserting on it would
+				 * pass or fail by timing. Read out what Content-Length announced before handing
+				 * the request to the handler. */
+				if ( const auto announced = declaredContentLength(request); announced > 0 )
+				{
+					const auto bodyStart = request.find("\r\n\r\n") + 4;
+
+					while ( request.size() - bodyStart < announced && request.size() < MaxRequestSize )
+					{
+						std::array< char, 2048 > buffer{};
+
+						const auto bytesRead = stream.read_some(asio::buffer(buffer), error);
+
+						if ( error )
+						{
+							break;
+						}
+
+						request.append(buffer.data(), bytesRead);
+					}
+
+					if ( error )
+					{
+						return;
+					}
 				}
 
 				const auto response = m_handler(request);

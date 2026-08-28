@@ -135,6 +135,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPResponseParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClient.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClientLive.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClientRequest.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkTLSConnection.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkTrustStore.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkURI.cpp

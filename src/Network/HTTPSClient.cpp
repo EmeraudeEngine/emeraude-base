@@ -27,11 +27,14 @@
 #include "HTTPSClient.hpp"
 
 /* STL inclusions. */
+#include <cctype>
 #include <cstdlib>
 #include <algorithm>
 #include <array>
 #include <fstream>
 #include <limits>
+#include <string_view>
+#include <utility>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
@@ -178,6 +181,126 @@ namespace EmEn::Base::Network
 
 			return false;
 		}
+
+		/**
+		 * @brief Compares two header field names, case-insensitively (RFC 9110 §5.1).
+		 * @note Takes views and allocates nothing: it sits on the validation path of every
+		 * caller-supplied header.
+		 * @param lhs The first name.
+		 * @param rhs The second name.
+		 * @return bool
+		 */
+		[[nodiscard]]
+		bool
+		headerNameEquals (std::string_view lhs, std::string_view rhs) noexcept
+		{
+			if ( lhs.size() != rhs.size() )
+			{
+				return false;
+			}
+
+			for ( size_t index = 0; index < lhs.size(); ++index )
+			{
+				if ( std::tolower(static_cast< unsigned char >(lhs[index])) != std::tolower(static_cast< unsigned char >(rhs[index])) )
+				{
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		/**
+		 * @brief Returns whether a character is a RFC 9110 §5.6.2 token character.
+		 * @param character The character.
+		 * @return bool
+		 */
+		[[nodiscard]]
+		bool
+		isTokenChar (char character) noexcept
+		{
+			if ( std::isalnum(static_cast< unsigned char >(character)) != 0 )
+			{
+				return true;
+			}
+
+			constexpr std::string_view Specials{"!#$%&'*+-.^_`|~"};
+
+			return Specials.find(character) != std::string_view::npos;
+		}
+
+		/**
+		 * @brief Returns whether a header name is one the client writes itself.
+		 * @note A second copy of a framing header is a request-smuggling primitive, so a caller
+		 * supplying one is refused rather than silently overridden. User-Agent is deliberately
+		 * absent: overriding it is legitimate and harmless.
+		 * @param name The header field name.
+		 * @return bool
+		 */
+		[[nodiscard]]
+		bool
+		isReservedRequestHeader (std::string_view name) noexcept
+		{
+			constexpr std::array< std::string_view, 5 > Reserved{
+				std::string_view{"Host"},
+				std::string_view{"Content-Length"},
+				std::string_view{"Connection"},
+				std::string_view{"Transfer-Encoding"},
+				std::string_view{"Accept-Encoding"}
+			};
+
+			return std::ranges::any_of(Reserved, [name] (std::string_view reserved) {
+				return headerNameEquals(name, reserved);
+			});
+		}
+
+		/**
+		 * @brief Returns whether a method always frames a body, even an empty one.
+		 * @note A server reading a POST without Content-Length waits for a body that never comes,
+		 * so these three get the header whatever the body size.
+		 * @param method The HTTP method.
+		 * @return bool
+		 */
+		[[nodiscard]]
+		bool
+		methodFramesABody (HTTPRequest::Method method) noexcept
+		{
+			switch ( method )
+			{
+				case HTTPRequest::Method::POST :
+				case HTTPRequest::Method::PUT :
+				case HTTPRequest::Method::PATCH :
+					return true;
+
+				default :
+					return false;
+			}
+		}
+
+		/**
+		 * @brief Returns whether two URIs share an origin (host and effective port).
+		 * @note The scheme is not compared: every hop this client speaks is https by construction
+		 * — a downgrade Location is refused and an http one is upgraded.
+		 * @param lhs The first URI.
+		 * @param rhs The second URI.
+		 * @return bool False when either target cannot be extracted.
+		 */
+		[[nodiscard]]
+		bool
+		sameOrigin (const URI & lhs, const URI & rhs) noexcept
+		{
+			std::string leftHost;
+			std::string rightHost;
+			uint16_t leftPort = 0;
+			uint16_t rightPort = 0;
+
+			if ( !extractHTTPSTarget(lhs, leftHost, leftPort) || !extractHTTPSTarget(rhs, rightHost, rightPort) )
+			{
+				return false;
+			}
+
+			return leftPort == rightPort && headerNameEquals(leftHost, rightHost);
+		}
 	}
 
 	HTTPSClient::HTTPSClient (asio::ssl::context & tlsContext, HTTPSClientOptions options) noexcept
@@ -196,10 +319,12 @@ namespace EmEn::Base::Network
 		}
 
 		/* The transport records its own coarse reason; anything it did not classify is a protocol
-		 * or local-I/O problem, which run() distinguishes through m_lastOutcome. */
-		m_lastOutcome = DownloadOutcome::Protocol;
+		 * or local-I/O problem, which run() distinguishes. The variable is a LOCAL: several
+		 * download() calls run concurrently on one shared client (Net::Manager does exactly that),
+		 * and the member this used to be was a data race between them. */
+		DownloadOutcome outcome{DownloadOutcome::Protocol};
 
-		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath, progress ? &progress : nullptr);
+		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath, {}, outcome, progress ? &progress : nullptr);
 
 		if ( !result.has_value() )
 		{
@@ -210,7 +335,7 @@ namespace EmEn::Base::Network
 
 			if ( report != nullptr )
 			{
-				report->outcome = m_lastOutcome;
+				report->outcome = outcome;
 			}
 
 			return false;
@@ -240,6 +365,74 @@ namespace EmEn::Base::Network
 		}
 
 		return true;
+	}
+
+	bool
+	HTTPSClient::isRequestHeaderAcceptable (const std::string & name, const std::string & value) noexcept
+	{
+		if ( name.empty() || !std::ranges::all_of(name, isTokenChar) )
+		{
+			return false;
+		}
+
+		if ( isReservedRequestHeader(name) )
+		{
+			return false;
+		}
+
+		/* ⚠️ The request is built by concatenation, so a CR or LF inside a value ends the header
+		 * line early and injects everything after it — header injection, and with a body, request
+		 * splitting. Every other C0 control (and DEL) is refused too; only HTAB is legal in a
+		 * field value (RFC 9110 §5.5). */
+		return std::ranges::none_of(value, [] (char character) {
+			const auto byte = static_cast< unsigned char >(character);
+
+			if ( byte == '\t' )
+			{
+				return false;
+			}
+
+			return byte < 0x20 || byte == 0x7F;
+		});
+	}
+
+	std::optional< HTTPResult >
+	HTTPSClient::request (HTTPRequest::Method method, const URI & uri, HTTPRequestOptions options, DownloadReport * report) const noexcept
+	{
+		if ( report != nullptr )
+		{
+			*report = {};
+		}
+
+		DownloadOutcome outcome{DownloadOutcome::Protocol};
+
+		auto result = this->run(method, uri, BodySink::Memory, {}, std::move(options), outcome);
+
+		if ( !result.has_value() )
+		{
+			if ( report != nullptr )
+			{
+				report->outcome = outcome;
+			}
+
+			return std::nullopt;
+		}
+
+		const auto statusCode = result->response.codeResponse();
+
+		if ( report != nullptr )
+		{
+			report->statusCode = static_cast< uint16_t >(statusCode);
+			report->contentType = result->response.value(HTTPResponse::ContentType);
+
+			/* ⚠️ Unlike download(), a non-2xx is NOT a failure here and the response is still
+			 * returned: an API answers 404 or 422 with a body the caller has to read to know what
+			 * went wrong. The outcome merely labels it so the caller can branch without
+			 * re-deriving the class from the status code. */
+			report->outcome = statusCode >= 200 && statusCode <= 299 ? DownloadOutcome::Success : DownloadOutcome::HTTPStatus;
+		}
+
+		return result;
 	}
 
 	bool
@@ -324,15 +517,47 @@ namespace EmEn::Base::Network
 	}
 
 	std::optional< HTTPResult >
-	HTTPSClient::run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const DownloadProgress * progress) const noexcept
+	HTTPSClient::run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, HTTPRequestOptions options, DownloadOutcome & outcome, const DownloadProgress * progress) const noexcept
 	{
+		/* ⚠️ Validated ONCE, before the first connection is opened. Refusing a header only when
+		 * performHop() concatenates it would already have resolved and contacted the target, and
+		 * the caller cannot tell that apart from a transport failure. */
+		for ( const auto & [name, value] : options.headers )
+		{
+			if ( !HTTPSClient::isRequestHeaderAcceptable(name, value) )
+			{
+				outcome = DownloadOutcome::BadRequest;
+
+				Logging::error(Tag, "run(), the request header '" + name + "' is refused: bad field name, control character in the value, or a framing header the client owns.");
+
+				return std::nullopt;
+			}
+		}
+
+		/* The media type takes the same path into the request line, so it needs the same check. */
+		if ( !options.contentType.empty() && !HTTPSClient::isRequestHeaderAcceptable(HTTPRequest::ContentType, options.contentType) )
+		{
+			outcome = DownloadOutcome::BadRequest;
+
+			Logging::error(Tag, "run(), the request content type is refused: it carries a control character.");
+
+			return std::nullopt;
+		}
+
 		const auto deadline = std::chrono::steady_clock::now() + m_options.totalTimeout;
+
+		/* A method rewritten to GET must not keep the body it was going to POST: the target would
+		 * read it as the GET's own body, and a write would be replayed where none was intended. */
+		const auto dropBody = [&options] () {
+			options.body.clear();
+			options.contentType.clear();
+		};
 
 		URI currentURI{uri};
 
 		for ( uint8_t redirect = 0; redirect <= m_options.maxRedirects; ++redirect )
 		{
-			auto result = this->performHop(method, currentURI, sink, filepath, deadline, progress);
+			auto result = this->performHop(method, currentURI, sink, filepath, options, deadline, outcome, progress);
 
 			if ( !result.has_value() )
 			{
@@ -349,6 +574,8 @@ namespace EmEn::Base::Network
 
 			if ( redirect == m_options.maxRedirects )
 			{
+				outcome = DownloadOutcome::Protocol;
+
 				Logging::error(Tag, "run(), too many redirects (limit " + std::to_string(m_options.maxRedirects) + ").");
 
 				return std::nullopt;
@@ -360,6 +587,8 @@ namespace EmEn::Base::Network
 
 			if ( !HTTPSClient::resolveRedirect(currentURI, location, nextURI) )
 			{
+				outcome = DownloadOutcome::Protocol;
+
 				return std::nullopt;
 			}
 
@@ -371,10 +600,24 @@ namespace EmEn::Base::Network
 			if ( statusCode == 303 && method != HTTPRequest::Method::HEAD )
 			{
 				method = HTTPRequest::Method::GET;
+
+				dropBody();
 			}
 			else if ( (statusCode == 301 || statusCode == 302) && method == HTTPRequest::Method::POST )
 			{
 				method = HTTPRequest::Method::GET;
+
+				dropBody();
+			}
+
+			/* ⚠️ A redirect that leaves the origin DROPS every caller header. Forwarding an
+			 * Authorization to whatever host a Location names hands that host the credential — the
+			 * classic redirect credential leak. curl and every browser behave the same way. */
+			if ( !options.headers.empty() && !sameOrigin(currentURI, nextURI) )
+			{
+				Logging::info(Tag, "run(), the redirect leaves the origin: the caller headers are not forwarded.");
+
+				options.headers.clear();
 			}
 
 			currentURI = nextURI;
@@ -384,12 +627,12 @@ namespace EmEn::Base::Network
 	}
 
 	std::optional< HTTPResult >
-	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline, const DownloadProgress * progress) const noexcept
+	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const HTTPRequestOptions & options, std::chrono::steady_clock::time_point deadline, DownloadOutcome & outcome, const DownloadProgress * progress) const noexcept
 	{
 		std::string host;
 		uint16_t port = 0;
 
-		m_lastOutcome = DownloadOutcome::BadScheme;
+		outcome = DownloadOutcome::BadScheme;
 
 		if ( !extractHTTPSTarget(uri, host, port) )
 		{
@@ -400,8 +643,16 @@ namespace EmEn::Base::Network
 
 		/* Build the request (origin-form target, explicit close — no keep-alive
 		 * reuse yet, identity encoding so no client-side decompression needed). */
+		const auto callerHasUserAgent = std::ranges::any_of(options.headers, [] (const auto & header) {
+			return headerNameEquals(header.first, HTTPRequest::UserAgent);
+		});
+
+		const auto callerHasContentType = std::ranges::any_of(options.headers, [] (const auto & header) {
+			return headerNameEquals(header.first, HTTPRequest::ContentType);
+		});
+
 		std::string request;
-		request.reserve(RequestReserveBytes);
+		request.reserve(RequestReserveBytes + options.body.size());
 		request += HTTPRequest::method(method);
 		request += ' ';
 		request += buildRequestTarget(uri);
@@ -410,14 +661,48 @@ namespace EmEn::Base::Network
 		request += ": ";
 		request += host;
 		request += "\r\n";
-		request += HTTPRequest::UserAgent;
-		request += ": ";
-		request += m_options.userAgent;
-		request += "\r\n";
+
+		/* An API that keys on a named client needs its own User-Agent; the caller's wins. */
+		if ( !callerHasUserAgent )
+		{
+			request += HTTPRequest::UserAgent;
+			request += ": ";
+			request += m_options.userAgent;
+			request += "\r\n";
+		}
+
 		request += HTTPRequest::AcceptEncoding;
 		request += ": identity\r\n";
 		request += "Connection: close\r\n";
+
+		/* Caller headers. run() validated every one of them before this function ever ran, so no
+		 * CR or LF can reach this concatenation. */
+		for ( const auto & [name, value] : options.headers )
+		{
+			request += name;
+			request += ": ";
+			request += value;
+			request += "\r\n";
+		}
+
+		if ( !options.body.empty() && !options.contentType.empty() && !callerHasContentType )
+		{
+			request += HTTPRequest::ContentType;
+			request += ": ";
+			request += options.contentType;
+			request += "\r\n";
+		}
+
+		if ( !options.body.empty() || methodFramesABody(method) )
+		{
+			request += HTTPRequest::ContentLength;
+			request += ": ";
+			request += std::to_string(options.body.size());
+			request += "\r\n";
+		}
+
 		request += "\r\n";
+		request += options.body;
 
 		TLSConnection connection{m_tlsContext, m_options.transportTimeouts};
 
@@ -432,13 +717,13 @@ namespace EmEn::Base::Network
 		{
 			/* Nothing was ever spoken to, or the peer refused the handshake: TLSConnection logged
 			 * which of the two it was. */
-			m_lastOutcome = DownloadOutcome::Unreachable;
+			outcome = DownloadOutcome::Unreachable;
 
 			return std::nullopt;
 		}
 
 		/* Past the handshake: anything from here is protocol or local I/O. */
-		m_lastOutcome = DownloadOutcome::Protocol;
+		outcome = DownloadOutcome::Protocol;
 
 		if ( !connection.write(request.data(), request.size()) )
 		{
@@ -469,7 +754,7 @@ namespace EmEn::Base::Network
 
 			if ( !fileStream.is_open() )
 			{
-				m_lastOutcome = DownloadOutcome::LocalIO;
+				outcome = DownloadOutcome::LocalIO;
 
 				Logging::error(Tag, "performHop(), unable to open '" + filepath.string() + "' for writing.");
 
@@ -505,7 +790,7 @@ namespace EmEn::Base::Network
 		{
 			if ( std::chrono::steady_clock::now() >= deadline )
 			{
-				m_lastOutcome = DownloadOutcome::Timeout;
+				outcome = DownloadOutcome::Timeout;
 
 				Logging::error(Tag, "performHop(), the total time budget expired.");
 
@@ -545,7 +830,7 @@ namespace EmEn::Base::Network
 
 					if ( fileStream.fail() )
 					{
-						m_lastOutcome = DownloadOutcome::LocalIO;
+						outcome = DownloadOutcome::LocalIO;
 
 						Logging::error(Tag, "performHop(), unable to write to '" + filepath.string() + "'.");
 
@@ -604,7 +889,7 @@ namespace EmEn::Base::Network
 
 			if ( fileStream.fail() )
 			{
-				m_lastOutcome = DownloadOutcome::LocalIO;
+				outcome = DownloadOutcome::LocalIO;
 
 				Logging::error(Tag, "performHop(), unable to flush '" + filepath.string() + "' (disk full?).");
 

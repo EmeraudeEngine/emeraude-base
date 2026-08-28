@@ -33,6 +33,8 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
+#include <vector>
 
 /* Third-party inclusions.
  * NOTE: the no-exceptions hook MUST be included before any asio header. */
@@ -72,7 +74,8 @@ namespace EmEn::Base::Network
 		Timeout,        /* A per-operation or total deadline expired. */
 		Protocol,       /* Malformed, truncated, too large, or a redirect that could not be followed. */
 		HTTPStatus,     /* The exchange completed, the status was not 2xx (see downloadStatusCode). */
-		LocalIO         /* The destination file could not be opened, written or flushed. */
+		LocalIO,        /* The destination file could not be opened, written or flushed. */
+		BadRequest      /* The CALLER's request was refused before a byte was sent (bad header, bad body). */
 	};
 
 	/**
@@ -95,6 +98,7 @@ namespace EmEn::Base::Network
 			case DownloadOutcome::Protocol : return "Protocol";
 			case DownloadOutcome::HTTPStatus : return "HTTPStatus";
 			case DownloadOutcome::LocalIO : return "LocalIO";
+			case DownloadOutcome::BadRequest : return "BadRequest";
 		}
 
 		return "Unknown";
@@ -175,6 +179,34 @@ namespace EmEn::Base::Network
 	};
 
 	/**
+	 * @brief What a caller adds to a request beyond its method and URI: headers, and a body.
+	 * @note Exists for API traffic; get()/head()/download() leave it empty. The client owns the
+	 * framing headers (Host, Content-Length, Connection, Transfer-Encoding, Accept-Encoding) and
+	 * REFUSES a caller that supplies one rather than silently ignoring it: a duplicate framing
+	 * header is a request-smuggling primitive. User-Agent is the exception — it overrides the one
+	 * from HTTPSClientOptions, which is what an API expecting a named client needs.
+	 */
+	struct HTTPRequestOptions final
+	{
+		/**
+		 * @brief Extra request headers, sent in this order.
+		 * @note A vector, not a map: a field may legitimately repeat (Accept, Cookie), and a
+		 * request-signing scheme can be order-sensitive. Every name and value is validated
+		 * before anything reaches the socket — see HTTPSClient::isRequestHeaderAcceptable().
+		 */
+		std::vector< std::pair< std::string, std::string > > headers;
+
+		/** @brief The request body, sent verbatim. Empty for a body-less method. */
+		std::string body;
+
+		/**
+		 * @brief Media type of the body, sent as Content-Type when 'headers' carries none.
+		 * @note Ignored when the body is empty.
+		 */
+		std::string contentType;
+	};
+
+	/**
 	 * @brief A blocking, redirect-following HTTPS/1.1 client over LibreSSL.
 	 * @note Assembles the trust store (via the shared TLS context), the TLS transport
 	 * (TLSConnection) and the response codec (HTTPResponseParser) into the synchronous
@@ -208,7 +240,9 @@ namespace EmEn::Base::Network
 			std::optional< HTTPResult >
 			get (const URI & uri) const noexcept
 			{
-				return this->run(HTTPRequest::Method::GET, uri, BodySink::Memory, {});
+				DownloadOutcome outcome{DownloadOutcome::Success};
+
+				return this->run(HTTPRequest::Method::GET, uri, BodySink::Memory, {}, {}, outcome);
 			}
 
 			/**
@@ -220,8 +254,42 @@ namespace EmEn::Base::Network
 			std::optional< HTTPResult >
 			head (const URI & uri) const noexcept
 			{
-				return this->run(HTTPRequest::Method::HEAD, uri, BodySink::Discard, {});
+				DownloadOutcome outcome{DownloadOutcome::Success};
+
+				return this->run(HTTPRequest::Method::HEAD, uri, BodySink::Discard, {}, {}, outcome);
 			}
+
+			/**
+			 * @brief Performs an arbitrary request — method, extra headers, body — and returns the response + body.
+			 * @note The API-traffic entry point; get() and head() are façades over it. The response
+			 * body is held in memory and capped by HTTPSClientOptions::maxInMemoryBodySize.
+			 * @warning Redirect handling differs from a plain GET in two ways, both of which exist
+			 * to avoid leaking a credential or replaying a write:
+			 *  - a 301/302/303 that rewrites the method to GET also DROPS the body;
+			 *  - a redirect that changes scheme, host or port DROPS every caller header, because an
+			 *    Authorization forwarded to the redirect target is a credential leak.
+			 * @param method The HTTP method.
+			 * @param uri The target URI (https scheme).
+			 * @param options The extra headers and body [std::move]. Default none.
+			 * @param report Where to write the outcome, HTTP status and media type. Default none.
+			 * @return std::optional< HTTPResult > std::nullopt on a refused request, or on a transport/parse/redirect error.
+			 */
+			[[nodiscard]]
+			std::optional< HTTPResult > request (HTTPRequest::Method method, const URI & uri, HTTPRequestOptions options = {}, DownloadReport * report = nullptr) const noexcept;
+
+			/**
+			 * @brief Returns whether a caller-supplied request header may be sent.
+			 * @note Refuses an empty or non-token name (RFC 9110 §5.1 tchar), a value carrying CR,
+			 * LF or NUL — the request is built by concatenation, so a CRLF inside a value injects
+			 * arbitrary headers, which is the request-splitting primitive — a value carrying any
+			 * other C0 control but HTAB, and every framing header the client owns (Host,
+			 * Content-Length, Connection, Transfer-Encoding, Accept-Encoding).
+			 * @param name The header field name.
+			 * @param value The header field value.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static bool isRequestHeaderAcceptable (const std::string & name, const std::string & value) noexcept;
 
 			/**
 			 * @brief Downloads a resource to a file, streaming the body (never held whole in memory).
@@ -249,11 +317,14 @@ namespace EmEn::Base::Network
 			 * @param uri The initial target URI.
 			 * @param sink Where the final response body goes.
 			 * @param filepath The destination file when sink is File.
+			 * @param options The caller headers and body [std::move]. Mutated across hops: a method
+			 * rewrite drops the body, a cross-origin redirect drops the headers.
+			 * @param outcome Where the coarse reason is written [out].
 			 * @param progress The progress hook of a File sink, nullptr otherwise.
 			 * @return std::optional< HTTPResult > The final response (body empty when streamed to file).
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const DownloadProgress * progress = nullptr) const noexcept;
+			std::optional< HTTPResult > run (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, HTTPRequestOptions options, DownloadOutcome & outcome, const DownloadProgress * progress = nullptr) const noexcept;
 
 			/**
 			 * @brief Performs a single request/response exchange (one connection, no redirect).
@@ -261,12 +332,14 @@ namespace EmEn::Base::Network
 			 * @param uri The target URI for this hop (https).
 			 * @param sink Where the body goes.
 			 * @param filepath The destination file when sink is File.
+			 * @param options The caller headers and body for this hop.
 			 * @param deadline The absolute total-budget deadline.
+			 * @param outcome Where the coarse reason is written [out].
 			 * @param progress The progress hook of a File sink, nullptr otherwise. Reported only on a 2xx.
 			 * @return std::optional< HTTPResult >
 			 */
 			[[nodiscard]]
-			std::optional< HTTPResult > performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, std::chrono::steady_clock::time_point deadline, const DownloadProgress * progress = nullptr) const noexcept;
+			std::optional< HTTPResult > performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const HTTPRequestOptions & options, std::chrono::steady_clock::time_point deadline, DownloadOutcome & outcome, const DownloadProgress * progress = nullptr) const noexcept;
 
 			/**
 			 * @brief Resolves the proxy to use for a target host (explicit option or environment).
@@ -290,10 +363,11 @@ namespace EmEn::Base::Network
 			[[nodiscard]]
 			static bool resolveRedirect (const URI & current, const std::string & location, URI & resolved) noexcept;
 
-			/* Coarse reason of the transfer in progress, set along its failure paths. Mutable
-			 * because the whole client API is const — it describes the last call, not the object. */
-			mutable DownloadOutcome m_lastOutcome{DownloadOutcome::Success};
-
+			/* ⚠️ The coarse reason used to be a `mutable` member written by these const methods.
+			 * Net::Manager runs several download() calls CONCURRENTLY on one shared client, so that
+			 * member was a genuine data race, and a failing transfer could report the reason of
+			 * another one. It is now threaded through run()/performHop() as an out-parameter, which
+			 * makes every call self-contained. Never put it back on the object. */
 			asio::ssl::context & m_tlsContext;
 			HTTPSClientOptions m_options;
 	};
