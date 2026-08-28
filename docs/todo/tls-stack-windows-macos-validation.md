@@ -70,13 +70,17 @@ the engine is not above it.
   every platform. Confirm no regression in the mDNS round trip and that `close()` still returns a
   parked `receive()` — Linux got it from `shutdown()` before, it now also gets it from the flag.
 - [ ] **L3** `tools/net-check` under ASan+UBSan, for the moved-from and close-race sections.
+- [ ] **L4** Replay step 5 through the new fixture (`app_system/tools/external-data-check/`) to seed
+  the reference row of its results table. Linux *has* run this chain (2026-08-27) but through an
+  ad-hoc store, so there is no row the other two machines can be compared against.
 - [ ] Nothing changed in `SerialPort.linux.cpp`; a build check is enough.
 
 ### macOS — steps 4-5, plus what a terminal cannot prove
 
 - [ ] **M1** Steps 4 and 5 below (the downloader from the remote console, then the `ExternalData`
   resource chain). **Never run on macOS** — the unit suites do not cover `Net::Manager`, its cache
-  directory, `index.json`, or the `.part` sweep.
+  directory, `index.json`, or the `.part` sweep. Step 5 is no longer improvised: run
+  `app_system/tools/external-data-check/` verbatim and fill its results table.
 - [ ] **M2 ⚠️ A SIGNED, PACKAGED binary**, for the macOS 15+ *Local Network* authorisation
   (`NSLocalNetworkUsageDescription`). Everything on 2026-08-28 ran from an already-authorised
   Terminal, which is precisely why it proves nothing. See the sibling item.
@@ -108,6 +112,7 @@ for the other.
 - [x] **W7** The hermetic suite's listening socket on 127.0.0.1 — no firewall problem in practice.
 - [ ] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
   that matters most for shipping: it is the path a `"Source": "ExternalData"` resource takes.
+  Run `app_system/tools/external-data-check/` verbatim and fill its results table.
 
 > [!NOTE]
 > What the Windows run found first was **not** in this cascade: app_system's
@@ -186,9 +191,26 @@ left behind by a kill is swept at the next start.
 
 ### 5. The `ExternalData` resource chain
 
-Drop a store declaring an https resource, then
-`Core.ResourcesManagerService.loadResource(ImageResource, <name>)` and poll `resourceStatus` until
-`Loaded`. This is the path that has never run on Windows or macOS.
+**Do not improvise this step any more.** It used to read "drop a store declaring an https resource",
+which is not a definition: three machines improvising three stores produce three runs that cannot be
+compared, and comparability is the whole point of a cross-platform handover.
+
+The fixture is now in the tree, in the consuming application:
+`app_system/tools/external-data-check/` — one store file (`ExternalDataCheck.store.json`, three
+entries: a nominal one, an expired certificate, a cleartext URL), one command sequence identical on
+the three OSes, the expected outcomes, and a results table to fill. Run it verbatim.
+
+Two things that cost time when this was pinned down (2026-08-28, Linux), both recorded in that
+README:
+
+- `Core::openFiles()` runs `openResourceIndex()` **before** the application's `onCoreOpenFiles()`,
+  so the console path works under app_system even though that override sends dropped files to
+  JavaScript. But a **malformed** store falls through to the application and vanishes silently,
+  behind a cheerful `1 file(s) submitted to the opening pipeline.` — that message is not proof,
+  `listResources` is.
+- Installing the store by dropping it into a `data-stores/` directory **cannot work**:
+  `Core/Resources/UseDynamicScan` defaults to `true`, and in that mode `readResourceIndexes()` is
+  never called at all. A dynamic scan can only produce `LocalData` entries anyway.
 
 ## ⚠️ Traps recorded on Linux, likely to bite differently there
 
