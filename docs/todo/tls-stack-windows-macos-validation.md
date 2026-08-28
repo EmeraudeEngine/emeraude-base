@@ -99,8 +99,15 @@ the engine is not above it.
   bound`, `Sealed Resources=none`, which is not what a shipped bundle looks like.
   ⚠️ **Orthogonal to M1**: the `external-data-check` fixture is an HTTPS *unicast* download, which
   the Local Network authorisation does not gate. A green step 5 says nothing about M2.
-- [ ] **M3** The app's own JS path — `--mode=test` → the dev-check mDNS card. Only the engine layer
-  was exercised.
+- [x] **M3 — done 2026-08-28.** `--mode=test`, driven over CDP like the Windows run. dev-check mDNS
+  card: bind `0.0.0.0:5353` beside `mDNSResponder`, TTL 255 + loopback, join on **both** real NICs
+  with zero failures, DNS-SD answered by **5 LAN hosts**, idempotent re-join, tolerant drop,
+  `close(cb)` + `"close"` event. Plus the native `TCP.server`/`TCP.client` bindings, the `net`
+  wrapper's full loopback demo, and `getNetworkInterfaces()` returning IPv4+IPv6 with MAC, index,
+  scope id and CIDR. `close()` against a parked `receive()`: **20.0 ms at 3000 ms, 14.7 ms at
+  1000 ms** — the macOS half of a measurement that existed only for Windows.
+  ⚠️ No CDP tooling and no WebSocket library exist on this machine; the run used a ~110-line pure
+  Python CDP client. Worth keeping in mind before assuming the Windows recipe is portable.
 - [ ] **M4** `SerialPort` at **250000 bauds against a real printer**. The `IOSSIOSPEED` path is new
   and was only ever exercised against a pty, which refuses the rate — so only the *failure* branch
   has run, never the success one.
