@@ -280,6 +280,15 @@ clear them: it had never run this path either.
 - **`path::string()` throws on MS-STL** for unconvertible content, and the whole stack is built
   `-fno-exceptions` — that is a terminate, not an error. Sites: `HTTPSClient.cpp` (the destination
   path in log messages), `TrustStore.cpp` (the bundle path). Prefer `u8string()` if it bites.
+  ⚠️ **This list was not exhaustive, and naming files rather than the pattern is what hid the rest.**
+  The same defect reaches any `TraceX{} << somePath`, because `path::operator<<` emits
+  `quoted(p.string())` — the conversion is implicit and there is nothing to grep for but the
+  streaming itself. `emeraude-engine/src/Net/Manager.cpp` carried **four** such sites, found from
+  Windows and fixed 2026-08-28 (`5032b9e5`, each wrapped in `IO::toU8String()`); one was on the init
+  path, so the crash landed at startup rather than during a download and looked like anything but a
+  tracing bug. The download cache sits under the user's profile, so a Windows account name with a
+  non-ANSI character is the whole trigger. Sweep for `<< *<path variable>` rather than for a file
+  name — and note that **no Linux or macOS run can surface this**, both convert without throwing.
 - **Windows needs `crypt32`, `bcrypt`, `ws2_32`** (`SetupLibreSSL.cmake`); `Iphlpapi` for
   `NetworkInterfaces`; `SetupAPI.lib` and `wlanapi.lib` come from `#pragma comment(lib, …)` inside
   the `.windows.cpp` files, i.e. **MSVC only** — a MinGW/clang-cl build will not link.
