@@ -100,8 +100,15 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Sets the vertex tangent.
-			 * @param tangent A reference to a 4D vector for the tangent.
+			 * @brief Sets the vertex tangent, handedness included.
+			 * @warning ⚠️ The W component is the BITANGENT HANDEDNESS, not a homogeneous
+			 * coordinate: it is the sign that turns `cross(normal, tangent)` into the authored
+			 * bitangent, and it is the ONLY thing that distinguishes a mirrored UV island from a
+			 * plain one. This overload used to DROP it, which flipped the bitangent on every
+			 * mirrored island and lit its normal map backwards (measured on the Khronos
+			 * `NormalTangentMirrorTest`). glTF's `TANGENT` accessor is a vec4 for exactly this
+			 * reason; so is FBX's and USD's tangent convention.
+			 * @param tangent A reference to a 4D vector for the tangent, W being the handedness.
 			 * @return void
 			 */
 			void
@@ -110,6 +117,20 @@ namespace EmEn::Base::VertexFactory
 				m_tangent[Math::X] = tangent[Math::X];
 				m_tangent[Math::Y] = tangent[Math::Y];
 				m_tangent[Math::Z] = tangent[Math::Z];
+				m_tangentHandedness = tangent[Math::W];
+			}
+
+			/**
+			 * @brief Sets the bitangent handedness alone.
+			 * @note The sign applied to `cross(normal, tangent)` by biNormal(). +1 leaves the
+			 * cross product untouched, which is the neutral value every generated shape uses.
+			 * @param handedness The handedness, expected to be +1 or -1.
+			 * @return void
+			 */
+			void
+			setTangentHandedness (vertex_data_t handedness) noexcept
+			{
+				m_tangentHandedness = handedness;
 			}
 
 			/**
@@ -241,14 +262,27 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Returns the vertex bi-normal vector.
-			 * @note Produced by the cross product of normal and tangent vectors.
-			 * @return const Math::Vector< 3, data_t > &
+			 * @note The cross product of the normal and tangent vectors, SIGNED by the tangent
+			 * handedness. The neutral handedness is +1, so a shape that never sets one behaves
+			 * exactly as it did before the handedness existed.
+			 * @return Math::Vector< 3, data_t >
 			 */
 			[[nodiscard]]
 			Math::Vector< 3, vertex_data_t >
 			biNormal () const noexcept
 			{
-				return Math::Vector< 3, vertex_data_t >::crossProduct(m_normal, m_tangent);
+				return Math::Vector< 3, vertex_data_t >::crossProduct(m_normal, m_tangent) * m_tangentHandedness;
+			}
+
+			/**
+			 * @brief Returns the bitangent handedness.
+			 * @return vertex_data_t
+			 */
+			[[nodiscard]]
+			vertex_data_t
+			tangentHandedness () const noexcept
+			{
+				return m_tangentHandedness;
 			}
 
 			/**
@@ -329,5 +363,10 @@ namespace EmEn::Base::VertexFactory
 			Math::Vector< 3, vertex_data_t > m_textureCoordinates{0, 0, 0};
 			Math::Vector< 4, int32_t > m_influences{-1, -1, -1, -1};
 			Math::Vector< 4, vertex_data_t > m_weights{0, 0, 0, 0};
+			/** @brief Sign applied to cross(normal, tangent) by biNormal(). Neutral is +1.
+			 * ⚠️ Adding this member changed sizeof(ShapeVertex) from 80 to 84 bytes, and
+			 * FileFormatNative writes vertices as a RAW BLOB of that size — hence the format
+			 * version bump to 2 in that file. */
+			vertex_data_t m_tangentHandedness{1};
 	};
 }

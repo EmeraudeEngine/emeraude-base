@@ -69,15 +69,18 @@ namespace EmEn::Base::VertexFactory
 			std::memcpy(buffer.data() + offset, &value, sizeof(value));
 		}
 
-		/* Builds a well-formed EE3D_V1 header (float/uint32 precision) followed by `blobBytes`
-		 * of zeroed payload, with the three counts set as requested. */
+		/* Builds a well-formed native header (float/uint32 precision) followed by `blobBytes`
+		 * of zeroed payload, with the three counts set as requested.
+		 * ⚠️ The magic string stayed "EE3D_V1" while the VERSION FIELD moved to 2 — the magic is
+		 * only checked for identity, the uint16 at offset 8 is what gates the layout. The payload
+		 * size is taken from sizeof(ShapeVertex) by the callers, so it follows the structure. */
 		std::vector< std::byte >
-		makeNative (uint64_t vertexCount, uint64_t triangleCount, uint64_t colorCount, size_t blobBytes) noexcept
+		makeNative (uint64_t vertexCount, uint64_t triangleCount, uint64_t colorCount, size_t blobBytes, uint16_t version = 2) noexcept
 		{
 			std::vector< std::byte > buffer(HeaderBytes + blobBytes, std::byte{0});
 
 			std::memcpy(buffer.data(), "EE3D_V1", 7);
-			putU16(buffer, 8, 1);                                       /* version */
+			putU16(buffer, 8, version);
 			buffer[10] = static_cast< std::byte >(sizeof(float));       /* vertex precision */
 			buffer[11] = static_cast< std::byte >(sizeof(uint32_t));    /* index precision */
 			putU64(buffer, 32, vertexCount);
@@ -103,6 +106,21 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(result.shape.vertices().size(), 3U);
 		EXPECT_EQ(result.shape.triangles().size(), 1U);
 		EXPECT_EQ(result.shape.vertexColors().size(), 0U);
+	}
+
+	/* A version-1 file predates the tangent handedness: its vertices are 80 bytes where this
+	 * build expects 84. There is no read path for it and there must not be one — reading a v1
+	 * blob at the v2 stride misparses SILENTLY, because the count validation can pass on a wrong
+	 * stride. The rejection is the feature. */
+	TEST(VertexFactoryNative, version1IsRejectedNotMisparsed)
+	{
+		const size_t blob = (3 * sizeof(ShapeVertex< float >)) + (1 * sizeof(ShapeTriangle< float, uint32_t >));
+		const auto buffer = makeNative(3, 1, 0, blob, 1);
+
+		MemoryStream stream{buffer};
+		Native format;
+		Result result;
+		EXPECT_FALSE(format.readStream(stream, result, {}));
 	}
 
 	/* ===== Malformed / hostile (run under ASan/UBSan: must reject, never crash) ===== */

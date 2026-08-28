@@ -19,8 +19,23 @@ in-memory representation they feed into.
 - The canonical in-memory geometry type; every loader/generator produces a `Shape`.
 - See: `Shape.hpp`
 
-**ShapeVertex<T>** - Position + normal + tangent + texture coordinates for one vertex.
-- See: `ShapeVertex.hpp`
+**ShapeVertex<T>** - Position + normal + tangent (+ its handedness) + texture coordinates,
+influences and weights for one vertex.
+- ⚠️⚠️ **`biNormal()` is DERIVED, not stored**: `cross(normal, tangent) * tangentHandedness`.
+  The handedness is a **signed scalar member**, neutral at `+1`, and it is the only thing that
+  distinguishes a **mirrored UV island** from a plain one — mirroring flips the authored bitangent
+  relative to the cross product. It arrived 2026-08-28; before that the sign did not exist and
+  `setTangent(Vector<4>)` silently DROPPED its W, so every mirrored island lit its normal map
+  backwards (measured on the Khronos `NormalTangentMirrorTest`: two of its four columns scattered
+  over 107.7° and 102.9° of highlight angle, against 0.3° on the reference column).
+  glTF's `TANGENT` accessor is a vec4 for exactly this reason. A caller that only knows a direction
+  uses the `Vector<3>` overload, which deliberately leaves the handedness untouched.
+- ⚠️⚠️ **`sizeof(ShapeVertex<float>)` is 84 bytes and that is part of a PERSISTED FORMAT**:
+  `FileFormatNative` writes vertices as a raw blob of that size. Any change to this structure MUST
+  bump the native format version in the same commit — a size change with an unchanged version
+  number is silent data corruption, not a compatibility question. The size is pinned by
+  `test_VertexFactoryShapeVertex.cpp` so the failure is a red test, not a corrupt file.
+- See: `ShapeVertex.hpp`, `test_VertexFactoryShapeVertex.cpp`
 
 **ShapeTriangle<V,I>** / **ShapeEdge** - Triangle (3 vertex indices + attributes) / edge primitives.
 - See: `ShapeTriangle.hpp`, `ShapeEdge.hpp`
@@ -370,6 +385,13 @@ CORNERS. Two lessons are built into it, both learned the hard way during the con
   content-sniff text formats (OBJ/ASCII-STL have no reliable magic).
 - **Untrusted counts**: any new parser MUST validate header-derived counts against the actual
   stream size before allocating (the Tier-1 vuln above). Add a fuzz target under `src/Fuzzing/`.
+- **Never change `ShapeVertex` or `ShapeTriangle` without bumping `FileFormatNative`'s version.**
+  The payload is a raw blob of `sizeof(...)`; the count validation can PASS on a wrong stride, so
+  the corruption is silent. Version 2 (2026-08-28) is the tangent-handedness layout; there is
+  deliberately no version-1 read path — the format had no users yet (owner decision), and a loud
+  refusal beats a plausible misparse.
+- **`setTangent(Vector<4>)`'s W is the handedness, not a homogeneous coordinate.** Dropping it
+  compiles, renders, and is wrong only on mirrored UVs — the worst kind of silent defect.
 
 ## Open Axis-B markers (not yet done)
 

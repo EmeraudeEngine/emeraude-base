@@ -92,9 +92,18 @@ namespace EmEn::Base::VertexFactory
 				uint16_t version = 0;
 				std::memcpy(&version, &header[8], sizeof(uint16_t));
 
-				if ( version != 1 )
+				/* ⚠️⚠️ VERSION 2 (2026-08-28). Vertices are written as a RAW BLOB of
+				 * sizeof(ShapeVertex<vertex_data_t>), so ANY change to that structure changes the
+				 * on-disk layout. Version 1 vertices were 80 bytes; the tangent handedness added
+				 * for mirrored-UV support makes them 84. There is deliberately NO version-1 read
+				 * path: the format was not in use yet (owner, 2026-08-28), and reading a v1 blob
+				 * with the v2 stride would misparse it SILENTLY — the count validation above can
+				 * pass on a wrong stride. Refusing it loudly is the only safe behaviour.
+				 * ⚠️ If ShapeVertex or ShapeTriangle ever changes again, BUMP THIS. A size change
+				 * with an unchanged version number is silent data corruption. */
+				if ( version != 2 )
 				{
-					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " !");
+					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " — this build reads version 2 only; a version-1 file predates the tangent handedness and must be re-exported from its source asset !");
 
 					return false;
 				}
@@ -238,7 +247,9 @@ namespace EmEn::Base::VertexFactory
 
 				std::memcpy(header, Magic, 7);
 
-				uint16_t version = 1;
+				/* ⚠️ Must match the accepted version in readStream(), and must be bumped whenever
+				 * ShapeVertex or ShapeTriangle changes size — the payload is a raw blob. */
+				uint16_t version = 2;
 				std::memcpy(&header[8], &version, sizeof(uint16_t));
 
 				header[10] = static_cast< char >(sizeof(vertex_data_t));
