@@ -81,9 +81,18 @@ the engine is not above it.
   resource chain). **Never run on macOS** — the unit suites do not cover `Net::Manager`, its cache
   directory, `index.json`, or the `.part` sweep. Step 5 is no longer improvised: run
   `app_system/tools/external-data-check/` verbatim and fill its results table.
-- [ ] **M2 ⚠️ A SIGNED, PACKAGED binary**, for the macOS 15+ *Local Network* authorisation
-  (`NSLocalNetworkUsageDescription`). Everything on 2026-08-28 ran from an already-authorised
-  Terminal, which is precisely why it proves nothing. See the sibling item.
+- [ ] **M2 ⚠️ A SIGNED, PACKAGED binary**, for the macOS 15+ *Local Network* authorisation.
+  Everything on 2026-08-28 ran from an already-authorised Terminal, which is precisely why it
+  proves nothing. See the sibling item. ⚠️ **The precondition was missing and is now in place**:
+  `app_system/resources/mac/Info.plist` had **no `NSLocalNetworkUsageDescription` at all** — with
+  the key absent the system cannot even present the prompt, so a bundle test run before 2026-08-28
+  would have measured the missing key, not the stack. Two things that run must still answer: does
+  TCC attribute the **renderer helper's** multicast to the main bundle (the key is deliberately in
+  the main plist only, so the answer is a clean measurement rather than a guess), and does an
+  **ad-hoc, linker-signed** bundle even qualify — the local build is `adhoc`, `Info.plist=not
+  bound`, `Sealed Resources=none`, which is not what a shipped bundle looks like.
+  ⚠️ **Orthogonal to M1**: the `external-data-check` fixture is an HTTPS *unicast* download, which
+  the Local Network authorisation does not gate. A green step 5 says nothing about M2.
 - [ ] **M3** The app's own JS path — `--mode=test` → the dev-check mDNS card. Only the engine layer
   was exercised.
 - [ ] **M4** `SerialPort` at **250000 bauds against a real printer**. The `IOSSIOSPEED` path is new
@@ -107,8 +116,12 @@ for the other.
   `dcb.BaudRate = config.baudRate` directly: an arbitrary `DWORD`, **no `CBR_*` table**, so the
   silent-fallback bug that hit both POSIX legs structurally cannot occur. Untested against real
   hardware, but there is no lookup to be wrong.
-- [ ] **W6** `TCPServer` binding `"::"` — no explicit `v6_only`, so IPv4 peers are silently refused
-  on Windows while accepted on Linux (see the traps below). **Still unfixed.**
+- [ ] **W6** `TCPServer` binding `"::"` — **fixed 2026-08-28, needs measuring HERE.** `listen()`
+  now requests `IPV6_V6ONLY` off explicitly when binding the IPv6 any-address, and **fails** if the
+  stack refuses rather than coming up IPv6-only. Written and compiled on macOS, where the symptom
+  never existed (`net.inet6.ip6.v6only = 0`), so Windows is the only machine that can confirm it:
+  `TCP.server.listen(port, backlog, "::")` then connect an **IPv4** client to `127.0.0.1:port`.
+  Before the fix that connection was refused on Windows and accepted everywhere else.
 - [x] **W7** The hermetic suite's listening socket on 127.0.0.1 — no firewall problem in practice.
 - [ ] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
   that matters most for shipping: it is the path a `"Source": "ExternalData"` resource takes.
@@ -222,9 +235,11 @@ README:
   the `.windows.cpp` files, i.e. **MSVC only** — a MinGW/clang-cl build will not link.
 - **macOS `IOKit`** (needed by `SerialPort.mac.mm`) is not linked by the engine: it arrives
   transitively through `SetupHWLOC.cmake`. If hwloc ever goes, the serial port stops linking.
-- **`TCPServer` on Windows**: binding `"::"` opens an AF_INET6 socket with **no explicit
-  `v6_only`** — Windows defaults to v6-only, so IPv4 peers are silently refused there while they
-  are accepted on Linux.
+- **`TCPServer` on Windows**: binding `"::"` used to open an AF_INET6 socket with **no explicit
+  `v6_only`** — Windows defaults to v6-only, so IPv4 peers were silently refused there while they
+  were accepted on Linux and macOS. **Fixed 2026-08-28** (explicit dual-stack request, hard failure
+  if refused), **unmeasured on Windows** — see W6. The lesson survives the fix: a kernel default is
+  not a contract, and the two platforms that "worked" only ever hid the trap.
 - ⚠️⚠️ **`shutdown()` does not wake a reader on an unconnected datagram socket, and Windows is
   very likely affected — CONFIRMED on macOS 2026-08-28.** POSIX makes it fail with `ENOTCONN`
   (Winsock: `WSAENOTCONN`); **Linux is the lenient outlier** that wakes the reader anyway, which
