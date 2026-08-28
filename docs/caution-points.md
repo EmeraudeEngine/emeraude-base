@@ -283,3 +283,71 @@ branches into an endless `data[0]` read.
 
 No caller in the cascade uses these pointer overloads today (every engine site calls
 `fill(const Color &)`), so the semantic correction carries no regression risk.
+### An OOM-guard test proves nothing on a big-RAM host — the HDR reader allocated 51 GB from a 40-byte file (Aug 2026, FIXED)
+
+> [!WARNING]
+> `PixelFactoryFileFormats.hdrHugeDimensionsDoNotOOM` feeds a ~40-byte stream whose resolution
+> line declares `-Y 65535 +X 65535` and asserts the load is refused. It **passed** on the
+> development hosts (Linux 125 GB RAM + 96 GB swap, macOS, Windows) and **failed on Ubuntu** with
+> `terminate called after throwing an instance of 'std::bad_alloc'`.
+>
+> Nothing platform-specific happened. `FileFormatHDR::readStream()` called
+> `pixmap.initialize(65535, 65535, RGB)` **before** reading a single pixel byte: 4.29e9 pixels ×
+> 3 floats = **51.5 GB**. A host that can back that reservation allocates it, zero-fills it, then
+> reaches the truncated-scanline guard and returns `false` — the test goes green after **2716 ms
+> and 16.8 GB of peak RSS**. A host that cannot, dies in the allocation. The test was measuring
+> the machine, not the code.
+>
+> **⚠️ The library is built `-fno-exceptions`** (verified in the cascade build flags), so
+> `m_data.resize()` inside `Pixmap::initialize()` cannot *fail*: a throwing `operator new`
+> unwinding into a `-fno-exceptions` frame is `std::terminate`. `initialize()` returning `bool`
+> therefore **cannot** report an allocation failure — every reader must bound the declared
+> dimensions **before** calling it. There is no second line of defence.
+>
+> **Fix** (`FileFormatHDR::readStream()`, the same guard and rationale as `FileFormatTarga`,
+> where `fuzz_targa` found the identical defect):
+> - reject a resolution line wider than the pixmap dimension type — it is scanned as
+>   `unsigned long` and `4294967296` used to truncate to `0`;
+> - compare the declared pixel count against the **remaining** stream payload
+>   (`stream.size() - stream.tell()`; both `FileStream` and `MemoryStream` implement `tell()`)
+>   times a max-expansion factor of **128**, before `initialize()`.
+>
+> The 128 factor: the tightest legitimate encoding is the adaptive RLE — 4 row-header bytes plus,
+> per each of the 4 component planes, 2 bytes per run of at most 127 pixels ⇒ **~16 pixels per
+> payload byte**. 128 keeps a wide margin and matches the Targa constant. **Known trade-off:** the
+> legacy RLE can in theory expand further (its repeat count is shifted 8 bits left per consecutive
+> repeat record, so 12 bytes can cover a 65535-wide scanline), so a legacy scanline compressing
+> better than 128:1 is refused. No Radiance-era or modern writer emits that, and the alternative
+> is an unbounded allocation driven by an untrusted header.
+>
+> **Result**: 2716 ms / 16.8 GB peak RSS → **0 ms / 11.7 MB**. Suite `2029/2029`.
+>
+> **How to verify an OOM guard on a host with plenty of RAM** — do not trust the green verdict:
+> ```bash
+> # 1. Peak RSS must stay flat. A "DoesNotOOM" test that peaks in GB is not guarding anything.
+> /usr/bin/time -f "peak RSS: %M KB" ./EmeraudeBaseUnitTests --gtest_filter='*DoesNotOOM'
+> # 2. Emulate a small-RAM host in-place: cap the address space (here 4 GB).
+> ( ulimit -v 4000000; ./EmeraudeBaseUnitTests --gtest_filter='*DoesNotOOM' )
+> ```
+> **Measured, not guessed** (2026-08-28): the sweep was run over all 20 tests whose name matches
+> `oom|huge|large` — `targaHugeDimensionsDoNotOOM`, `md3HugeTriangleTotalDoesNotOOM`,
+> `hugeVertexCountIsRejectedNotAllocated`, `forgedHugeFrameCountNeverOverAllocates`, … — and every
+> one of them peaks at the bare process baseline (~11.5 MB). `hdrHugeDimensionsDoNotOOM` was the
+> **only** guard in the suite that guarded nothing.
+>
+> **Deliberately NOT done (owner decisions, 2026-08-28):**
+> - **No allocation ceiling inside `Pixmap::initialize()`.** The guard stays the *reader's*
+>   responsibility. A ceiling would be a foundation contract change needing an arbitrary constant,
+>   and a legitimate pixmap can be enormous (16K×16K RGBA float = 4 GB). A nothrow allocator for
+>   `m_data` was rejected for the same reason it is tempting — it changes the type behind
+>   `data()`/`std::span` and the whole API around it.
+> - **The test keeps asserting only the return value.** A forked death test capping `RLIMIT_AS`
+>   (which *would* fail on any host) and a self-measured peak-RSS assertion were both considered
+>   and refused: POSIX-only / three platform implementations to maintain, for a defect the recipe
+>   below catches. **Consequence to accept: a future regression of this class will again only be
+>   visible on a small-RAM host, or by running the two commands below.**
+>
+> Both axes must be applied to **every** `DoesNotOOM` / `HugeDimensions` test — this class of test is
+> the one most likely to pass for the wrong reason. `FileFormatHDR` was added (`ceb83c2`) after
+> the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
+> is what caught it (`docs/todo/fuzz-hdr-target.md`).

@@ -282,6 +282,17 @@ are locale-independent by specification.
 | HDR / RGBE (`.hdr`) | ✅ | ✅ | in-house — the only floating-point citizen |
 | **TIFF (`.tif`, `.tiff`)** | ✅ | ❌ | **libtiff (added 2026-08-09)** |
 
+> [!WARNING]
+> **An in-house reader MUST bound the declared dimensions against the stream payload BEFORE
+> `Pixmap::initialize()`.** The library is built `-fno-exceptions`, so `initialize()`'s
+> `m_data.resize()` cannot *fail*: a throwing `operator new` is `std::terminate`. Its `bool` return
+> can never report an allocation failure — the header check is the only line of defence. Both
+> in-house readers shipped without it and both were caught: Targa by `fuzz_targa` (~17 GB from an
+> 18-byte header), HDR by the unit suite on a smaller-RAM host (**51.5 GB** from a 40-byte stream,
+> 2026-08-28). The pattern to copy, the max-expansion factor and its trade-off are in
+> [`docs/caution-points.md`](docs/caution-points.md) § PixelFactory. ⚠️ A `…DoesNotOOM` test going
+> green proves nothing on a big-RAM host — verify peak RSS and re-run under `ulimit -v`.
+
 **Why TIFF was added, breaking the "Ave robustus!" freeze on purpose (owner decision,
 2026-08-09):** Intel's Jungle Ruins — the engine's gold-goal scene — stores the base colour and
 translucency of its **entire vegetation** as 16-bit TIFF. Ten files, all under

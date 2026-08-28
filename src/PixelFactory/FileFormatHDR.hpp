@@ -133,8 +133,50 @@ namespace EmEn::Base::PixelFactory
 						return false;
 					}
 
+					/* The resolution line is scanned as 'unsigned long': a declaration wider than the
+					 * pixmap dimension type would truncate silently (4294967296 -> 0 with uint32_t). */
+					constexpr auto maxDimension = static_cast< uint64_t >(std::numeric_limits< dimension_t >::max());
+
+					if ( static_cast< uint64_t >(rows) > maxDimension || static_cast< uint64_t >(columns) > maxDimension )
+					{
+						std::cerr << "FileFormatHDR::readStream(), resolution line '" << line << "' exceeds the pixmap dimension type !" "\n";
+
+						return false;
+					}
+
 					width = static_cast< dimension_t >(columns);
 					height = static_cast< dimension_t >(rows);
+				}
+
+				/* Guard the declared resolution against the stream payload BEFORE allocating the pixmap.
+				 * The resolution line is untrusted: '-Y 65535 +X 65535' in a 40-byte stream asks for 4.29e9
+				 * pixels, i.e. a 51 GB RGB float pixmap. The truncated-scanline guard below only fires AFTER
+				 * initialize(), so a host that cannot back that reservation dies inside the allocation
+				 * (std::bad_alloc -> std::terminate under -fno-exceptions) instead of refusing the load, while a
+				 * host that can back it burns 16+ GB of RSS to reach the same 'false'. Same defect, and same
+				 * fix, as FileFormatTarga (found there by fuzz_targa).
+				 * The tightest legitimate encoding is the adaptive RLE: 4 row-header bytes plus, for each of the
+				 * 4 component planes, 2 bytes per run of at most 127 pixels -> ~16 pixels per payload byte. The
+				 * 128 factor keeps a wide margin over it and matches the Targa guard.
+				 * NOTE: the legacy RLE can in theory expand further (its repeat count is shifted 8 bits left per
+				 * consecutive repeat record), so a legacy scanline compressing better than 128:1 is refused. No
+				 * Radiance-era or modern writer emits that, and the alternative is an unbounded allocation
+				 * driven by an untrusted header. */
+				{
+					constexpr uint64_t maxRLEExpansion = 128;
+
+					const auto streamSize = static_cast< uint64_t >(stream.size());
+					const auto position = stream.tell();
+					const auto consumedBytes = position > 0 ? static_cast< uint64_t >(position) : 0;
+					const auto payloadBytes = streamSize > consumedBytes ? streamSize - consumedBytes : 0;
+					const auto pixelCount = static_cast< uint64_t >(width) * static_cast< uint64_t >(height);
+
+					if ( pixelCount > payloadBytes * maxRLEExpansion )
+					{
+						std::cerr << "FileFormatHDR::readStream(), declared resolution " << width << 'x' << height << " exceeds the stream payload (" << payloadBytes << " bytes) !" "\n";
+
+						return false;
+					}
 				}
 
 				if ( !pixmap.initialize(width, height, ChannelMode::RGB) )

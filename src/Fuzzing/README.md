@@ -108,3 +108,14 @@ clean for millions of runs under ASan + UBSan (`UBSAN_OPTIONS=halt_on_error=1`).
 > The fuzzers are header-instrumented by clang while linking the g++ `libEmeraudeBase.a`; the
 > `setjmp`/`longjmp` error handling for libpng/libjpeg is the sanctioned mechanism under the
 > library's `-fno-exceptions` policy. See [`../docs/error-handling.md`](../docs/error-handling.md).
+### Gap: `FileFormatHDR` (RGBE) has no target
+
+`FileFormatHDR` was added by `ceb83c2`, **after** the campaign above, and no `fuzz_hdr` target was
+written — while it is a hand-rolled parser (three scanline encodings) that the engine feeds with
+untrusted `.hdr` assets. The gap cost a defect immediately: the reader trusted its resolution line
+and allocated a **51.5 GB** pixmap from a 40-byte stream — the *same* defect `fuzz_targa` had found
+in Targa one campaign earlier. It was caught on 2026-08-28 by the unit suite running on a
+smaller-RAM host (`std::bad_alloc` → `terminate`), not by design: on a big-RAM host the test went
+green after allocating 16.8 GB. Fix and measurement:
+[`../../docs/caution-points.md`](../../docs/caution-points.md) § PixelFactory. Open item:
+[`../../docs/todo/fuzz-hdr-target.md`](../../docs/todo/fuzz-hdr-target.md).
