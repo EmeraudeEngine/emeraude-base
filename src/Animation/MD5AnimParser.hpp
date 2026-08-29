@@ -304,7 +304,7 @@ namespace EmEn::Base::Animation
 				{
 					/* Translation channel. */
 					AnimationChannel< precision_t > translationChannel;
-					translationChannel.jointIndex = static_cast< int32_t >(j);
+					translationChannel.targetIndex = static_cast< int32_t >(j);
 					translationChannel.target = ChannelTarget::Translation;
 					translationChannel.interpolation = ChannelInterpolation::Linear;
 					translationChannel.vectorKeyFrames = std::move(translationKeys[j]);
@@ -312,7 +312,7 @@ namespace EmEn::Base::Animation
 
 					/* Rotation channel. */
 					AnimationChannel< precision_t > rotationChannel;
-					rotationChannel.jointIndex = static_cast< int32_t >(j);
+					rotationChannel.targetIndex = static_cast< int32_t >(j);
 					rotationChannel.target = ChannelTarget::Rotation;
 					rotationChannel.interpolation = ChannelInterpolation::Linear;
 					rotationChannel.quaternionKeyFrames = std::move(rotationKeys[j]);

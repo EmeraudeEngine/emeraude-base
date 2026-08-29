@@ -55,7 +55,9 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 **Animation/** - Skeletal animation data types (header-only)
 - **Joint**: Joint struct (name, parentIndex, localT/R/S, inverseBindMatrix). Namespace: `EmEn::Base::Animation`
 - **Skeleton**: Ordered joint collection with name lookup and hierarchy validation (topological ordering)
-- **AnimationChannel**: Per-joint keyframes (`VectorKeyFrame` for T/S, `QuaternionKeyFrame` for R), 3 interpolation modes (Step, Linear, CubicSpline), `ChannelTarget` enum
+- **AnimationChannel**: Keyframes for ONE target (`VectorKeyFrame` for T/S, `QuaternionKeyFrame` for R), 3 interpolation modes (Step, Linear, CubicSpline), `ChannelTarget` enum, and the sampling itself — `sampleVector(t)` / `sampleQuaternion(t)`.
+  ⚠️ The field is **`targetIndex`**, renamed from `jointIndex` (Aug 2026): a clip is target-AGNOSTIC. A skeletal clip indexes a `Skeleton`'s joints, a NODE clip indexes an imported hierarchy's nodes — the engine has an evaluator for each. Producer and consumer must agree on which structure it indexes; nothing in the type can check it.
+  ⚠️ The sampling lives on the CHANNEL, not in an evaluator, precisely because there are now two consumers: a second copy is a second place for the CubicSpline stride and the tangent scaling to drift.
 - **AnimationClip**: Named collection of channels, duration auto-computed, skeleton-independent (joints referenced by index)
 - **Skin**: Mesh-to-skeleton binding (joint index remapping, inverse bind matrices, GLTF JOINTS_0 indirection)
 - Pure data types — no runtime playback. Consumed by `src/Animations/` for runtime evaluation and by loaders (GLTF, MD5)
@@ -194,7 +196,7 @@ See [`Testing/AGENTS.md`](Testing/AGENTS.md) for conventions and the sanitizer g
 ### Animation (skeletal data types)
 - `Animation/Joint.hpp` - Joint struct (name, parentIndex, T/R/S, inverseBindMatrix)
 - `Animation/Skeleton.hpp` - Ordered joint collection, name lookup, hierarchy validation
-- `Animation/AnimationChannel.hpp` - Per-joint keyframes, 3 interpolation modes, ChannelTarget enum
+- `Animation/AnimationChannel.hpp` - Keyframes for one `targetIndex` (joint OR node), 3 interpolation modes, ChannelTarget enum, `sampleVector()`/`sampleQuaternion()`
 - `Animation/AnimationClip.hpp` - Named channel collection, auto-computed duration
 - `Animation/Skin.hpp` - Mesh-to-skeleton binding, joint remapping, inverse bind matrices
 

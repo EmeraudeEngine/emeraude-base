@@ -32,6 +32,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "Math/Base.hpp"
 #include "Math/Quaternion.hpp"
 #include "Math/Vector.hpp"
 
@@ -106,8 +107,14 @@ namespace EmEn::Base::Animation
 	requires (std::is_floating_point_v< precision_t >)
 	struct AnimationChannel final
 	{
-		/** @brief Index of the target joint in the Skeleton's joint array. */
-		int32_t jointIndex{-1};
+		/**
+		 * @brief Index of the animated target inside the structure the clip belongs to.
+		 * @note ⚠️ The clip is target-AGNOSTIC on purpose: a SKELETAL clip indexes the Skeleton's
+		 * joint array, a NODE clip indexes the imported hierarchy's node array. The two are never
+		 * interchangeable — feeding one to the other's evaluator silently animates the wrong
+		 * things — so the producer and the consumer must agree on which structure this indexes.
+		 */
+		int32_t targetIndex{-1};
 
 		/** @brief Which transform component this channel animates. */
 		ChannelTarget target{ChannelTarget::Translation};
@@ -162,6 +169,151 @@ namespace EmEn::Base::Animation
 			}
 
 			return vectorKeyFrames.empty() ? precision_t{0} : vectorKeyFrames.back().time;
+		}
+
+		/**
+		 * @brief Samples the translation or scale track at the given time.
+		 * @note ⚠️ Lives HERE rather than in an evaluator: sampling a keyframe track is a property
+		 * of the track, and the engine has more than one animator reading these channels — a
+		 * skeletal one and a node one. A second copy of this interpolation is a second place for
+		 * the CubicSpline stride and the tangent scaling to drift apart.
+		 * @param time The time to sample at, in seconds. Clamped to the track's own range.
+		 * @return Math::Vector< 3, precision_t >
+		 */
+		[[nodiscard]]
+		Math::Vector< 3, precision_t >
+		sampleVector (precision_t time) const noexcept
+		{
+			const auto & keyFrames = vectorKeyFrames;
+
+			if ( keyFrames.empty() )
+			{
+				return {};
+			}
+
+			if ( keyFrames.size() == 1 || time <= keyFrames.front().time )
+			{
+				return keyFrames.front().value;
+			}
+
+			if ( time >= keyFrames.back().time )
+			{
+				return keyFrames.back().value;
+			}
+
+			const auto index = findKeyFrameIndex(keyFrames, time);
+			const auto & previous = keyFrames[index];
+			const auto & next = keyFrames[index + 1];
+
+			if ( interpolation == ChannelInterpolation::Step )
+			{
+				return previous.value;
+			}
+
+			const auto span = next.time - previous.time;
+			const auto factor = span > precision_t{0} ? (time - previous.time) / span : precision_t{0};
+
+			/* glTF cubic: the tangents are scaled by the segment duration inside the evaluator. */
+			if ( interpolation == ChannelInterpolation::CubicSpline )
+			{
+				return Math::cubicSplineInterpolation(previous.value, previous.outTangent, next.value, next.inTangent, span, factor);
+			}
+
+			return Math::Vector< 3, precision_t >{
+				previous.value[0] + (next.value[0] - previous.value[0]) * factor,
+				previous.value[1] + (next.value[1] - previous.value[1]) * factor,
+				previous.value[2] + (next.value[2] - previous.value[2]) * factor
+			};
+		}
+
+		/**
+		 * @brief Samples the rotation track at the given time.
+		 * @param time The time to sample at, in seconds. Clamped to the track's own range.
+		 * @return Math::Quaternion< precision_t >
+		 */
+		[[nodiscard]]
+		Math::Quaternion< precision_t >
+		sampleQuaternion (precision_t time) const noexcept
+		{
+			const auto & keyFrames = quaternionKeyFrames;
+
+			if ( keyFrames.empty() )
+			{
+				return {};
+			}
+
+			if ( keyFrames.size() == 1 || time <= keyFrames.front().time )
+			{
+				return keyFrames.front().value;
+			}
+
+			if ( time >= keyFrames.back().time )
+			{
+				return keyFrames.back().value;
+			}
+
+			const auto index = findKeyFrameIndex(keyFrames, time);
+			const auto & previous = keyFrames[index];
+			const auto & next = keyFrames[index + 1];
+
+			if ( interpolation == ChannelInterpolation::Step )
+			{
+				return previous.value;
+			}
+
+			const auto span = next.time - previous.time;
+			const auto factor = span > precision_t{0} ? (time - previous.time) / span : precision_t{0};
+
+			/* ⚠️ glTF cubic on a rotation is evaluated component-wise, so the result is NOT unit
+			 * length and must be normalized before it reaches a transform matrix. */
+			if ( interpolation == ChannelInterpolation::CubicSpline )
+			{
+				auto result = Math::cubicSplineInterpolation(previous.value, previous.outTangent, next.value, next.inTangent, span, factor);
+				result.normalize();
+
+				return result;
+			}
+
+			return Math::Quaternion< precision_t >::slerp(previous.value, next.value, factor, precision_t{0.05});
+		}
+
+		private:
+
+		/**
+		 * @brief Finds the index of the last keyframe at or before the given time.
+		 * @param keyFrames A reference to the keyframe list.
+		 * @param time The time to look for.
+		 * @return size_t The index, or 0 when the time precedes every keyframe.
+		 */
+		template< typename keyframe_t >
+		[[nodiscard]]
+		static
+		size_t
+		findKeyFrameIndex (const std::vector< keyframe_t > & keyFrames, precision_t time) noexcept
+		{
+			if ( keyFrames.size() <= 1 )
+			{
+				return 0;
+			}
+
+			size_t low = 0;
+			size_t high = keyFrames.size() - 1;
+
+			while ( low < high - 1 )
+			{
+				const auto mid = (low + high) / 2;
+
+				if ( keyFrames[mid].time <= time )
+				{
+					low = mid;
+				}
+				else
+				{
+					high = mid;
+				}
+			}
+
+			return low;
 		}
 	};
 
