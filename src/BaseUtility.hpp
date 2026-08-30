@@ -106,6 +106,26 @@ namespace EmEn::Base::Utility
 		return value >= lowest && value <= highest;
 	}
 
+	template< typename number_t = float >
+	[[nodiscard]]
+	constexpr
+	number_t
+	between (number_t value, number_t lowest, number_t highest) noexcept
+		requires (std::is_arithmetic_v< number_t >)
+	{
+		if ( value <= lowest )
+		{
+			return lowest;
+		}
+
+		if ( value >= highest )
+		{
+			return highest;
+		}
+
+		return value;
+	}
+
 	/**
 	 * @brief Gets the celled result of a division.
 	 * @tparam number_t The type of the number. Default uint32_t.
