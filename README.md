@@ -146,9 +146,10 @@ Two categories:
 
 **2. Git submodules**, compiled with the library:
 
-| Library | Repository |
-|---|---|
-| **Asio** | [chriskohlhoff/asio](https://github.com/chriskohlhoff/asio) |
+| Library           | Repository                                                              |
+|-------------------|-------------------------------------------------------------------------|
+| **Asio**          | [chriskohlhoff/asio](https://github.com/chriskohlhoff/asio)             |
+| **json**          | [nlohmann/json](https://github.com/nlohmann/json.git)                   |
 | **TinySoundFont** | [schellingb/TinySoundFont](https://github.com/schellingb/TinySoundFont) |
 
 ### How resolution works
