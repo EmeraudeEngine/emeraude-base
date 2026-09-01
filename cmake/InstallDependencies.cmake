@@ -39,7 +39,7 @@ endif ()
 # from a previously-configured build dir (e.g. "v012") silently win over a bump.
 # The leading 'v' is part of the value: it is both the GitHub release tag and
 # the archive filename token (e.g. ...-glibc2.35.v013.zip).
-set(EXTERNAL_DEPENDENCIES_VERSION "v014")
+set(EXTERNAL_DEPENDENCIES_VERSION "v015")
 set(EXTERNAL_DEPENDENCIES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
 
 # Candidate dirnames, in priority order: the exact host tag first, then the
