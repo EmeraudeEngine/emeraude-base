@@ -12,14 +12,16 @@ if ( MSVC )
 	# mpg123 uses PathCombineW / PathIsRelativeW / PathIsUNCW from shlwapi
 	# when WANT_WIN32_UNICODE is on (the default in our recipe). The official
 	# mpg123-targets.cmake declares this as INTERFACE_LINK_LIBRARIES, but
-	# since we link mpg123.lib by path we must add shlwapi.lib here too.
+	# since we link libmpg123.lib by path we must add shlwapi.lib here too.
+	# NOTE: the MSVC artifact is libmpg123.lib since deps v015 — upstream's cmake
+	# port forces `PREFIX lib` on the target, aligning Windows with the Unix name.
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PRIVATE
 		${EMERAUDE_EXT_LIBS_PATH}/lib/sndfile.lib
 		${EMERAUDE_EXT_LIBS_PATH}/lib/FLAC.lib
 		${EMERAUDE_EXT_LIBS_PATH}/lib/vorbisenc.lib
 		${EMERAUDE_EXT_LIBS_PATH}/lib/vorbis.lib
 		${EMERAUDE_EXT_LIBS_PATH}/lib/opus.lib
-		${EMERAUDE_EXT_LIBS_PATH}/lib/mpg123.lib
+		${EMERAUDE_EXT_LIBS_PATH}/lib/libmpg123.lib
 		${EMERAUDE_EXT_LIBS_PATH}/lib/mp3lame.lib
 		${EMERAUDE_EXT_LIBS_PATH}/lib/ogg.lib
 		shlwapi.lib
