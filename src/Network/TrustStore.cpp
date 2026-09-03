@@ -153,7 +153,9 @@ namespace EmEn::Base::Network::TrustStore
 			return false;
 		}
 
-		Logging::info(Tag, "CA bundle file '" + bundleFilepath.string() + "' loaded.");
+		#ifdef DEBUG
+		Logging::debug(Tag, "CA bundle file '" + bundleFilepath.string() + "' loaded.");
+		#endif
 
 		return true;
 	}
