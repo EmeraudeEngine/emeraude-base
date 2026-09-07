@@ -35,6 +35,9 @@
 #include <sstream>
 #include <string>
 
+/* Third-party inclusions. */
+#include <tracy/Tracy.hpp>
+
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
@@ -507,6 +510,8 @@ namespace EmEn::Base
 	void
 	ThreadPool::worker ()
 	{
+		tracy::SetThreadName("EmEn::Base::ThreadPool");
+
 		isPoolWorker() = true;
 
 		while ( true )

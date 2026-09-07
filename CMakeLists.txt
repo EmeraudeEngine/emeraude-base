@@ -84,6 +84,7 @@ option(EMERAUDE_ENABLE_TSAN "Build with ThreadSanitizer: data races. GCC, Clang,
 option(EMERAUDE_ENABLE_UBSAN "Build with UndefinedBehaviorSanitizer: undefined behaviour at run time. GCC, Clang, AppleClang (Default Off)." Off)
 option(EMERAUDE_ENABLE_MSAN "Build with MemorySanitizer: uninitialised reads. Clang on Linux only; exclusive with ASan, LSan, TSan (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
+option(EMERAUDE_ENABLE_TRACY "Build the Tracy profiler client as a shared library and define TRACY_ENABLE (Default Off)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
@@ -725,6 +726,10 @@ include(SetupThreads)
 include(SetupMeshOptimizer) # Mesh simplification (VertexFactory::simplifyShape); the engine also decodes EXT_meshopt_compression with it
 
 unset(TARGET_BINARY_FOR_SETUP)
+
+# Tracy attaches itself to the shared compile requirements rather than to the umbrella, so the
+# per-module OBJECT libraries see its headers too. Off by default: headers only, no runtime.
+include(SetupTracy)
 
 # Every third-party archive is attached at this point: keep them out of the export table when the
 # umbrella is built SHARED, so its static copies never interpose the system libraries used by any
