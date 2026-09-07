@@ -34,6 +34,7 @@ policy.
 | Meshes, parametric geometry | [`src/VertexFactory/AGENTS.md`](src/VertexFactory/AGENTS.md) |
 | Audio data | [`src/WaveFactory/AGENTS.md`](src/WaveFactory/AGENTS.md) |
 | Unit tests (`EmeraudeBaseUnitTests`) | [`src/Testing/AGENTS.md`](src/Testing/AGENTS.md) |
+| Tracy profiler client | [`docs/agents/06b-3d-tracy-profiler-client.md`](docs/agents/06b-3d-tracy-profiler-client.md) |
 | Supported image formats (PixelFactory) | [`docs/agents/10-6b-pixelfactory-supported-image-formats.md`](docs/agents/10-6b-pixelfactory-supported-image-formats.md) |
 | Pitfalls | [`docs/caution-points.md`](docs/caution-points.md) (search it, do not read it whole) |
 
@@ -47,6 +48,7 @@ policy.
 | Shared precompiled header | [`04-3a-shared-precompiled-header.md`](docs/agents/04-3a-shared-precompiled-header.md) |
 | Third-party symbol hiding | [`05-3b-third-party-symbols-must-never-leave-the-binary-that-link.md`](docs/agents/05-3b-third-party-symbols-must-never-leave-the-binary-that-link.md) |
 | Numeric locale invariant | [`06-3c-the-c-numeric-locale-is-a-cascade-invariant.md`](docs/agents/06-3c-the-c-numeric-locale-is-a-cascade-invariant.md) |
+| Tracy profiler client | [`06b-3d-tracy-profiler-client.md`](docs/agents/06b-3d-tracy-profiler-client.md) |
 | Core axioms | [`07-4-core-axioms.md`](docs/agents/07-4-core-axioms.md) |
 | Conventions | [`08-5-conventions.md`](docs/agents/08-5-conventions.md) |
 | Documentation directive | [`09-6-documentation-directive.md`](docs/agents/09-6-documentation-directive.md) |

@@ -32,6 +32,9 @@
 /* STL inclusions. */
 #include <iostream>
 
+/* Third-party inclusions. */
+#include <tracy/Tracy.hpp>
+
 /* Local inclusions. */
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 
@@ -149,6 +152,8 @@ namespace EmEn::Base
 	void
 	ThreadPool::worker ()
 	{
+		tracy::SetThreadName("EmEn::Base::ThreadPool");
+
 		while ( true )
 		{
 			Task task;
