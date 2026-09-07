@@ -18,6 +18,7 @@ Index of the AI-facing documentation for **emeraude-base**.
 | [`integration.md`](integration.md) | How to link emeraude-base into a third-party project. |
 | [`todo/README.md`](todo/README.md) | **Open work** — one file per idea to do in [`todo/`](todo/); done = file deleted. Design/governance documents stay in `plans/`. |
 | [`caution-points.md`](caution-points.md) | Cross-cutting compiler/platform pitfalls (GCC `-Wstringop-*` false positives on `std::string`, …) and their source-level fixes. |
+| [`tracy-profiler.md`](tracy-profiler.md) | **Tracy client integration** — `EMERAUDE_ENABLE_TRACY`, why the client must be shared, on-demand mode, how to add a zone. |
 | [`error-handling.md`](error-handling.md) | **Error-handling contract** (Ave robustus A.0): bool/optional propagation, abort policy, no-throw, untrusted-input bounds, the Logging hook. Normative. |
 | [`plans/ave-robustus.md`](plans/ave-robustus.md) | **Long-term governance plan** "Ave robustus!" — robustness of software intent (completeness + execution hardening). Feature freeze + "no fix without a test" in effect. *(VALIDATED 2026-05-31)* |
 | [`plans/ave-robustus-inventory.md`](plans/ave-robustus-inventory.md) | Phase 0 deliverable: full promised-vs-delivered inventory of all 15 modules (severity tiers, gaps A/B, correctness bugs, open decisions). |

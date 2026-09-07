@@ -48,6 +48,7 @@ option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual St
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
+option(EMERAUDE_ENABLE_TRACY "Build the Tracy profiler client as a shared library and define TRACY_ENABLE (Default Off)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
@@ -459,6 +460,10 @@ if ( EMERAUDE_ENABLE_OPENMP AND NOT APPLE )
 endif ()
 
 unset(TARGET_BINARY_FOR_SETUP)
+
+# Tracy attaches itself to the shared compile requirements rather than to the umbrella, so the
+# per-module OBJECT libraries see its headers too. Off by default: headers only, no runtime.
+include(SetupTracy)
 
 # Every third-party archive is attached at this point: keep them out of the export table when the
 # umbrella is built SHARED, so its static copies never interpose the system libraries used by any
