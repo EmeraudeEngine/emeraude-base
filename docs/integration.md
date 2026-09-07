@@ -63,6 +63,7 @@ Options:
 | `EMERAUDE_DISABLE_EXCEPTIONS` | `On` | Build with `-fno-exceptions` (MSVC: `/EHs- /EHc-` **and** `_HAS_EXCEPTIONS=0`, C4530 not suppressed — see `docs/error-handling.md` § 1). |
 | `EMERAUDE_DISABLE_RTTI` | `Off` | Build with `-fno-rtti`. |
 | `EMERAUDE_DISABLE_PARANOID_COMPILATION` | `Off` | Relax warnings-as-errors (`-Werror`). |
+| `EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION` | `Off` | Raise the **Release** optimisation one notch: `-O3` instead of `-O2` (GCC/Clang), `/Ob3` instead of `/Ob2` (MSVC — there is no `/O3`, so the inline expansion level is the whole lever there). Unmeasured on this codebase, hence `Off`; the default deliberately matches the level CEF publishes per platform. ⚠️ MSVC processes options left to right and `/O2` *resets* the level to `/Ob2`, so the `/Ob` entry must stay **after** `/O2` in `EMERAUDE_COMPILE_OPTIONS` — reordering disables it in silence. |
 | `EMERAUDE_ENABLE_PCH` | `On` | Precompiled headers. Pass `${EMERAUDE_BASE_STL_PCH_HEADERS}` to `emeraude_base_target_enable_pch()`; `.m`/`.mm` sources are auto-skipped. |
 | `EMERAUDE_ENABLE_TESTS` | `Off` | Build the GoogleTest suite. |
 | `EMERAUDE_EXT_LIBS_LINUX_LIBC_TAG` | *(auto)* | Linux only. Host glibc tag (e.g. `glibc2.41`) selecting the exact ext-deps archive; auto-detected via `getconf GNU_LIBC_VERSION`. Override to force a specific published tag. |

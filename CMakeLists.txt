@@ -43,6 +43,7 @@ option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions (Default On)." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI (Default Off)." Off)
 option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors (Default Off)." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point (Default Off)." Off)
+option(EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION "Raise the Release optimisation one notch: -O3 instead of -O2 (GCC/Clang), /Ob3 instead of /Ob2 (MSVC) (Default Off)." Off)
 option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual Studio (Default Off)." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
@@ -229,7 +230,7 @@ if ( MSVC )
 		$<$<CONFIG:Debug>:/Zi>												# Generate debug information (PDB)
 		$<$<CONFIG:Release>:/O2>											# Optimize for maximum speed
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,/fp:fast,/fp:precise>> # Enable fast floating-point optimizations
-		$<$<CONFIG:Release>:/Ob2>											# Inline any suitable function
+		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION}>,/Ob3,/Ob2>> # Inline expansion level: /Ob2 inlines any suitable function, /Ob3 uses the same inliner more aggressively. MSVC has no /O3, so this is the WHOLE aggressive lever on Windows. MUST stay BELOW /O2, which silently resets the level to /Ob2 (options are processed left to right).
 		$<$<CONFIG:Release>:/GF>											# Enable string pooling
 		/MP 																# Multi-processor compilation
 		/Gy 																# Enable function-level linking
@@ -262,7 +263,7 @@ elseif ( APPLE )
 		$<$<CONFIG:Debug>:-Wextra>													# Enable extra warnings
 		$<$<CONFIG:Debug>:-Wpedantic>												# Enforce strict ISO C++ compliance
 		$<$<CONFIG:Debug>:-fno-omit-frame-pointer>									# Keep frame pointer for better stack traces
-		$<$<CONFIG:Release>:-O2>													# Optimize for speed
+		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION}>,-O3,-O2>> # Optimize for speed (-O3 adds vectorisation and loop unrolling, at the cost of code size)
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>> # Enable fast floating-point optimizations # FIXME: This flag makes unit tests fail.
 		$<$<CONFIG:Release>:-fdata-sections>										# Place each data item in its own section
 		$<$<CONFIG:Release>:-ffunction-sections>									# Place each function in its own section
@@ -300,7 +301,7 @@ elseif ( UNIX )
 		$<$<CONFIG:Debug>:-Wextra> 													# Enable extra warnings
 		$<$<CONFIG:Debug>:-Wpedantic> 												# Enforce strict ISO C++ compliance
 		$<$<CONFIG:Debug>:-fno-omit-frame-pointer> 									# Keep frame pointer for better stack traces
-		$<$<CONFIG:Release>:-O2> 													# Optimize for speed
+		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION}>,-O3,-O2>> # Optimize for speed (-O3 adds vectorisation and loop unrolling, at the cost of code size)
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>> # Enable fast floating-point optimizations # FIXME: This flag makes unit tests fail.
 		$<$<CONFIG:Release>:-fdata-sections> 										# Place each data item in its own section
 		$<$<CONFIG:Release>:-ffunction-sections> 									# Place each function in its own section
