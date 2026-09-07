@@ -229,7 +229,7 @@ if ( MSVC )
 		$<$<CONFIG:Debug>:/Zi>												# Generate debug information (PDB)
 		$<$<CONFIG:Release>:/O2>											# Optimize for maximum speed
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,/fp:fast,/fp:precise>> # Enable fast floating-point optimizations
-		$<$<CONFIG:Release>:/Ob3>											# Inline any suitable function
+		$<$<CONFIG:Release>:/Ob2>											# Inline any suitable function
 		$<$<CONFIG:Release>:/GF>											# Enable string pooling
 		/MP 																# Multi-processor compilation
 		/Gy 																# Enable function-level linking
