@@ -26,8 +26,13 @@ is three switches, all driven by `EMERAUDE_DISABLE_EXCEPTIONS`:
 > ⚠️ `_HAS_EXCEPTIONS=0` is honoured but not officially supported by the MSVC STL team, and it
 > changes the definition `std::exception` gets. Every C++ translation unit **linked into one
 > binary** must agree on it — a prebuilt C++ third-party library compiled with the default is the
-> thing to check when a Windows link or crash looks like an ABI mismatch. The switch is
-> **unverified on a Windows toolchain as of 2026-09-08** (see `docs/todo/`).
+> thing to check when a Windows link or crash looks like an ABI mismatch. **Verified by the owner on
+> the Windows toolchain, 2026-09-08**: the whole cascade (emeraude-base, emeraude-engine,
+> projet-alpha) builds green under `/WX` with **zero C4530** — the STL emits no exception handler
+> once `_HAS_EXCEPTIONS=0` is set, and the `#if __cpp_exceptions` branches (`ThreadPool.hpp`,
+> `StaticVector.hpp`) stay compiled out under `/EHs-`. Runtime checked the same day: the engine's
+> native file dialog opens through its rewritten `_beginthreadex()` worker path
+> (`runFileDialogOnDedicatedThread()`, the former `std::thread` + `try`/`catch` site).
 
 ## 2. Error propagation — the contract
 
