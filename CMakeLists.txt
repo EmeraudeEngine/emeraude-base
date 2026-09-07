@@ -212,6 +212,7 @@ if ( MSVC )
 	set(EMERAUDE_COMPILE_DEFINITIONS
 		$<$<CONFIG:Debug>:DEBUG>											# Declares DEBUG macro
 		$<$<CONFIG:Release>:NDEBUG>											# Declares NDEBUG macro
+		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:_HAS_EXCEPTIONS=0>			# MSVC STL: stop expanding try/catch inside the standard headers (the real counterpart of -fno-exceptions; /EHs- alone leaves _HAS_EXCEPTIONS=1 and every std::vector instantiation raises C4530). See docs/error-handling.md § 1.
 		_WIN32_WINNT=0x0A00													# Target Windows 10/11 (0x0601=Win7, 0x0602=Win8, 0x0603=Win8.1)
 		NOMINMAX															# Prevent <windows.h> from defining min/max macros (breaks Math/Vector.h and every std::min/std::max)
 		WIN32_LEAN_AND_MEAN													# Trim rarely-used headers pulled by <windows.h> (faster compilation, fewer macro conflicts)
@@ -220,9 +221,9 @@ if ( MSVC )
 	set(EMERAUDE_COMPILE_OPTIONS
 		/utf-8																# Treat source files as UTF-8 and emit UTF-8 narrow execution strings (required for u8"..." literals containing non-ASCII to round-trip correctly; without this MSVC interprets sources via the system codepage)
 		$<IF:$<BOOL:${EMERAUDE_DISABLE_RTTI}>,/GR-,/GR>						# Run-time type information
-		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHs->						# Enable exceptions
-		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHc->						# Enable exceptions
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>>:/EHsc>				# Enable exceptions
+		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHs->						# Disable C++ exception handling (no unwind semantics)
+		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/EHc->						# Disable C++ exception handling (extern "C" may throw assumption off)
+		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>>:/EHsc>				# Enable C++ exception handling
 		$<$<CONFIG:Debug>:/RTC1>											# Enable basic run-time checks
 		$<$<CONFIG:Debug>:/Od>												# Disable optimizations
 		$<$<CONFIG:Debug>:/Zi>												# Generate debug information (PDB)
@@ -241,7 +242,6 @@ if ( MSVC )
 		/wd4324 															# Ignore "structure was padded due to alignment specifier"
 		/wd4481 															# Ignore "nonstandard extension used: override"
 		/wd4512																# Ignore "assignment operator could not be generated"
-		$<$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>:/wd4530>					# Ignore "C++ exception handler used, but unwind semantics are not enabled" when exceptions are disabled
 		/wd4702 															# Ignore "unreachable code"
 		/wd4996																# Ignore "function or variable may be unsafe"
 		/bigobj																# Remove the COFF object format limitation

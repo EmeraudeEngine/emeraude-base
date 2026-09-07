@@ -60,7 +60,7 @@ Options:
 | `EMERAUDE_BASE_LIBRARY_TYPE` | `STATIC` | Umbrella library type (`STATIC` or `SHARED`). |
 | `EMERAUDE_CXX_VERSION` | `20` | C++ standard (floor 20). |
 | `EMERAUDE_C_VERSION` | `17` | C standard (floor 17). |
-| `EMERAUDE_DISABLE_EXCEPTIONS` | `On` | Build with `-fno-exceptions`. |
+| `EMERAUDE_DISABLE_EXCEPTIONS` | `On` | Build with `-fno-exceptions` (MSVC: `/EHs- /EHc-` **and** `_HAS_EXCEPTIONS=0`, C4530 not suppressed — see `docs/error-handling.md` § 1). |
 | `EMERAUDE_DISABLE_RTTI` | `Off` | Build with `-fno-rtti`. |
 | `EMERAUDE_DISABLE_PARANOID_COMPILATION` | `Off` | Relax warnings-as-errors (`-Werror`). |
 | `EMERAUDE_ENABLE_PCH` | `On` | Precompiled headers. Pass `${EMERAUDE_BASE_STL_PCH_HEADERS}` to `emeraude_base_target_enable_pch()`; `.m`/`.mm` sources are auto-skipped. |

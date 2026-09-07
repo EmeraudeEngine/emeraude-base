@@ -14,6 +14,21 @@ propagate, not exceptions that unwind.
 > Base may still be consumed by a project built **with** exceptions. Header code that wants
 > to serve both audiences uses the dual pattern in §4.
 
+**MSVC counterpart (2026-09-08).** `-fno-exceptions` has no single MSVC equivalent, so the policy
+is three switches, all driven by `EMERAUDE_DISABLE_EXCEPTIONS`:
+
+| Switch | What it does |
+|--------|--------------|
+| `/EHs- /EHc-` | No unwind semantics: a `throw` crossing our frames terminates, exactly like GCC/Clang. |
+| `_HAS_EXCEPTIONS=0` | Tells the **MSVC STL** to stop expanding `try`/`catch` inside its own headers (its `_TRY_BEGIN`/`_CATCH_ALL` macros). `/EH` does not set it — it defaults to `1` — so without it every `std::vector`/`std::string` instantiation is a `try` compiled without unwinding. |
+| **No `/wd4530`** | C4530 ("C++ exception handler used, but unwind semantics are not enabled") is left ON, so with `/WX` a `try` in our code is a **build error** — the compiler enforces §3 on Windows. Until 2026-09-08 the warning was suppressed, which is how two `try`/`catch` survived in the engine's Windows platform files. |
+
+> ⚠️ `_HAS_EXCEPTIONS=0` is honoured but not officially supported by the MSVC STL team, and it
+> changes the definition `std::exception` gets. Every C++ translation unit **linked into one
+> binary** must agree on it — a prebuilt C++ third-party library compiled with the default is the
+> thing to check when a Windows link or crash looks like an ABI mismatch. The switch is
+> **unverified on a Windows toolchain as of 2026-09-08** (see `docs/todo/`).
+
 ## 2. Error propagation — the contract
 
 Hybrid, using only the standard library (C++20; no custom `Expected` type during the

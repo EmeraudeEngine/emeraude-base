@@ -84,6 +84,23 @@ on which entries are dead — never sweep a capture list by hand.
 **Rule:** do not capture `constexpr` locals. Capture only non-`constexpr` locals (`invRadius`,
 `invExtent`, …) and any `constexpr` whose address or reference the body actually takes.
 
+### MSVC: `/EHs-` alone is NOT `-fno-exceptions` — the STL keeps its `try`/`catch`, and `/wd4530` hid them (Sept 2026, FIXED)
+
+The MSVC STL guards its internal `try`/`catch` behind `_HAS_EXCEPTIONS`, which defaults to `1`
+whatever `/EH` says. So a `/EHs- /EHc-` build still compiled hundreds of `try` blocks without unwind
+semantics and MSVC reported each one as **C4530**; the policy answered with `/wd4530`, which also
+silenced the two real `try`/`catch` in the engine's `Helpers.windows.cpp` / `SystemInfo.windows.cpp`
+for years. Fix: `_HAS_EXCEPTIONS=0` goes with `/EHs-` (the STL stops emitting exception handlers),
+and `/wd4530` is gone so a home-made `try` is now a `/WX` error. Contract:
+[`error-handling.md`](error-handling.md) § 1.
+
+- **Never re-add `/wd4530`.** If it fires, a `try` slipped into a `/EHs-` translation unit — find it.
+- **Throwing standard calls are the Windows trap**: `std::thread`'s constructor throws from inside
+  the CRT on OS refusal. Use the API that returns the failure (`_beginthreadex()` → `0`, `errno`).
+- **Mixing `_HAS_EXCEPTIONS` values across a link is an ODR hazard** (`std::exception` differs).
+  A prebuilt C++ third-party library built with the default is the first suspect on an unexplained
+  Windows link error or crash in exception machinery.
+
 ### `numeric_limits< T >::max()` as a float divisor — cast it explicitly
 
 `ColorFromInteger()` divided by `std::numeric_limits< input_t >::max()` and let the conversion to
