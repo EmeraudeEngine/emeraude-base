@@ -1,7 +1,7 @@
 ---
 id: geodesic-sphere-uv-convention-transposed
 title: The geodesic sphere writes U and V transposed against the convention it claims to match
-status: in-progress
+status: open
 priority: high
 scope: src/VertexFactory/ShapeGenerator.hpp (generateGeodesicSphere / subdivide)
 opened: 2026-09-08
@@ -78,27 +78,16 @@ own `Pavement` albedo — NOT the MDI wrong-texture item.
       reflection, cannot halve the brightness). The UV defect was real and is closed; the black
       sphere is a **different defect on the same geometry**, still open below.
 
-## What remains — the darkening, still unattributed
+## The darkening — HANDED OVER to the engine (2026-09-08)
 
-Falsified so far, each by a single-variable measurement or a compiled test — do not re-run them:
-
-| Hypothesis | Instrument | Result |
-|---|---|---|
-| POM | `POMIterations` was at the engine default 0 when the sphere was already dark | dead |
-| UV transposition / tangent frame | convention fixed, re-measured at the pinned pose | 32.35 → 33.07, dead |
-| baked vertex colour | `generateSphere` writes the same `(n + 1) * 0.5` | dead |
-| inverted winding | geodesic sphere added to `loopDrivenGeneratorsWindCCWAroundTheirNormals` and `…FacesOutward` | both pass, dead |
-
-What the capture says: a **flat black disc with no shading gradient at all**, while its shadow on
-the ground is present and correct. A wrong normal produces a wrong gradient, not a flat zero. This
-reads as albedo ≈ 0 or skipped lighting on that geometry — the UV sphere under the same material
-lights up with its texture visible.
-
-- [ ] **Material A/B on the same geometry**: colour-only material (no texture) on the geodesic
-      sphere. Lit ⇒ the defect is in texture sampling on this geometry (see the engine's open
-      `mdi-wrong-texture-after-first-frame`); still black ⇒ the lighting path.
-- [ ] Then RenderDoc on the sphere's draw (validation layers OFF for the capture, X11 — engine
-      `docs/todo/renderdoc-layer-present-rejected.md`).
+Measured on this repository's side, under the ENGINE's builder options `(false, false, false)`, by
+the new gate `geodesicSphereKeepsItsAttributesUnderEngineBuilderOptions` (depth 4): 2619 vertices,
+5120 triangles, U and V over their full range, **0 zero normals, 0 zero tangents, 0 non-finite
+tangents, 0 tangents non-perpendicular to their normal**; both winding gates pass. And in the
+engine, the same geodesic sphere under a **colour-only** material lights up with a gradient (R mean
+31.5 → 83.9, max 121 → 211). So the geometry is clean on every attribute a normal-mapped material
+consumes, and the black disc is the engine's textured path on this geometry:
+`emeraude-engine/docs/todo/geodesic-sphere-textured-renders-black.md`. Nothing remains here.
 
 ## ⚠️ Traps
 

@@ -995,6 +995,93 @@ TEST(VertexFactoryShapeGenerator, geodesicSphereSeamSitsOnPositiveZ)
 }
 
 /*
+ * ⚠️ Attribute integrity of the geodesic sphere under the ENGINE's builder options, not the tests'.
+ *
+ * uvOptions() enables normals generation, so ShapeBuilder::endConstruction() takes the
+ * computeVertexTBNSpace() path. The engine builds every generated shape with
+ * ShapeBuilderOptions(false, false, false, ...) and takes computeTriangleTangent() /
+ * computeVertexTangent() instead -- a different path, and the one that actually ships. This test
+ * walks that path and asserts everything a normal-mapped material consumes is there and finite:
+ * texture coordinates over their full range, non-zero normals, non-zero and finite tangents,
+ * tangents perpendicular to their normal.
+ *
+ * Written in Sep 2026 while a normal-mapped geodesic sphere rendered flat black in the engine and
+ * its colour-only twin rendered correctly. MEASURED: the geometry is clean on every count below
+ * (depth 4: 2619 vertices, 5120 triangles, 0 zero tangents), which moved the defect out of this
+ * repository and into the engine's handling of the textured path. Kept as the gate that proves the
+ * geometry side stays clean.
+ *
+ * ⚠️ Do not add generateSphere to this gate as-is: its degenerate pole triangles (a quad whose top
+ * edge collapses onto the pole) yield two zero-length vertex tangents at the poles. It renders
+ * correctly regardless, so that is a separate, cosmetic finding -- not a reason to weaken this test.
+ */
+TEST(VertexFactoryShapeGenerator, geodesicSphereKeepsItsAttributesUnderEngineBuilderOptions)
+{
+	using EmEn::Base::Math::X;
+	using EmEn::Base::Math::Y;
+	using EmEn::Base::Math::Z;
+
+	const ShapeBuilderOptions< float > engineOptions{false, false, false, false, false};
+
+	const auto shape = ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.5F, 4, engineOptions);
+
+	float uMin = 1.0E9F;
+	float uMax = -1.0E9F;
+	float vMin = 1.0E9F;
+	float vMax = -1.0E9F;
+	size_t zeroNormals = 0;
+	size_t zeroTangents = 0;
+	size_t nonFiniteTangents = 0;
+	size_t notPerpendicular = 0;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & uv = vertex.textureCoordinates();
+
+		uMin = std::min(uMin, uv[X]);
+		uMax = std::max(uMax, uv[X]);
+		vMin = std::min(vMin, uv[Y]);
+		vMax = std::max(vMax, uv[Y]);
+
+		const auto & tangent = vertex.tangent();
+		const auto & normal = vertex.normal();
+		const auto tangentLength = std::sqrt((tangent[X] * tangent[X]) + (tangent[Y] * tangent[Y]) + (tangent[Z] * tangent[Z]));
+		const auto normalLength = std::sqrt((normal[X] * normal[X]) + (normal[Y] * normal[Y]) + (normal[Z] * normal[Z]));
+
+		if ( normalLength < 1.0E-6F )
+		{
+			++zeroNormals;
+		}
+
+		if ( !std::isfinite(tangentLength) )
+		{
+			++nonFiniteTangents;
+		}
+		else if ( tangentLength < 1.0E-6F )
+		{
+			++zeroTangents;
+		}
+		else if ( normalLength > 1.0E-6F )
+		{
+			const auto cosine = ((tangent[X] * normal[X]) + (tangent[Y] * normal[Y]) + (tangent[Z] * normal[Z])) / (tangentLength * normalLength);
+
+			if ( std::abs(cosine) > 0.1F )
+			{
+				++notPerpendicular;
+			}
+		}
+	}
+
+	EXPECT_GT(shape.vertices().size(), 2000U) << "depth 4 must produce thousands of vertices, the counts below would be vacuous";
+	EXPECT_GT(uMax - uMin, 0.9F) << "U must cover the longitude (measured range " << uMin << ".." << uMax << ")";
+	EXPECT_GT(vMax - vMin, 0.9F) << "V must cover the latitude (measured range " << vMin << ".." << vMax << ")";
+	EXPECT_EQ(zeroNormals, 0U);
+	EXPECT_EQ(nonFiniteTangents, 0U);
+	EXPECT_EQ(zeroTangents, 0U) << "a zero tangent becomes NaN in the shader's normalize() and paints the pixel black";
+	EXPECT_EQ(notPerpendicular, 0U) << "a tangent that is not perpendicular to its normal is not a tangent";
+}
+
+/*
  * ⚠️⚠️ GOLDEN GEOMETRY for the twelve gem cuts, captured 2026-08-25 from the code as it stood BEFORE
  * their facet math was re-authored from the retired Y-down frame to Y-up.
  *
