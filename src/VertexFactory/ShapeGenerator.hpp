@@ -1044,63 +1044,111 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	{
 		if ( depth == 0 )
 		{
-			/* Compute spherical UV matching generateSphere() convention:
-			 * tex.X = latitude  (1.0 at north pole Y=+1, 0.0 at south pole Y=-1)
-			 * tex.Y = longitude (0.0 to 1.0 around the equator)
+			/* Spherical UV in the generateSphere() convention, which is THE sphere convention
+			 * (VertexFactory/AGENTS.md, "Sphere longitude: direction and seam"):
+			 *   tex.X = U = LONGITUDE, growing EASTWARD (the positive rotation about +Y):
+			 *           +Z -> 0 (and 1 on its seam twin), +X -> 0.25, -Z -> 0.5, -X -> 0.75.
+			 *   tex.Y = V = LATITUDE, 0 at the +Y pole, 0.5 on the equator, 1 at the -Y pole
+			 *           (the subdivided pole itself reads ~1e-4, not 0: normalize() leaves its y at
+			 *           0.99999994f and acos turns that ulp into V — sub-texel, and not this leaf's doing).
 			 *
-			 * Reconstructing from the vertex position on the unit sphere:
-			 *   rho   = acos(Y)		 => U = 1 - acos(Y)/pi
-			 *   theta = atan2(-X, Z)	=> V = (atan2(-X, Z) + pi) / (2*pi)
-			 *
-			 * NOTE: atan2(-X, Z) matches the classic sphere's -sin(theta) for X. */
+			 * Reconstructed from the unit position (the normal IS the position here):
+			 *   U = atan2(X, Z) / (2*pi), lifted by one turn when negative   (pure longitude)
+			 *   V = acos(Y) / pi                                               (pure latitude)
+			 * atan2 wraps at -pi/+pi, i.e. on -Z, the prime meridian. Lifting the negative half-turn
+			 * turns that discontinuity into a plain 0.5 and lands the 0/1 wrap on +Z, exactly where
+			 * generateSphere puts its duplicated seam column — a triangle straddling -Z reads
+			 * 0.49/0.51 and never tears.
+			 * ⚠️⚠️ Until Sep 2026 this leaf had the components TRANSPOSED (latitude in tex.X), the
+			 * latitude INVERTED (1 at +Y) and the longitude growing WESTWARD with its seam on -Z, under
+			 * a comment claiming to match generateSphere — it matched that generator's pre-Aug-2026
+			 * transposition, inverted latitude and westward handedness — not its seam, which already
+			 * sat on +Z. Reading the comment instead of the numbers is how it
+			 * survived. ⚠️ Not a Y-up residue: it depends on no axis sign. */
 			constexpr auto zero = static_cast< vertex_data_t >(0);
 			constexpr auto half = static_cast< vertex_data_t >(0.5);
 			constexpr auto one = static_cast< vertex_data_t >(1);
-			constexpr auto twoPi = static_cast< vertex_data_t >(2) * std::numbers::pi_v< vertex_data_t >;
-			constexpr auto poleThreshold = static_cast< vertex_data_t >(0.999);
+			constexpr auto pi = std::numbers::pi_v< vertex_data_t >;
+			constexpr auto twoPi = static_cast< vertex_data_t >(2) * pi;
+			/* A vertex has no longitude when it sits ON the Y axis, i.e. when its XZ radius is
+			 * numerically zero. The two poles come out of the subdivision with X = Z = 0 bit-exactly
+			 * (midpoint of two mirrored seed vertices); the closest off-axis vertex at the maximum
+			 * depth (8) still lies ~0.25 deg away, XZ radius^2 ~2e-5, three decades above this. */
+			constexpr auto poleRadiusSquared = static_cast< vertex_data_t >(1.0e-8);
 
 			const auto sphericalUV = [one](const Math::Vector< 3, vertex_data_t > & v) {
-				const auto latitude = one - (std::acos(std::clamp(v[Math::Y], -one, one)) / std::numbers::pi_v< vertex_data_t >);
-				const auto longitude = (std::atan2(-v[Math::X], v[Math::Z]) + std::numbers::pi_v< vertex_data_t >) / twoPi;
+				/* The positive rotation about +Y carries +Z onto +X, and atan2(X, Z) grows along
+				 * exactly that rotation: this is what makes U grow eastward. */
+				auto longitude = std::atan2(v[Math::X], v[Math::Z]) / twoPi;
 
-				return Math::Vector< 3, vertex_data_t >{latitude, longitude, zero};
+				if ( longitude < zero )
+				{
+					longitude += one;
+				}
+
+				/* Polar angle from +Y: V = 0 at the north pole, like generateSphere's first stack. */
+				const auto latitude = std::acos(std::clamp(v[Math::Y], -one, one)) / pi;
+
+				return Math::Vector< 3, vertex_data_t >{longitude, latitude, zero};
 			};
 
-			auto uvA = sphericalUV(vectorA);
-			auto uvB = sphericalUV(vectorB);
-			auto uvC = sphericalUV(vectorC);
+			const auto onAxis = [](const Math::Vector< 3, vertex_data_t > & v) {
+				return (v[Math::X] * v[Math::X]) + (v[Math::Z] * v[Math::Z]) < poleRadiusSquared;
+			};
 
-			/* Fix seam: when a triangle crosses the longitude V=0/V=1
-			 * boundary, the texture interpolation wraps the wrong way.
-			 * Since each triangle has its own vertices (no indexing),
-			 * we can shift V values past 1.0 for correct interpolation.
-			 * The GPU repeat/wrap mode handles V > 1.0 transparently. */
-			const auto maxV = std::max({uvA[Math::Y], uvB[Math::Y], uvC[Math::Y]});
-			const auto minV = std::min({uvA[Math::Y], uvB[Math::Y], uvC[Math::Y]});
+			std::array< Math::Vector< 3, vertex_data_t >, 3 > uv{sphericalUV(vectorA), sphericalUV(vectorB), sphericalUV(vectorC)};
+			const std::array< bool, 3 > isPole{onAxis(vectorA), onAxis(vectorB), onAxis(vectorC)};
 
-			if ( maxV - minV > half )
+			/* Seam fix (on U, the longitude): a triangle straddling +Z reads U on both sides of the
+			 * 0/1 wrap (say 0.98 and 0.02) and the rasterizer would sweep the whole map backwards
+			 * across it. Lift the low side by a full turn (0.02 -> 1.02): the sampler's repeat mode
+			 * reads U > 1 as U - 1, the interpolation is short again, and the same +Z position now
+			 * carries U = 0 in one triangle and U = 1 in its neighbour — the duplicated seam column of
+			 * generateSphere, reproduced. The builder welds only vertices equal within numeric_limits epsilon per
+			 * component (Vector::operator== via Utility::equal), so the
+			 * two twins stay distinct and U = 1 / U = 1.02 survive into the shape.
+			 * A triangle spans far less than half a turn of longitude from depth 1 on (0.176 max: seed
+			 * edge 63.4 deg, halved per depth; ~60 deg between the two neighbours of a pole), so
+			 * "span > 0.5" can only mean a wrap — among the vertices that HAVE a longitude. At depth 0
+			 * two seed faces whose 4-5 edge crosses the pole span EXACTLY 0.5, and the strict > keeps
+			 * them unlifted, correctly. An on-axis vertex is left out: its raw
+			 * atan2(0, 0) = 0 would sit ON the seam and drag every polar triangle through the lift. */
+			auto maxU = zero;
+			auto minU = one;
+
+			for ( size_t index = 0; index < 3; ++index )
 			{
-				if ( uvA[Math::Y] < half ) { uvA[Math::Y] += one; }
-				if ( uvB[Math::Y] < half ) { uvB[Math::Y] += one; }
-				if ( uvC[Math::Y] < half ) { uvC[Math::Y] += one; }
+				if ( !isPole[index] )
+				{
+					maxU = std::max(maxU, uv[index][Math::X]);
+					minU = std::min(minU, uv[index][Math::X]);
+				}
 			}
 
-			/* Fix poles: at Y ≈ ±1, atan2(~0, ~0) gives an arbitrary
-			 * longitude. Replace with the average V of the other two
-			 * vertices (after seam fix) to avoid a visible pinch. */
-			if ( std::abs(vectorA[Math::Y]) > poleThreshold )
+			if ( maxU - minU > half )
 			{
-				uvA[Math::Y] = (uvB[Math::Y] + uvC[Math::Y]) * half;
+				for ( size_t index = 0; index < 3; ++index )
+				{
+					if ( !isPole[index] && uv[index][Math::X] < half )
+					{
+						uv[index][Math::X] += one;
+					}
+				}
 			}
 
-			if ( std::abs(vectorB[Math::Y]) > poleThreshold )
+			/* Pole fix (on U, the longitude): an on-axis vertex takes the mean U of its two neighbours,
+			 * AFTER the seam fix so the mean lands on the lifted side too. There is no "true" longitude
+			 * at the pole; this is the value that makes U run monotonically from one neighbour to the
+			 * other across the polar triangle — no pinch, no swirl. Each polar triangle therefore emits
+			 * its own pole vertex (six per pole), like generateSphere's slices + 1 pole vertices. A
+			 * triangle holds at most one on-axis vertex (two distinct vertices cannot share the axis
+			 * point, no triangle reaches from pole to pole), so "the other two" always exists. */
+			for ( size_t index = 0; index < 3; ++index )
 			{
-				uvB[Math::Y] = (uvA[Math::Y] + uvC[Math::Y]) * half;
-			}
-
-			if ( std::abs(vectorC[Math::Y]) > poleThreshold )
-			{
-				uvC[Math::Y] = (uvA[Math::Y] + uvB[Math::Y]) * half;
+				if ( isPole[index] )
+				{
+					uv[index][Math::X] = (uv[(index + 1) % 3][Math::X] + uv[(index + 2) % 3][Math::X]) * half;
+				}
 			}
 
 			/* Volumetric vertex color: map XYZ [-1, 1] to RGB [0, 1]. */
@@ -1115,19 +1163,19 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			builder.setPosition(vectorA);
 			builder.setNormal(vectorA);
-			builder.setTextureCoordinates(uvA);
+			builder.setTextureCoordinates(uv[0]);
 			builder.setVertexColor(volumetricColor(vectorA));
 			builder.newVertex();
 
 			builder.setPosition(vectorB);
 			builder.setNormal(vectorB);
-			builder.setTextureCoordinates(uvB);
+			builder.setTextureCoordinates(uv[1]);
 			builder.setVertexColor(volumetricColor(vectorB));
 			builder.newVertex();
 
 			builder.setPosition(vectorC);
 			builder.setNormal(vectorC);
-			builder.setTextureCoordinates(uvC);
+			builder.setTextureCoordinates(uv[2]);
 			builder.setVertexColor(volumetricColor(vectorC));
 			builder.newVertex();
 

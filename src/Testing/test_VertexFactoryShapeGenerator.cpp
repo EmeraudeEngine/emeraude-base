@@ -30,6 +30,7 @@
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <numbers>
 #include <vector>
 
 /* Local inclusions. */
@@ -499,6 +500,10 @@ TEST(VertexFactoryShapeGenerator, loopDrivenGeneratorsWindCCWAroundTheirNormals)
 	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateHemisphere< float, uint32_t >(1.0F, 16, 8, uvOptions()), "hemisphere");
 	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateTube< float, uint32_t >(1.0F, 0.8F, 2.0F, 16, 4, CapUVMapping::Planar, uvOptions()), "tube");
 	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateArrow< float, uint32_t >(0.05F, 0.15F, 0.7F, 0.3F, 16, uvOptions()), "arrow");
+
+	/* The recursive one. It was absent from this gate until Sep 2026, when a normal-mapped geodesic
+	 * sphere rendered at half the brightness of the UV sphere carrying the same material. */
+	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, 3U, uvOptions()), "geodesic sphere");
 }
 
 /*
@@ -553,6 +558,11 @@ TEST(VertexFactoryShapeGenerator, gemCutsWindAndFaceOutward)
 	expectConvexShapeFacesOutward(ShapeGenerator::generatePearCutGem< float, uint32_t >(), "pear cut");
 	expectConvexShapeFacesOutward(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), "heart cut");
 	expectConvexShapeFacesOutward(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), "rose cut");
+
+	/* Not a gem, but the same independent judge (faceCentre - centroid) applies to any convex solid,
+	 * and it does not trust the authored normals -- which is the point for a sphere whose normals
+	 * are set to the position by construction and would agree with ANY winding. */
+	expectConvexShapeFacesOutward(ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, 3U, uvOptions()), "geodesic sphere");
 }
 
 /*
@@ -775,6 +785,211 @@ TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
 	EXPECT_TRUE(middleFound) << "no U = 0.5 vertex found, the check was vacuous";
 
 	/* Both sides of the seam must exist, or the texture wraps backwards across the last quad. */
+	EXPECT_GT(seamAtZeroU, 0) << "no U = 0 vertex on the seam";
+	EXPECT_GT(seamAtOneU, 0) << "no U = 1 vertex on the seam: the seam is not duplicated";
+}
+
+/*
+ * ⚠️⚠️ The GEODESIC sphere had the coordinates TRANSPOSED (latitude in U), the latitude INVERTED
+ * (1 at +Y) and the longitude growing WESTWARD with its seam on -Z -- under a comment claiming to
+ * match generateSphere(). It survived every audit because no test read its numbers, and the render
+ * showed it as a normal-mapped sphere shading a quarter turn off (Sep 2026, light-and-shadow-debug).
+ *
+ * An icosphere has no latitude rings to bin, so the ring discriminator of the UV sphere does not
+ * transfer. The formula check below is stronger anyway: it pins the closed form the two generators
+ * now share, vertex by vertex.
+ *
+ *   U = atan2(x, z) / (2*pi), lifted by one turn when negative: +Z -> 0, +X -> 0.25, -Z -> 0.5,
+ *       -X -> 0.75 -- possibly lifted by a further turn on a seam-straddling triangle, hence the
+ *       comparison modulo 1.
+ *   V = acos(y) / pi.
+ *
+ * A vertex ON the Y axis has no longitude and takes its neighbours' mean: it is excluded from the U
+ * check and pinned on V instead.
+ */
+TEST(VertexFactoryShapeGenerator, geodesicSphereWritesGenerateSphereConvention)
+{
+	constexpr auto Depth = 3U;
+	constexpr auto Tolerance = 1.0E-4F;
+	constexpr auto PoleRadiusSquared = 1.0E-8F;
+	constexpr auto TwoPi = 2.0F * std::numbers::pi_v< float >;
+
+	const auto shape = ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, Depth, uvOptions());
+
+	auto checked = 0;
+	auto poles = 0;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & position = vertex.position();
+		const auto x = position[EmEn::Base::Math::X];
+		const auto y = position[EmEn::Base::Math::Y];
+		const auto z = position[EmEn::Base::Math::Z];
+		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
+		const auto v = vertex.textureCoordinates()[EmEn::Base::Math::Y];
+
+		/* V is the polar angle from +Y, whatever the longitude does. */
+		const auto expectedV = std::acos(std::clamp(y, -1.0F, 1.0F)) / std::numbers::pi_v< float >;
+
+		EXPECT_NEAR(v, expectedV, Tolerance)
+			<< "V must be the latitude acos(y)/pi at (" << x << ", " << y << ", " << z << "), got " << v
+			<< ". A V that tracks the longitude means the coordinates are transposed.";
+
+		if ( (x * x) + (z * z) < PoleRadiusSquared )
+		{
+			/* ~1e-4 rather than exactly 0: normalize() leaves the subdivided pole's y one ulp short of 1. */
+			EXPECT_TRUE(v < 1.0E-3F || v > 1.0F - 1.0E-3F) << "a pole must carry V ~ 0 or ~ 1, got " << v;
+
+			++poles;
+
+			continue;
+		}
+
+		auto expectedU = std::atan2(x, z) / TwoPi;
+
+		if ( expectedU < 0.0F )
+		{
+			expectedU += 1.0F;
+		}
+
+		/* Modulo one turn: a seam-straddling triangle lifts its low side past 1, on purpose. */
+		const auto difference = std::abs((u - std::floor(u)) - expectedU);
+		const auto wrapped = std::min(difference, 1.0F - difference);
+
+		EXPECT_LT(wrapped, Tolerance)
+			<< "U must be the longitude atan2(x, z)/(2pi) at (" << x << ", " << y << ", " << z << "), got " << u
+			<< ". +Z is 0, +X is 0.25, -Z is 0.5, -X is 0.75: anything else is a transposition, an inversion or a mirror.";
+
+		++checked;
+	}
+
+	EXPECT_GT(checked, 100) << "too few vertices checked, the test would be vacuous";
+
+	/* One pole vertex per polar triangle, six per pole: the geodesic twin of generateSphere's
+	 * slices + 1 pole vertices, distinct through their U. Measured on the compiled leaf at every
+	 * depth >= 1. */
+	EXPECT_EQ(poles, 12) << "expected six per-triangle pole vertices per pole";
+}
+
+/*
+ * Same rule as sphereUGrowsEastwardNotWestward, on the geodesic sphere: walking in the direction of
+ * increasing U must turn POSITIVELY about +Y. A thin equatorial band stands in for the latitude ring
+ * an icosphere does not have -- within it the order of U IS the angular order about +Y, whatever the
+ * small y differences. The seam-lifted twins (U > 1) are dropped so the sort covers a single turn.
+ *
+ * ⚠️ Two vertices on the same meridian can differ in U by one ulp with a cross product of exactly 0;
+ * pairs closer than 1e-4 in U are skipped for that reason, exactly as the UV-sphere test does.
+ */
+TEST(VertexFactoryShapeGenerator, geodesicSphereUGrowsEastwardNotWestward)
+{
+	using V3 = EmEn::Base::Math::Vector< 3, float >;
+
+	constexpr auto Depth = 3U;
+
+	const auto shape = ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, Depth, uvOptions());
+
+	std::vector< std::pair< float, V3 > > band;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & position = vertex.position();
+		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
+
+		if ( std::abs(position[EmEn::Base::Math::Y]) > 0.15F || u > 1.0F )
+		{
+			continue;
+		}
+
+		band.emplace_back(u, position);
+	}
+
+	ASSERT_GT(band.size(), 8U) << "too few equatorial vertices, the check would be vacuous";
+
+	std::sort(band.begin(), band.end(), [] (const auto & lhs, const auto & rhs) {
+		return lhs.first < rhs.first;
+	});
+
+	auto eastward = 0;
+	auto westward = 0;
+
+	for ( size_t index = 0; index + 1 < band.size(); ++index )
+	{
+		if ( band[index + 1].first - band[index].first < 1.0E-4F )
+		{
+			continue;
+		}
+
+		const auto & a = band[index].second;
+		const auto & b = band[index + 1].second;
+
+		/* Y component of the cross product: the sign of the rotation about +Y. */
+		const auto turn = V3::crossProduct(a, b)[EmEn::Base::Math::Y];
+
+		if ( turn > 0.0F ) { ++eastward; } else if ( turn < 0.0F ) { ++westward; }
+	}
+
+	EXPECT_GT(eastward, 0) << "no usable pair in the band, the check was vacuous";
+
+	EXPECT_EQ(westward, 0)
+		<< westward << " step(s) of increasing U turn NEGATIVELY about +Y, i.e. westward. "
+		<< "The texture is MIRRORED on the geodesic sphere: U must grow eastward, the positive rotation.";
+}
+
+/*
+ * Same convention as sphereSeamSitsOnPositiveZ, on the geodesic sphere: U = 0 and U = 1 both fall on
+ * +Z (duplicated, one per side of the seam), and U = 0.5 -- the prime meridian -- faces -Z.
+ *
+ * ⚠️ A seam-straddling triangle lifts its low-side vertex past 1 (0.02 -> 1.02) so the sampler's
+ * repeat mode interpolates the short way round. That neighbour is NOT on the seam and is skipped.
+ */
+TEST(VertexFactoryShapeGenerator, geodesicSphereSeamSitsOnPositiveZ)
+{
+	constexpr auto Depth = 3U;
+	constexpr auto Tolerance = 1.0E-3F;
+
+	const auto shape = ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, Depth, uvOptions());
+
+	auto seamAtZeroU = 0;
+	auto seamAtOneU = 0;
+	auto middleFound = false;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & position = vertex.position();
+
+		/* Equatorial band only: near the poles every U converges and says nothing. */
+		if ( std::abs(position[EmEn::Base::Math::Y]) > 0.4F )
+		{
+			continue;
+		}
+
+		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
+
+		if ( u > 1.0F + Tolerance )
+		{
+			continue;
+		}
+
+		if ( u < Tolerance || u > 1.0F - Tolerance )
+		{
+			EXPECT_NEAR(position[EmEn::Base::Math::X], 0.0F, 0.01F) << "the seam must sit on the Z axis";
+			EXPECT_GT(position[EmEn::Base::Math::Z], 0.0F) << "the seam must sit on +Z, not -Z";
+
+			if ( u < Tolerance ) { ++seamAtZeroU; } else { ++seamAtOneU; }
+		}
+
+		if ( std::abs(u - 0.5F) < Tolerance )
+		{
+			EXPECT_LT(position[EmEn::Base::Math::Z], 0.0F)
+				<< "U = 0.5 is the prime meridian and must face -Z, the engine's forward";
+
+			middleFound = true;
+		}
+	}
+
+	EXPECT_TRUE(middleFound) << "no U = 0.5 vertex found, the check was vacuous";
+
+	/* Both sides of the seam must exist, or the texture wraps backwards across the seam triangles. */
 	EXPECT_GT(seamAtZeroU, 0) << "no U = 0 vertex on the seam";
 	EXPECT_GT(seamAtOneU, 0) << "no U = 1 vertex on the seam: the seam is not duplicated";
 }
