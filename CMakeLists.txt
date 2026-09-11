@@ -176,7 +176,7 @@ elseif ( MSVC )
 		set(EMERAUDE_EXT_LIBS_DIRNAME "windows.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}-MD")
 	endif ()
 else ()
-	message(FATAL_ERROR "[EmeraudeBase] Unsupported platform.")
+	message(FATAL_ERROR "[EmeraudeBase] Unsupported platform. If you were on Windows, please be sure to use MSVC compiler.")
 endif ()
 
 set(EMERAUDE_EXT_LIBS_PATH        "${CMAKE_CURRENT_SOURCE_DIR}/dependencies/${EMERAUDE_EXT_LIBS_DIRNAME}" CACHE PATH "ext-deps-generator output root." FORCE)
