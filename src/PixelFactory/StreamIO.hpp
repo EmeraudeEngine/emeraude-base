@@ -36,6 +36,7 @@
 /* Local inclusions. */
 #include "FileFormatJpeg.hpp"
 #include "FileFormatPNG.hpp"
+#include "FileFormatWebP.hpp"
 #include "FileFormatTarga.hpp"
 #include "IOCommon.hpp"
 #include "IO/MemoryStream.hpp"
@@ -95,6 +96,14 @@ namespace EmEn::Base::PixelFactory::StreamIO
 			case Pixmap< pixel_data_t, dimension_t >::Format::Targa :
 			{
 				FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
+
+				decoded = fileFormat.readStream(stream, pixmap);
+			}
+				break;
+
+			case Pixmap< pixel_data_t, dimension_t >::Format::WebP :
+			{
+				FileFormatWebP< pixel_data_t, dimension_t > fileFormat;
 
 				decoded = fileFormat.readStream(stream, pixmap);
 			}
@@ -171,6 +180,13 @@ namespace EmEn::Base::PixelFactory::StreamIO
 			case Pixmap< pixel_data_t, dimension_t >::Format::Targa :
 			{
 				FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
+
+				return fileFormat.writeStream(stream, pixmap, options);
+			}
+
+			case Pixmap< pixel_data_t, dimension_t >::Format::WebP :
+			{
+				FileFormatWebP< pixel_data_t, dimension_t > fileFormat;
 
 				return fileFormat.writeStream(stream, pixmap, options);
 			}

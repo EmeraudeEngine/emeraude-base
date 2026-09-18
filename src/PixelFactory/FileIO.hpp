@@ -36,6 +36,7 @@
 #include "FileFormatHDR.hpp"
 #include "FileFormatJpeg.hpp"
 #include "FileFormatPNG.hpp"
+#include "FileFormatWebP.hpp"
 #include "FileFormatTarga.hpp"
 #include "FileFormatTIFF.hpp"
 #include "IOCommon.hpp"
@@ -122,6 +123,21 @@ namespace EmEn::Base::PixelFactory::FileIO
 			else
 			{
 				std::cerr << "PixelFactory::FileIO::read(), Targa requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
+		}
+		else if ( extension == "webp" )
+		{
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				FileFormatWebP< pixel_data_t, dimension_t > fileFormat;
+
+				decoded = fileFormat.readStream(stream, pixmap);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::read(), WebP requires an 8-bit pixmap !" "\n";
 
 				return false;
 			}
@@ -239,6 +255,22 @@ namespace EmEn::Base::PixelFactory::FileIO
 			else
 			{
 				std::cerr << "PixelFactory::FileIO::write(), Targa requires an 8-bit pixmap !" "\n";
+
+				return false;
+			}
+		}
+
+		if ( extension == "webp" )
+		{
+			if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+			{
+				const FileFormatWebP< pixel_data_t, dimension_t > fileFormat;
+
+				return fileFormat.writeStream(stream, pixmap, options);
+			}
+			else
+			{
+				std::cerr << "PixelFactory::FileIO::write(), WebP requires an 8-bit pixmap !" "\n";
 
 				return false;
 			}

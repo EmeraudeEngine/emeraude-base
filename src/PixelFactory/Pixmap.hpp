@@ -77,7 +77,9 @@ namespace EmEn::Base::PixelFactory
 				None,
 				Targa, /* No compression */
 				PNG, /* Loss-less compression */
-				Jpeg /* Destructive compression */
+				Jpeg, /* Destructive compression */
+				WebP /* Loss-less or destructive; ⚠️ NOT a GPU format — it decodes to RGB/RGBA
+						pixels like PNG, it is never uploaded compressed the way KTX2 is. */
 			};
 
 			/**
