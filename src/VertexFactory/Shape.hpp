@@ -31,6 +31,8 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -189,6 +191,8 @@ namespace EmEn::Base::VertexFactory
 				m_triangles.resize(facesCount);
 				m_edges.resize(edgesCount);
 				m_unpairedEdges.clear();
+				m_vertexIndex.clear();
+				m_vertexColorIndex.clear();
 			}
 
 			/**
@@ -203,6 +207,8 @@ namespace EmEn::Base::VertexFactory
 				m_triangles.clear();
 				m_edges.clear();
 				m_unpairedEdges.clear();
+				m_vertexIndex.clear();
+				m_vertexColorIndex.clear();
 				m_boundaryLoops.clear();
 				m_boundaryLoopsAnalyzed = false;
 				m_groups.clear();
@@ -1531,31 +1537,19 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Declares a new vertex a returns its index.
+			 * @brief Declares a new vertex and returns its index, merging it with an identical one.
 			 * @note This function is for building the shape manually.
-			 * @param position A reference to a vector.
+			 * @param position The position of the vertex.
 			 * @return index_data_t
 			 */
 			index_data_t
 			addVertex (const Math::Vector< 3, vertex_data_t > & position) noexcept
 			{
-				index_data_t offset = 0;
-
-				for ( const auto & vertexRef : m_vertices )
-				{
-					if ( vertexRef.position() == position )
-					{
-						return offset;
-					}
-
-					++offset;
-				}
-
-				return this->saveVertex(position, {}, {});
+				return this->addVertex(position, {}, {});
 			}
 
 			/**
-			 * @brief Declares a new vertex a returns its index.
+			 * @brief Declares a new vertex and returns its index, merging it with an identical one.
 			 * @note This function is for building the shape manually.
 			 * @param position The position of the vertex.
 			 * @param normal The normal of the vertex.
@@ -1564,69 +1558,105 @@ namespace EmEn::Base::VertexFactory
 			index_data_t
 			addVertex (const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & normal) noexcept
 			{
-				index_data_t offset = 0;
-
-				for ( const auto & vertexRef : m_vertices )
-				{
-					if ( vertexRef.position() == position && vertexRef.normal() == normal )
-					{
-						return offset;
-					}
-
-					++offset;
-				}
-
-				return this->saveVertex(position, normal, {});
+				return this->addVertex(position, normal, {});
 			}
 
 			/**
-			 * @brief Declares a new vertex a returns its index.
+			 * @brief Declares a new vertex and returns its index, merging it with an identical one.
 			 * @note This function is for building the shape manually.
+			 * @note ⚠️ Identical means "in the same cell of a grid of side mergeTolerance", NOT "equal
+			 * within an epsilon". It used to be the latter, in a LINEAR SCAN of every vertex already
+			 * stored, which made building a shape quadratic: 8.7 s for a 65 536 triangle sphere against
+			 * 24.9 ms. No hash can reproduce an epsilon equality — that relation is not transitive — so
+			 * making this fast IS a change of merge semantics, and a deliberate one (owner decision,
+			 * 2026-09-22).
+			 * @note The grid merges MORE than the old epsilon did, not less: the absolute
+			 * numeric_limits<float>::epsilon() (1.19e-7) is finer than the rounding a generator's own
+			 * trigonometry produces, so it missed vertices that agree on every attribute and differ
+			 * only in their last float bits. Measured on a 256x128 sphere: 33 169 vertices against
+			 * 36 405, and the same count the batch pass of ShapeProcessor returns.
+			 * @note ⚠️ This does NOT close a UV seam, and must not: the two sides of a seam carry
+			 * u = 0 and u = 1, which are genuinely different texture coordinates. A sphere keeps its
+			 * seam and its poles split and is still not watertight in the edge sense — that was never
+			 * the epsilon's doing.
+			 * @note ⚠️ Merging progressively is order-dependent at a cell boundary, where the batch
+			 * pass is not: a handful of vertices may differ between the two (2 of 2 145 measured on a
+			 * 64x32 sphere). Do not pin an exact count across the two paths.
 			 * @param position The position of the vertex.
 			 * @param normal The normal of the vertex.
-			 * @param textureCoordinates The texture coordinates to that vertex.
+			 * @param textureCoordinates The texture coordinates of the vertex.
 			 * @return index_data_t
 			 */
 			index_data_t
 			addVertex (const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & normal, const Math::Vector< 3, vertex_data_t > & textureCoordinates) noexcept
 			{
-				index_data_t offset = 0;
+				const VertexKey key{this->quantize(position), this->quantize(normal), this->quantize(textureCoordinates)};
 
-				for ( const auto & vertexRef : m_vertices )
+				const auto keyIt = m_vertexIndex.find(key);
+
+				if ( keyIt != m_vertexIndex.cend() )
 				{
-					if ( vertexRef.position() == position && vertexRef.normal() == normal && vertexRef.textureCoordinates() == textureCoordinates )
-					{
-						return offset;
-					}
-
-					++offset;
+					return keyIt->second;
 				}
 
-				return this->saveVertex(position, normal, textureCoordinates);
+				const auto index = this->saveVertex(position, normal, textureCoordinates);
+
+				m_vertexIndex.emplace(key, index);
+
+				return index;
 			}
 
 			/**
-			 * @brief Declares a new vertex color a returns its index.
+			 * @brief Declares a new vertex color and returns its index, merging it with an identical one.
 			 * @note This function is for building the shape manually.
+			 * @note Same grid equality as addVertex(), and it had the same quadratic defect.
 			 * @param color The color.
 			 * @return index_data_t
 			 */
 			index_data_t
 			addVertexColor (const Math::Vector< 4, vertex_data_t > & color) noexcept
 			{
-				index_data_t offset = 0;
+				const ColorKey key{this->quantize(Math::Vector< 3, vertex_data_t >{color[Math::X], color[Math::Y], color[Math::Z]}), this->quantizeScalar(color[Math::W])};
 
-				for ( const auto & existingColor : m_vertexColors )
+				const auto keyIt = m_vertexColorIndex.find(key);
+
+				if ( keyIt != m_vertexColorIndex.cend() )
 				{
-					if ( existingColor == color )
-					{
-						return offset;
-					}
-
-					++offset;
+					return keyIt->second;
 				}
 
-				return this->saveVertexColor(color);
+				const auto index = this->saveVertexColor(color);
+
+				m_vertexColorIndex.emplace(key, index);
+
+				return index;
+			}
+
+			/**
+			 * @brief Sets the side of the grid cell two vertices must share to be merged.
+			 * @note Default 1e-4, the same value ShapeProcessor::deduplicateVertices() uses, so the two
+			 * merge paths of the library speak the same language.
+			 * @param tolerance The cell side. A value of 0 or less is ignored.
+			 * @return void
+			 */
+			void
+			setMergeTolerance (vertex_data_t tolerance) noexcept
+			{
+				if ( tolerance > 0 )
+				{
+					m_mergeTolerance = tolerance;
+				}
+			}
+
+			/**
+			 * @brief Returns the side of the grid cell two vertices must share to be merged.
+			 * @return vertex_data_t
+			 */
+			[[nodiscard]]
+			vertex_data_t
+			mergeTolerance () const noexcept
+			{
+				return m_mergeTolerance;
 			}
 
 			/**
@@ -2162,6 +2192,113 @@ namespace EmEn::Base::VertexFactory
 				}
 			}
 
+			/** @brief A position, normal or texture coordinate snapped to the merge grid. */
+			using QuantizedVector = std::array< int64_t, 3 >;
+
+			/**
+			 * @brief A vertex snapped to the merge grid.
+			 * @note ⚠️ Same quantisation as ShapeProcessor::deduplicateVertices(), on purpose: the two
+			 * merge paths of the library must not disagree about what "the same vertex" means.
+			 */
+			struct VertexKey final
+			{
+				QuantizedVector position{};
+				QuantizedVector normal{};
+				QuantizedVector textureCoordinates{};
+
+				bool operator== (const VertexKey & other) const noexcept = default;
+			};
+
+			/** @brief A vertex color snapped to the merge grid. */
+			struct ColorKey final
+			{
+				QuantizedVector rgb{};
+				int64_t alpha{0};
+
+				bool operator== (const ColorKey & other) const noexcept = default;
+			};
+
+			/** @brief Hashes a quantised vertex or color key. */
+			struct QuantizedHash final
+			{
+				/**
+				 * @brief Folds one quantised component into a running hash.
+				 * @param seed A reference to the running hash.
+				 * @param value The component.
+				 * @return void
+				 */
+				static
+				void
+				combine (size_t & seed, int64_t value) noexcept
+				{
+					seed ^= std::hash< int64_t >{}(value) + 0x9E3779B9UL + (seed << 6U) + (seed >> 2U);
+				}
+
+				/**
+				 * @brief Returns the hash of a vertex key.
+				 * @param key A reference to the key.
+				 * @return size_t
+				 */
+				[[nodiscard]]
+				size_t
+				operator() (const VertexKey & key) const noexcept
+				{
+					size_t seed = 0;
+
+					for ( const auto & component : {key.position, key.normal, key.textureCoordinates} )
+					{
+						combine(seed, component[0]);
+						combine(seed, component[1]);
+						combine(seed, component[2]);
+					}
+
+					return seed;
+				}
+
+				/**
+				 * @brief Returns the hash of a color key.
+				 * @param key A reference to the key.
+				 * @return size_t
+				 */
+				[[nodiscard]]
+				size_t
+				operator() (const ColorKey & key) const noexcept
+				{
+					size_t seed = 0;
+
+					combine(seed, key.rgb[0]);
+					combine(seed, key.rgb[1]);
+					combine(seed, key.rgb[2]);
+					combine(seed, key.alpha);
+
+					return seed;
+				}
+			};
+
+			/**
+			 * @brief Snaps a value to the merge grid.
+			 * @param value The value.
+			 * @return int64_t
+			 */
+			[[nodiscard]]
+			int64_t
+			quantizeScalar (vertex_data_t value) const noexcept
+			{
+				return static_cast< int64_t >(std::round(value / m_mergeTolerance));
+			}
+
+			/**
+			 * @brief Snaps a vector to the merge grid.
+			 * @param vector A reference to the vector.
+			 * @return QuantizedVector
+			 */
+			[[nodiscard]]
+			QuantizedVector
+			quantize (const Math::Vector< 3, vertex_data_t > & vector) const noexcept
+			{
+				return {this->quantizeScalar(vector[Math::X]), this->quantizeScalar(vector[Math::Y]), this->quantizeScalar(vector[Math::Z])};
+			}
+
 			/**
 			 * @brief The unordered vertex index pair identifying an edge, whatever the winding of the
 			 * triangle that declared it.
@@ -2228,12 +2365,18 @@ namespace EmEn::Base::VertexFactory
 			/* NOTE: Construction-time index only, it holds no geometry: addEdge() uses it to pair the
 			 * two half-edges of a shared edge in constant time. */
 			std::unordered_map< EdgeKey, EdgeSlot, EdgeKeyHash > m_unpairedEdges;
+			/* NOTE: Construction-time indexes only, they hold no geometry: addVertex() and
+			 * addVertexColor() use them to merge in constant time instead of scanning everything
+			 * already stored. */
+			std::unordered_map< VertexKey, index_data_t, QuantizedHash > m_vertexIndex;
+			std::unordered_map< ColorKey, index_data_t, QuantizedHash > m_vertexColorIndex;
 			std::vector< BoundaryLoop< index_data_t > > m_boundaryLoops;
 			Math::Space3D::AACuboid< vertex_data_t > m_boundingBox;
 			Math::Space3D::Sphere< vertex_data_t > m_boundingSphere;
 			/* NOTE: This is the max distance between [0,0,0] and the farthest vertex.
 			 * This is different from the fourth component of the centroid (m_boundingSphere). */
 			vertex_data_t m_farthestDistance{0};
+			vertex_data_t m_mergeTolerance{static_cast< vertex_data_t >(1e-4)};
 			bool m_textureCoordinatesDeclared{false};
 			bool m_normalsDeclared{false};
 			bool m_computeEdges{false};

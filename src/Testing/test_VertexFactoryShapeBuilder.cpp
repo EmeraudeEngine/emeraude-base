@@ -88,10 +88,11 @@ TEST(VertexFactoryShapeBuilder, triangleEdgeIndexesPointAtTheirOwnEdge)
 
 /* Ave robustus! (Axis B — correction marker): the two half-edges of a shared edge must point at
  * each other. The same off-by-one made the older half point one past its mate.
- * NOTE: an unpaired edge is NOT a defect here. generateSphere() merges its vertices through
- * Shape::addVertex(), whose absolute-epsilon comparison leaves the UV seam and the poles split,
- * so the sphere is not watertight in the edge sense (see the todo item
- * shape-addvertex-dedup-is-quadratic). Only the edges that DID pair are checked. */
+ * NOTE: an unpaired edge is NOT a defect here. A sphere is not watertight in the EDGE sense:
+ * the two sides of its UV seam carry u = 0 and u = 1, and its poles fan out, so those vertices
+ * are genuinely distinct whatever the merge tolerance. Measured after addVertex() became
+ * hash-based on 2026-09-22: still 48 unpaired edges on a 16x8 sphere. Only the edges that DID
+ * pair are checked. */
 TEST(VertexFactoryShapeBuilder, sharedEdgeCrossLinksAreReciprocal)
 {
 	const auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16U, 8U);

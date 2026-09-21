@@ -246,7 +246,7 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 > **Verified**: suite back to `1967/1967`, and the real `cyberdemon.md5mesh` still loads with its
 > skeleton and 10 animation clips — the new checks reject garbage without touching valid models.
 
-### ⚠️⚠️ Building a shape is QUADRATIC in its triangle count — two separate linear scans (Sept 2026, one FIXED)
+### ⚠️⚠️ Building a shape WAS quadratic in its triangle count — two separate linear scans (Sept 2026, both FIXED)
 
 `ShapeBuilder` routes every triangle it emits through `Shape::addTriangle()`, which calls
 `Shape::addEdge()` three times; with `dataEconomy` (the **default**) it also routes every corner
@@ -262,23 +262,37 @@ Measured on this workstation (GCC, `-O2`, `generateSphere`, 2026-09-21):
 | 128x64 | 16 384 | 925.6 ms | 329.3 ms | 567.9 ms | 6.3 ms |
 | 256x128 | 65 536 | **14 012 ms** | **5 299 ms** | 8 743 ms | **24.9 ms** |
 
-**FIXED**: `addEdge()` now pairs the two half-edges through a hash of the unordered vertex index
-pair (`m_unpairedEdges`, a construction-time index that holds no geometry). The streamed path is
-now **linear** — 4x triangles cost 4.0x — and 213x faster at 65 536 triangles.
+**BOTH FIXED** (`addEdge()` on 2026-09-21, `addVertex()` / `addVertexColor()` on 2026-09-22).
+Each now looks its candidate up in a construction-time hash index that holds no geometry. Final
+numbers on the 65 536 triangle sphere: **14 012 ms → 21.6 ms with data economy ON**, a **405x**
+gain, and the path is linear.
 
-**STILL OPEN**: `addVertex()` / `addVertexColor()` keep their linear scan, which is the whole of
-the remaining 8.7 s. The fix is not mechanical because it changes a merge semantic — see the item
-`docs/todo/shape-addvertex-dedup-is-quadratic.md`.
+⚠️⚠️ **Do not conclude from that sphere that the default is now always the faster path.** Which
+one wins depends on the MERGE RATIO. The sphere merges 83 % of its corners, so the in-build hash
+wins (21.6 ms against 25.5 ms for economy OFF + a batch dedup). A tree canopy merges almost
+nothing — every leaf card carries its own positions and UVs — so the in-build hash pays an
+insertion per corner for no merge: **122 ms batch against 208 ms in-build** on the aspen level
+chain, 124 against 263 on the conifer. `TreeSkinner` keeps `enableDataEconomy(false)` for that
+measured reason. This very session nearly shipped the opposite claim, generalised from the
+sphere alone.
 
-⚠️ **The workaround is the blessed path, not a hack**: `options.enableDataEconomy(false)` while
-building, then `ShapeProcessor::deduplicateVertices()` afterwards. It is not only 351x faster, it
-merges **better**: 33 169 vertices against 36 405 on the 256x128 sphere. `Vector::operator==`
-compares through `Utility::equal()` with an **absolute** `epsilon()` of 1.19e-7, finer than the
-rounding the generators produce, so the linear scan misses merges the 1e-4 quantised hash finds.
+⚠️⚠️ **Making it fast CHANGED a merge semantic, deliberately** (owner decision, 2026-09-22).
+`addVertex()` compared with `Utility::equal()`, an **absolute** epsilon of 1.19e-7. Epsilon
+equality is not transitive, so **no hash can reproduce it** — a hashed merge is necessarily a grid
+merge. The grid (1e-4, the same `ShapeProcessor::deduplicateVertices()` uses, so the library's two
+merge paths agree) merges **more**: 33 169 vertices against 36 405, because that epsilon is finer
+than the rounding a generator's own trigonometry produces.
 
-⚠️ A consequence worth knowing before writing a test: **`generateSphere()` is not watertight in
-the edge sense**. The unmerged UV seam and poles leave real boundary edges, so "a closed shape has
-every edge paired" is FALSE here — a unit test written on that premise fails on correct code.
+⚠️ **Progressive merging is order-dependent at a cell boundary**, the batch pass is not. Expect a
+handful of vertices of difference between them — 2 of 2 145 measured on a 64x32 sphere. Never pin
+an exact vertex count across the two paths.
+
+⚠️ **`generateSphere()` is STILL not watertight in the edge sense, and that is correct.** 48
+unpaired edges on a 16x8 sphere, after the change as before it. The two sides of a UV seam carry
+u = 0 and u = 1 and the poles fan out: those vertices are genuinely distinct whatever the
+tolerance, and merging them would break the mapping. ⚠️ An earlier version of this section blamed
+the seam on the epsilon comparison — it never was that. "A closed shape has every edge paired" is
+FALSE here, and a unit test written on that premise fails on correct code.
 
 ### `Shape::addEdge()` returned the index PLUS ONE (Sept 2026, FIXED)
 

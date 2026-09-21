@@ -112,10 +112,13 @@ namespace EmEn::Base::VertexFactory
 					return shape;
 				}
 
-				/* ⚠️ Data economy OFF on purpose: it deduplicates every corner with a LINEAR scan
-				 * of the vertex list, which makes the build quadratic — 8.7 s against 24.9 ms on a
-				 * 65 536 triangle shape. The hashed pass of ShapeProcessor does the same job
-				 * afterwards, and merges better. See docs/caution-points.md § VertexFactory. */
+				/* ⚠️ Data economy OFF, and it stays off even though addVertex() stopped being quadratic on
+				 * 2026-09-22. MEASURED both ways on this generator: economy OFF plus the batch pass builds
+				 * the aspen chain in 122 ms and the conifer in 124 ms; economy ON takes 208 ms and 263 ms.
+				 * A canopy is the opposite of a sphere: almost every leaf-card vertex is UNIQUE, so the
+				 * in-build hash pays an insertion per corner and merges nothing, while the batch pass walks
+				 * a contiguous array once. On a sphere, where 83 %% of the corners merge, it is the other
+				 * way round (21.6 ms against 25.5 ms). The rule is the merge RATIO, not the vertex count. */
 				ShapeBuilderOptions< vertex_data_t > builderOptions{true, true, true, false, false};
 				builderOptions.enableDataEconomy(false);
 

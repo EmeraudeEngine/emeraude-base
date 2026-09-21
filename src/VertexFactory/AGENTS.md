@@ -151,14 +151,27 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
 **Grid / GridQuad** - 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
 - See: `Grid.hpp`, `GridQuad.hpp`
 
-**Cost of building a shape** - ⚠️⚠️ read this before writing any dense generator
+**Cost of building a shape** - ⚠️ read this before writing any dense generator
 - `ShapeBuilder` → `Shape::addTriangle()` → `addEdge()` x3, plus `addVertex()` /
   `addVertexColor()` when `dataEconomy` is on (**the default**).
-- `addEdge()` pairs half-edges through a hash since 2026-09-21 and is O(1). `addVertex()` and
-  `addVertexColor()` **still scan linearly**, so the default path remains quadratic: a 65 536
-  triangle sphere costs **8.7 s** that way against **24.9 ms** with `enableDataEconomy(false)`
-  followed by `ShapeProcessor::deduplicateVertices()`. The hashed path also merges *better*
-  (33 169 vertices against 36 405).
+- All three went from a linear scan to a hashed lookup (`addEdge()` 2026-09-21, the two others
+  2026-09-22). A 65 536 triangle sphere went from **14 s** to **21.6 ms** with the default
+  options, and the path is linear.
+- ⚠️⚠️ **Which of the two merge paths is faster depends on the MERGE RATIO, not on the size.**
+  On that sphere 83 % of the corners merge and the in-build hash wins (21.6 ms against 25.5 ms
+  for `enableDataEconomy(false)` + a batch `ShapeProcessor::deduplicateVertices()`). On a tree
+  canopy almost every leaf-card vertex is unique, so the in-build hash pays an insertion per
+  corner and merges nothing: **122 ms batch against 208 ms in-build** for the aspen chain,
+  124 against 263 for the conifer. `TreeSkinner` keeps the batch path for that measured reason.
+  Measure your own generator before choosing; do not assume the default.
+- ⚠️⚠️ **The merge semantic changed with it** (owner decision): a hash cannot reproduce an epsilon
+  equality, which is not transitive, so `addVertex()` now merges by a **grid** of
+  `mergeTolerance` (1e-4, the value `ShapeProcessor` uses, so the two paths agree). It merges
+  MORE than the old epsilon did — 33 169 vertices against 36 405 — and merging progressively is
+  order-dependent at a cell boundary where the batch pass is not, so the two differ by a handful
+  of vertices. Never pin an exact count across them.
+- ⚠️ It does NOT close a UV seam and must not: the two sides carry u = 0 and u = 1. A sphere keeps
+  48 unpaired edges and is not watertight in the edge sense — that was never the epsilon's doing.
 - Measurements, the epsilon-vs-grid explanation and the seam consequence:
   `docs/caution-points.md` § VertexFactory. Open item:
   `docs/todo/shape-addvertex-dedup-is-quadratic.md`.
