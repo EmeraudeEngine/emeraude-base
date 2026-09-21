@@ -52,9 +52,34 @@ influences and weights for one vertex.
 - See: `ShapeGenerator.hpp`
 
 **TreeGenerator / Grid / GridQuad** - Specialized generators
-- `TreeGenerator` is the only compiled unit (`TreeGenerator.cpp`); the rest are header-only.
+- ⚠️⚠️ **`TreeGenerator` is a STUB, not a generator.** Its whole algorithm sits inside a
+  `/* … */` block (`TreeGenerator.cpp:38-84`); the live code prints two `std::cout` lines and
+  returns an **empty** `Shape`. It has **no caller** anywhere in the cascade. The commented body
+  would not even compile today: it calls `Utility::random()` (that namespace went away with the
+  extraction from emeraude-engine), `CartesianFrame::clearRotation()` and
+  `translateAlongLocalYAxis()` (both gone), and passes no `bool local` to `yaw/pitch/roll`.
+  Its approach — merging one **capped cylinder per segment** — is the real dead end: the caps
+  interpenetrate, nothing is continuous along a branch, and the triangle budget explodes. A
+  rewrite must separate a **skeleton** phase from a **generalized-cylinder skinning** phase; see
+  the items `docs/todo/tree-generator-skeleton-and-growers.md` and
+  `…/tree-generator-skinning-lod-and-wind-channels.md`.
+- `TreeGenerator.cpp` is the only compiled unit of this module, and the **only source** of the
+  `emeraude_base_vertex` object library (`CMakeLists.txt:426`). Making it header-only would leave
+  that target with no source at all — remove the target in the same move, or keep a `.cpp`.
 - `Grid` generates 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
 - See: `TreeGenerator.hpp/.cpp`, `Grid.hpp`, `GridQuad.hpp`
+
+**Cost of building a shape** - ⚠️⚠️ read this before writing any dense generator
+- `ShapeBuilder` → `Shape::addTriangle()` → `addEdge()` x3, plus `addVertex()` /
+  `addVertexColor()` when `dataEconomy` is on (**the default**).
+- `addEdge()` pairs half-edges through a hash since 2026-09-21 and is O(1). `addVertex()` and
+  `addVertexColor()` **still scan linearly**, so the default path remains quadratic: a 65 536
+  triangle sphere costs **8.7 s** that way against **24.9 ms** with `enableDataEconomy(false)`
+  followed by `ShapeProcessor::deduplicateVertices()`. The hashed path also merges *better*
+  (33 169 vertices against 36 405).
+- Measurements, the epsilon-vs-grid explanation and the seam consequence:
+  `docs/caution-points.md` § VertexFactory. Open item:
+  `docs/todo/shape-addvertex-dedup-is-quadratic.md`.
 
 ### Processing & Analysis
 
