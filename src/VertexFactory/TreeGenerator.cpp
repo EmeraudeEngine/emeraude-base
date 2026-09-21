@@ -24,79 +24,54 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+
 #include "TreeGenerator.hpp"
+
+/* Local inclusions. */
+#include "TreeParametricGrower.hpp"
+#include "TreeSkinner.hpp"
 
 namespace EmEn::Base::VertexFactory
 {
-	using namespace Math;
-
-	void
-	TreeGenerator::generateBranch (ShapeAssembler< float > & /*assembler*/, float /*size*/, float /*height*/, const CartesianFrame< float > & /*origin*/, size_t currentDepth, bool /*generateSubBranches*/) noexcept
+	TreeMesh< float >
+	TreeGenerator::generate (uint32_t seed) const noexcept
 	{
-		std::cout << "Level #" << currentDepth << " generation." "\n";
+		TreeMesh< float > mesh;
 
-		/*Shape branch{};
-		ShapeAssembler branchAssembler{branch};
+		auto skeleton = m_growerType == GrowerType::Parametric ?
+			TreeParametricGrower< float >{m_parameters}.grow(seed) :
+			m_colonizationGrower.grow(seed);
 
-		CartesianFrame< float > chunkCoords{};
-
-		for ( auto thisDepth = currentDepth; thisDepth < m_depth; thisDepth++ )
+		if ( skeleton.empty() )
 		{
-			chunkCoords.clearRotation();
-
-			if ( generateSubBranches && thisDepth > currentDepth )
-			{
-				//for ( auto branchDepth = depth - 1; branchDepth < m_depth; branchDepth++ )
-				{
-					std::cout << "Level #" << currentDepth << " sub-generation." "\n";
-
-					auto branchOrigin = chunkCoords;
-					branchOrigin.yaw(Math::Radian(Utility::random(0.0F, 360.0F)));
-					branchOrigin.pitch(Math::Radian(m_maxSpreadingAngle * 2.0F));
-
-					this->generateBranch(assembler, size * 0.5F, height * 0.75F, branchOrigin, thisDepth, true);
-				}
-			}
-
-			chunkCoords.roll(Math::Radian(Utility::random(-m_maxSpreadingAngle, m_maxSpreadingAngle)));
-			chunkCoords.pitch(Math::Radian(Utility::random(-m_maxSpreadingAngle, m_maxSpreadingAngle)));
-
-			const auto nextSize = size * m_reduceFactor;
-
-			auto chunk = ShapeGenerator::generateCylinder(size, nextSize, height, 8, 4);
-
-			branchAssembler.merge(chunk, chunkCoords, false);
-
-			chunkCoords.translateAlongLocalYAxis(height);
-			size = nextSize;
-			height *= m_reduceFactor;
+			return mesh;
 		}
 
-		{
-			auto branchOrigin = ShapeGenerator::generateSphere(size * 5.0F, 8, 8);
+		/* The pruning ladder of the coarser levels is expressed relative to the thickest branch,
+		 * so a sapling and a mature oak lose the same PROPORTION of their twigs. */
+		float trunkRadius = 0.0F;
 
-			assembler.merge(branchOrigin, origin);
+		for ( const auto & segment : skeleton.segments() )
+		{
+			trunkRadius = std::max(trunkRadius, segment.startRadius());
 		}
 
-		if ( branch.empty() )
-			return;
+		for ( uint32_t level = 0; level < m_levelOfDetailCount; ++level )
+		{
+			const TreeSkinner< float > skinner{m_skinningOptions.coarsened(level, trunkRadius)};
 
-		assembler.merge(branch, origin);*/
+			mesh.addLevelOfDetail(skinner.skin(skeleton));
+		}
 
-		std::cout << "Level #" << currentDepth << " assembled to the parent." "\n";
-	}
+		if ( m_imposterEnabled )
+		{
+			const TreeSkinner< float > skinner{m_skinningOptions};
 
-	Shape< float >
-	TreeGenerator::generate (unsigned int seed) noexcept
-	{
-		Shape< float > treeShape{};
+			mesh.setImposter(skinner.skinImposter(skeleton, m_imposterQuadCount));
+		}
 
-		ShapeAssembler treeAssembler{treeShape};
+		mesh.setSkeleton(std::move(skeleton));
 
-		std::srand(seed);
-
-		this->generateBranch(treeAssembler, m_baseSize, m_baseHeight, {}, 0U, true);
-
-		return treeShape;
+		return mesh;
 	}
 }

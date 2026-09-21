@@ -336,6 +336,56 @@ growers, or two calls, never disturb each other. The old stub used `std::srand`,
 process-global.
 
 
+### ⚠️⚠️ A vegetation level of detail keeps the CANOPY and drops the twigs, not the reverse (Sept 2026)
+
+The first skinner pruned branches thinner than a threshold, and then dropped every leaf hanging on
+a branch it had pruned — because a leaf floating where its twig used to be looks like a defect. It
+is not: at the distance where a two-pixel twig is worth dropping, the canopy **is** the tree.
+Measured on a quaking aspen, that rule cost the first coarser level **100 % of its foliage**
+(97 500 triangles of leaves down to 0) while keeping 801 triangles of bare sticks.
+
+Two more numbers that shape the ladder, same tree:
+
+- The canopy is **97 500 of the 119 709 triangles** of the finest level. Halving the ring
+  resolution and the leaf count *together* barely moves the total — the leaves have to fall
+  **faster** (`leafFraction * factor²`), with the survivors enlarged by `1/sqrt(fraction)` so the
+  coverage holds.
+- Pruning at 2 % of the trunk radius per level ate every branch carrying foliage on the very first
+  step. 1 % doubling per level is the ladder that works here.
+- A skeleton of many short segments (space colonization: 874 segments in 402 branches) is barely
+  reducible by radius and resolution alone — its triangle count is set by its TOPOLOGY. The axial
+  stride, which skips ring stations, is what moves it: 12 591 → 6 286 → 4 476.
+
+Final ladder, aspen levels 0 to 3: **119 709 / 29 457 / 7 403 / 1 736**.
+
+### ⚠️⚠️ A tube built on per-segment frames corkscrews, and the AREA does not see it
+
+A generalized cylinder must carry a **rotation-minimizing frame** along the branch (double
+reflection, Wang, Jüttler, Zheng & Liu, ACM TOG 27(1), 2008). The segment frames cannot be used:
+`makeTreeFrame()` derives its spin from the world axis least aligned with the direction, so it
+flips when a branch crosses that threshold, and the two rings on either side of the flip are out
+of phase.
+
+⚠️ **The trap is in the measurement, not in the geometry.** A corkscrew is not a hole and not an
+inversion: it passes every topological check, and it barely moves the surface area — measured
+**1.002** of the analytic tube with the correct frame against **1.019** with per-segment frames.
+The first version of the regression test asserted on the area, passed on **both** variants, and
+therefore tested nothing. The quantity that separates them is the **longest edge**: 1.04–1.10
+segment lengths against 1.42–1.46, because an out-of-phase ring makes the joining edges cut across
+the tube instead of running along it.
+
+The lesson is general: before trusting a test, run it against the defect it is supposed to catch.
+
+### `ShapeProcessor::deduplicateVertices()` leaves the edge list pointing at dead indices
+
+It rewrites `m_shape.vertices()` and remaps every triangle's vertex indices, but does not touch
+`m_shape.edges()` — whose `ShapeEdge` entries still hold the PRE-merge vertex indices, and whose
+`triangle.edgeIndex()` links still point into the old numbering. Anything reading `shape.edges()`
+after a dedup reads garbage. Latent today, because nothing in the cascade consumes the edge list
+(`Silhouette` has no caller), and because the generators that dedup do not need edges. Open item:
+`docs/todo/dedup-does-not-remap-the-edge-list.md`.
+
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count

@@ -100,18 +100,53 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   segments / 10.7 m x 9.6 m in 11 ms.
 - See: `TreeColonizationGrower.hpp`
 
-**TreeGenerator** - ⚠️ still the OLD stub, untouched
-- Its whole algorithm sits inside a `/* … */` block (`TreeGenerator.cpp:38-84`); the live code
-  prints two `std::cout` lines and returns an **empty** `Shape`, and it has no caller. The
-  commented body would not even compile today: `Utility::random()` (namespace gone with the
-  extraction), `CartesianFrame::clearRotation()` and `translateAlongLocalYAxis()` (both gone), and
-  no `bool local` on `yaw/pitch/roll`. Its approach — one **capped cylinder per segment** — is the
-  dead end that motivated the two-phase design above.
-- It becomes the façade over the growers and the skinner in the skinning lot. Until then, use
-  `TreeParametricGrower` or `TreeColonizationGrower` directly.
-- `TreeGenerator.cpp` is the only compiled unit of this module, and the **only source** of the
-  `emeraude_base_vertex` object library (`CMakeLists.txt:426`). Making it header-only would leave
-  that target with no source at all — remove the target in the same move, or keep a `.cpp`.
+**TreeSkinningOptions / TreeSkinner / TreeMesh** - the mesh
+- `TreeSkinner` walks the skeleton branch by branch and emits ONE continuous tube per branch:
+  consecutive segments share their ring, `u` runs around, `v` is the arc length over
+  `barkTextureLength`, and a branch closes on a single **apex vertex**, never a cap disk. The old
+  stub's pile of capped cylinders is what this replaces.
+- ⚠️⚠️ **The skinner builds its OWN rotation-minimizing frame** (double reflection, Wang, Jüttler,
+  Zheng & Liu, ACM TOG 27(1), 2008) and must never use the segment frames: `makeTreeFrame()` picks
+  its spin from the world axis least aligned with the direction, so it FLIPS when a branch crosses
+  that threshold and the tube corkscrews. Guarded by
+  `VertexFactoryTreeSkinner.theTubeDoesNotCorkscrewOnIndependentlyFramedSegments`.
+- **One radial count per BRANCH**, from its base radius — not per ring. Two rings of different
+  counts cannot be chained into a quad strip, so "N follows the radius" is applied at branch
+  granularity. The axial half of the resolution is `axialStride`, which skips ring stations.
+- **Junctions are the cheap version**, deliberately: the child's first rings sit on the parent
+  AXIS, are swallowed by the parent tube, and a `collarScale` fakes the swelling. A real
+  bifurcation stitch would have to be redone for every level of detail, and is invisible under
+  bark at the distance a tree is seen from.
+- Two groups, always: `TreeMesh::BarkGroup` then `TreeMesh::LeafGroup`, so
+  `Interface::buildSubGeometries()` gives the engine two sub-geometries and therefore two
+  materials. The leaf group is declared even when empty.
+- Vertex channels (Crytek/SpeedTree convention): **R** trunk bending weight (normalized height,
+  raised to `trunkBendExponent`), **G** branch bending weight (arc along the branch; 0 on the
+  trunk, which would otherwise sway twice), **B** leaf flutter phase (constant per card), **A**
+  baked occlusion.
+- ⚠️ The **A channel is a DENSITY estimate, not ray-traced occlusion**: it counts leaves and
+  branch nodes in the cell around a point, normalized on the densest cell. It captures the one
+  thing that reads — the inside of a canopy is darker than its rim — for a hash lookup. Real
+  occlusion needs rays and belongs to a bake.
+- `TreeMesh` is the structured result: the skeleton, the level chain, and the crossed-quads card.
+  ⚠️ The card is kept APART from the chain, not as its last rung: it carries ONE group because it
+  samples a single baked atlas, and that atlas is engine work
+  (`vegetation-octahedral-imposter-atlas`).
+- Measured, quaking aspen seed 1 (3 178 segments, 24 375 leaves), levels 0 to 3:
+  **119 709 / 29 457 / 7 403 / 1 736** triangles, 114 ms for the whole chain plus the card.
+  Conifer: 150 924 / 35 160 / 8 787. A colonized crown: 12 591 / 6 286 / 4 476 — it plateaus,
+  because its triangle count is set by its topology (874 short segments in 402 branches) rather
+  than by its radii.
+- See: `TreeSkinningOptions.hpp`, `TreeSkinner.hpp`, `TreeMesh.hpp`
+
+**TreeGenerator** - the façade
+- Picks a grower, skins the chain, optionally builds the card, and returns a `TreeMesh`. Use it
+  unless you want a skeleton with no mesh, or a mesh from a skeleton you built yourself.
+- ⚠️ Deliberately **not a template**, unlike the rest of the module: it is the only compiled unit
+  here and the **only source** of the `emeraude_base_vertex` object library
+  (`CMakeLists.txt:426`). Making it header-only would leave that target with no source at all —
+  remove the target in the same move, or keep a `.cpp`. A tree is generated at load time, so
+  `float` costs nothing and the template instantiation is spent once.
 
 **Grid / GridQuad** - 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
 - See: `Grid.hpp`, `GridQuad.hpp`
@@ -485,7 +520,9 @@ Tracked in `docs/plans/ave-robustus.md` (§6, "Real correctness gaps"): all reso
 | `TreeSegment.hpp` / `TreeLeafAttachment.hpp` / `TreeSkeleton.hpp` | Tree botany, no mesh |
 | `TreeParameters.hpp` / `TreeParametricGrower.hpp` | Weber & Penn tree growth |
 | `TreeColonizationGrower.hpp` | Space-colonization tree growth |
-| `TreeGenerator.hpp` | ⚠️ Empty stub, awaiting the skinning lot |
+| `TreeSkinningOptions.hpp` / `TreeSkinner.hpp` | Skeleton to mesh, per level of detail |
+| `TreeMesh.hpp` | Skeleton + level chain + imposter card |
+| `TreeGenerator.hpp` / `.cpp` | The façade, and the module's only compiled unit |
 | `ShapeProcessor.hpp` / `ShapeDecimator.hpp` / `ShapeAssembler.hpp` / `ShapeSplitter.hpp` | Processing |
 | `Silhouette.hpp` / `XRayAnalyzer.hpp` | Analysis |
 | `CapUVMapping.hpp` / `Normal.hpp` / `TextureCoordinates.hpp` | UV / coordinate helpers |

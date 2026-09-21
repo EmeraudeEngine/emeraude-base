@@ -26,182 +26,223 @@
 
 #pragma once
 
+/* STL inclusions. */
+#include <algorithm>
+#include <cstdint>
+
 /* Local inclusions for usages. */
-#include "ShapeAssembler.hpp"
+#include "TreeColonizationGrower.hpp"
+#include "TreeMesh.hpp"
+#include "TreeParameters.hpp"
+#include "TreeSkinningOptions.hpp"
 
 namespace EmEn::Base::VertexFactory
 {
 	/**
-	 * @brief The TreeGenerator class
+	 * @brief Generates a complete tree: grows a skeleton, skins it into a chain of levels of
+	 * detail, and builds the card that replaces it in the distance.
+	 * @note This is the façade over the two growers and the skinner. Use it unless you need a
+	 * skeleton without a mesh, or a mesh from a skeleton you built yourself — both growers and
+	 * `TreeSkinner` are usable on their own.
+	 * @note Deliberately NOT a template, unlike the rest of this module. It is the single compiled
+	 * unit of the `emeraude_base_vertex` object library, and a tree is generated at load time, not
+	 * per frame, so `float` costs nothing here and the compile time is spent once.
 	 */
 	class TreeGenerator final
 	{
 		public:
 
 			/**
-			 * @brief Constructs a default tree generator.
+			 * @brief Which model grows the skeleton.
+			 */
+			enum class GrowerType : uint8_t
+			{
+				/** @brief Weber & Penn: species parameters drive the shape. */
+				Parametric,
+				/** @brief Runions et al.: the crown volume drives the shape. */
+				SpaceColonization
+			};
+
+			/** @brief The deepest level chain that can be asked for. */
+			static constexpr uint32_t MaxLevelOfDetailCount{8};
+
+			/**
+			 * @brief Constructs a generator growing the default parametric species.
 			 */
 			TreeGenerator () noexcept = default;
 
 			/**
-			 * @brief Sets the base size of generation.
-			 * @param baseSize The radius of the trunk.
+			 * @brief Sets which model grows the skeleton.
+			 * @param type The model.
 			 * @return void
 			 */
 			void
-			setBaseSize (float baseSize) noexcept
+			setGrowerType (GrowerType type) noexcept
 			{
-				m_baseSize = baseSize;
+				m_growerType = type;
 			}
 
 			/**
-			 * @brief Returns the base size.
-			 * @return float
+			 * @brief Returns which model grows the skeleton.
+			 * @return GrowerType
 			 */
 			[[nodiscard]]
-			float
-			baseSize () const noexcept
+			GrowerType
+			growerType () const noexcept
 			{
-				return m_baseSize;
+				return m_growerType;
 			}
 
 			/**
-			 * @brief Sets the base height of generation.
-			 * @param baseHeight The height of the trunk.
+			 * @brief Gives mutable access to the species parameters of the parametric model.
+			 * @return TreeParameters< float > &
+			 */
+			[[nodiscard]]
+			TreeParameters< float > &
+			parameters () noexcept
+			{
+				return m_parameters;
+			}
+
+			/**
+			 * @brief Gives access to the species parameters of the parametric model.
+			 * @return const TreeParameters< float > &
+			 */
+			[[nodiscard]]
+			const TreeParameters< float > &
+			parameters () const noexcept
+			{
+				return m_parameters;
+			}
+
+			/**
+			 * @brief Gives mutable access to the space colonization model.
+			 * @return TreeColonizationGrower< float > &
+			 */
+			[[nodiscard]]
+			TreeColonizationGrower< float > &
+			colonizationGrower () noexcept
+			{
+				return m_colonizationGrower;
+			}
+
+			/**
+			 * @brief Gives access to the space colonization model.
+			 * @return const TreeColonizationGrower< float > &
+			 */
+			[[nodiscard]]
+			const TreeColonizationGrower< float > &
+			colonizationGrower () const noexcept
+			{
+				return m_colonizationGrower;
+			}
+
+			/**
+			 * @brief Gives mutable access to the skinning options of the FINEST level; the coarser
+			 * ones are derived from it.
+			 * @return TreeSkinningOptions< float > &
+			 */
+			[[nodiscard]]
+			TreeSkinningOptions< float > &
+			skinningOptions () noexcept
+			{
+				return m_skinningOptions;
+			}
+
+			/**
+			 * @brief Gives access to the skinning options of the finest level.
+			 * @return const TreeSkinningOptions< float > &
+			 */
+			[[nodiscard]]
+			const TreeSkinningOptions< float > &
+			skinningOptions () const noexcept
+			{
+				return m_skinningOptions;
+			}
+
+			/**
+			 * @brief Sets how many levels of detail are skinned, 1 meaning the finest alone.
+			 * @param count The count.
 			 * @return void
 			 */
 			void
-			setBaseHeight (float baseHeight) noexcept
+			setLevelOfDetailCount (uint32_t count) noexcept
 			{
-				m_baseHeight = baseHeight;
+				m_levelOfDetailCount = std::clamp(count, 1U, MaxLevelOfDetailCount);
 			}
 
 			/**
-			 * @brief Returns the base size of generation.
-			 * @return float
+			 * @brief Returns how many levels of detail are skinned.
+			 * @return uint32_t
 			 */
 			[[nodiscard]]
-			float
-			baseHeight () const noexcept
+			uint32_t
+			levelOfDetailCount () const noexcept
 			{
-				return m_baseHeight;
+				return m_levelOfDetailCount;
 			}
 
 			/**
-			 * @brief setReduceFactor
-			 * @param reduceFactor
+			 * @brief Sets whether the crossed-quads card is built.
+			 * @param state The state.
 			 * @return void
 			 */
 			void
-			setReduceFactor (float reduceFactor) noexcept
+			enableImposter (bool state) noexcept
 			{
-				m_reduceFactor = Math::clampToUnit(reduceFactor);
+				m_imposterEnabled = state;
 			}
 
 			/**
-			 * @brief reduceFactor
-			 * @return float
+			 * @brief Returns whether the crossed-quads card is built.
+			 * @return bool
 			 */
 			[[nodiscard]]
-			float
-			reduceFactor () const noexcept
+			bool
+			imposterEnabled () const noexcept
 			{
-				return m_reduceFactor;
+				return m_imposterEnabled;
 			}
 
 			/**
-			 * @brief setMaxSpreadingAngle
-			 * @param maxSpreadingAngle
+			 * @brief Sets how many quads cross each other in the card.
+			 * @param count The count.
 			 * @return void
 			 */
 			void
-			setMaxSpreadingAngle (float maxSpreadingAngle) noexcept
+			setImposterQuadCount (uint32_t count) noexcept
 			{
-				m_maxSpreadingAngle = maxSpreadingAngle;
+				m_imposterQuadCount = std::max(1U, count);
 			}
 
 			/**
-			 * @brief maxSpreadingAngle
-			 * @return float
+			 * @brief Returns how many quads cross each other in the card.
+			 * @return uint32_t
 			 */
 			[[nodiscard]]
-			float
-			maxSpreadingAngle () const noexcept
+			uint32_t
+			imposterQuadCount () const noexcept
 			{
-				return m_maxSpreadingAngle;
+				return m_imposterQuadCount;
 			}
 
 			/**
-			 * @brief setChaos
-			 * @param chaos
-			 * @return void
-			 */
-			void
-			setChaos (float chaos) noexcept
-			{
-				m_chaos = chaos;
-			}
-
-			/**
-			 * @brief chaos
-			 * @return float
-			 */
-			[[nodiscard]]
-			float
-			chaos () const noexcept
-			{
-				return m_chaos;
-			}
-
-			/**
-			 * @brief setDepth
-			 * @param depth
-			 * @return void
-			 */
-			void
-			setDepth (size_t depth) noexcept
-			{
-				m_depth = depth;
-			}
-
-			/**
-			 * @brief depth
-			 * @return size_t
-			 */
-			[[nodiscard]]
-			size_t
-			depth () const noexcept
-			{
-				return m_depth;
-			}
-
-			/**
-			 * @brief Executes the generation of the tree as a shape.
+			 * @brief Grows and skins a complete tree.
+			 * @note The same seed and the same settings always give the same tree.
 			 * @param seed The generation seed. Default 0.
-			 * @return Shape< float >
+			 * @return TreeMesh< float >
 			 */
 			[[nodiscard]]
-			Shape< float > generate (unsigned int seed = 0) noexcept;
+			TreeMesh< float > generate (uint32_t seed = 0) const noexcept;
 
 		private:
 
-			/**
-			 * @brief generateBranch
-			 * @param assembler
-			 * @param size
-			 * @param height
-			 * @param origin
-			 * @param currentDepth
-			 * @param generateSubBranches
-			 * @return void
-			 */
-			void generateBranch (ShapeAssembler< float > & assembler, float size, float height, const Math::CartesianFrame< float > & origin, size_t currentDepth, bool generateSubBranches) noexcept;
-
-			float m_baseSize{1.0F};
-			float m_baseHeight{4.0F};
-			float m_reduceFactor{0.75F};
-			float m_maxSpreadingAngle{15.0F};
-			float m_chaos{0.1F};
-			size_t m_depth{3};
-		};
+			TreeParameters< float > m_parameters;
+			TreeColonizationGrower< float > m_colonizationGrower;
+			TreeSkinningOptions< float > m_skinningOptions;
+			uint32_t m_levelOfDetailCount{3};
+			uint32_t m_imposterQuadCount{3};
+			GrowerType m_growerType{GrowerType::Parametric};
+			bool m_imposterEnabled{false};
+	};
 }
