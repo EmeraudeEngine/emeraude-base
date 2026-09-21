@@ -39,6 +39,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 /* Local inclusions for usages. */
@@ -187,6 +188,7 @@ namespace EmEn::Base::VertexFactory
 				m_vertexColors.resize(vertexColorsCount);
 				m_triangles.resize(facesCount);
 				m_edges.resize(edgesCount);
+				m_unpairedEdges.clear();
 			}
 
 			/**
@@ -200,6 +202,7 @@ namespace EmEn::Base::VertexFactory
 				m_vertexColors.clear();
 				m_triangles.clear();
 				m_edges.clear();
+				m_unpairedEdges.clear();
 				m_boundaryLoops.clear();
 				m_boundaryLoopsAnalyzed = false;
 				m_groups.clear();
@@ -1843,42 +1846,39 @@ namespace EmEn::Base::VertexFactory
 			index_data_t
 			addEdge (index_data_t vertexIndexA, index_data_t vertexIndexB) noexcept
 			{
-				/* Checks for shared edge. */
-				auto sharedIndex = std::numeric_limits< index_data_t >::max();
+				/* NOTE: The half-edge waiting for its mate is looked up by the unordered vertex index
+				 * pair. A linear scan of the edge list here makes the whole shape construction quadratic
+				 * in the triangle count, which no procedural generator can afford. */
+				const EdgeKey key{std::min(vertexIndexA, vertexIndexB), std::max(vertexIndexA, vertexIndexB)};
 
-				index_data_t offset = 0;
+				const auto slotIt = m_unpairedEdges.find(key);
+				const auto found = slotIt != m_unpairedEdges.end();
 
-				for ( const auto & edge : m_edges )
+				/* NOTE: A third triangle sharing the same edge means a non-manifold shape. */
+				if ( found && slotIt->second.paired )
 				{
-					if ( edge.same(vertexIndexA, vertexIndexB) )
-					{
-						sharedIndex = offset;
-
-						/* Checks if the edge is alone, otherwise it's an error. */
-						if ( edge.isShared() )
-						{
-							return std::numeric_limits< index_data_t >::max();
-						}
-
-						break;
-					}
-
-					++offset;
+					return std::numeric_limits< index_data_t >::max();
 				}
 
 				/* Insert the new edge. */
 				m_edges.emplace_back(vertexIndexA, vertexIndexB);
 
-				const auto newEdgeIndex = static_cast< index_data_t >(m_edges.size());
+				const auto newEdgeIndex = static_cast< index_data_t >(m_edges.size() - 1);
 
-				/* Link with the shared edge if it found. */
-				if ( sharedIndex < std::numeric_limits< index_data_t >::max() )
+				/* Link with the shared edge if it was found. */
+				if ( found )
 				{
 					/* Sets to the new inserted edge the index of the shared edge found. */
-					m_edges.back().setSharedIndex(sharedIndex);
+					m_edges.back().setSharedIndex(slotIt->second.index);
 
 					/* Save the index of the new edge to the shared edge found. */
-					m_edges[sharedIndex].setSharedIndex(newEdgeIndex);
+					m_edges[slotIt->second.index].setSharedIndex(newEdgeIndex);
+
+					slotIt->second.paired = true;
+				}
+				else
+				{
+					m_unpairedEdges.emplace(key, EdgeSlot{newEdgeIndex, false});
 				}
 
 				return newEdgeIndex;
@@ -2162,6 +2162,59 @@ namespace EmEn::Base::VertexFactory
 				}
 			}
 
+			/**
+			 * @brief The unordered vertex index pair identifying an edge, whatever the winding of the
+			 * triangle that declared it.
+			 */
+			struct EdgeKey final
+			{
+				index_data_t first{0};
+				index_data_t second{0};
+
+				/**
+				 * @brief Compares two edge keys.
+				 * @param other A reference to the other key.
+				 * @return bool
+				 */
+				[[nodiscard]]
+				bool
+				operator== (const EdgeKey & other) const noexcept
+				{
+					return first == other.first && second == other.second;
+				}
+			};
+
+			/**
+			 * @brief Hashes an edge key.
+			 */
+			struct EdgeKeyHash final
+			{
+				/**
+				 * @brief Returns the hash of an edge key.
+				 * @param key A reference to the key.
+				 * @return size_t
+				 */
+				[[nodiscard]]
+				size_t
+				operator() (const EdgeKey & key) const noexcept
+				{
+					const auto hashA = std::hash< index_data_t >{}(key.first);
+					const auto hashB = std::hash< index_data_t >{}(key.second);
+
+					return hashA ^ (hashB + 0x9E3779B9UL + (hashA << 6U) + (hashA >> 2U));
+				}
+			};
+
+			/**
+			 * @brief The half-edge already inserted for an edge key, and whether its mate has been
+			 * inserted too.
+			 */
+			struct EdgeSlot final
+			{
+				index_data_t index{0};
+				bool paired{false};
+			};
+
 			/* Flag names. */
 			static constexpr auto TextureCoordinatesDeclared{0UL};
 			static constexpr auto ComputeEdges{1UL};
@@ -2172,6 +2225,9 @@ namespace EmEn::Base::VertexFactory
 			std::vector< Math::Vector< 4, vertex_data_t > > m_vertexColors;
 			std::vector< ShapeTriangle< vertex_data_t, index_data_t > > m_triangles;
 			std::vector< ShapeEdge< index_data_t > > m_edges;
+			/* NOTE: Construction-time index only, it holds no geometry: addEdge() uses it to pair the
+			 * two half-edges of a shared edge in constant time. */
+			std::unordered_map< EdgeKey, EdgeSlot, EdgeKeyHash > m_unpairedEdges;
 			std::vector< BoundaryLoop< index_data_t > > m_boundaryLoops;
 			Math::Space3D::AACuboid< vertex_data_t > m_boundingBox;
 			Math::Space3D::Sphere< vertex_data_t > m_boundingSphere;

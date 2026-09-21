@@ -246,6 +246,58 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 > **Verified**: suite back to `1967/1967`, and the real `cyberdemon.md5mesh` still loads with its
 > skeleton and 10 animation clips — the new checks reject garbage without touching valid models.
 
+### ⚠️⚠️ Building a shape is QUADRATIC in its triangle count — two separate linear scans (Sept 2026, one FIXED)
+
+`ShapeBuilder` routes every triangle it emits through `Shape::addTriangle()`, which calls
+`Shape::addEdge()` three times; with `dataEconomy` (the **default**) it also routes every corner
+through `Shape::addVertex()` and `Shape::addVertexColor()`. Each of those four used to walk the
+whole existing list. The primitives in `ShapeGenerator` are small enough (a 16x8 sphere is 256
+triangles) that nobody ever felt it — a procedural generator cannot ignore it.
+
+Measured on this workstation (GCC, `-O2`, `generateSphere`, 2026-09-21):
+
+| Sphere | Triangles | before the fix, economy ON | before, economy OFF + dedup | after, economy ON | after, economy OFF + dedup |
+|---|---|---|---|---|---|
+| 64x32 | 4 096 | 56.9 ms | 25.8 ms | 48.5 ms | 1.7 ms |
+| 128x64 | 16 384 | 925.6 ms | 329.3 ms | 567.9 ms | 6.3 ms |
+| 256x128 | 65 536 | **14 012 ms** | **5 299 ms** | 8 743 ms | **24.9 ms** |
+
+**FIXED**: `addEdge()` now pairs the two half-edges through a hash of the unordered vertex index
+pair (`m_unpairedEdges`, a construction-time index that holds no geometry). The streamed path is
+now **linear** — 4x triangles cost 4.0x — and 213x faster at 65 536 triangles.
+
+**STILL OPEN**: `addVertex()` / `addVertexColor()` keep their linear scan, which is the whole of
+the remaining 8.7 s. The fix is not mechanical because it changes a merge semantic — see the item
+`docs/todo/shape-addvertex-dedup-is-quadratic.md`.
+
+⚠️ **The workaround is the blessed path, not a hack**: `options.enableDataEconomy(false)` while
+building, then `ShapeProcessor::deduplicateVertices()` afterwards. It is not only 351x faster, it
+merges **better**: 33 169 vertices against 36 405 on the 256x128 sphere. `Vector::operator==`
+compares through `Utility::equal()` with an **absolute** `epsilon()` of 1.19e-7, finer than the
+rounding the generators produce, so the linear scan misses merges the 1e-4 quantised hash finds.
+
+⚠️ A consequence worth knowing before writing a test: **`generateSphere()` is not watertight in
+the edge sense**. The unmerged UV seam and poles leave real boundary edges, so "a closed shape has
+every edge paired" is FALSE here — a unit test written on that premise fails on correct code.
+
+### `Shape::addEdge()` returned the index PLUS ONE (Sept 2026, FIXED)
+
+`addEdge()` ended with `const auto newEdgeIndex = static_cast< index_data_t >(m_edges.size());`
+**after** the `emplace_back` — that is the size, not the index of what was just inserted. So every
+edge index stored in a triangle by `addTriangle()`, and one half of every shared-edge cross-link,
+pointed at the **next** edge, and the last one pointed one past the end.
+
+Measured on a 16x8 sphere before the fix: **0 of 768** edge indices joined the two vertices of
+their own triangle corner, 767 were wrong and **1 was out of range**. `Silhouette.hpp:98-100`
+dereferences exactly those indices (`edges[triangle.edgeIndex(0..2)]`), so silhouette extraction
+read the wrong edges and, on the last triangle, read **past the end of the vector**. It is latent
+rather than live only because nothing in the cascade calls `Silhouette` today.
+
+Regression tests: `VertexFactoryShapeBuilder.triangleEdgeIndexesPointAtTheirOwnEdge` and
+`…sharedEdgeCrossLinksAreReciprocal` — both fail on the pre-fix header, both pass after. Suite
+`2051/2051`.
+
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count
