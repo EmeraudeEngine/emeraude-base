@@ -298,6 +298,44 @@ Regression tests: `VertexFactoryShapeBuilder.triangleEdgeIndexesPointAtTheirOwnE
 `2051/2051`.
 
 
+### ⚠️⚠️ A tree fork must DIVIDE the stem, never restart it (Sept 2026, FIXED before shipping)
+
+Weber & Penn's stem splitting (`nSegSplits`) is the one place in the parametric grower where a
+naive reading multiplies the tree instead of shaping it. Three things must hold, and the first
+draft got all three wrong — with visible, escalating symptoms:
+
+1. **A clone inherits the REMAINING segments**, not a fresh full-length stem. Restarting a stem of
+   `nCurveRes` segments means the clone forks again at the same relative place, forever: it
+   **overflowed the stack and segfaulted**. `StemRequest::segmentCountOverride` is what bounds it —
+   a clone is always strictly smaller than what it replaces.
+2. **The clones SHARE the children the stem was going to carry** (`StemRequest::childShare`), they
+   do not each get the full budget.
+3. **The clones carry on the stem's fork error** (`StemRequest::inheritedSplitError`), they do not
+   each start a fresh accumulator.
+
+With 2 and 3 reset, the `broadleaf()` preset reached the **400 000 segment ceiling** and 2 916 030
+leaves; fixed, the same seed gives **7 276 segments and 49 410 leaves**. The ceiling
+(`TreeParametricGrower::MaxSegments`) is what turned an out-of-memory into a diagnosable number —
+keep it.
+
+⚠️ The lesson generalises: when a recursive generator guards its recursion with a RELATIVE test
+("stop when the remainder is below 2 % of my length"), the guard is worthless, because the clone's
+own length is the new reference. Bound the recursion on something that strictly decreases in
+absolute terms — here, a segment count.
+
+### The colonization grower is seeded, so nothing may iterate a hash map
+
+`TreeColonizationGrower::NodeGrid` is an `unordered_map` of cells. It is read **by key only**, and
+each cell keeps its nodes in insertion order, so a given seed always regrows the same tree. Add a
+loop over the map itself and the result starts depending on the hash table layout — the tree would
+still look fine, and the bench comparing two captures of "the same" tree would quietly stop being
+valid. `VertexFactoryTreeColonizationGrower.sameSeedGivesTheSameTree` is the guard.
+
+Same reason the growers build their `Randomizer` **inside** `grow()`: it is seeded per call, so two
+growers, or two calls, never disturb each other. The old stub used `std::srand`, which is
+process-global.
+
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count

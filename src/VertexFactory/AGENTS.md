@@ -51,23 +51,70 @@ influences and weights for one vertex.
 **ShapeGenerator** - Procedural primitives (triangle, quad, cube, sphere, cylinder, cone, …).
 - See: `ShapeGenerator.hpp`
 
-**TreeGenerator / Grid / GridQuad** - Specialized generators
-- ⚠️⚠️ **`TreeGenerator` is a STUB, not a generator.** Its whole algorithm sits inside a
-  `/* … */` block (`TreeGenerator.cpp:38-84`); the live code prints two `std::cout` lines and
-  returns an **empty** `Shape`. It has **no caller** anywhere in the cascade. The commented body
-  would not even compile today: it calls `Utility::random()` (that namespace went away with the
-  extraction from emeraude-engine), `CartesianFrame::clearRotation()` and
-  `translateAlongLocalYAxis()` (both gone), and passes no `bool local` to `yaw/pitch/roll`.
-  Its approach — merging one **capped cylinder per segment** — is the real dead end: the caps
-  interpenetrate, nothing is continuous along a branch, and the triangle budget explodes. A
-  rewrite must separate a **skeleton** phase from a **generalized-cylinder skinning** phase; see
-  the items `docs/todo/tree-generator-skeleton-and-growers.md` and
-  `…/tree-generator-skinning-lod-and-wind-channels.md`.
+### Vegetation — the tree skeleton and its growers (Sept 2026)
+
+The tree work is split in two phases on purpose: **growing the botany**, which is done, and
+**turning it into a mesh**, which is not (`docs/todo/tree-generator-skinning-lod-and-wind-channels.md`).
+Keeping the skeleton is what lets one tree be re-skinned at several LOD levels, baked into an
+imposter, turned into physics capsules or given a wind hierarchy without growing it again.
+
+**TreeSegment / TreeLeafAttachment / TreeSkeleton** - the botany, no mesh
+- A segment is a straight tapered internode. Its frame sits at the START and its **local +Y is the
+  growth axis** — read it with `CartesianFrame::localYAxis()`, never `upwardVector()`: that
+  accessor carries no up/down meaning and cannot invert if the world convention moves again.
+- ⚠️⚠️ **Contract: a grower MUST add a segment only after its parent**, so a parent index is
+  always smaller than its child's. The reverse passes (`computeRadiiFromPipeModel()`) and the
+  future skinning phase both rely on it, and **nothing checks it for you**. The unit test
+  `VertexFactoryTreeSkeleton.growersAddAParentBeforeItsChild` is the only guard.
+- `TreeChildTable` is the children of every segment in compressed row form, built on demand
+  (`buildChildTable()`) rather than stored — a vector of vectors would allocate once per segment.
+- `computeRadiiFromPipeModel(tipRadius, exponent)` is the discrete pipe model (da Vinci / Murray):
+  `radius = tipRadius * tipCount^(1/exponent)`, and a segment ends on the radius of its THICKEST
+  child so the surface stays continuous. ⚠️ **On an unbranched chain the tip count never changes,
+  so this model yields NO taper there** — that is the model, not a defect. The parametric grower
+  sets its own radii from the Weber & Penn formulas and must not call it.
+- `makeTreeFrame(position, growthAxis)` (in `TreeSegment.hpp`) is the single way to turn a
+  direction into a segment frame. The spin around the axis is picked from the world axis least
+  aligned with it, so a nearly vertical branch does not flip its frame between two segments.
+- See: `TreeSegment.hpp`, `TreeLeafAttachment.hpp`, `TreeSkeleton.hpp`
+
+**TreeParameters / TreeParametricGrower** - Weber & Penn, SIGGRAPH '95
+- The parameter set IS the paper's, so a table published for Arbaro or Blender's Sapling transfers
+  unchanged; `TreeCrownShape`'s enumeration order is the paper's numbering. `quakingAspen()` is
+  the paper's set; `broadleaf()` and `conifer()` are **designed here** and say so.
+- Not implemented, deliberately: the periodic taper range ]2, 3] (cacti) and pruning.
+- Measured on this workstation: aspen 3 178 segments / 24 375 leaves / ~15 m in **3 ms**,
+  broadleaf 7 276 / 49 410 / ~9 m in 4 ms, conifer 1 952 / 34 080 / ~18 m in 3 ms.
+- See: `TreeParameters.hpp`, `TreeParametricGrower.hpp`
+
+**TreeColonizationGrower** - Runions, Lane & Prusinkiewicz, EGWNP 2007
+- Space colonization: a cloud of attraction points fills the crown, every tip steers toward the
+  points closest to it, a point is consumed when a tip reaches it. The branching pattern is not
+  prescribed — it emerges from the competition. Driven by the SHAPE of the crown, not by species
+  parameters: `growFromAttractors()` takes any cloud, so the crown can be any volume.
+- Radii come from the pipe model, which is why that lives on the skeleton and not in this class.
+- A uniform grid (`NodeGrid`) answers "which tip is nearest this point". ⚠️ **Nothing ever
+  iterates that `unordered_map`** — it is read by key only and each cell keeps insertion order.
+  Iterating it would make a seeded result depend on the hash table layout.
+- Measured: ellipsoid crown ~875 segments / 9 m in 4 ms; a 2 000-attractor wide crown 2 061
+  segments / 10.7 m x 9.6 m in 11 ms.
+- See: `TreeColonizationGrower.hpp`
+
+**TreeGenerator** - ⚠️ still the OLD stub, untouched
+- Its whole algorithm sits inside a `/* … */` block (`TreeGenerator.cpp:38-84`); the live code
+  prints two `std::cout` lines and returns an **empty** `Shape`, and it has no caller. The
+  commented body would not even compile today: `Utility::random()` (namespace gone with the
+  extraction), `CartesianFrame::clearRotation()` and `translateAlongLocalYAxis()` (both gone), and
+  no `bool local` on `yaw/pitch/roll`. Its approach — one **capped cylinder per segment** — is the
+  dead end that motivated the two-phase design above.
+- It becomes the façade over the growers and the skinner in the skinning lot. Until then, use
+  `TreeParametricGrower` or `TreeColonizationGrower` directly.
 - `TreeGenerator.cpp` is the only compiled unit of this module, and the **only source** of the
   `emeraude_base_vertex` object library (`CMakeLists.txt:426`). Making it header-only would leave
   that target with no source at all — remove the target in the same move, or keep a `.cpp`.
-- `Grid` generates 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
-- See: `TreeGenerator.hpp/.cpp`, `Grid.hpp`, `GridQuad.hpp`
+
+**Grid / GridQuad** - 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
+- See: `Grid.hpp`, `GridQuad.hpp`
 
 **Cost of building a shape** - ⚠️⚠️ read this before writing any dense generator
 - `ShapeBuilder` → `Shape::addTriangle()` → `addEdge()` x3, plus `addVertex()` /
@@ -434,7 +481,11 @@ Tracked in `docs/plans/ave-robustus.md` (§6, "Real correctness gaps"): all reso
 | `Shape.hpp` | Mesh container (vertices, triangles, colors, layers, AABB) |
 | `ShapeVertex.hpp` / `ShapeTriangle.hpp` / `ShapeEdge.hpp` | Mesh primitives |
 | `ShapeBuilder.hpp` / `ShapeBuilderOptions.hpp` | Primary construction API + options |
-| `ShapeGenerator.hpp` / `TreeGenerator.hpp` / `Grid.hpp` | Procedural generators |
+| `ShapeGenerator.hpp` / `Grid.hpp` | Procedural primitives and grids |
+| `TreeSegment.hpp` / `TreeLeafAttachment.hpp` / `TreeSkeleton.hpp` | Tree botany, no mesh |
+| `TreeParameters.hpp` / `TreeParametricGrower.hpp` | Weber & Penn tree growth |
+| `TreeColonizationGrower.hpp` | Space-colonization tree growth |
+| `TreeGenerator.hpp` | ⚠️ Empty stub, awaiting the skinning lot |
 | `ShapeProcessor.hpp` / `ShapeDecimator.hpp` / `ShapeAssembler.hpp` / `ShapeSplitter.hpp` | Processing |
 | `Silhouette.hpp` / `XRayAnalyzer.hpp` | Analysis |
 | `CapUVMapping.hpp` / `Normal.hpp` / `TextureCoordinates.hpp` | UV / coordinate helpers |

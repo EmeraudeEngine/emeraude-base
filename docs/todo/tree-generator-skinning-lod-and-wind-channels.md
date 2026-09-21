@@ -1,10 +1,9 @@
 ---
 id: tree-generator-skinning-lod-and-wind-channels
 title: Tree generator — generalized-cylinder skinning, leaf cards, LOD chain and wind channels
-status: blocked
+status: open
 priority: unranked
 scope: src/VertexFactory
-blocked-by: [tree-generator-skeleton-and-growers]
 tags: [vegetation, procedural, vertexfactory, lod]
 opened: 2026-09-21
 ---
@@ -12,6 +11,9 @@ opened: 2026-09-21
 # Tree generator — generalized-cylinder skinning, leaf cards, LOD chain and wind channels
 
 ## Why
+
+The skeleton phase is **done** (`TreeSkeleton`, `TreeParametricGrower`, `TreeColonizationGrower`,
+Sept 2026 — see `src/VertexFactory/AGENTS.md` § *Vegetation*). What is left is the mesh.
 
 Turning a `TreeSkeleton` into a `Shape` is where the stub's approach failed: merging one capped
 cylinder per segment gives interpenetrating caps, no shared vertices between segments, no UV
@@ -58,6 +60,8 @@ reserved from the start** rather than retrofitted.
 
 ## References
 
-- Sibling item: `tree-generator-skeleton-and-growers` (produces the input).
+- Input: `src/VertexFactory/TreeSkeleton.hpp`, grown by either grower. ⚠️ Read the
+  parent-before-child contract and the pipe-model taper limit in
+  `src/VertexFactory/AGENTS.md` § *Vegetation* before walking a skeleton.
 - Engine consumers: `vegetation-renderable-and-lod-chain`, `vegetation-wind-shader`,
   `vegetation-octahedral-imposter-atlas`.

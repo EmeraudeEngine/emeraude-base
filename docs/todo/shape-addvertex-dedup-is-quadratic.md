@@ -38,7 +38,8 @@ the generators actually produce, so the linear scan misses merges that the 1e-4 
 finds.
 
 No procedural generator that produces a dense mesh can use the default today. The tree generator
-work (`tree-generator-skeleton-and-growers`) disables data economy and dedups afterwards, but
+work (`tree-generator-skinning-lod-and-wind-channels`) will disable data economy and dedup
+afterwards, but
 every other caller silently pays the cost.
 
 ## What remains

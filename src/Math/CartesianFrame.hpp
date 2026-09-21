@@ -525,7 +525,10 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Returns the frame Y axis vector.
-			 * @note This is the same as CartesianFrame::downwardVector().
+			 * @note ⚠️ This is the same as CartesianFrame::upwardVector(), and the OPPOSITE of
+			 * downwardVector(). This note said "downwardVector()" until Sept 2026, which was the
+			 * pre-Y-up truth; localYAxis() already carries the warning, and believing this one
+			 * inverts the axis.
 			 * @return const Vector< 3, precision_t > &
 			 */
 			[[nodiscard]]
