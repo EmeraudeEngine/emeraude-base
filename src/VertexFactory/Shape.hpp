@@ -1718,6 +1718,41 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Rebuilds the edge list and every triangle edge index from the current triangles.
+			 * @note ⚠️ Anything that renumbers the VERTICES invalidates the edges: a ShapeEdge holds
+			 * vertex indices, and a triangle holds indices into the edge list. Call this after such a
+			 * pass, or shape.edges() answers with pre-renumbering indices. Measured on a 16x8 sphere
+			 * deduplicated from 768 to 153 vertices: 765 of the 768 edge indices wrong, and 615 edges
+			 * still naming vertices that no longer exist.
+			 * @note Cheap since addEdge() became a hashed lookup (2026-09-21); it would have been
+			 * unthinkable when pairing meant scanning the whole edge list.
+			 * @note Does nothing on a shape that carries no edge, so a caller need not ask first.
+			 * @return void
+			 */
+			void
+			rebuildEdges () noexcept
+			{
+				if ( m_edges.empty() )
+				{
+					return;
+				}
+
+				m_edges.clear();
+				m_unpairedEdges.clear();
+
+				/* The adjacency changed, so any boundary loop found on the old one is stale too. */
+				m_boundaryLoops.clear();
+				m_boundaryLoopsAnalyzed = false;
+
+				for ( auto & triangle : m_triangles )
+				{
+					triangle.setEdgeIndex(0, this->addEdge(triangle.vertexIndex(0), triangle.vertexIndex(1)));
+					triangle.setEdgeIndex(1, this->addEdge(triangle.vertexIndex(1), triangle.vertexIndex(2)));
+					triangle.setEdgeIndex(2, this->addEdge(triangle.vertexIndex(2), triangle.vertexIndex(0)));
+				}
+			}
+
+			/**
 			 * @brief Recomputes the centroid and the bounding box.
 			 * @return void
 			 */

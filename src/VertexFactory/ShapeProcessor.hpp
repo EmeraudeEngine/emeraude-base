@@ -201,6 +201,12 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
+				/* ⚠️ The edges hold VERTEX indices and the triangles hold EDGE indices: renumbering the
+				 * vertices invalidates both, and leaving them is how shape.edges() came to answer with
+				 * pre-merge indices — 765 of 768 wrong on a deduplicated 16x8 sphere, 615 of them naming
+				 * vertices that no longer existed. */
+				m_shape.rebuildEdges();
+
 				return static_cast< size_t >(removed);
 			}
 
@@ -923,6 +929,11 @@ namespace EmEn::Base::VertexFactory
 				 * same 3D position to restore smooth interpolation across triangle boundaries. */
 				smoothVertexAttributesByPosition();
 
+				/* ⚠️ This pass SPLITS vertices along the seams, so triangles end up pointing at indices
+				 * that did not exist when the edges were built. Same defect class as the one
+				 * deduplicateVertices() had: an edge holds vertex indices, a triangle holds edge indices. */
+				m_shape.rebuildEdges();
+
 				m_shape.declareTextureCoordinatesAvailable();
 				m_shape.updateProperties();
 
@@ -998,6 +1009,11 @@ namespace EmEn::Base::VertexFactory
 							Math::Vector< 2, vertex_data_t >{uvs[localIdx][Math::X], uvs[localIdx][Math::Y]});
 					}
 				}
+
+				/* ⚠️ This pass SPLITS vertices along the seams, so triangles end up pointing at indices
+				 * that did not exist when the edges were built. Same defect class as the one
+				 * deduplicateVertices() had: an edge holds vertex indices, a triangle holds edge indices. */
+				m_shape.rebuildEdges();
 
 				/* Recompute tangent space to match the new UV layout. */
 				m_shape.computeTriangleTangent();

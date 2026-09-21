@@ -390,14 +390,28 @@ the tube instead of running along it.
 
 The lesson is general: before trusting a test, run it against the defect it is supposed to catch.
 
-### `ShapeProcessor::deduplicateVertices()` leaves the edge list pointing at dead indices
+### ⚠️ Renumbering the vertices invalidates the edges — all three passes did (Sept 2026, FIXED)
 
-It rewrites `m_shape.vertices()` and remaps every triangle's vertex indices, but does not touch
-`m_shape.edges()` — whose `ShapeEdge` entries still hold the PRE-merge vertex indices, and whose
-`triangle.edgeIndex()` links still point into the old numbering. Anything reading `shape.edges()`
-after a dedup reads garbage. Latent today, because nothing in the cascade consumes the edge list
-(`Silhouette` has no caller), and because the generators that dedup do not need edges. Open item:
-`docs/todo/dedup-does-not-remap-the-edge-list.md`.
+A `ShapeEdge` holds VERTEX indices and a `ShapeTriangle` holds EDGE indices, so any pass that
+renumbers or splits vertices leaves both stale. Three did it, and all three were silent:
+
+- `deduplicateVertices()` renumbered and remapped the triangles only. Measured on a 16x8 sphere
+  taken from 768 to 153 vertices: **765 of the 768 edge indices wrong, and 615 edges still naming
+  vertices that no longer existed**.
+- `generateLightmapUV()` and `generateUVUnwrap()` SPLIT vertices along the seams, so triangles end
+  up pointing at indices that did not exist when the edges were built. Same class, found by
+  looking for the sibling rather than by a failure.
+
+All three now end on `Shape::rebuildEdges()`, which clears the edge list and the pairing index and
+re-runs `addEdge()` over the current triangles. ⚠️ That is only affordable **because `addEdge()`
+became a hashed lookup on 2026-09-21** — rebuilding an edge list used to mean a quadratic scan,
+which is presumably why nobody did it.
+
+⚠️ `rebuildEdges()` also drops the boundary loops and clears `m_boundaryLoopsAnalyzed`: the
+adjacency changed, so a loop found on the old one describes nothing.
+
+Regression test: `VertexFactoryShapeBuilder.deduplicatingVerticesKeepsTheEdgeListValid`, which
+fails on the pre-fix source with "an edge still names a vertex the merge removed".
 
 
 ## PixelFactory

@@ -33,6 +33,7 @@
 #include "VertexFactory/Shape.hpp"
 #include "VertexFactory/ShapeBuilder.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
+#include "VertexFactory/ShapeProcessor.hpp"
 
 using namespace EmEn::Base::VertexFactory;
 
@@ -126,4 +127,50 @@ TEST(VertexFactoryShapeBuilder, sharedEdgeCrossLinksAreReciprocal)
 	/* The vast majority of a sphere's edges are interior ones; if almost nothing paired, the
 	 * reciprocity check above ran on nothing and proves nothing. */
 	EXPECT_GT(pairedCount, edges.size() / 2) << "only " << pairedCount << " of " << edges.size() << " edges paired, the check is nearly vacuous";
+}
+
+/* Ave robustus! (Axis B — correction marker): ShapeProcessor::deduplicateVertices() renumbers the
+ * vertices and remaps the triangles, and used to leave the edge list untouched. A ShapeEdge holds
+ * VERTEX indices and a triangle holds EDGE indices, so both were stale afterwards. Measured before
+ * the 2026-09-22 fix on a 16x8 sphere deduplicated from 768 to 153 vertices: 765 of the 768 edge
+ * indices wrong, and 615 edges still naming vertices that no longer existed. It was latent only
+ * because nothing in the cascade consumes the edge list yet. */
+TEST(VertexFactoryShapeBuilder, deduplicatingVerticesKeepsTheEdgeListValid)
+{
+	/* Data economy OFF so the build really produces duplicates for the pass to remove. */
+	ShapeBuilderOptions< float > options;
+	options.enableDataEconomy(false);
+
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16U, 8U, options);
+
+	ASSERT_FALSE(shape.edges().empty());
+
+	ShapeProcessor< float, uint32_t > processor{shape};
+
+	const auto removed = processor.deduplicateVertices();
+
+	ASSERT_GT(removed, 0U) << "nothing was merged, the check would be vacuous";
+
+	const auto vertexCount = shape.vertices().size();
+
+	/* No edge may name a vertex that the merge removed. */
+	for ( const auto & edge : shape.edges() )
+	{
+		ASSERT_LT(edge.vertexIndexA(), vertexCount) << "an edge still names a vertex the merge removed";
+		ASSERT_LT(edge.vertexIndexB(), vertexCount) << "an edge still names a vertex the merge removed";
+	}
+
+	/* And every triangle edge index must still point at its own edge. */
+	for ( const auto & triangle : shape.triangles() )
+	{
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			const auto edgeIndex = triangle.edgeIndex(corner);
+
+			ASSERT_LT(edgeIndex, shape.edges().size()) << "edge index out of the rebuilt list";
+
+			EXPECT_TRUE(shape.edges()[edgeIndex].same(triangle.vertexIndex(corner), triangle.vertexIndex((corner + 1) % 3)))
+				<< "the edge at index " << edgeIndex << " does not join the two vertices of corner " << corner;
+		}
+	}
 }

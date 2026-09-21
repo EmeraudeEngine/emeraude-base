@@ -172,6 +172,11 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   of vertices. Never pin an exact count across them.
 - ⚠️ It does NOT close a UV seam and must not: the two sides carry u = 0 and u = 1. A sphere keeps
   48 unpaired edges and is not watertight in the edge sense — that was never the epsilon's doing.
+- ⚠️⚠️ **Any pass that renumbers or splits vertices must end on `Shape::rebuildEdges()`.** An edge
+  holds vertex indices and a triangle holds edge indices, so both go stale. `deduplicateVertices()`,
+  `generateLightmapUV()` and `generateUVUnwrap()` all did it silently; see
+  `docs/caution-points.md` § VertexFactory for the measured damage. Rebuilding is only affordable
+  because `addEdge()` is hashed now.
 - Measurements, the epsilon-vs-grid explanation and the seam consequence:
   `docs/caution-points.md` § VertexFactory. Open item:
   `docs/todo/shape-addvertex-dedup-is-quadratic.md`.
