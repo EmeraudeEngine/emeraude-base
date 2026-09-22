@@ -31,6 +31,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -1714,6 +1715,103 @@ namespace EmEn::Base::VertexFactory
 				result.m_boundingBox.set(
 					{result.m_halfSquaredSize, maxHeight, result.m_halfSquaredSize},
 					{-result.m_halfSquaredSize, minHeight, -result.m_halfSquaredSize}
+				);
+				result.m_boundingSphere.setRadius(result.m_boundingBox.highestLength() * static_cast< vertex_data_t >(0.5));
+
+				return result;
+			}
+
+			/**
+			 * @brief Returns a copy of this grid with half the cells per axis, each height LOW-PASSED by a
+			 * 1-2-1 tent (separable, 3 × 3 source points around the coincident one).
+			 * @note The copy spans the SAME extent with cells twice as large, so its point `(x, y)` sits on
+			 * this grid's point `(2x, 2y)` — but where coarsened() keeps that point's height, this returns
+			 * the tent-weighted MEAN of its neighbourhood: the next level of a height PYRAMID. A clip level
+			 * built from point samples aliases every relief finer than its texel (and so does the normal
+			 * baked from it); the tent is the mip filter of a vertex-centred grid. Border points replicate
+			 * the edge. The cell count must be even; otherwise the result is INVALID (`isValid()` false)
+			 * and an error is printed. Texture coordinate multipliers, UV offset and world offset are
+			 * carried over, and the bounding box is placed where the grid is.
+			 * @return Grid
+			 */
+			[[nodiscard]]
+			Grid
+			halvedTent () const noexcept
+			{
+				Grid result;
+
+				if ( m_squaredQuadCount < 2 || m_squaredQuadCount % 2 != 0 )
+				{
+					std::cerr << "Grid::halvedTent(), the cell count (" << m_squaredQuadCount << ") must be even and at least 2 !" "\n";
+
+					return result;
+				}
+
+				const auto cellCount = m_squaredQuadCount / 2;
+
+				if ( !result.initializeByCellSize(cellCount, m_quadSquaredSize * static_cast< vertex_data_t >(2)) )
+				{
+					return result;
+				}
+
+				result.m_UMultiplier = m_UMultiplier;
+				result.m_VMultiplier = m_VMultiplier;
+				result.m_UVOffset = m_UVOffset;
+				result.m_worldOffset = m_worldOffset;
+
+				const auto sourceLast = m_squaredQuadCount;
+				const auto targetPointCount = static_cast< size_t >(cellCount) + 1;
+
+				/* One horizontally filtered row per source row of the 3-row window, reused as the window
+				 * slides down: 3 × (N/2 + 1) floats instead of a whole intermediate grid. */
+				std::array< std::vector< vertex_data_t >, 3 > filteredRows;
+
+				for ( auto & row : filteredRows )
+				{
+					row.resize(targetPointCount);
+				}
+
+				const auto filterRow = [this, sourceLast, cellCount] (index_data_t sourceRow, std::vector< vertex_data_t > & output) {
+					const auto * heights = m_pointHeights.data() + (static_cast< size_t >(sourceRow) * (static_cast< size_t >(sourceLast) + 1));
+
+					for ( index_data_t x = 0; x <= cellCount; ++x )
+					{
+						const auto centre = x * 2;
+						const auto left = centre > 0 ? centre - 1 : 0;
+						const auto right = centre < sourceLast ? centre + 1 : sourceLast;
+
+						output[x] = (heights[left] + (static_cast< vertex_data_t >(2) * heights[centre]) + heights[right]) * static_cast< vertex_data_t >(0.25);
+					}
+				};
+
+				auto minHeight = std::numeric_limits< vertex_data_t >::max();
+				auto maxHeight = std::numeric_limits< vertex_data_t >::lowest();
+
+				for ( index_data_t y = 0; y <= cellCount; ++y )
+				{
+					const auto centre = y * 2;
+					const auto top = centre > 0 ? centre - 1 : 0;
+					const auto bottom = centre < sourceLast ? centre + 1 : sourceLast;
+
+					filterRow(top, filteredRows[0]);
+					filterRow(centre, filteredRows[1]);
+					filterRow(bottom, filteredRows[2]);
+
+					auto * target = result.m_pointHeights.data() + (static_cast< size_t >(y) * targetPointCount);
+
+					for ( size_t x = 0; x < targetPointCount; ++x )
+					{
+						const auto height = (filteredRows[0][x] + (static_cast< vertex_data_t >(2) * filteredRows[1][x]) + filteredRows[2][x]) * static_cast< vertex_data_t >(0.25);
+
+						target[x] = height;
+						minHeight = std::min(minHeight, height);
+						maxHeight = std::max(maxHeight, height);
+					}
+				}
+
+				result.m_boundingBox.set(
+					{result.m_worldOffset[0] + result.m_halfSquaredSize, maxHeight, result.m_worldOffset[1] + result.m_halfSquaredSize},
+					{result.m_worldOffset[0] - result.m_halfSquaredSize, minHeight, result.m_worldOffset[1] - result.m_halfSquaredSize}
 				);
 				result.m_boundingSphere.setRadius(result.m_boundingBox.highestLength() * static_cast< vertex_data_t >(0.5));
 

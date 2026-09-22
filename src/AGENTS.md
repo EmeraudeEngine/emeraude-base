@@ -689,7 +689,11 @@ Grid grid(8192.0F, 256);  // 8km terrain, 256 subdivisions
 // starts), and its bounding box is where the window IS (it carried no world offset until 2026-09-22).
 // A coarse copy that coincides with the fine grid at every shared point — for a far mesh around the
 // window — is grid.coarsened(step): point samples, never an average, or the shared vertices would no
-// longer share a height. Tests: src/Testing/test_VertexFactoryGrid.cpp.
+// longer share a height. The OTHER coarse copy — the next level of a height PYRAMID (a clip level,
+// a mip) — is grid.halvedTent(): half the cells, each point the 1-2-1 × 1-2-1 tent mean around its
+// coincident parent point (edges replicated, even cell count or INVALID). A point-sampled level
+// aliases every relief finer than its cell, and so does a normal baked from it; the CDLOD terrain's
+// clipmap is built with this one (2026-09-22). Tests: src/Testing/test_VertexFactoryGrid.cpp.
 
 grid.applyDiamondSquare({
     .factor = 100.0F,   // heights will be ±100 meters

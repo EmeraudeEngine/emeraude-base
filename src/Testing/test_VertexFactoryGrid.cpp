@@ -24,6 +24,9 @@
 
 #include <gtest/gtest.h>
 
+/* STL inclusions. */
+#include <cmath>
+
 /* Local inclusions. */
 #include "VertexFactory/Grid.hpp"
 
@@ -155,4 +158,82 @@ TEST(VertexFactoryGrid, ASubGridBoundingBoxIsWhereTheWindowIs)
 	/* And the corner points of the window lie on that box. */
 	ASSERT_FLOAT_EQ(window.position(0U, 0U)[Math::X], box.minimum(Math::X));
 	ASSERT_FLOAT_EQ(window.position(256U, 256U)[Math::Z], box.maximum(Math::Z));
+}
+
+TEST(VertexFactoryGrid, AHalvedTentGridIsTheTentMeanOfItsParent)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(512.0F, 256U));
+	grid.applyPerlinNoise(16.0F, 40.0F);
+
+	const auto half = grid.halvedTent();
+
+	ASSERT_TRUE(half.isValid());
+	ASSERT_EQ(half.squaredQuadCount(), 128U);
+	ASSERT_FLOAT_EQ(half.quadSize(), 4.0F);
+
+	/* Every point sits on the parent's point (2x, 2y) and holds the 1-2-1 × 1-2-1 mean around it. */
+	for ( uint32_t y = 1; y < 128U; y += 7U )
+	{
+		for ( uint32_t x = 1; x < 128U; x += 5U )
+		{
+			ASSERT_EQ(half.position(x, y)[Math::X], grid.position(x * 2U, y * 2U)[Math::X]);
+			ASSERT_EQ(half.position(x, y)[Math::Z], grid.position(x * 2U, y * 2U)[Math::Z]);
+
+			float expected = 0.0F;
+
+			for ( int dy = -1; dy <= 1; ++dy )
+			{
+				for ( int dx = -1; dx <= 1; ++dx )
+				{
+					const float weight = (dx == 0 ? 2.0F : 1.0F) * (dy == 0 ? 2.0F : 1.0F) / 16.0F;
+
+					expected += weight * grid.getHeightAt((x * 2U) + dx, (y * 2U) + dy);
+				}
+			}
+
+			ASSERT_NEAR(half.getHeightAt(x, y), expected, 1.0e-4F);
+		}
+	}
+
+	/* An odd cell count cannot be halved: invalid, not wrong. */
+	Grid< float > odd;
+	ASSERT_TRUE(odd.initializeByGridSize(96.0F, 3U));
+	ASSERT_FALSE(odd.halvedTent().isValid());
+}
+
+TEST(VertexFactoryGrid, AHalvedTentGridIsSmootherThanAPointSampledOne)
+{
+	/* Relief at 3 cells per period: finer than what a grid of twice the cell can carry (that period is
+	 * 1.5 of its cells, under the 2 of Nyquist). The point
+	 * sample (coarsened) folds it back as a false coarse relief; the tent attenuates it. The measure
+	 * is the mean absolute second difference, the curvature a lighting normal would see. */
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(1024.0F, 1024U));
+	grid.applyPerlinNoise(1024.0F / 3.0F, 10.0F); /* size = periods over the WHOLE grid: 3 cells per period. */
+
+	const auto curvature = [] (const Grid< float > & source) {
+		const auto last = source.squaredQuadCount();
+		double sum = 0.0;
+		uint32_t count = 0;
+
+		for ( uint32_t y = 1; y < last; ++y )
+		{
+			for ( uint32_t x = 1; x < last; ++x )
+			{
+				const auto h = source.getHeightAt(x, y);
+
+				sum += std::abs(source.getHeightAt(x - 1U, y) - (2.0F * h) + source.getHeightAt(x + 1U, y));
+				++count;
+			}
+		}
+
+		return sum / count;
+	};
+
+	const auto pointSampled = curvature(grid.coarsened(2U));
+	const auto filtered = curvature(grid.halvedTent());
+
+	ASSERT_GT(pointSampled, 0.0);
+	ASSERT_LT(filtered, pointSampled * 0.75);
 }
