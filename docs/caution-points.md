@@ -414,6 +414,39 @@ Regression test: `VertexFactoryShapeBuilder.deduplicatingVerticesKeepsTheEdgeLis
 fails on the pre-fix source with "an edge still names a vertex the merge removed".
 
 
+## Math
+
+### ⚠️⚠️ The octahedral map is 2-to-1 on the BORDER — two atlas cells legitimately hold the same view (Sept 2026)
+
+`Math/OctahedralMapping.hpp` is the shared core of an imposter atlas: the baker asks
+`octahedralCellDirection(cellX, cellY, gridSize)` which direction to render a cell from, and the
+shader asks `octahedralBlend(direction, gridSize)` which three cells a view falls between. They
+MUST agree, so they live in one header rather than one in each consumer.
+
+**On the outer border of the square the parametrisation is not injective**: two different border
+points denote the very same direction. On an 8x8 grid, cells `(3, 7)` and `(4, 7)` both decode to
+`(0, -0.143, 0.857)`. Encoding that direction back lands on `(4, 7)`, so cell `(3, 7)` receives a
+weight of `2.4e-07` for **its own** direction.
+
+That is a property of the fold, not a defect: the blend still selects the right VIEW and its
+weights still sum to 1. A baker may skip re-rendering a duplicate; it must **never** try to make
+the border cells distinct, and it must never "fix" the blend to force a cell onto itself.
+
+⚠️ **The trap is in the TEST, and it caught me.** The first version of
+`aCellDirectionBlendsBackOntoItsOwnCell` asserted that a cell recognises its own **index** and
+failed on `(3, 7)`. The property that matters for an imposter is the **direction it shows**, so the
+test now blends the selected cells' own directions back together and compares that vector to the
+one asked for (`aCellDirectionBlendsBackOntoThatSameDirection`). Assert on what the pixel will be,
+not on the bookkeeping that gets there.
+
+The three other tests cover what a hand-written octahedral map usually gets wrong: the round trip
+over a dense direction sweep, the three weights being positive and summing to 1, and a small
+rotation moving the encoded point only a little (the fold must not teleport across the square
+away from the border).
+
+Reference: Cigolle, Donow, Evangelakos, Mara, McGuire & Meyer, *A Survey of Efficient
+Representations for Independent Unit Vectors*, JCGT 3(2), 2014, § 3.3.
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count

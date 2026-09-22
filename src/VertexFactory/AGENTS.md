@@ -132,6 +132,12 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   ⚠️ The card is kept APART from the chain, not as its last rung: it carries ONE group because it
   samples a single baked atlas, and that atlas is engine work
   (`vegetation-octahedral-imposter-atlas`).
+- The atlas **parametrisation** is here, though, in `Math/OctahedralMapping.hpp`: the baker asks
+  `octahedralCellDirection()` which direction to render a cell from, the shader asks
+  `octahedralBlend()` which three cells to blend. One header on purpose — a baker and a shader
+  that disagree by one cell show a neighbouring view. ⚠⚠ **The map is 2-to-1 on the border**, so two
+  border cells legitimately hold the same view; never try to make them distinct
+  (`docs/caution-points.md` § Math).
 - Measured, quaking aspen seed 1 (3 178 segments, 24 375 leaves), levels 0 to 3:
   **119 709 / 29 457 / 7 403 / 1 736** triangles, 114 ms for the whole chain plus the card.
   Conifer: 150 924 / 35 160 / 8 787. A colonized crown: 12 591 / 6 286 / 4 476 — it plateaus,
