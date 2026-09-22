@@ -294,41 +294,204 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Applies pixmap-based displacement mapping to modify grid heights.
-			 *
-			 * Samples a pixmap using UV coordinates and uses its grayscale values to displace
-			 * grid point heights. The pixmap is sampled using cosine interpolation for smooth results.
-			 * This is commonly used to apply heightmaps from image files to terrain geometry.
-			 *
-			 * @param map Reference to a valid pixmap containing height data. Grayscale values are used for displacement.
-			 * @param factor Multiplier applied to sampled grayscale values (range 0-255) to determine displacement magnitude.
-			 * @param mode Transformation mode controlling how new heights combine with existing values (default: Replace).
-			 *
-			 * @pre map must be valid (map.isValid() returns true)
-			 * @post Grid heights are modified according to the specified mode
-			 * @post Bounding box is NOT automatically updated; use height transformation methods if needed
-			 *
-			 * @note Uses cosine interpolation for smooth sampling across the pixmap
-			 * @note UV coordinates are computed automatically from grid indices
-			 *
-			 * @see PointTransformationMode
-			 * @see applyPerlinNoise()
-			 * @see applyDiamondSquare()
+			 * @brief Applies a heightmap image to the grid: height = gray × factor.
+			 * @details The image covers the whole grid, its corner pixels on the grid's corner points (a point
+			 * of index i samples the image at i / N · (width - 1)); image row 0 is the grid's first row (-Z).
+			 * The gray is the pixel's normalized value — channel 0 of a grayscale image, the mean of R, G
+			 * and B otherwise — so 0 … 1 whatever the pixel type (8 bits, 16 bits, float).
+			 * Between pixels the height is a separable CATMULL-ROM spline: it passes through every pixel,
+			 * is C1 continuous, and is what a lit mesh needs. The former cosine interpolation had a ZERO
+			 * slope at every pixel, which shades a heightmap upsampled to a finer grid as an egg-crate of
+			 * one bump per pixel (2026-09-22, the `terrain` demo's land003: 8 grid points per pixel).
+			 * @note Separable: one vertical spline per grid row over the image columns, then one horizontal
+			 * spline per point — 4 multiply-adds per point.
+			 * An INTEGER image is dequantized first (dequantize(): the smoothest field inside every
+			 * pixel's rounding interval), then smoothed by two binomial passes (smoothBinomial()): an
+			 * 8-bit image has 256 levels, so over a relief of `factor` metres a gentle slope made of equal
+			 * neighbours is a TERRACE of factor / 255 that a spline alone cannot turn into a slope — the
+			 * `terrain` demo's land003 at 1200 m showed one contour line per level without it.
+			 * @warning ⚠️ The dequantized field stays within half a level of the data; the binomial passes
+			 * then move a height by its local curvature at a ~1.4-pixel radius. A 16-bit heightmap needs
+			 * neither and loses nothing to them.
+			 * @tparam pixel_t The pixmap's pixel type.
+			 * @param map A valid pixmap.
+			 * @param factor The height of a gray of 1, in world units.
+			 * @param mode How the new heights combine with the existing ones (default: Replace).
+			 * @post The bounding box and sphere are recomputed from the heights (they were left stale until 2026-09-22).
+			 * @return void
 			 */
+			template< typename pixel_t >
 			void
-			applyDisplacementMapping (const PixelFactory::Pixmap< uint8_t > & map, vertex_data_t factor, PointTransformationMode mode = PointTransformationMode::Replace) noexcept
+			applyDisplacementMapping (const PixelFactory::Pixmap< pixel_t > & map, vertex_data_t factor, PointTransformationMode mode = PointTransformationMode::Replace) noexcept requires (std::is_arithmetic_v< pixel_t >)
 			{
-				if ( !map.isValid() )
+				if ( !map.isValid() || m_squaredQuadCount == 0 )
 				{
 					std::cerr << "Grid::applyDisplacementMapping(), Pixmap is not usable !" "\n";
 
 					return;
 				}
 
-				this->applyTransformationWithUV([this, &map, factor, mode] (index_data_t indexOnX, index_data_t indexOnY, vertex_data_t coordU, vertex_data_t coordV) {
-					const auto newValue = static_cast< vertex_data_t >(map.cosineSample(coordU, coordV).gray()) * factor;
-					applyMode(m_pointHeights[this->index(indexOnX, indexOnY)], newValue, mode);
-				});
+				const auto width = static_cast< int64_t >(map.width());
+				const auto height = static_cast< int64_t >(map.height());
+				const auto channels = static_cast< size_t >(map.colorCount());
+				const auto & data = map.data();
+
+				/* The normalized gray of every pixel, once, with a one-pixel border EXTRAPOLATED linearly
+				 * (ghost = 2 · edge - inner): the spline keeps the image's slope up to its edge, where
+				 * duplicating the edge pixel would flatten the last half-pixel of the terrain. */
+				const auto paddedWidth = width + 2;
+				const auto paddedHeight = height + 2;
+				std::vector< vertex_data_t > grays(static_cast< size_t >(paddedWidth * paddedHeight));
+				{
+					const auto scale = std::is_floating_point_v< pixel_t > ? static_cast< vertex_data_t >(1) : static_cast< vertex_data_t >(1) / static_cast< vertex_data_t >(std::numeric_limits< pixel_t >::max());
+					const auto at = [&grays, paddedWidth] (int64_t x, int64_t y) -> vertex_data_t & {
+						return grays[static_cast< size_t >(((y + 1) * paddedWidth) + x + 1)];
+					};
+
+					for ( int64_t y = 0; y < height; ++y )
+					{
+						for ( int64_t x = 0; x < width; ++x )
+						{
+							const auto * pixel = data.data() + (static_cast< size_t >((y * width) + x) * channels);
+							const auto value = channels >= 3 ?
+								(static_cast< vertex_data_t >(pixel[0]) + static_cast< vertex_data_t >(pixel[1]) + static_cast< vertex_data_t >(pixel[2])) / static_cast< vertex_data_t >(3) :
+								static_cast< vertex_data_t >(pixel[0]);
+
+							at(x, y) = value * scale;
+						}
+					}
+
+					/* An integer image stores each height rounded to its nearest level: a gentle slope becomes a
+					 * staircase of flat terraces, which the per-pixel lighting shows as contour lines. The
+					 * heights are reconstructed as the SMOOTHEST field that stays inside every pixel's
+					 * rounding interval — never farther than half a level from the data. */
+					if constexpr ( !std::is_floating_point_v< pixel_t > )
+					{
+						std::vector< vertex_data_t > samples(static_cast< size_t >(width * height));
+
+						for ( int64_t y = 0; y < height; ++y )
+						{
+							for ( int64_t x = 0; x < width; ++x )
+							{
+								samples[static_cast< size_t >((y * width) + x)] = at(x, y);
+							}
+						}
+
+						dequantize(samples, width, height, scale * static_cast< vertex_data_t >(0.5));
+
+						/* The constrained field is piecewise flat-then-sloped: it CREASES where it touches an
+						 * interval, one crease per former contour, which a per-pixel normal draws as a line.
+						 * Two binomial passes (1-4-6-4-1, sigma ~1.4 pixel) round the creases; a relief of
+						 * hundreds of levels loses nothing visible at that radius. */
+						smoothBinomial(samples, width, height, 2);
+
+						for ( int64_t y = 0; y < height; ++y )
+						{
+							for ( int64_t x = 0; x < width; ++x )
+							{
+								at(x, y) = samples[static_cast< size_t >((y * width) + x)];
+							}
+						}
+					}
+
+					const auto ghost = [] (vertex_data_t edge, vertex_data_t inner) {
+						return (static_cast< vertex_data_t >(2) * edge) - inner;
+					};
+
+					for ( int64_t y = 0; y < height; ++y )
+					{
+						at(-1, y) = width > 1 ? ghost(at(0, y), at(1, y)) : at(0, y);
+						at(width, y) = width > 1 ? ghost(at(width - 1, y), at(width - 2, y)) : at(width - 1, y);
+					}
+
+					for ( int64_t x = -1; x <= width; ++x )
+					{
+						at(x, -1) = height > 1 ? ghost(at(x, 0), at(x, 1)) : at(x, 0);
+						at(x, height) = height > 1 ? ghost(at(x, height - 1), at(x, height - 2)) : at(x, height - 1);
+					}
+				}
+
+				/* Catmull-Rom weights for a fractional position t in [0, 1) between samples 1 and 2 of 0..3. */
+				const auto weights = [] (vertex_data_t t) {
+					const auto t2 = t * t;
+					const auto t3 = t2 * t;
+
+					return std::array< vertex_data_t, 4 >{
+						static_cast< vertex_data_t >(0.5) * (-t3 + (static_cast< vertex_data_t >(2) * t2) - t),
+						static_cast< vertex_data_t >(0.5) * ((static_cast< vertex_data_t >(3) * t3) - (static_cast< vertex_data_t >(5) * t2) + static_cast< vertex_data_t >(2)),
+						static_cast< vertex_data_t >(0.5) * ((static_cast< vertex_data_t >(-3) * t3) + (static_cast< vertex_data_t >(4) * t2) + t),
+						static_cast< vertex_data_t >(0.5) * (t3 - t2)
+					};
+				};
+
+				/* A sample index of the padded image: pixel i is at i + 1, the ghosts at 0 and n + 1. */
+				const auto clampIndex = [] (int64_t index, int64_t count) {
+					return std::clamp< int64_t >(index + 1, 0, count + 1);
+				};
+
+				const auto points = m_squaredPointCount;
+				const auto divisions = static_cast< vertex_data_t >(m_squaredQuadCount);
+
+				/* The horizontal sample positions are the same for every row. */
+				std::vector< std::array< int64_t, 4 > > columns(points);
+				std::vector< std::array< vertex_data_t, 4 > > columnWeights(points);
+
+				for ( index_data_t x = 0; x < points; ++x )
+				{
+					const auto real = (static_cast< vertex_data_t >(x) / divisions) * static_cast< vertex_data_t >(width - 1);
+					const auto base = static_cast< int64_t >(std::floor(real));
+
+					columns[x] = {clampIndex(base - 1, width), clampIndex(base, width), clampIndex(base + 1, width), clampIndex(base + 2, width)};
+					columnWeights[x] = weights(real - static_cast< vertex_data_t >(base));
+				}
+
+				std::vector< vertex_data_t > row(static_cast< size_t >(paddedWidth));
+				auto minimum = std::numeric_limits< vertex_data_t >::max();
+				auto maximum = std::numeric_limits< vertex_data_t >::lowest();
+
+				for ( index_data_t y = 0; y < points; ++y )
+				{
+					/* The vertical spline, over every image column, for this grid row. */
+					const auto real = (static_cast< vertex_data_t >(y) / divisions) * static_cast< vertex_data_t >(height - 1);
+					const auto base = static_cast< int64_t >(std::floor(real));
+					const auto rowWeights = weights(real - static_cast< vertex_data_t >(base));
+					const std::array< const vertex_data_t *, 4 > sources{
+						grays.data() + (clampIndex(base - 1, height) * paddedWidth),
+						grays.data() + (clampIndex(base, height) * paddedWidth),
+						grays.data() + (clampIndex(base + 1, height) * paddedWidth),
+						grays.data() + (clampIndex(base + 2, height) * paddedWidth)
+					};
+
+					for ( int64_t column = 0; column < paddedWidth; ++column )
+					{
+						row[static_cast< size_t >(column)] =
+							(rowWeights[0] * sources[0][column]) + (rowWeights[1] * sources[1][column]) +
+							(rowWeights[2] * sources[2][column]) + (rowWeights[3] * sources[3][column]);
+					}
+
+					/* The horizontal spline, per point. */
+					for ( index_data_t x = 0; x < points; ++x )
+					{
+						const auto & indices = columns[x];
+						const auto & w = columnWeights[x];
+						const auto gray =
+							(w[0] * row[static_cast< size_t >(indices[0])]) + (w[1] * row[static_cast< size_t >(indices[1])]) +
+							(w[2] * row[static_cast< size_t >(indices[2])]) + (w[3] * row[static_cast< size_t >(indices[3])]);
+
+						auto & pointHeight = m_pointHeights[this->index(x, y)];
+
+						applyMode(pointHeight, gray * factor, mode);
+
+						minimum = std::min(minimum, pointHeight);
+						maximum = std::max(maximum, pointHeight);
+					}
+				}
+
+				m_boundingBox.set(
+					{m_worldOffset[0] + m_halfSquaredSize, maximum, m_worldOffset[1] + m_halfSquaredSize},
+					{m_worldOffset[0] - m_halfSquaredSize, minimum, m_worldOffset[1] - m_halfSquaredSize}
+				);
+				m_boundingSphere.setRadius(m_boundingBox.highestLength() * static_cast< vertex_data_t >(0.5));
 			}
 
 			/**
@@ -2055,6 +2218,223 @@ namespace EmEn::Base::VertexFactory
 						transform(xIndex, yIndex);
 					}
 				}
+			}
+
+			/**
+			 * @brief Smooths an image by separable binomial passes (1-4-6-4-1 / 16), edges extrapolated linearly.
+			 * @note Each pass is a sigma of 1 sample; linear extrapolation keeps a border slope unbent.
+			 * @param samples The samples, row-major, smoothed in place.
+			 * @param width The width in samples.
+			 * @param height The height in samples.
+			 * @param passes How many passes (sigma grows as the square root).
+			 * @return void
+			 */
+			static
+			void
+			smoothBinomial (std::vector< vertex_data_t > & samples, int64_t width, int64_t height, int passes) noexcept
+			{
+				constexpr std::array< vertex_data_t, 5 > Kernel{1.0F / 16.0F, 4.0F / 16.0F, 6.0F / 16.0F, 4.0F / 16.0F, 1.0F / 16.0F};
+
+				std::vector< vertex_data_t > temporary(samples.size());
+
+				/* A sample along a line of `count`, index clamped by linear extrapolation. */
+				const auto fetch = [] (const vertex_data_t * line, int64_t stride, int64_t count, int64_t index) -> vertex_data_t {
+					if ( index < 0 )
+					{
+						return count > 1 ? line[0] + (static_cast< vertex_data_t >(index) * (line[stride] - line[0])) : line[0];
+					}
+
+					if ( index >= count )
+					{
+						const auto last = line[(count - 1) * stride];
+
+						return count > 1 ? last + (static_cast< vertex_data_t >(index - count + 1) * (last - line[(count - 2) * stride])) : last;
+					}
+
+					return line[index * stride];
+				};
+
+				for ( int pass = 0; pass < passes; ++pass )
+				{
+					/* Horizontal, samples -> temporary. */
+					for ( int64_t y = 0; y < height; ++y )
+					{
+						const auto * line = samples.data() + (y * width);
+
+						for ( int64_t x = 0; x < width; ++x )
+						{
+							vertex_data_t sum = 0;
+
+							for ( int64_t tap = -2; tap <= 2; ++tap )
+							{
+								sum += Kernel[static_cast< size_t >(tap + 2)] * fetch(line, 1, width, x + tap);
+							}
+
+							temporary[static_cast< size_t >((y * width) + x)] = sum;
+						}
+					}
+
+					/* Vertical, temporary -> samples. */
+					for ( int64_t x = 0; x < width; ++x )
+					{
+						const auto * column = temporary.data() + x;
+
+						for ( int64_t y = 0; y < height; ++y )
+						{
+							vertex_data_t sum = 0;
+
+							for ( int64_t tap = -2; tap <= 2; ++tap )
+							{
+								sum += Kernel[static_cast< size_t >(tap + 2)] * fetch(column, width, height, y + tap);
+							}
+
+							samples[static_cast< size_t >((y * width) + x)] = sum;
+						}
+					}
+				}
+			}
+
+			/**
+			 * @brief Reconstructs a quantized height image as the smoothest field inside its rounding intervals.
+			 * @details Each sample q stands for any height in [q - halfStep, q + halfStep]. Jacobi relaxation
+			 * (the mean of the four neighbours) projected back into that interval converges to the flattest
+			 * surface the data allows: terraces become ramps, and no sample moves more than half a level.
+			 * A plain relaxation needs ~w² sweeps to cross a plateau w samples wide, so it runs coarse to
+			 * fine: each level halves the image (2 × 2 means, intervals widened by nothing — a mean of
+			 * values inside their intervals is inside the mean interval), is relaxed, and seeds the next
+			 * finer one. Constrained smoothing of a contoured DEM, cf. the "terrace removal" of heightfield
+			 * pipelines; here the constraint makes it exact rather than a blur.
+			 * @param samples The samples, row-major, relaxed in place.
+			 * @param width The width in samples.
+			 * @param height The height in samples.
+			 * @param halfStep Half a quantization level, in the samples' unit.
+			 * @return void
+			 */
+			static
+			void
+			dequantize (std::vector< vertex_data_t > & samples, int64_t width, int64_t height, vertex_data_t halfStep) noexcept
+			{
+				constexpr int SweepsPerLevel{48};
+				constexpr int64_t CoarsestSide{16};
+
+				struct Level
+				{
+					std::vector< vertex_data_t > centre;
+					std::vector< vertex_data_t > value;
+					int64_t width{0};
+					int64_t height{0};
+				};
+
+				/* The pyramid of interval centres. */
+				std::vector< Level > levels;
+				levels.push_back({samples, samples, width, height});
+
+				while ( levels.back().width > CoarsestSide && levels.back().height > CoarsestSide )
+				{
+					const auto & fine = levels.back();
+					Level coarse;
+					coarse.width = (fine.width + 1) / 2;
+					coarse.height = (fine.height + 1) / 2;
+					coarse.centre.resize(static_cast< size_t >(coarse.width * coarse.height));
+
+					for ( int64_t y = 0; y < coarse.height; ++y )
+					{
+						for ( int64_t x = 0; x < coarse.width; ++x )
+						{
+							vertex_data_t sum = 0;
+							int count = 0;
+
+							for ( int64_t dy = 0; dy < 2; ++dy )
+							{
+								for ( int64_t dx = 0; dx < 2; ++dx )
+								{
+									const auto fx = std::min((x * 2) + dx, fine.width - 1);
+									const auto fy = std::min((y * 2) + dy, fine.height - 1);
+
+									sum += fine.centre[static_cast< size_t >((fy * fine.width) + fx)];
+									++count;
+								}
+							}
+
+							coarse.centre[static_cast< size_t >((y * coarse.width) + x)] = sum / static_cast< vertex_data_t >(count);
+						}
+					}
+
+					coarse.value = coarse.centre;
+					levels.push_back(std::move(coarse));
+				}
+
+				std::vector< vertex_data_t > next;
+
+				for ( auto levelIndex = static_cast< int64_t >(levels.size()) - 1; levelIndex >= 0; --levelIndex )
+				{
+					auto & level = levels[static_cast< size_t >(levelIndex)];
+					const auto w = level.width;
+					const auto h = level.height;
+
+					/* Seeded by the coarser solution (nearest sample: the relaxation smooths it at once). */
+					if ( levelIndex + 1 < static_cast< int64_t >(levels.size()) )
+					{
+						const auto & coarse = levels[static_cast< size_t >(levelIndex + 1)];
+
+						for ( int64_t y = 0; y < h; ++y )
+						{
+							for ( int64_t x = 0; x < w; ++x )
+							{
+								const auto seed = coarse.value[static_cast< size_t >(((y / 2) * coarse.width) + (x / 2))];
+								const auto centre = level.centre[static_cast< size_t >((y * w) + x)];
+
+								level.value[static_cast< size_t >((y * w) + x)] = std::clamp(seed, centre - halfStep, centre + halfStep);
+							}
+						}
+					}
+
+					next.resize(level.value.size());
+
+					for ( int sweep = 0; sweep < SweepsPerLevel; ++sweep )
+					{
+						/* A neighbour beyond the edge is extrapolated linearly (2 · edge - inner): a ramp stays a
+						 * ramp up to the border, where a duplicated neighbour would bend it by half a level. */
+						const auto & v = level.value;
+						const auto sample = [&v, w, h] (int64_t x, int64_t y) -> vertex_data_t {
+							const auto cx = std::clamp< int64_t >(x, 0, w - 1);
+							const auto cy = std::clamp< int64_t >(y, 0, h - 1);
+							auto value = v[static_cast< size_t >((cy * w) + cx)];
+
+							if ( x != cx && w > 1 )
+							{
+								value = (static_cast< vertex_data_t >(2) * value) - v[static_cast< size_t >((cy * w) + (cx == 0 ? 1 : w - 2))];
+							}
+
+							if ( y != cy && h > 1 )
+							{
+								value = (static_cast< vertex_data_t >(2) * value) - v[static_cast< size_t >(((cy == 0 ? 1 : h - 2) * w) + cx)];
+							}
+
+							return value;
+						};
+
+						for ( int64_t y = 0; y < h; ++y )
+						{
+							const auto row = y * w;
+
+							for ( int64_t x = 0; x < w; ++x )
+							{
+								const bool inside = x > 0 && y > 0 && x + 1 < w && y + 1 < h;
+								const auto mean = inside ?
+									(v[static_cast< size_t >(row + x - 1)] + v[static_cast< size_t >(row + x + 1)] + v[static_cast< size_t >(row - w + x)] + v[static_cast< size_t >(row + w + x)]) * static_cast< vertex_data_t >(0.25) :
+									(sample(x - 1, y) + sample(x + 1, y) + sample(x, y - 1) + sample(x, y + 1)) * static_cast< vertex_data_t >(0.25);
+								const auto centre = level.centre[static_cast< size_t >(row + x)];
+
+								next[static_cast< size_t >(row + x)] = std::clamp(mean, centre - halfStep, centre + halfStep);
+							}
+						}
+
+						level.value.swap(next);
+					}
+				}
+
+				samples = std::move(levels.front().value);
 			}
 
 			/**

@@ -693,7 +693,18 @@ Grid grid(8192.0F, 256);  // 8km terrain, 256 subdivisions
 // a mip) — is grid.halvedTent(): half the cells, each point the 1-2-1 × 1-2-1 tent mean around its
 // coincident parent point (edges replicated, even cell count or INVALID). A point-sampled level
 // aliases every relief finer than its cell, and so does a normal baked from it; the CDLOD terrain's
-// clipmap is built with this one (2026-09-22). Tests: src/Testing/test_VertexFactoryGrid.cpp.
+// clipmap is built with this one (2026-09-22).
+// A HEIGHTMAP IMAGE goes through grid.applyDisplacementMapping(pixmap, factor) (any pixel type, gray
+// normalized to 0..1, height = gray x factor), rewritten 2026-09-22 for the `terrain` demo's land003:
+// - Catmull-Rom between pixels (separable, border extrapolated linearly): the former COSINE
+//   interpolation had a zero slope at every pixel — an egg-crate of one bump per pixel once upsampled;
+// - an INTEGER image is first DEQUANTIZED: the smoothest field inside every pixel's rounding interval
+//   (coarse-to-fine constrained Jacobi), then two binomial passes (sigma ~1.4 px) round the creases the
+//   constraint leaves. 8 bits over 1200 m is a 4.7 m step: terraces on every gentle slope, drawn as
+//   contour lines by a per-pixel normal, without it;
+// - the bounding box is recomputed (it was left stale, and a CDLOD terrain takes its height range from it).
+// ⚠️ updateBoundingBox() (private, unused) merges points at X = Z = 0: never call it as is.
+// Tests: src/Testing/test_VertexFactoryGrid.cpp.
 
 grid.applyDiamondSquare({
     .factor = 100.0F,   // heights will be ±100 meters

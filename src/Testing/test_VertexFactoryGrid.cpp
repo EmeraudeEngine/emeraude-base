@@ -26,6 +26,9 @@
 
 /* STL inclusions. */
 #include <cmath>
+#include <cstdint>
+#include <span>
+#include <vector>
 
 /* Local inclusions. */
 #include "VertexFactory/Grid.hpp"
@@ -236,4 +239,75 @@ TEST(VertexFactoryGrid, AHalvedTentGridIsSmootherThanAPointSampledOne)
 
 	ASSERT_GT(pointSampled, 0.0);
 	ASSERT_LT(filtered, pointSampled * 0.75);
+}
+
+TEST(VertexFactoryGrid, AHeightmapIsASplineThroughItsPixels)
+{
+	/* A horizontal ramp of 17 pixels over a grid of 64 cells: 4 grid cells per pixel. */
+	std::vector< uint8_t > pixels(17 * 3);
+
+	for ( uint32_t y = 0; y < 3; ++y )
+	{
+		for ( uint32_t x = 0; x < 17; ++x )
+		{
+			pixels[(y * 17) + x] = static_cast< uint8_t >(x * 15);
+		}
+	}
+
+	const PixelFactory::Pixmap< uint8_t > ramp{17, 3, PixelFactory::ChannelMode::Grayscale, std::span< const uint8_t >{pixels}};
+
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(64.0F, 64U));
+	grid.applyDisplacementMapping(ramp, 255.0F);
+
+	/* Every fourth point sits on a pixel and takes its value; between them a Catmull-Rom spline
+	 * reproduces a straight line exactly (the former cosine interpolation flattened it at each pixel). */
+	for ( uint32_t x = 0; x <= 64U; ++x )
+	{
+		ASSERT_NEAR(grid.getHeightAt(x, 32U), static_cast< float >(x) * 15.0F / 4.0F, 1.0e-3F);
+	}
+
+	/* The box is recomputed, and where the grid is. */
+	const auto & box = grid.boundingBox();
+
+	ASSERT_NEAR(box.minimum(Math::Y), 0.0F, 1.0e-3F);
+	ASSERT_NEAR(box.maximum(Math::Y), 240.0F, 1.0e-3F);
+	ASSERT_FLOAT_EQ(box.minimum(Math::X), -32.0F);
+	ASSERT_FLOAT_EQ(box.maximum(Math::Z), 32.0F);
+}
+
+TEST(VertexFactoryGrid, An8BitHeightmapLosesItsTerracesButNotItsData)
+{
+	/* A gentle ramp stored in 8 bits: one level every 4 pixels, i.e. flat terraces 4 pixels wide. */
+	constexpr uint32_t Width{64};
+	std::vector< uint8_t > pixels(Width * 4);
+
+	for ( uint32_t y = 0; y < 4; ++y )
+	{
+		for ( uint32_t x = 0; x < Width; ++x )
+		{
+			pixels[(y * Width) + x] = static_cast< uint8_t >(std::lround(static_cast< float >(x) * 0.25F));
+		}
+	}
+
+	const PixelFactory::Pixmap< uint8_t > staircase{Width, 4, PixelFactory::ChannelMode::Grayscale, std::span< const uint8_t >{pixels}};
+
+	/* One grid point per pixel, the height in LEVELS (factor 255). */
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(63.0F, Width - 1));
+	grid.applyDisplacementMapping(staircase, 255.0F);
+
+	for ( uint32_t x = 0; x < Width; ++x )
+	{
+		const auto height = grid.getHeightAt(x, 2U);
+
+		/* Never farther than half a level from the stored value... */
+		ASSERT_LE(std::abs(height - static_cast< float >(pixels[x])), 0.5F + 1.0e-3F);
+	}
+
+	/* ...and the staircase is gone: away from the borders, every point climbs (no flat terrace left). */
+	for ( uint32_t x = 4; x + 4 < Width; ++x )
+	{
+		ASSERT_GT(grid.getHeightAt(x + 1U, 2U), grid.getHeightAt(x, 2U));
+	}
 }
