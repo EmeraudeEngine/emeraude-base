@@ -477,6 +477,53 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			/**
+			 * @brief Returns the squared distance from a point to the nearest point of the cuboid.
+			 * @note Zero when the point lies inside the cuboid or on its surface. This is the quantity a
+			 * level-of-detail selection wants: the distance to the SURFACE of a region, never to its
+			 * centre — a 512 m region seen from its own edge is 0 m away, not 362 m.
+			 * @param point A reference to a point.
+			 * @return precision_t
+			 */
+			[[nodiscard]]
+			constexpr
+			precision_t
+			squaredDistanceTo (const Point< precision_t > & point) const noexcept
+			{
+				precision_t squaredDistance = 0;
+
+				for ( size_t index = 0; index < 3; ++index )
+				{
+					if ( point[index] < m_minimum[index] )
+					{
+						const auto delta = m_minimum[index] - point[index];
+
+						squaredDistance += delta * delta;
+					}
+					else if ( point[index] > m_maximum[index] )
+					{
+						const auto delta = point[index] - m_maximum[index];
+
+						squaredDistance += delta * delta;
+					}
+				}
+
+				return squaredDistance;
+			}
+
+			/**
+			 * @brief Returns the distance from a point to the nearest point of the cuboid.
+			 * @note Zero when the point lies inside the cuboid or on its surface.
+			 * @param point A reference to a point.
+			 * @return precision_t
+			 */
+			[[nodiscard]]
+			precision_t
+			distanceTo (const Point< precision_t > & point) const noexcept
+			{
+				return std::sqrt(this->squaredDistanceTo(point));
+			}
+
+			/**
 			 * @brief Reset the cuboid to null value.
 			 * @return void
 			 */

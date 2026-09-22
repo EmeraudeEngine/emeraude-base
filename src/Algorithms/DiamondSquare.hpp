@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -97,13 +98,20 @@ namespace EmEn::Base::Algorithms
 
 			/**
 			 * @brief Generates the noise data.
-			 * @param size The size of pattern which must be 2^1 + 1.
-			 * @param roughness A value from 0 to 1 to controls the roughness.
+			 * @note The displacement of the first subdivision level is `roughness × size / 2`, and every
+			 * finer level multiplies it by `2^-hurst`. `hurst = 1` is the classical Brownian relief and
+			 * reproduces the historical formula (`roughness × halfSize` at every level) exactly; a higher
+			 * value damps the fine levels faster, so the finest subdivisions stop depositing white noise
+			 * on the grid — on a terrain that noise shades as a regular lattice aligned on the mesh.
+			 * The output is normalised afterwards, so `hurst` shapes the relief and never its range.
+			 * @param size The size of pattern which must be 2^n + 1.
+			 * @param roughness A value from 0 to 1 scaling every level's displacement against the corner values.
+			 * @param hurst The per-level decay exponent, 0 or more. Default 1 (Brownian).
 			 * @param normalize If true, normalizes output values to [-1, 1] range. Default true.
 			 * @return bool
 			 */
 			bool
-			generate (size_t size, number_t roughness, bool normalize = true) noexcept
+			generate (size_t size, number_t roughness, number_t hurst = 1, bool normalize = true) noexcept
 			{
 				/* Size must be at least 3. */
 				if ( size < 3 )
@@ -122,6 +130,7 @@ namespace EmEn::Base::Algorithms
 				}
 
 				roughness = Math::clampToUnit(roughness);
+				hurst = std::max(hurst, static_cast< number_t >(0));
 
 				m_size = size;
 				m_data.resize(m_size * m_size);
@@ -130,17 +139,23 @@ namespace EmEn::Base::Algorithms
 
 				auto currentSize = m_size;
 
+				/* The first level displaces by roughness × (size / 2), then each finer level by 2^-H less.
+				 * With H = 1 this is exactly roughness × halfSize at every level, the historical amplitude. */
+				auto amplitude = roughness * static_cast< number_t >(m_size / 2);
+				const auto decay = std::pow(static_cast< number_t >(2), -hurst);
+
 				while ( currentSize > 1 )
 				{
 					auto halfSize = currentSize / 2;
 
 					/* Diamond step. The centers of each tile. */
-					this->diamondStep(currentSize, halfSize, roughness);
+					this->diamondStep(currentSize, halfSize, amplitude);
 
 					/* Square step. The midpoints of the sides. */
-					this->squareStep(currentSize, halfSize, roughness);
+					this->squareStep(currentSize, halfSize, amplitude);
 
 					currentSize = halfSize;
+					amplitude *= decay;
 				}
 
 				/* Normalize values to [-1, 1] range if requested. */
@@ -198,11 +213,11 @@ namespace EmEn::Base::Algorithms
 			 * @brief Performs the diamond step.
 			 * @param size
 			 * @param halfSize
-			 * @param roughness
+			 * @param amplitude The displacement amplitude of this level.
 			 * @return void
 			 */
 			void
-			diamondStep (size_t size, size_t halfSize, number_t roughness) noexcept
+			diamondStep (size_t size, size_t halfSize, number_t amplitude) noexcept
 			{
 				for ( size_t coordX = halfSize; coordX < m_size; coordX += size )
 				{
@@ -219,10 +234,7 @@ namespace EmEn::Base::Algorithms
 						average += m_data[this->index(posX, negY)];
 						average *= 0.25;
 
-						m_data[this->index(coordX, coordY)] = average + m_randomizer.value(
-							-roughness * halfSize,
-							roughness * halfSize
-						);
+						m_data[this->index(coordX, coordY)] = average + m_randomizer.value(-amplitude, amplitude);
 					}
 				}
 			}
@@ -231,11 +243,11 @@ namespace EmEn::Base::Algorithms
 			 * @brief Performs the square step.
 			 * @param size
 			 * @param halfSize
-			 * @param roughness
+			 * @param amplitude The displacement amplitude of this level.
 			 * @return void
 			 */
 			void
-			squareStep (size_t size, size_t halfSize, number_t roughness) noexcept
+			squareStep (size_t size, size_t halfSize, number_t amplitude) noexcept
 			{
 				size_t offset = 0;
 
@@ -279,10 +291,7 @@ namespace EmEn::Base::Algorithms
 							count++;
 						}
 
-						m_data[this->index(coordX, coordY)] = (sum / count) + m_randomizer.value(
-							-roughness * halfSize,
-							roughness * halfSize
-						);
+						m_data[this->index(coordX, coordY)] = (sum / count) + m_randomizer.value(-amplitude, amplitude);
 					}
 				}
 			}

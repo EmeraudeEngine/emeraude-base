@@ -2464,3 +2464,37 @@ TYPED_TEST(MathSpace3D, CollisionCapsuleCapsuleVeryCloseButNotTouching)
 	// Distance > sum of radii
 	ASSERT_FALSE(isColliding(capsule1, capsule2));
 }
+
+/* ---- AACuboid — distance from a point to the nearest point of the box ---- */
+
+TYPED_TEST(MathSpace3D, AACuboidDistanceToPointInsideOrOnSurfaceIsZero)
+{
+	const AACuboid< TypeParam > cuboid{Point< TypeParam >(10, 20, 30), Point< TypeParam >(-5, -10, -15)};
+
+	ASSERT_EQ(cuboid.squaredDistanceTo(Point< TypeParam >(0, 0, 0)), static_cast< TypeParam >(0));
+	ASSERT_EQ(cuboid.squaredDistanceTo(Point< TypeParam >(10, 20, 30)), static_cast< TypeParam >(0));
+	ASSERT_EQ(cuboid.squaredDistanceTo(Point< TypeParam >(-5, 0, 30)), static_cast< TypeParam >(0));
+	ASSERT_EQ(cuboid.distanceTo(Point< TypeParam >(3, -10, 7)), static_cast< TypeParam >(0));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidDistanceToPointOutside)
+{
+	const AACuboid< TypeParam > cuboid{Point< TypeParam >(1, 1, 1), Point< TypeParam >(-1, -1, -1)};
+
+	/* Facing a face: the distance along that axis alone. */
+	ASSERT_NEAR(cuboid.distanceTo(Point< TypeParam >(4, 0, 0)), static_cast< TypeParam >(3), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(cuboid.distanceTo(Point< TypeParam >(0, -6, 0)), static_cast< TypeParam >(5), static_cast< TypeParam >(1e-5));
+	/* Facing an edge: two axes contribute. */
+	ASSERT_NEAR(cuboid.squaredDistanceTo(Point< TypeParam >(3, 0, -3)), static_cast< TypeParam >(8), static_cast< TypeParam >(1e-5));
+	/* Facing a corner: all three. */
+	ASSERT_NEAR(cuboid.squaredDistanceTo(Point< TypeParam >(3, 3, 3)), static_cast< TypeParam >(12), static_cast< TypeParam >(1e-5));
+}
+
+TYPED_TEST(MathSpace3D, AACuboidDistanceIsToTheSurfaceNotTheCentre)
+{
+	/* A 512-unit region seen from a point 1 unit past its edge is 1 unit away, not 257. */
+	const AACuboid< TypeParam > cuboid{Point< TypeParam >(512, 100, 512), Point< TypeParam >(0, -100, 0)};
+
+	ASSERT_NEAR(cuboid.distanceTo(Point< TypeParam >(513, 0, 256)), static_cast< TypeParam >(1), static_cast< TypeParam >(1e-4));
+	ASSERT_GT(Point< TypeParam >::distance(cuboid.centroid(), Point< TypeParam >(513, 0, 256)), static_cast< TypeParam >(250));
+}

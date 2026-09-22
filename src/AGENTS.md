@@ -659,7 +659,8 @@ grid.applyDiamondSquare({100.0F, 0.5F, 0});  // factor=100m, roughness=0.5
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `size` | `size_t` | Grid dimension (must be 2^n + 1, e.g., 3, 5, 9, 17, 33...) |
-| `roughness` | `float` | 0.0-1.0, controls terrain detail (higher = more jagged) |
+| `roughness` | `float` | 0.0-1.0, scale of every level's displacement against the random corner values |
+| `hurst` | `float` | per-level decay `2^-H` of the displacement (default 1 = Brownian, the historical relief). ⚠️ At 1 the finest level is white noise at the vertex frequency, which a lit 1 m grid shades as a regular LATTICE; measured on a 4096 × 1 m grid the vertex-frequency curvature goes 0.44 m (1.0) → 0.083 (1.25) → 0.017 (1.5) → 0.004 (1.75) while the 64 m slope only drops 0.25 → 0.15. `DiamondSquareParams::hurst` is declared LAST so a positional `{factor, roughness, seed}` keeps its meaning |
 | `normalize` | `bool` | Default `true`. Set to `false` for raw algorithm output |
 | `useSameValueForCorner` | `bool` | If `true`, all four corners start with same random value (tileable edges) |
 | `seed` | `int32_t` | Optional random seed for reproducible results |
@@ -678,10 +679,17 @@ if (ds.generate(129, 0.5F)) {  // 129x129 grid, 0.5 roughness
 
 // Via VertexFactory Grid (typical usage)
 Grid grid(8192.0F, 256);  // 8km terrain, 256 subdivisions
+// Streaming a window: ask WHERE it can go before extracting anything — subGridCenter() is the
+// single clamp subGrid() applies (snapped to a cell, held inside the grid). A caller that compares
+// the raw camera position instead regenerates the same window on every cycle at the grid border.
+// const auto centre = grid.subGridCenter({cameraX, cameraZ}, 4096U);
+// if ( Math::Vector< 2, float >::distance(centre, heldCentre) > slack ) { auto window = grid.subGrid(centre, 4096U); }
+
 grid.applyDiamondSquare({
-    100.0F,  // factor: heights will be ±100 meters
-    0.5F,    // roughness: 0.5 (moderate detail)
-    7        // seed: reproducible terrain
+    .factor = 100.0F,   // heights will be ±100 meters
+    .roughness = 0.5F,  // moderate detail against the corner values
+    .seed = 7,          // reproducible terrain
+    .hurst = 1.25F      // damp the finest levels: no vertex-frequency lattice on a fine grid
 });
 ```
 

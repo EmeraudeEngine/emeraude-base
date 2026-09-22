@@ -37,6 +37,7 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
@@ -64,9 +65,21 @@ namespace EmEn::Base::VertexFactory
 	requires (std::is_floating_point_v< vertex_data_t > )
 	struct DiamondSquareParams
 	{
+		/** @brief Multiplier of the normalised [-1, 1] output: the relief spans about twice this value. */
 		vertex_data_t factor{1};
+		/** @brief Scale of every level's displacement against the random corner values, in [0, 1]. */
 		vertex_data_t roughness{0.5};
 		int32_t seed{0};
+		/**
+		 * @brief Per-level decay exponent of the displacement (`2^-hurst` at each finer level).
+		 * @note 1 is the classical Brownian relief (the historical behaviour). Raise it to damp the
+		 * finest subdivisions: at 1 they deposit white noise at the vertex frequency, which a lit
+		 * grid shades as a regular lattice — measured on a 1 m grid: the vertex-frequency curvature
+		 * goes 0.44 m (1.0) → 0.08 m (1.25) → 0.017 m (1.5) → 0.004 m (1.75), the coarse relief
+		 * (64 m slope) 0.25 → 0.19 → 0.16 → 0.15. Declared LAST so a positional `{factor, roughness,
+		 * seed}` keeps its meaning. See Algorithms::DiamondSquare::generate().
+		 */
+		vertex_data_t hurst{1};
 	};
 
 	/**
@@ -359,9 +372,7 @@ namespace EmEn::Base::VertexFactory
 			 * technique that produces realistic terrain with controllable roughness. This method is
 			 * particularly effective for creating mountainous or hilly landscapes with natural variation.
 			 *
-			 * @param factor Multiplier for algorithm output values, controlling overall displacement magnitude.
-			 * @param roughness Controls terrain roughness/smoothness. Higher values create more jagged, rough terrain; lower values produce smoother landscapes.
-			 * @param seed Random seed for reproducible generation (default: 1). Different seeds produce different terrain patterns.
+			 * @param params The generator parameters: output factor, roughness, Hurst exponent and seed. See DiamondSquareParams.
 			 * @param mode Transformation mode controlling how generated heights combine with existing values (default: Replace).
 			 *
 			 * @post Grid heights are modified with Diamond-Square values according to the specified mode
@@ -376,12 +387,14 @@ namespace EmEn::Base::VertexFactory
 			 * @see applyDisplacementMapping()
 			 */
 			void
-			applyDiamondSquare (vertex_data_t factor, vertex_data_t roughness, int32_t seed = 1, PointTransformationMode mode = PointTransformationMode::Replace) noexcept
+			applyDiamondSquare (const DiamondSquareParams< vertex_data_t > & params, PointTransformationMode mode = PointTransformationMode::Replace) noexcept
 			{
-				Algorithms::DiamondSquare< vertex_data_t > generator{seed, false};
+				Algorithms::DiamondSquare< vertex_data_t > generator{params.seed, false};
 
-				if ( generator.generate(m_squaredPointCount, roughness) )
+				if ( generator.generate(m_squaredPointCount, params.roughness, params.hurst) )
 				{
+					const auto factor = params.factor;
+
 					this->applyTransformation([this, factor, mode, &generator] (index_data_t indexOnX, index_data_t indexOnY) {
 						const auto idx = this->index(indexOnX, indexOnY);
 						const auto newValue = generator.value(indexOnX, indexOnY) * factor;
@@ -1586,17 +1599,8 @@ namespace EmEn::Base::VertexFactory
 				const auto clampedCellCount = std::min(cellCount, m_squaredQuadCount);
 				const auto halfCellCount = clampedCellCount / 2;
 
-				/* Convert world position to grid indices. */
-				auto centerIndexX = static_cast< index_data_t >(std::floor((centerPosition[0] + m_halfSquaredSize) / m_quadSquaredSize));
-				auto centerIndexY = static_cast< index_data_t >(std::floor((centerPosition[1] + m_halfSquaredSize) / m_quadSquaredSize));
-
-				/* Clamp center so the sub-grid stays within bounds.
-				 * The center must be at least halfCellCount from edges. */
-				const auto minCenter = halfCellCount;
-				const auto maxCenter = m_squaredQuadCount - (clampedCellCount - halfCellCount);
-
-				centerIndexX = std::clamp(centerIndexX, minCenter, maxCenter);
-				centerIndexY = std::clamp(centerIndexY, minCenter, maxCenter);
+				/* The centre the window actually gets: snapped to a cell and kept inside the grid. */
+				const auto [centerIndexX, centerIndexY] = this->subGridCenterIndices(centerPosition, cellCount);
 
 				/* Calculate starting indices. */
 				const auto startX = centerIndexX - halfCellCount;
@@ -1642,6 +1646,29 @@ namespace EmEn::Base::VertexFactory
 				result.m_boundingSphere.setRadius(result.m_boundingBox.highestLength() * static_cast< vertex_data_t >(0.5));
 
 				return result;
+			}
+
+			/**
+			 * @brief Returns the world-space centre a sub-grid extracted around a position would actually get.
+			 * @note The SAME snapping and clamping subGrid() applies: the centre lands on a cell corner and
+			 * moves inward so the window stays inside the grid. A caller that streams a window compares
+			 * this with the centre it holds BEFORE extracting anything — near the grid border the window
+			 * cannot move, and comparing the raw camera position instead regenerates the same window on
+			 * every cycle.
+			 * @param centerPosition The desired centre in world coordinates (X, Z).
+			 * @param cellCount The number of cells per dimension of the sub-grid.
+			 * @return Math::Vector< 2, vertex_data_t > The centre (X, Z) subGrid() would place the window at.
+			 */
+			[[nodiscard]]
+			Math::Vector< 2, vertex_data_t >
+			subGridCenter (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount) const noexcept
+			{
+				const auto [centerIndexX, centerIndexY] = this->subGridCenterIndices(centerPosition, cellCount);
+
+				return {
+					(static_cast< vertex_data_t >(centerIndexX) * m_quadSquaredSize) - m_halfSquaredSize,
+					(static_cast< vertex_data_t >(centerIndexY) * m_quadSquaredSize) - m_halfSquaredSize
+				};
 			}
 
 			/**
@@ -1781,6 +1808,33 @@ namespace EmEn::Base::VertexFactory
 						transform(xIndex, yIndex, coordU, coordV);
 					}
 				}
+			}
+
+			/**
+			 * @brief Snaps a world position to the cell-corner indices a sub-grid of `cellCount` cells is centred on, kept inside the grid.
+			 * @note The single clamp both subGrid() and subGridCenter() use: the centre must stay at least
+			 * half a window from every edge, so a request beyond that is pulled back to the border window.
+			 * @param centerPosition The desired centre in world coordinates (X, Z).
+			 * @param cellCount The number of cells per dimension of the sub-grid (clamped to the grid's).
+			 * @return std::pair< index_data_t, index_data_t > The centre indices (X, Y).
+			 */
+			[[nodiscard]]
+			std::pair< index_data_t, index_data_t >
+			subGridCenterIndices (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount) const noexcept
+			{
+				const auto clampedCellCount = std::min(cellCount, m_squaredQuadCount);
+				const auto halfCellCount = clampedCellCount / 2;
+
+				auto centerIndexX = static_cast< index_data_t >(std::max(static_cast< vertex_data_t >(0), std::floor((centerPosition[0] + m_halfSquaredSize) / m_quadSquaredSize)));
+				auto centerIndexY = static_cast< index_data_t >(std::max(static_cast< vertex_data_t >(0), std::floor((centerPosition[1] + m_halfSquaredSize) / m_quadSquaredSize)));
+
+				const auto minCenter = halfCellCount;
+				const auto maxCenter = m_squaredQuadCount - (clampedCellCount - halfCellCount);
+
+				centerIndexX = std::clamp(centerIndexX, minCenter, maxCenter);
+				centerIndexY = std::clamp(centerIndexY, minCenter, maxCenter);
+
+				return {centerIndexX, centerIndexY};
 			}
 
 			/**
