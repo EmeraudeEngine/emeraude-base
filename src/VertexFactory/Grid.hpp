@@ -490,6 +490,8 @@ namespace EmEn::Base::VertexFactory
 			{
 				m_pointHeights.clear();
 
+				m_worldOffset = {};
+				m_UVOffset = {};
 				m_squaredQuadCount = 0;
 				m_squaredPointCount = 0;
 
@@ -1453,8 +1455,8 @@ namespace EmEn::Base::VertexFactory
 				const auto div = static_cast< vertex_data_t >(m_squaredQuadCount);
 
 				return {
-					(static_cast< vertex_data_t >(indexOnX) / div) * m_UMultiplier,
-					(static_cast< vertex_data_t >(indexOnY) / div) * m_VMultiplier
+					((static_cast< vertex_data_t >(indexOnX) / div) * m_UMultiplier) + m_UVOffset[0],
+					((static_cast< vertex_data_t >(indexOnY) / div) * m_VMultiplier) + m_UVOffset[1]
 				};
 			}
 
@@ -1500,8 +1502,8 @@ namespace EmEn::Base::VertexFactory
 				const auto div = static_cast< vertex_data_t >(m_squaredQuadCount);
 
 				return {
-					(static_cast< vertex_data_t >(indexOnX) / div) * m_UMultiplier,
-					(static_cast< vertex_data_t >(indexOnY) / div) * m_VMultiplier,
+					((static_cast< vertex_data_t >(indexOnX) / div) * m_UMultiplier) + m_UVOffset[0],
+					((static_cast< vertex_data_t >(indexOnY) / div) * m_VMultiplier) + m_UVOffset[1],
 					(m_pointHeights[this->index(indexOnX, indexOnY)] - m_boundingBox.minimum()[Math::Y]) / m_boundingBox.height()
 				};
 			}
@@ -1593,14 +1595,14 @@ namespace EmEn::Base::VertexFactory
 			 */
 			[[nodiscard]]
 			Grid
-			subGrid (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount) const noexcept
+			subGrid (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount, index_data_t snapCells = 0) const noexcept
 			{
 				/* Ensure cellCount doesn't exceed the parent grid. */
 				const auto clampedCellCount = std::min(cellCount, m_squaredQuadCount);
 				const auto halfCellCount = clampedCellCount / 2;
 
-				/* The centre the window actually gets: snapped to a cell and kept inside the grid. */
-				const auto [centerIndexX, centerIndexY] = this->subGridCenterIndices(centerPosition, cellCount);
+				/* The centre the window actually gets: snapped to a cell (or to a multiple of snapCells) and kept inside the grid. */
+				const auto [centerIndexX, centerIndexY] = this->subGridCenterIndices(centerPosition, cellCount, snapCells);
 
 				/* Calculate starting indices. */
 				const auto startX = centerIndexX - halfCellCount;
@@ -1611,9 +1613,17 @@ namespace EmEn::Base::VertexFactory
 				result.initializeByCellSize(clampedCellCount, m_quadSquaredSize);
 
 				{
-					const auto UVRatio = static_cast< float >(cellCount) / static_cast< float >(this->squaredQuadCount());
+					/* The window's texture coordinates are the PARENT's at the same points: the multiplier
+					 * shrinks with the window and the offset carries where the window starts, so a slide
+					 * never moves the texture under the ground (without the offset it jumped by
+					 * startX × U / N at every slide — invisible only when that is a whole number of tiles). */
+					const auto UVRatio = static_cast< vertex_data_t >(clampedCellCount) / static_cast< vertex_data_t >(m_squaredQuadCount);
 
 					result.setUVMultiplier(m_UMultiplier * UVRatio, m_VMultiplier * UVRatio);
+					result.m_UVOffset = {
+						m_UVOffset[0] + ((static_cast< vertex_data_t >(startX) / static_cast< vertex_data_t >(m_squaredQuadCount)) * m_UMultiplier),
+						m_UVOffset[1] + ((static_cast< vertex_data_t >(startY) / static_cast< vertex_data_t >(m_squaredQuadCount)) * m_VMultiplier)
+					};
 				}
 
 				/* Calculate world offset for the sub-grid center. */
@@ -1638,7 +1648,69 @@ namespace EmEn::Base::VertexFactory
 					maxHeight = std::max(maxHeight, *rowMax);
 				}
 
-				/* Single bounding box update. */
+				/* Single bounding box update — WHERE THE WINDOW IS. The box carries the world offset like
+				 * position() does; centred on zero it described a window that had not moved, and a far
+				 * mesh culled against it kept its hole at the origin after every slide (2026-09-22). */
+				result.m_boundingBox.set(
+					{result.m_worldOffset[0] + result.m_halfSquaredSize, maxHeight, result.m_worldOffset[1] + result.m_halfSquaredSize},
+					{result.m_worldOffset[0] - result.m_halfSquaredSize, minHeight, result.m_worldOffset[1] - result.m_halfSquaredSize}
+				);
+				result.m_boundingSphere.setRadius(result.m_boundingBox.highestLength() * static_cast< vertex_data_t >(0.5));
+
+				return result;
+			}
+
+			/**
+			 * @brief Returns a copy of this grid keeping one point out of `step` per axis.
+			 * @note The copy spans the SAME extent with cells `step` times larger, so its points coincide
+			 * with this grid's points at multiples of `step` — same position, same height, same texture
+			 * coordinates (the multipliers and the offset are carried over). This is what a coarse mesh
+			 * drawn around a fine window needs to meet the window without a crack: point samples, never
+			 * an average, or the shared vertices would no longer share a height. The step must divide the
+			 * cell count; otherwise the result is INVALID (`isValid()` false) and an error is printed.
+			 * @param step How many cells of this grid make one cell of the copy (at least 1).
+			 * @return Grid
+			 */
+			[[nodiscard]]
+			Grid
+			coarsened (index_data_t step) const noexcept
+			{
+				Grid result;
+
+				if ( step == 0 || m_squaredQuadCount == 0 || m_squaredQuadCount % step != 0 )
+				{
+					std::cerr << "Grid::coarsened(), the step (" << step << ") must divide the cell count (" << m_squaredQuadCount << ") !" "\n";
+
+					return result;
+				}
+
+				const auto cellCount = m_squaredQuadCount / step;
+
+				if ( !result.initializeByCellSize(cellCount, m_quadSquaredSize * static_cast< vertex_data_t >(step)) )
+				{
+					return result;
+				}
+
+				result.m_UMultiplier = m_UMultiplier;
+				result.m_VMultiplier = m_VMultiplier;
+				result.m_UVOffset = m_UVOffset;
+				result.m_worldOffset = m_worldOffset;
+
+				auto minHeight = std::numeric_limits< vertex_data_t >::max();
+				auto maxHeight = std::numeric_limits< vertex_data_t >::lowest();
+
+				for ( index_data_t y = 0; y <= cellCount; ++y )
+				{
+					for ( index_data_t x = 0; x <= cellCount; ++x )
+					{
+						const auto height = m_pointHeights[this->index(x * step, y * step)];
+
+						result.m_pointHeights[result.index(x, y)] = height;
+						minHeight = std::min(minHeight, height);
+						maxHeight = std::max(maxHeight, height);
+					}
+				}
+
 				result.m_boundingBox.set(
 					{result.m_halfSquaredSize, maxHeight, result.m_halfSquaredSize},
 					{-result.m_halfSquaredSize, minHeight, -result.m_halfSquaredSize}
@@ -1657,13 +1729,15 @@ namespace EmEn::Base::VertexFactory
 			 * every cycle.
 			 * @param centerPosition The desired centre in world coordinates (X, Z).
 			 * @param cellCount The number of cells per dimension of the sub-grid.
+			 * @param snapCells Keep the centre on a multiple of this many cells (0 = any cell). A window
+			 * that must tile with a coarser mesh outside it snaps to that mesh's sector size.
 			 * @return Math::Vector< 2, vertex_data_t > The centre (X, Z) subGrid() would place the window at.
 			 */
 			[[nodiscard]]
 			Math::Vector< 2, vertex_data_t >
-			subGridCenter (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount) const noexcept
+			subGridCenter (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount, index_data_t snapCells = 0) const noexcept
 			{
-				const auto [centerIndexX, centerIndexY] = this->subGridCenterIndices(centerPosition, cellCount);
+				const auto [centerIndexX, centerIndexY] = this->subGridCenterIndices(centerPosition, cellCount, snapCells);
 
 				return {
 					(static_cast< vertex_data_t >(centerIndexX) * m_quadSquaredSize) - m_halfSquaredSize,
@@ -1820,7 +1894,7 @@ namespace EmEn::Base::VertexFactory
 			 */
 			[[nodiscard]]
 			std::pair< index_data_t, index_data_t >
-			subGridCenterIndices (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount) const noexcept
+			subGridCenterIndices (const Math::Vector< 2, vertex_data_t > & centerPosition, index_data_t cellCount, index_data_t snapCells = 0) const noexcept
 			{
 				const auto clampedCellCount = std::min(cellCount, m_squaredQuadCount);
 				const auto halfCellCount = clampedCellCount / 2;
@@ -1828,8 +1902,24 @@ namespace EmEn::Base::VertexFactory
 				auto centerIndexX = static_cast< index_data_t >(std::max(static_cast< vertex_data_t >(0), std::floor((centerPosition[0] + m_halfSquaredSize) / m_quadSquaredSize)));
 				auto centerIndexY = static_cast< index_data_t >(std::max(static_cast< vertex_data_t >(0), std::floor((centerPosition[1] + m_halfSquaredSize) / m_quadSquaredSize)));
 
-				const auto minCenter = halfCellCount;
-				const auto maxCenter = m_squaredQuadCount - (clampedCellCount - halfCellCount);
+				auto minCenter = halfCellCount;
+				auto maxCenter = m_squaredQuadCount - (clampedCellCount - halfCellCount);
+
+				if ( snapCells > 1 )
+				{
+					/* Nearest multiple, then a clamp range made of multiples too — when it is not empty.
+					 * A snap the grid cannot honour (a window as wide as the grid) falls back to the cell. */
+					const auto snappedMin = ((minCenter + snapCells - 1) / snapCells) * snapCells;
+					const auto snappedMax = (maxCenter / snapCells) * snapCells;
+
+					if ( snappedMin <= snappedMax )
+					{
+						centerIndexX = ((centerIndexX + (snapCells / 2)) / snapCells) * snapCells;
+						centerIndexY = ((centerIndexY + (snapCells / 2)) / snapCells) * snapCells;
+						minCenter = snappedMin;
+						maxCenter = snappedMax;
+					}
+				}
 
 				centerIndexX = std::clamp(centerIndexX, minCenter, maxCenter);
 				centerIndexY = std::clamp(centerIndexY, minCenter, maxCenter);
@@ -1897,6 +1987,7 @@ namespace EmEn::Base::VertexFactory
 			vertex_data_t m_UMultiplier{1}; ///< Texture coordinate multiplier for U (horizontal) direction.
 			vertex_data_t m_VMultiplier{1}; ///< Texture coordinate multiplier for V (vertical) direction.
 			Math::Vector< 2, vertex_data_t > m_worldOffset{}; ///< World-space offset applied to positions (X, Z).
+			Math::Vector< 2, vertex_data_t > m_UVOffset{}; ///< Texture-coordinate offset (U, V): a sub-grid's UVs stay those of its parent grid, so a window slides under a still texture.
 			Math::Space3D::AACuboid< vertex_data_t > m_boundingBox; ///< Axis-aligned bounding box encompassing all grid geometry.
 			Math::Space3D::Sphere< vertex_data_t > m_boundingSphere; ///< Bounding sphere encompassing all grid geometry.
 	};

@@ -680,10 +680,16 @@ if (ds.generate(129, 0.5F)) {  // 129x129 grid, 0.5 roughness
 // Via VertexFactory Grid (typical usage)
 Grid grid(8192.0F, 256);  // 8km terrain, 256 subdivisions
 // Streaming a window: ask WHERE it can go before extracting anything — subGridCenter() is the
-// single clamp subGrid() applies (snapped to a cell, held inside the grid). A caller that compares
-// the raw camera position instead regenerates the same window on every cycle at the grid border.
-// const auto centre = grid.subGridCenter({cameraX, cameraZ}, 4096U);
-// if ( Math::Vector< 2, float >::distance(centre, heldCentre) > slack ) { auto window = grid.subGrid(centre, 4096U); }
+// single clamp subGrid() applies (snapped to a cell, or to a multiple of `snapCells`, held inside the
+// grid). A caller that compares the raw camera position instead regenerates the same window on every
+// cycle at the grid border.
+// const auto centre = grid.subGridCenter({cameraX, cameraZ}, 4096U, 1024U);
+// if ( Math::Vector< 2, float >::distance(centre, heldCentre) > slack ) { auto window = grid.subGrid(centre, 4096U, 1024U); }
+// A window's texture coordinates are its PARENT's at the same points (a UV offset carries where it
+// starts), and its bounding box is where the window IS (it carried no world offset until 2026-09-22).
+// A coarse copy that coincides with the fine grid at every shared point — for a far mesh around the
+// window — is grid.coarsened(step): point samples, never an average, or the shared vertices would no
+// longer share a height. Tests: src/Testing/test_VertexFactoryGrid.cpp.
 
 grid.applyDiamondSquare({
     .factor = 100.0F,   // heights will be ±100 meters
