@@ -447,6 +447,15 @@ away from the border).
 Reference: Cigolle, Donow, Evangelakos, Mara, McGuire & Meyer, *A Survey of Efficient
 Representations for Independent Unit Vectors*, JCGT 3(2), 2014, § 3.3.
 
+### A negative float converted straight to an unsigned integer is UNDEFINED — `PerlinNoise` did it for every coordinate below zero (Sept 2026, FIXED)
+
+`PerlinNoise::generate()` found its lattice cell with `static_cast< uint32_t >(std::floor(x))`: undefined
+behaviour for any negative `x`. x86 happens to wrap (so the noise "worked" on Linux and Windows), ARM saturates
+to 0 — every point west or south of the origin would read cell 0 on the Mac. Fixed through a signed integer
+(`static_cast< uint32_t >(static_cast< int32_t >(std::floor(x)))`, two's complement then wraps under the 255
+mask and the noise stays periodic across zero). Tests `AlgorithmsPerlinNoise.*`. ⚠️ On x86 they pass without
+the fix too: the discriminating machine is ARM.
+
 ## PixelFactory
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count

@@ -113,10 +113,13 @@ namespace EmEn::Base::Algorithms
 				constexpr auto One{static_cast< number_t >(1.0)};
 				constexpr auto Half{static_cast< number_t >(0.5)};
 
-				/* Find the unit cube that contains the point. */
-				const auto X = static_cast< uint32_t >(std::floor(x)) & TableMask;
-				const auto Y = static_cast< uint32_t >(std::floor(y)) & TableMask;
-				const auto Z = static_cast< uint32_t >(std::floor(z)) & TableMask;
+				/* Find the unit cube that contains the point. ⚠️ Through a SIGNED integer: converting a negative
+				 * floating-point value straight to an unsigned one is undefined behaviour, and every coordinate
+				 * west or south of the origin is one. Two's complement then wraps -1 to 255 under the mask, so
+				 * the noise stays periodic (period 256) across zero. */
+				const auto X = static_cast< uint32_t >(static_cast< int32_t >(std::floor(x))) & TableMask;
+				const auto Y = static_cast< uint32_t >(static_cast< int32_t >(std::floor(y))) & TableMask;
+				const auto Z = static_cast< uint32_t >(static_cast< int32_t >(std::floor(z))) & TableMask;
 
 				/* Find relative x, y,z of point in cube. */
 				x -= std::floor(x);

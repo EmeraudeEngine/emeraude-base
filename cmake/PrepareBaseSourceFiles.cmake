@@ -165,6 +165,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryTreeSkinner.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathOctahedralMapping.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsDiamondSquare.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsPerlinNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryGrid.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ZipArchive.cpp
