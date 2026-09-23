@@ -807,7 +807,9 @@ namespace EmEn::Base::VertexFactory
 					corners[corner].position = origin + across * (right ? half : -half) + along * (top ? length : static_cast< vertex_data_t >(0));
 					corners[corner].normal = normal;
 					corners[corner].textureU = right ? static_cast< vertex_data_t >(1) : static_cast< vertex_data_t >(0);
-					corners[corner].textureV = top ? static_cast< vertex_data_t >(1) : static_cast< vertex_data_t >(0);
+					/* ⚠️ v = 0 is the image's FIRST row, its top: a leaf image stands on its stem, so the petiole
+					 * (the attached end) takes v = 1 and the tip v = 0 (owner, 2026-09-23: the leaves were upside down). */
+					corners[corner].textureV = top ? static_cast< vertex_data_t >(0) : static_cast< vertex_data_t >(1);
 
 					if ( m_options.windChannelsEnabled() )
 					{

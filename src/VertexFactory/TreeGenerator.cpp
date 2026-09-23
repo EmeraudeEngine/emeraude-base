@@ -33,10 +33,70 @@
 
 namespace EmEn::Base::VertexFactory
 {
+	namespace
+	{
+		/* The one bark of the store so far (Materials/Vegetals/palm_bark.json). */
+		constexpr auto DefaultBark{"Vegetals/palm_bark"};
+	}
+
+	TreeGenerator
+	TreeGenerator::quakingAspen () noexcept
+	{
+		TreeGenerator generator;
+		generator.parameters() = TreeParameters< float >::quakingAspen();
+		generator.setBarkMaterial(DefaultBark);
+		generator.setLeafMaterial("Vegetals/leaf001");
+		generator.skinningOptions().setLeafAspectRatio(1.0F);
+
+		return generator;
+	}
+
+	TreeGenerator
+	TreeGenerator::broadleaf () noexcept
+	{
+		TreeGenerator generator;
+		generator.parameters() = TreeParameters< float >::broadleaf();
+		generator.setBarkMaterial(DefaultBark);
+		generator.setLeafMaterial("Vegetals/leaf003");
+		generator.skinningOptions().setLeafAspectRatio(1.0F);
+
+		return generator;
+	}
+
+	TreeGenerator
+	TreeGenerator::conifer () noexcept
+	{
+		TreeGenerator generator;
+		generator.parameters() = TreeParameters< float >::conifer();
+		generator.setBarkMaterial(DefaultBark);
+		generator.setLeafMaterial("Vegetals/leaf007");
+		/* leaf007 is 1024 x 2048: a card twice as long as wide keeps the twig undistorted. */
+		generator.skinningOptions().setLeafAspectRatio(0.5F);
+
+		return generator;
+	}
+
+	TreeGenerator
+	TreeGenerator::colonizedCrown () noexcept
+	{
+		TreeGenerator generator;
+		generator.setGrowerType(GrowerType::SpaceColonization);
+		generator.colonizationGrower().setAttractorCount(1600);
+		generator.colonizationGrower().setCrownCenter({0.0F, 8.0F, 0.0F});
+		generator.colonizationGrower().setCrownRadii({4.5F, 3.5F, 4.5F});
+		generator.colonizationGrower().setTrunkHeight(4.0F);
+		generator.setBarkMaterial(DefaultBark);
+		generator.setLeafMaterial("Vegetals/leaf002");
+		generator.skinningOptions().setLeafAspectRatio(1.0F);
+
+		return generator;
+	}
+
 	TreeMesh< float >
 	TreeGenerator::generate (uint32_t seed) const noexcept
 	{
 		TreeMesh< float > mesh;
+		mesh.setMaterialNames(m_barkMaterial, m_leafMaterial);
 
 		auto skeleton = m_growerType == GrowerType::Parametric ?
 			TreeParametricGrower< float >{m_parameters}.grow(seed) :

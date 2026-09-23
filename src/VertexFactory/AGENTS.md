@@ -153,6 +153,18 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   (`CMakeLists.txt:426`). Making it header-only would leave that target with no source at all —
   remove the target in the same move, or keep a `.cpp`. A tree is generated at load time, so
   `float` costs nothing and the template instantiation is spent once.
+- **The species names its materials** (owner decision 2026-09-23): `setBarkMaterial("...")` /
+  `setLeafMaterial("...")` — NAMES only, this library knows no material — copied into the result
+  (`TreeMesh::barkMaterial()` / `leafMaterial()`); the engine resolves them
+  (`Scenes::Toolkit::vegetationMaterial()`). Presets: `TreeGenerator::quakingAspen()` (leaf001),
+  `broadleaf()` (leaf003), `conifer()` (leaf007), `colonizedCrown()` (leaf002), all on
+  `Vegetals/palm_bark`.
+- ⚠️ **The leaf card's width/length must be the leaf IMAGE's** (`skinningOptions().setLeafAspectRatio()`):
+  the texture covers the whole card. 1 for a square image, 0.5 for the 1024 × 2048 pine twig; the
+  presets set it (the former default 0.7 squashed every square leaf).
+- ⚠️ **V = 1 at the petiole, V = 0 at the tip** (`TreeSkinner::emitCard()`): V = 0 is the image's first
+  row, its top, and a leaf image stands on its stem. It was the other way round until 2026-09-23 —
+  every leaf upside down (owner-spotted).
 
 **Grid / GridQuad** - 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
 - See: `Grid.hpp`, `GridQuad.hpp`

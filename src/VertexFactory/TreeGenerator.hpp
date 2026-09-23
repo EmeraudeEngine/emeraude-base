@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cstdint>
+#include <string>
 
 /* Local inclusions for usages. */
 #include "TreeColonizationGrower.hpp"
@@ -70,6 +71,85 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Constructs a generator growing the default parametric species.
 			 */
 			TreeGenerator () noexcept = default;
+
+			/**
+			 * @brief A quaking aspen (the Weber & Penn paper's own parameters), round leaves (`Vegetals/leaf001`).
+			 * @return TreeGenerator
+			 */
+			[[nodiscard]]
+			static TreeGenerator quakingAspen () noexcept;
+
+			/**
+			 * @brief A broadleaf, beech leaves (`Vegetals/leaf003`).
+			 * @return TreeGenerator
+			 */
+			[[nodiscard]]
+			static TreeGenerator broadleaf () noexcept;
+
+			/**
+			 * @brief A conifer, pine twigs (`Vegetals/leaf007`, a 1:2 image: the leaf cards follow it).
+			 * @return TreeGenerator
+			 */
+			[[nodiscard]]
+			static TreeGenerator conifer () noexcept;
+
+			/**
+			 * @brief A space-colonized crown (Runions et al.), maple leaves (`Vegetals/leaf002`).
+			 * @return TreeGenerator
+			 */
+			[[nodiscard]]
+			static TreeGenerator colonizedCrown () noexcept;
+
+			/**
+			 * @brief Sets the material of the branches, by NAME (owner decision 2026-09-23: the species says it).
+			 * @note Resolved by the engine (Scenes::Toolkit::vegetationMaterial()): the store material of that name when
+			 * one exists (a JSON in `Materials/`), otherwise a bark built from the images `<name>-color_a`,
+			 * `<name>-normal`, `<name>-roughness`. Empty: the caller's material, else the default one.
+			 * @param name The material name, e.g. "Vegetals/palm_bark".
+			 * @return void
+			 */
+			void
+			setBarkMaterial (std::string name) noexcept
+			{
+				m_barkMaterial = std::move(name);
+			}
+
+			/**
+			 * @brief Returns the material name of the branches, empty if none.
+			 * @return const std::string &
+			 */
+			[[nodiscard]]
+			const std::string &
+			barkMaterial () const noexcept
+			{
+				return m_barkMaterial;
+			}
+
+			/**
+			 * @brief Sets the material of the leaf cards, by NAME.
+			 * @note Same resolution as setBarkMaterial(), with a foliage built from `<name>-color_a` and its cut-out:
+			 * `<name>-alpha` (a separate mask) or the colour image's own alpha. ⚠️ The texture covers the whole card, so
+			 * the card's width/length must be the IMAGE's (skinningOptions().setLeafAspectRatio()): 1 for a square
+			 * image, 0.5 for the 1024 x 2048 pine twig. The presets set it.
+			 * @param name The material name, e.g. "Vegetals/leaf003".
+			 * @return void
+			 */
+			void
+			setLeafMaterial (std::string name) noexcept
+			{
+				m_leafMaterial = std::move(name);
+			}
+
+			/**
+			 * @brief Returns the material name of the leaf cards, empty if none.
+			 * @return const std::string &
+			 */
+			[[nodiscard]]
+			const std::string &
+			leafMaterial () const noexcept
+			{
+				return m_leafMaterial;
+			}
 
 			/**
 			 * @brief Sets which model grows the skeleton.
@@ -240,6 +320,8 @@ namespace EmEn::Base::VertexFactory
 			TreeParameters< float > m_parameters;
 			TreeColonizationGrower< float > m_colonizationGrower;
 			TreeSkinningOptions< float > m_skinningOptions;
+			std::string m_barkMaterial;
+			std::string m_leafMaterial;
 			uint32_t m_levelOfDetailCount{3};
 			uint32_t m_imposterQuadCount{3};
 			GrowerType m_growerType{GrowerType::Parametric};

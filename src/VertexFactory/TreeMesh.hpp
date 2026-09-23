@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cstdint>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -199,6 +200,44 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Sets the names of the materials the species asks for (TreeGenerator::setBarkMaterial() and
+			 * setLeafMaterial()); an empty name means "none asked".
+			 * @note Names only: this library knows no material. The engine resolves them (Scenes::Toolkit,
+			 * a store material of that name, or one built from the images that follow the vegetation convention).
+			 * @param barkMaterial The bark material name.
+			 * @param leafMaterial The leaf material name.
+			 * @return void
+			 */
+			void
+			setMaterialNames (std::string barkMaterial, std::string leafMaterial) noexcept
+			{
+				m_barkMaterial = std::move(barkMaterial);
+				m_leafMaterial = std::move(leafMaterial);
+			}
+
+			/**
+			 * @brief Returns the bark material name the species asks for, empty if none.
+			 * @return const std::string &
+			 */
+			[[nodiscard]]
+			const std::string &
+			barkMaterial () const noexcept
+			{
+				return m_barkMaterial;
+			}
+
+			/**
+			 * @brief Returns the leaf material name the species asks for, empty if none.
+			 * @return const std::string &
+			 */
+			[[nodiscard]]
+			const std::string &
+			leafMaterial () const noexcept
+			{
+				return m_leafMaterial;
+			}
+
+			/**
 			 * @brief Clears everything.
 			 * @return void
 			 */
@@ -208,6 +247,8 @@ namespace EmEn::Base::VertexFactory
 				m_skeleton.clear();
 				m_levelsOfDetail.clear();
 				m_imposter.clear();
+				m_barkMaterial.clear();
+				m_leafMaterial.clear();
 			}
 
 		private:
@@ -218,5 +259,7 @@ namespace EmEn::Base::VertexFactory
 			/* NOTE: What shape() hands back when nothing was skinned, so the accessor can return a
 			 * reference without ever handing out a dangling one. */
 			Shape< vertex_data_t, index_data_t > m_emptyShape;
+			std::string m_barkMaterial;
+			std::string m_leafMaterial;
 	};
 }
