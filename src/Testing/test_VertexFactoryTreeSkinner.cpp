@@ -27,6 +27,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <numbers>
@@ -378,6 +379,78 @@ TEST(VertexFactoryTreeSkinner, theBranchSwayIsContinuousAcrossTheJunctions)
 	}
 
 	EXPECT_LT(worst, 0.05F) << "two touching bark vertices sway apart (phasor gap " << worst << "): the wind opens a junction";
+}
+
+namespace
+{
+	/** @brief The canopy envelope of one level: the 99th percentile of the leaf vertices' distance to the trunk axis, and of their height. */
+	std::array< double, 2 >
+	canopyEnvelope (const Shape< float > & shape)
+	{
+		std::vector< double > radial;
+		std::vector< double > height;
+
+		/* The leaf group is the second one (TreeMesh::LeafGroup): {first triangle, triangle count}. */
+		if ( shape.groups().size() <= TreeMesh< float >::LeafGroup )
+		{
+			return {0.0, 0.0};
+		}
+
+		const auto [firstTriangle, triangleCount] = shape.groups()[TreeMesh< float >::LeafGroup];
+
+		for ( size_t index = firstTriangle; index < static_cast< size_t >(firstTriangle) + triangleCount && index < shape.triangles().size(); ++index )
+		{
+			const auto & triangle = shape.triangles()[index];
+
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				const auto & position = shape.vertices()[triangle.vertexIndex(corner)].position();
+
+				radial.push_back(std::hypot(static_cast< double >(position[Math::X]), static_cast< double >(position[Math::Z])));
+				height.push_back(static_cast< double >(position[Math::Y]));
+			}
+		}
+
+		if ( radial.empty() )
+		{
+			return {0.0, 0.0};
+		}
+
+		std::ranges::sort(radial);
+		std::ranges::sort(height);
+
+		return {radial[radial.size() * 99 / 100], height[height.size() * 99 / 100]};
+	}
+}
+
+/* A level of detail simplifies the tree, it must not change its VOLUME: the owner saw canopies shrink as the camera
+ * came closer (2026-09-23). The coarser levels keep fewer leaves and enlarge the survivors; enlarged from the petiole
+ * outward, a rim leaf reached far past the crown (+62 % radius at level 3 on the broadleaf). The envelope (99th
+ * percentile, radius and height) of every level must stay within 10 % in radius and 5 % in height of the finest one's
+ * (measured with half the leaves per level: -8 % / +2 % at worst). */
+TEST(VertexFactoryTreeSkinner, theCanopyEnvelopeHoldsAcrossTheLevels)
+{
+	for ( const auto & generator : {TreeGenerator::quakingAspen(), TreeGenerator::broadleaf(), TreeGenerator::conifer(), TreeGenerator::colonizedCrown()} )
+	{
+		auto ladder = generator;
+		ladder.setLevelOfDetailCount(4);
+
+		const auto mesh = ladder.generate(1);
+
+		ASSERT_EQ(mesh.levelCount(), 4U);
+
+		const auto finest = canopyEnvelope(mesh.shape(0));
+
+		ASSERT_GT(finest[0], 0.0);
+
+		for ( uint32_t level = 1; level < mesh.levelCount(); ++level )
+		{
+			const auto envelope = canopyEnvelope(mesh.shape(level));
+
+			EXPECT_NEAR(envelope[0] / finest[0], 1.0, 0.10) << ladder.leafMaterial() << " level " << level << ": the canopy radius changes (" << finest[0] << " m -> " << envelope[0] << " m)";
+			EXPECT_NEAR(envelope[1] / finest[1], 1.0, 0.05) << ladder.leafMaterial() << " level " << level << ": the canopy height changes (" << finest[1] << " m -> " << envelope[1] << " m)";
+		}
+	}
 }
 
 TEST(VertexFactoryTreeSkinner, theImposterIsACrossOfQuadsSpanningTheTree)

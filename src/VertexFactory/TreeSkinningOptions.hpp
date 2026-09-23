@@ -194,11 +194,14 @@ namespace EmEn::Base::VertexFactory
 				coarse.setRadialSegmentsMax(std::max(m_radialSegmentsMin, static_cast< uint32_t >(static_cast< vertex_data_t >(m_radialSegmentsMax) * factor)));
 				coarse.setTargetEdgeLength(m_targetEdgeLength / factor);
 				coarse.setAxialStride(m_axialStride * (1U << level));
-				/* ⚠️ The leaves fall FASTER than the rings, because they are where the triangles are:
-				 * on a quaking aspen the canopy is 97 500 of the 119 709 triangles of the finest
-				 * level. Halving both together barely moves the total. The survivors are enlarged by
-				 * the skinner, so the canopy keeps its coverage. */
-				coarse.setLeafFraction(m_leafFraction * factor * factor);
+				/* Half the leaves per step (owner decision 2026-09-23, "½ par niveau"): the survivors are enlarged by
+				 * sqrt(2) per step and pulled toward the crown centre by the skinner, so the canopy keeps its coverage
+				 * AND its volume. ⚠️ It was a QUARTER per step (the leaves are most of the triangles): level 3 then
+				 * enlarged each leaf 8 times, a card as large as the crown, and no placement could keep it inside —
+				 * the broadleaf canopy measured -12 % radius / +15 % height at level 3 even recentred (+62 % / +28 %
+				 * before the recentring), where half per step reads -8 % / +2 %, at 12.5 % of the finest level's leaf
+				 * triangles instead of 1.6 %. */
+				coarse.setLeafFraction(m_leafFraction * factor);
 
 				/* A twig of less than a few per cent of the trunk costs a tube and covers a pixel.
 				 * ⚠️ Gently: at 2 % of the trunk per level, the first step already ate every branch

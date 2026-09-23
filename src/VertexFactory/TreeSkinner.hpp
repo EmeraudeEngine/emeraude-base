@@ -139,6 +139,18 @@ namespace EmEn::Base::VertexFactory
 					buildWindHierarchy(context);
 				}
 
+				if ( !skeleton.leaves().empty() )
+				{
+					Math::Vector< 3, vertex_data_t > sum{};
+
+					for ( const auto & leaf : skeleton.leaves() )
+					{
+						sum += leaf.frame().position();
+					}
+
+					context.crownCenter = sum / static_cast< vertex_data_t >(skeleton.leaves().size());
+				}
+
 				/* Group 0: the bark. */
 				for ( const auto & branch : branches )
 				{
@@ -368,6 +380,8 @@ namespace EmEn::Base::VertexFactory
 				std::vector< vertex_data_t > pathStart{};
 				std::vector< vertex_data_t > branchPhase{};
 				vertex_data_t maxPath{1};
+				/* The centroid of the leaves: an enlarged leaf of a coarse level is pulled toward it (emitLeafCard()). */
+				Math::Vector< 3, vertex_data_t > crownCenter{};
 			};
 
 			/**
@@ -917,11 +931,37 @@ namespace EmEn::Base::VertexFactory
 
 				const auto occlusion = this->ambientOcclusion(context, frame.position());
 
-				this->emitCard(builder, frame.position(), along, frame.rightVector(), frame.backwardVector(), width, length, wind, occlusion, context);
+				/* ⚠️ A coarser level enlarges its surviving leaves k times (emitLeaves()). The card is enlarged about its
+				 * CENTRE, and that centre moves toward the crown centre by the (k - 1) half-diagonals it grew: the card's
+				 * farthest point from the crown centre stays where the finest level's was, whatever the leaf's
+				 * orientation, and the extra surface goes INTO the canopy. Grown from the petiole outward, a rim leaf
+				 * reached past the crown by (k - 1) of its length — the broadleaf's canopy was 62 %% wider at level 3, and
+				 * trees seemed to shrink as the camera came closer (owner, 2026-09-23). A level simplifies, it keeps the
+				 * volume (test theCanopyEnvelopeHoldsAcrossTheLevels). */
+				const auto originalLength = leaf.scale();
+				const auto growth = originalLength > 0 ? length / originalLength : static_cast< vertex_data_t >(1);
+				const auto originalCenter = frame.position() + along * (originalLength / static_cast< vertex_data_t >(2));
+				auto center = originalCenter;
+
+				if ( growth > static_cast< vertex_data_t >(1) )
+				{
+					const auto toCrown = context.crownCenter - originalCenter;
+					const auto distance = toCrown.length();
+					const auto halfDiagonal = std::sqrt(originalLength * originalLength + (originalLength * m_options.leafAspectRatio()) * (originalLength * m_options.leafAspectRatio())) / static_cast< vertex_data_t >(2);
+
+					if ( distance > static_cast< vertex_data_t >(1e-6) )
+					{
+						center += toCrown * (std::min((growth - static_cast< vertex_data_t >(1)) * halfDiagonal, distance) / distance);
+					}
+				}
+
+				const auto origin = center - along * (length / static_cast< vertex_data_t >(2));
+
+				this->emitCard(builder, origin, along, frame.rightVector(), frame.backwardVector(), width, length, wind, occlusion, context);
 
 				if ( m_options.leafCardMode() == TreeLeafCardMode::CrossedQuads )
 				{
-					this->emitCard(builder, frame.position(), along, frame.backwardVector(), frame.rightVector().inversed(), width, length, wind, occlusion, context);
+					this->emitCard(builder, origin, along, frame.backwardVector(), frame.rightVector().inversed(), width, length, wind, occlusion, context);
 				}
 			}
 

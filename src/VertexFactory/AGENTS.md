@@ -148,11 +148,19 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   that disagree by one cell show a neighbouring view. ⚠⚠ **The map is 2-to-1 on the border**, so two
   border cells legitimately hold the same view; never try to make them distinct
   (`docs/caution-points.md` § Math).
-- Measured, quaking aspen seed 1 (3 178 segments, 24 375 leaves), levels 0 to 3:
-  **119 709 / 29 457 / 7 403 / 1 736** triangles, 114 ms for the whole chain plus the card.
-  Conifer: 150 924 / 35 160 / 8 787. A colonized crown: 12 591 / 6 286 / 4 476 — it plateaus,
-  because its triangle count is set by its topology (874 short segments in 402 branches) rather
-  than by its radii.
+- **A level keeps the tree's VOLUME** (owner, 2026-09-23: "le LOD est censé décomplexifier l'arbre
+  sans changer son volume général"). Each level keeps HALF the leaves of the previous one
+  (`coarsened()`), the survivors are enlarged by sqrt(2) per level to keep the coverage, and each
+  enlarged card is pulled toward the crown centre by the half-diagonals it grew (`emitLeafCard()`),
+  so its farthest point stays the finest level's. ⚠️ Before: a QUARTER of the leaves per level,
+  enlarged from the petiole OUTWARD — the broadleaf canopy was **+62 % wider and +28 % taller** at
+  level 3, and trees shrank as the camera came closer. Now, worst of the four presets at level 3:
+  **−8 % radius, +2 % height**, leaf area 1.0 (test `theCanopyEnvelopeHoldsAcrossTheLevels`). A cap
+  on the enlargement was measured and rejected: ×3 left 14 % of the leaf area at level 3.
+- Measured 2026-09-23, seed 1, levels 0 to 3 (triangles): quaking aspen **119 709 / 53 833 /
+  25 683 / 12 400**, broadleaf 248 031 / 99 216 / 49 768 / 24 821, conifer 150 924 / 69 240 /
+  34 347 / 17 175, colonized crown 27 634 / 15 855 / 11 178 / 9 162 (it plateaus: its count is set
+  by its topology rather than its radii). The finest level of the broadleaf takes ~0.5 s.
 - See: `TreeSkinningOptions.hpp`, `TreeSkinner.hpp`, `TreeMesh.hpp`
 
 **TreeGenerator** - the façade
