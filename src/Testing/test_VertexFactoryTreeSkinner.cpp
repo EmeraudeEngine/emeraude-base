@@ -287,6 +287,99 @@ TEST(VertexFactoryTreeSkinner, theWindChannelsAreUsableAsWritten)
 		<< "the trunk bending weight does not grow with the height, the tree would sway from its foot";
 }
 
+/* The wind moves a vertex by its channels (engine AbstractVertexStage::generateVegetationWindCode()): the branch
+ * sway is G · sin(t + 2 pi B). Two CONNECTED vertices must move together, or the wind opens the junction, so the
+ * sway phasor G · (cos 2 pi B, sin 2 pi B) must be continuous where a branch leaves its parent. It was not until
+ * 2026-09-23: G restarted at 0 at every branch base while its parent carried ~0.5 there (owner: the wind tore the
+ * trees apart). A hand-built skeleton — a trunk, a limb, a twig on the limb's middle — has no other contact than
+ * its junctions (in a grown crown, twigs of different limbs cross without being connected, and may sway apart). */
+TEST(VertexFactoryTreeSkinner, theBranchSwayIsContinuousAcrossTheJunctions)
+{
+	TreeSkeleton< float > skeleton;
+
+	const auto addChain = [&skeleton] (Math::Vector< 3, float > start, Math::Vector< 3, float > axis, uint32_t count, float length, float startRadius, float endRadius, uint32_t parent, uint32_t branch, uint32_t order) {
+		axis = axis.normalized();
+
+		uint32_t previous = parent;
+
+		for ( uint32_t index = 0; index < count; ++index )
+		{
+			const auto t0 = static_cast< float >(index) / static_cast< float >(count);
+			const auto t1 = static_cast< float >(index + 1) / static_cast< float >(count);
+
+			previous = skeleton.addSegment(TreeSegment< float >{
+				makeTreeFrame(start + axis * (length * static_cast< float >(index)), axis),
+				length,
+				startRadius + (endRadius - startRadius) * t0,
+				startRadius + (endRadius - startRadius) * t1,
+				length * static_cast< float >(index),
+				previous,
+				branch,
+				order
+			});
+		}
+
+		return previous;
+	};
+
+	/* The trunk: 10 x 0.5 m up. The limb leaves it at 2.5 m; the twig leaves the limb's fifth segment. */
+	static_cast< void >(addChain({0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, 10, 0.5F, 0.15F, 0.08F, TreeSegment< float >::NoParent, 0, 0));
+	const auto limbAxis = Math::Vector< 3, float >{1.0F, 1.0F, 0.0F}.normalized();
+	const auto limbStart = skeleton.segmentCount();
+	static_cast< void >(addChain({0.0F, 2.5F, 0.0F}, limbAxis, 8, 0.4F, 0.06F, 0.025F, 4, 1, 1));
+	const auto twigParent = static_cast< uint32_t >(limbStart + 4);
+	static_cast< void >(addChain(Math::Vector< 3, float >{0.0F, 2.5F, 0.0F} + limbAxis * 1.6F, {0.0F, 1.0F, 1.0F}, 5, 0.3F, 0.03F, 0.02F, twigParent, 2, 2));
+
+	TreeSkinningOptions< float > options;
+	options.setLeafCardMode(TreeLeafCardMode::None);
+
+	const TreeSkinner< float > skinner{options};
+
+	const auto shape = skinner.skin(skeleton);
+
+	ASSERT_FALSE(shape.vertexColors().empty());
+
+	/* One phasor per vertex; every pair closer than 4 cm is compared. */
+	constexpr float Reach = 0.04F;
+
+	struct Sample
+	{
+		Math::Vector< 3, float > position;
+		float phasorX;
+		float phasorY;
+	};
+
+	std::vector< Sample > samples;
+
+	for ( const auto & triangle : shape.triangles() )
+	{
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			const auto & color = shape.vertexColors()[triangle.vertexColorIndex(corner)];
+			const auto angle = 2.0F * std::numbers::pi_v< float > * color[Math::Z];
+
+			samples.push_back({shape.vertices()[triangle.vertexIndex(corner)].position(), color[Math::Y] * std::cos(angle), color[Math::Y] * std::sin(angle)});
+		}
+	}
+
+	float worst = 0.0F;
+
+	for ( size_t first = 0; first < samples.size(); ++first )
+	{
+		for ( size_t second = first + 1; second < samples.size(); ++second )
+		{
+			if ( (samples[first].position - samples[second].position).length() > Reach )
+			{
+				continue;
+			}
+
+			worst = std::max(worst, std::hypot(samples[first].phasorX - samples[second].phasorX, samples[first].phasorY - samples[second].phasorY));
+		}
+	}
+
+	EXPECT_LT(worst, 0.05F) << "two touching bark vertices sway apart (phasor gap " << worst << "): the wind opens a junction";
+}
+
 TEST(VertexFactoryTreeSkinner, theImposterIsACrossOfQuadsSpanningTheTree)
 {
 	TreeGenerator generator;

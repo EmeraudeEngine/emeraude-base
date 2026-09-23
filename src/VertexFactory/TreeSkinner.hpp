@@ -134,6 +134,11 @@ namespace EmEn::Base::VertexFactory
 
 				Context context{skeleton, occlusion, baseHeight, treeHeight};
 
+				if ( m_options.windChannelsEnabled() )
+				{
+					buildWindHierarchy(context);
+				}
+
 				/* Group 0: the bark. */
 				for ( const auto & branch : branches )
 				{
@@ -357,7 +362,137 @@ namespace EmEn::Base::VertexFactory
 				const OcclusionField & occlusion;
 				vertex_data_t baseHeight;
 				vertex_data_t treeHeight;
+				/* The wind hierarchy (owner decision 2026-09-23, "hierarchie continue"), per segment: the distance
+				 * along the skeleton from the trunk to the segment START, and the phase of its first-order
+				 * ancestor. Both are continuous across a junction, which is what keeps a child on its parent. */
+				std::vector< vertex_data_t > pathStart{};
+				std::vector< vertex_data_t > branchPhase{};
+				vertex_data_t maxPath{1};
 			};
+
+			/**
+			 * @brief The wind of one branch: where it starts on the hierarchy and which phase it sways with.
+			 */
+			struct BranchWind final
+			{
+				vertex_data_t basePath{0};
+				vertex_data_t baseArc{0};
+				vertex_data_t phase{0};
+				bool isTrunk{false};
+			};
+
+			/**
+			 * @brief The wind of one leaf card: its twig's branch bending at the petiole and the tip, and the limb phase.
+			 */
+			struct LeafWind final
+			{
+				vertex_data_t petioleBend{0};
+				vertex_data_t tipBend{0};
+				vertex_data_t phase{0};
+			};
+
+			/**
+			 * @brief Returns a stable phase in [0, 1) for a branch index (Knuth's multiplicative hash).
+			 * @param branchIndex The branch index.
+			 * @return vertex_data_t
+			 */
+			[[nodiscard]]
+			static
+			vertex_data_t
+			phaseOf (uint32_t branchIndex) noexcept
+			{
+				return static_cast< vertex_data_t >((branchIndex * 2654435761U) % 1024U) / static_cast< vertex_data_t >(1024);
+			}
+
+			/**
+			 * @brief Fills the wind hierarchy of the context: path from the trunk and first-order phase, per segment.
+			 * @note A continuation (same branch) starts where its parent segment ends; a branch base starts at its
+			 * projection on the parent segment, 0 on the trunk. The phase is the first-order ancestor's, so a whole
+			 * limb — its twigs and its leaves — sways as one, and the trunk (G = 0) needs none.
+			 * @param context A reference to the context.
+			 * @return void
+			 */
+			static
+			void
+			buildWindHierarchy (Context & context) noexcept
+			{
+				const auto & segments = context.skeleton.segments();
+				const auto count = segments.size();
+
+				context.pathStart.assign(count, 0);
+				context.branchPhase.assign(count, 0);
+
+				std::vector< uint8_t > resolved(count, 0);
+				std::vector< uint32_t > stack;
+
+				for ( size_t index = 0; index < count; ++index )
+				{
+					/* Resolve the ancestry first (iteratively: a tree is thousands of segments deep at worst). */
+					stack.clear();
+
+					for ( auto current = static_cast< uint32_t >(index); current < count && resolved[current] == 0; )
+					{
+						stack.push_back(current);
+
+						const auto parent = segments[current].parentIndex();
+
+						if ( segments[current].isRoot() || parent >= count )
+						{
+							break;
+						}
+
+						current = parent;
+					}
+
+					while ( !stack.empty() )
+					{
+						const auto current = stack.back();
+						stack.pop_back();
+
+						const auto & segment = segments[current];
+						const auto parentIndex = segment.parentIndex();
+
+						if ( segment.order() == 0 || segment.isRoot() || parentIndex >= count )
+						{
+							context.pathStart[current] = 0;
+							context.branchPhase[current] = segment.order() == 0 ? static_cast< vertex_data_t >(0) : phaseOf(segment.branchIndex());
+						}
+						else
+						{
+							const auto & parent = segments[parentIndex];
+
+							if ( parent.branchIndex() == segment.branchIndex() )
+							{
+								context.pathStart[current] = context.pathStart[parentIndex] + parent.length();
+								context.branchPhase[current] = context.branchPhase[parentIndex];
+							}
+							else
+							{
+								const auto parentLength = std::max(parent.length(), static_cast< vertex_data_t >(1e-6));
+								const auto along = std::clamp(Math::Vector< 3, vertex_data_t >::dotProduct(segment.startPoint() - parent.startPoint(), parent.axis()) / parentLength, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
+
+								/* On the trunk the hierarchy starts over: the trunk has no branch bending (G = 0). */
+								context.pathStart[current] = parent.order() == 0 ? static_cast< vertex_data_t >(0) : context.pathStart[parentIndex] + along * parent.length();
+								context.branchPhase[current] = segment.order() == 1 ? phaseOf(segment.branchIndex()) : context.branchPhase[parentIndex];
+							}
+						}
+
+						resolved[current] = 1;
+					}
+				}
+
+				vertex_data_t maxPath = 0;
+
+				for ( size_t index = 0; index < count; ++index )
+				{
+					if ( segments[index].order() > 0 )
+					{
+						maxPath = std::max(maxPath, context.pathStart[index] + segments[index].length());
+					}
+				}
+
+				context.maxPath = std::max(maxPath, static_cast< vertex_data_t >(1e-3));
+			}
 
 			/**
 			 * @brief Groups the segments of a skeleton into continuous branches.
@@ -480,8 +615,12 @@ namespace EmEn::Base::VertexFactory
 
 				const auto references = this->buildRotationMinimizingFrames(positions, tangents);
 
-				const auto branchLength = arcs.back() > 0 ? arcs.back() : static_cast< vertex_data_t >(1);
-				const auto isTrunk = first.order() == 0;
+				const BranchWind wind{
+					.basePath = context.pathStart.empty() ? static_cast< vertex_data_t >(0) : context.pathStart[branch.segments.front()],
+					.baseArc = arcs.front(),
+					.phase = context.branchPhase.empty() ? static_cast< vertex_data_t >(0) : context.branchPhase[branch.segments.front()],
+					.isTrunk = first.order() == 0
+				};
 
 				/* The rings, then the quads between them. */
 				std::vector< std::vector< SkinVertex > > rings;
@@ -489,7 +628,7 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t station = 0; station < positions.size(); ++station )
 				{
-					rings.emplace_back(this->buildRing(context, positions[station], tangents[station], references[station], radii[station], radial, arcs[station], branchLength, isTrunk));
+					rings.emplace_back(this->buildRing(context, positions[station], tangents[station], references[station], radii[station], radial, arcs[station], wind));
 				}
 
 				for ( size_t station = 0; station + 1 < rings.size(); ++station )
@@ -508,7 +647,7 @@ namespace EmEn::Base::VertexFactory
 
 				/* Close on a single apex, never a cap disk: a disk on a branch tip is a visible
 				 * flat lid, and it doubles the vertices of the thinnest geometry of the tree. */
-				this->emitApex(builder, context, rings.back(), positions.back(), tangents.back(), radii.back(), arcs.back(), branchLength, isTrunk);
+				this->emitApex(builder, context, rings.back(), positions.back(), tangents.back(), radii.back(), arcs.back(), wind);
 			}
 
 			/**
@@ -579,13 +718,12 @@ namespace EmEn::Base::VertexFactory
 			 * @param radius The radius of the ring.
 			 * @param radial How many vertices the ring holds, the seam being duplicated.
 			 * @param arc The distance from the start of the branch.
-			 * @param branchLength The total length of the branch.
-			 * @param isTrunk Whether the branch is the trunk.
+			 * @param wind A reference to the branch's place in the wind hierarchy.
 			 * @return std::vector< SkinVertex >
 			 */
 			[[nodiscard]]
 			std::vector< SkinVertex >
-			buildRing (const Context & context, const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & tangent, const Math::Vector< 3, vertex_data_t > & reference, vertex_data_t radius, uint32_t radial, vertex_data_t arc, vertex_data_t branchLength, bool isTrunk) const noexcept
+			buildRing (const Context & context, const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & tangent, const Math::Vector< 3, vertex_data_t > & reference, vertex_data_t radius, uint32_t radial, vertex_data_t arc, const BranchWind & wind) const noexcept
 			{
 				std::vector< SkinVertex > ring;
 
@@ -595,7 +733,7 @@ namespace EmEn::Base::VertexFactory
 
 				const auto binormal = Math::Vector< 3, vertex_data_t >::crossProduct(tangent, reference);
 
-				const auto color = this->barkColor(context, position, arc, branchLength, isTrunk);
+				const auto color = this->barkColor(context, position, wind.basePath + (arc - wind.baseArc), wind);
 
 				const auto textureV = arc / m_options.barkTextureLength();
 
@@ -627,12 +765,11 @@ namespace EmEn::Base::VertexFactory
 			 * @param tangent A reference to the branch direction there.
 			 * @param radius The radius of the last ring.
 			 * @param arc The distance from the start of the branch.
-			 * @param branchLength The total length of the branch.
-			 * @param isTrunk Whether the branch is the trunk.
+			 * @param wind A reference to the branch's place in the wind hierarchy.
 			 * @return void
 			 */
 			void
-			emitApex (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const std::vector< SkinVertex > & ring, const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & tangent, vertex_data_t radius, vertex_data_t arc, vertex_data_t branchLength, bool isTrunk) const noexcept
+			emitApex (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const std::vector< SkinVertex > & ring, const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & tangent, vertex_data_t radius, vertex_data_t arc, const BranchWind & wind) const noexcept
 			{
 				if ( ring.size() < 2 )
 				{
@@ -643,7 +780,7 @@ namespace EmEn::Base::VertexFactory
 				apex.position = position + tangent * radius;
 				apex.normal = tangent;
 				apex.textureV = (arc + radius) / m_options.barkTextureLength();
-				apex.color = this->barkColor(context, apex.position, arc + radius, branchLength, isTrunk);
+				apex.color = this->barkColor(context, apex.position, wind.basePath + (arc + radius - wind.baseArc), wind);
 
 				for ( size_t side = 0; side + 1 < ring.size(); ++side )
 				{
@@ -656,16 +793,19 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Returns the vertex channels of a point of bark.
+			 * @note R trunk bending (from the height), G branch bending = the distance along the skeleton from the
+			 * trunk over the longest such distance — CONTINUOUS across every junction, a child starting where its
+			 * parent is (it restarted at 0 on every branch until 2026-09-23 and the wind tore the tree apart,
+			 * owner-spotted) —, B the first-order limb's phase, A the baked occlusion.
 			 * @param context A reference to the tree context.
 			 * @param position A reference to the point.
-			 * @param arc The distance from the start of the branch.
-			 * @param branchLength The total length of the branch.
-			 * @param isTrunk Whether the branch is the trunk.
+			 * @param path The distance along the skeleton from the trunk to this point.
+			 * @param wind A reference to the branch's place in the wind hierarchy.
 			 * @return Math::Vector< 4, vertex_data_t >
 			 */
 			[[nodiscard]]
 			Math::Vector< 4, vertex_data_t >
-			barkColor (const Context & context, const Math::Vector< 3, vertex_data_t > & position, vertex_data_t arc, vertex_data_t branchLength, bool isTrunk) const noexcept
+			barkColor (const Context & context, const Math::Vector< 3, vertex_data_t > & position, vertex_data_t path, const BranchWind & wind) const noexcept
 			{
 				if ( !m_options.windChannelsEnabled() )
 				{
@@ -678,11 +818,10 @@ namespace EmEn::Base::VertexFactory
 				 * trunk still while the crown swings. */
 				const auto trunkBend = std::pow(heightRatio, m_options.trunkBendExponent());
 
-				/* G: how much the BRANCH carries it. A trunk has no branch bending of its own, or
-				 * it would sway twice. */
-				const auto branchBend = isTrunk ? static_cast< vertex_data_t >(0) : std::clamp(arc / branchLength, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
+				/* G: how much the limb carries it. A trunk has no branch bending of its own, or it would sway twice. */
+				const auto branchBend = wind.isTrunk ? static_cast< vertex_data_t >(0) : std::clamp(path / context.maxPath, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
 
-				return {trunkBend, branchBend, 0, this->ambientOcclusion(context, position)};
+				return {trunkBend, branchBend, wind.phase, this->ambientOcclusion(context, position)};
 			}
 
 			/**
@@ -724,12 +863,9 @@ namespace EmEn::Base::VertexFactory
 				const auto scaleCompensation = static_cast< vertex_data_t >(1) / std::sqrt(std::max(fraction, static_cast< vertex_data_t >(1e-3)));
 
 				vertex_data_t accumulator = 0;
-				uint32_t leafIndex = 0;
 
 				for ( const auto & leaf : context.skeleton.leaves() )
 				{
-					++leafIndex;
-
 					/* Deterministic thinning: a running accumulator keeps the survivors spread
 					 * over the whole canopy, where "every n-th leaf" would carve visible rows. */
 					accumulator += fraction;
@@ -741,7 +877,7 @@ namespace EmEn::Base::VertexFactory
 
 					accumulator -= static_cast< vertex_data_t >(1);
 
-					this->emitLeafCard(builder, context, leaf, leaf.scale() * scaleCompensation, leafIndex);
+					this->emitLeafCard(builder, context, leaf, leaf.scale() * scaleCompensation);
 				}
 			}
 
@@ -751,30 +887,41 @@ namespace EmEn::Base::VertexFactory
 			 * @param context A reference to the tree context.
 			 * @param leaf A reference to the leaf attachment.
 			 * @param length The length of the card.
-			 * @param leafIndex The rank of the leaf, used to give it its own flutter phase.
 			 * @return void
 			 */
 			void
-			emitLeafCard (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const TreeLeafAttachment< vertex_data_t > & leaf, vertex_data_t length, uint32_t leafIndex) const noexcept
+			emitLeafCard (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const TreeLeafAttachment< vertex_data_t > & leaf, vertex_data_t length) const noexcept
 			{
 				const auto & frame = leaf.frame();
 
 				const auto along = frame.localYAxis();
 				const auto width = length * m_options.leafAspectRatio();
 
-				/* A phase that is stable for a given leaf and spread over [0, 1]: without it every
-				 * leaf of the tree flutters in unison, which reads as a pulsing blob. */
-				const auto phase = m_options.windChannelsEnabled() ?
-					static_cast< vertex_data_t >((leafIndex * 2654435761U) % 1024U) / static_cast< vertex_data_t >(1024) :
-					static_cast< vertex_data_t >(0);
+				/* The leaf sways WITH the twig it hangs on: its petiole takes the twig's branch bending at the
+				 * attachment point and the twig's limb phase (B). The flutter is the engine's, weighted by the card
+				 * V (0 at the petiole), so it never pulls the petiole off its twig. */
+				LeafWind wind{};
+				const auto & segments = context.skeleton.segments();
+
+				if ( !context.pathStart.empty() && leaf.segmentIndex() < segments.size() )
+				{
+					const auto & segment = segments[leaf.segmentIndex()];
+					const auto segmentLength = std::max(segment.length(), static_cast< vertex_data_t >(1e-6));
+					const auto alongSegment = std::clamp(Math::Vector< 3, vertex_data_t >::dotProduct(frame.position() - segment.startPoint(), segment.axis()) / segmentLength, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
+					const auto path = segment.order() == 0 ? static_cast< vertex_data_t >(0) : context.pathStart[leaf.segmentIndex()] + alongSegment * segment.length();
+
+					wind.petioleBend = segment.order() == 0 ? static_cast< vertex_data_t >(0) : std::clamp(path / context.maxPath, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
+					wind.tipBend = segment.order() == 0 ? static_cast< vertex_data_t >(0) : std::clamp((path + length) / context.maxPath, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
+					wind.phase = context.branchPhase[leaf.segmentIndex()];
+				}
 
 				const auto occlusion = this->ambientOcclusion(context, frame.position());
 
-				this->emitCard(builder, frame.position(), along, frame.rightVector(), frame.backwardVector(), width, length, phase, occlusion, context);
+				this->emitCard(builder, frame.position(), along, frame.rightVector(), frame.backwardVector(), width, length, wind, occlusion, context);
 
 				if ( m_options.leafCardMode() == TreeLeafCardMode::CrossedQuads )
 				{
-					this->emitCard(builder, frame.position(), along, frame.backwardVector(), frame.rightVector().inversed(), width, length, phase, occlusion, context);
+					this->emitCard(builder, frame.position(), along, frame.backwardVector(), frame.rightVector().inversed(), width, length, wind, occlusion, context);
 				}
 			}
 
@@ -787,13 +934,13 @@ namespace EmEn::Base::VertexFactory
 			 * @param normal A reference to the blade normal.
 			 * @param width The width of the blade.
 			 * @param length The length of the blade.
-			 * @param phase The flutter phase of the leaf.
+			 * @param wind A reference to the leaf's place in the wind hierarchy.
 			 * @param occlusion The baked occlusion of the leaf.
 			 * @param context A reference to the tree context.
 			 * @return void
 			 */
 			void
-			emitCard (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Math::Vector< 3, vertex_data_t > & origin, const Math::Vector< 3, vertex_data_t > & along, const Math::Vector< 3, vertex_data_t > & across, const Math::Vector< 3, vertex_data_t > & normal, vertex_data_t width, vertex_data_t length, vertex_data_t phase, vertex_data_t occlusion, const Context & context) const noexcept
+			emitCard (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Math::Vector< 3, vertex_data_t > & origin, const Math::Vector< 3, vertex_data_t > & along, const Math::Vector< 3, vertex_data_t > & across, const Math::Vector< 3, vertex_data_t > & normal, vertex_data_t width, vertex_data_t length, const LeafWind & wind, vertex_data_t occlusion, const Context & context) const noexcept
 			{
 				const auto half = width / static_cast< vertex_data_t >(2);
 
@@ -815,14 +962,12 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto heightRatio = std::clamp((corners[corner].position[Math::Y] - context.baseHeight) / context.treeHeight, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1));
 
-						/* A leaf sits at the end of everything, so it takes a full share of the branch
-						 * bending — and the tip of the blade takes more of it than the petiole, which is
-						 * attached. The flutter phase is constant over the card: it identifies the leaf,
-						 * it does not vary across it. */
+						/* The petiole takes its twig's branch bending, the tip a little more (it is further along
+						 * the same limb); both take the limb's phase, so the whole card moves with its twig. */
 						corners[corner].color = {
 							std::pow(heightRatio, m_options.trunkBendExponent()),
-							top ? static_cast< vertex_data_t >(1) : static_cast< vertex_data_t >(0.5),
-							phase,
+							top ? wind.tipBend : wind.petioleBend,
+							wind.phase,
 							occlusion
 						};
 					}

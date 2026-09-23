@@ -120,10 +120,20 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
 - Two groups, always: `TreeMesh::BarkGroup` then `TreeMesh::LeafGroup`, so
   `Interface::buildSubGeometries()` gives the engine two sub-geometries and therefore two
   materials. The leaf group is declared even when empty.
-- Vertex channels (Crytek/SpeedTree convention): **R** trunk bending weight (normalized height,
-  raised to `trunkBendExponent`), **G** branch bending weight (arc along the branch; 0 on the
-  trunk, which would otherwise sway twice), **B** leaf flutter phase (constant per card), **A**
-  baked occlusion.
+- Vertex channels (Crytek/SpeedTree convention, made CONTINUOUS 2026-09-23 — owner decision
+  "hiérarchie continue"): **R** trunk bending weight (normalized height, raised to
+  `trunkBendExponent`), **G** branch bending weight = the distance along the skeleton FROM THE
+  TRUNK over the longest such distance (0 on the trunk, which would otherwise sway twice; a child
+  starts where its parent is), **B** the phase of the FIRST-ORDER limb, shared by everything it
+  carries (twigs and leaves), **A** baked occlusion. A leaf card takes its twig's G at the petiole
+  (a little more at the tip) and its twig's B: it sways WITH the twig; its flutter is the engine's,
+  weighted by the card V. `TreeSkinner::buildWindHierarchy()` resolves the path and phase per
+  segment.
+- ⚠️⚠️ **Until 2026-09-23 G was `arc / branch length`, restarting at 0 at every branch base**, and B was
+  a per-LEAF phase that also drove the branch wave: every child branch stayed put where its parent
+  swayed (~0.5 G) and every leaf swayed out of phase with its twig — the wind tore the trees apart
+  (owner-spotted). Regression test `theBranchSwayIsContinuousAcrossTheJunctions` (a hand-built
+  skeleton: the old formula reads a 0.51 phasor gap at the junction, the new one < 0.05).
 - ⚠️ The **A channel is a DENSITY estimate, not ray-traced occlusion**: it counts leaves and
   branch nodes in the cell around a point, normalized on the densest cell. It captures the one
   thing that reads — the inside of a canopy is darker than its rim — for a hash lookup. Real
