@@ -158,9 +158,15 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   **−8 % radius, +2 % height**, leaf area 1.0 (test `theCanopyEnvelopeHoldsAcrossTheLevels`). A cap
   on the enlargement was measured and rejected: ×3 left 14 % of the leaf area at level 3.
 - Measured 2026-09-23, seed 1, levels 0 to 3 (triangles): quaking aspen **119 709 / 53 833 /
-  25 683 / 12 400**, broadleaf 248 031 / 99 216 / 49 768 / 24 821, conifer 150 924 / 69 240 /
+  25 683 / 12 400**, broadleaf 287 622 / 117 516 / 58 048 / 28 968 (after the base-split fix below), conifer 150 924 / 69 240 /
   34 347 / 17 175, colonized crown 27 634 / 15 855 / 11 178 / 9 162 (it plateaus: its count is set
   by its topology rather than its radii). The finest level of the broadleaf takes ~0.5 s.
+- ⚠️⚠️ **`nBaseSplits` forks the ORIGINAL trunk once** (`StemRequest::baseSplitAllowed`): a fork clone is a
+  level-0 stem restarting at segment 0, and until 2026-09-23 every clone forked again at its own base —
+  364 "trunks" on the broadleaf, the 243 last ones BARE, 1.5 cm thick, poking 2 m out of the crown and
+  popping in when the finest level took over (owner-spotted). Test
+  `theTrunkForksOnlyAtItsBaseAndNoStemIsBare`. Diagnose a stem that sticks out by counting the order-0
+  branches and the branches that carry neither a child nor a leaf, before touching the skinner or the LOD.
 - See: `TreeSkinningOptions.hpp`, `TreeSkinner.hpp`, `TreeMesh.hpp`
 
 **TreeGenerator** - the façade

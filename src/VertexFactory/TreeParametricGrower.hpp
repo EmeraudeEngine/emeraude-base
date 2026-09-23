@@ -170,6 +170,11 @@ namespace EmEn::Base::VertexFactory
 				 * reset, a forking broadleaf reached the 400 000 segment ceiling. */
 				vertex_data_t childShare{1};
 				vertex_data_t inheritedSplitError{0};
+				/* NOTE: nBaseSplits forks the ORIGINAL trunk at its first segment, once (Weber & Penn). A fork clone is
+				 * grown as a level-0 stem too and restarts at segment 0: without this flag every clone forked again at
+				 * its own base — 1 + 3 + 9 + 27 + 81 + 243 = 364 "trunks" on the broadleaf, the 243 last ones bare,
+				 * thin and poking 2 m out of the crown (owner, 2026-09-23: branches popping in on approach). */
+				bool baseSplitAllowed{true};
 			};
 
 			/**
@@ -335,7 +340,7 @@ namespace EmEn::Base::VertexFactory
 					 * a value of 0.3 forks roughly every third segment. */
 					uint32_t splitCount = 0;
 
-					if ( index == 0 && request.level == 0 && levelParameters.baseSplits() > 0 )
+					if ( index == 0 && request.level == 0 && request.baseSplitAllowed && levelParameters.baseSplits() > 0 )
 					{
 						splitCount = levelParameters.baseSplits();
 					}
@@ -444,6 +449,7 @@ namespace EmEn::Base::VertexFactory
 					cloneRequest.segmentCountOverride = remainingSegments;
 					cloneRequest.childShare = request.childShare / static_cast< vertex_data_t >(cloneCount);
 					cloneRequest.inheritedSplitError = splitError;
+					cloneRequest.baseSplitAllowed = false;
 
 					this->growStem(state, cloneRequest);
 				}

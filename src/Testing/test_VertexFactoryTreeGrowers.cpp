@@ -27,6 +27,7 @@
 
 /* STL inclusions. */
 #include <cstdint>
+#include <algorithm>
 #include <vector>
 
 /* Local inclusions. */
@@ -132,6 +133,48 @@ TEST(VertexFactoryTreeSkeleton, growersAddAParentBeforeItsChild)
 		{
 			EXPECT_LT(segment.parentIndex(), index) << "colonization segment " << index << " was added before its parent";
 		}
+	}
+}
+
+/* nBaseSplits forks the ORIGINAL trunk once, at its base (Weber & Penn). Every fork clone is a level-0 stem too, and
+ * until 2026-09-23 each one forked again at its own base: 364 "trunks" on the broadleaf (2 base splits, 6 trunk
+ * segments: 1 + 3 + 9 + 27 + 81 + 243), the 243 last ones bare and poking 2 m out of the crown, popping in as the
+ * camera came close (the finest level of detail is the only one to keep such thin stems). */
+TEST(VertexFactoryTreeParametricGrower, theTrunkForksOnlyAtItsBaseAndNoStemIsBare)
+{
+	const auto parameters = TreeParameters< float >::broadleaf();
+	const TreeParametricGrower< float > grower{parameters};
+
+	const auto skeleton = grower.grow(1);
+
+	ASSERT_FALSE(skeleton.empty());
+
+	std::vector< uint32_t > carried(skeleton.branchCount(), 0);
+	std::vector< uint32_t > orderOf(skeleton.branchCount(), 0);
+
+	for ( const auto & segment : skeleton.segments() )
+	{
+		orderOf[segment.branchIndex()] = segment.order();
+
+		if ( !segment.isRoot() && segment.parentIndex() < skeleton.segmentCount() && skeleton.segments()[segment.parentIndex()].branchIndex() != segment.branchIndex() )
+		{
+			carried[skeleton.segments()[segment.parentIndex()].branchIndex()]++;
+		}
+	}
+
+	for ( const auto & leaf : skeleton.leaves() )
+	{
+		carried[skeleton.segments()[leaf.segmentIndex()].branchIndex()]++;
+	}
+
+	const auto trunks = static_cast< uint32_t >(std::ranges::count(orderOf, 0U));
+
+	/* The trunk below the fork, plus baseSplits + 1 clones. */
+	EXPECT_LE(trunks, parameters.level(0).baseSplits() + 2U) << "the trunk forked again at the base of its own clones";
+
+	for ( size_t branch = 0; branch < carried.size(); ++branch )
+	{
+		EXPECT_GT(carried[branch], 0U) << "branch " << branch << " (order " << orderOf[branch] << ") carries neither a child nor a leaf: a bare whip";
 	}
 }
 
