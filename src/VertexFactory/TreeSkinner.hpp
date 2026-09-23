@@ -935,7 +935,7 @@ namespace EmEn::Base::VertexFactory
 				 * CENTRE, and that centre moves toward the crown centre by the (k - 1) half-diagonals it grew: the card's
 				 * farthest point from the crown centre stays where the finest level's was, whatever the leaf's
 				 * orientation, and the extra surface goes INTO the canopy. Grown from the petiole outward, a rim leaf
-				 * reached past the crown by (k - 1) of its length — the broadleaf's canopy was 62 %% wider at level 3, and
+				 * reached past the crown by (k - 1) of its length — the broadleaf's canopy was 62 % wider at level 3, and
 				 * trees seemed to shrink as the camera came closer (owner, 2026-09-23). A level simplifies, it keeps the
 				 * volume (test theCanopyEnvelopeHoldsAcrossTheLevels). */
 				const auto originalLength = leaf.scale();

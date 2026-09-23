@@ -70,8 +70,12 @@ namespace EmEn::Base::VertexFactory
 		generator.parameters() = TreeParameters< float >::conifer();
 		generator.setBarkMaterial(DefaultBark);
 		generator.setLeafMaterial("Vegetals/leaf007");
-		/* leaf007 is 1024 x 2048: a card twice as long as wide keeps the twig undistorted. */
+		/* leaf007 is 1024 x 2048: a card twice as long as wide keeps the twig undistorted. ⚠️ The card is a whole
+		 * TWIG of needles, 23 % opaque (the old fullfoliage card was 96 %): at the preset's 10 cm the crown was 54 %
+		 * opaque (99 % before) and the far conifers showed their trunks alone (owner, 2026-09-23). A 20 cm twig
+		 * stacks back to 77 % of the foliage footprint, 42 % of the crown box (38 % before), for no triangle. */
 		generator.skinningOptions().setLeafAspectRatio(0.5F);
+		generator.parameters().setLeafScale(0.2F);
 
 		return generator;
 	}
@@ -88,6 +92,9 @@ namespace EmEn::Base::VertexFactory
 		generator.setBarkMaterial(DefaultBark);
 		generator.setLeafMaterial("Vegetals/leaf002");
 		generator.skinningOptions().setLeafAspectRatio(1.0F);
+		/* leaf002 is 36 % opaque against fullfoliage's 96 %: 1.5 times the leaf size holds the sparse colonized crown
+		 * at 18 % of its box (12.5 % before the new leaves) for no triangle; doubling the leaves cost 36 % more. */
+		generator.colonizationGrower().setLeafScale(0.225F);
 
 		return generator;
 	}

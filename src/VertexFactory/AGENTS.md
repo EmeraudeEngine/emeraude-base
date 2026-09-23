@@ -186,6 +186,12 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
 - ⚠️ **The leaf card's width/length must be the leaf IMAGE's** (`skinningOptions().setLeafAspectRatio()`):
   the texture covers the whole card. 1 for a square image, 0.5 for the 1024 × 2048 pine twig; the
   presets set it (the former default 0.7 squashed every square leaf).
+- ⚠️ **A leaf image's OPACITY sets the leaf size a preset needs.** `conifer()`'s leaf007 is a whole twig of
+  needles, 23 % opaque (the old `fullfoliage` card was 96 %): at the preset's 10 cm the crown fell from 99 %
+  to 54 % opaque, so the preset now sets `setLeafScale(0.2)` (77 % of the foliage footprint back, no
+  triangle added). `colonizedCrown()`'s leaf002 is 36 % opaque: `colonizationGrower().setLeafScale(0.225)`.
+  Measure the mask's coverage before choosing a size. ⚠️ Density was NOT why the far pines were bare: that
+  was the fixed alpha-test threshold on the mips (engine `src/Graphics/AGENTS.md` § Alpha COVERAGE).
 - ⚠️ **V = 1 at the petiole, V = 0 at the tip** (`TreeSkinner::emitCard()`): V = 0 is the image's first
   row, its top, and a leaf image stands on its stem. It was the other way round until 2026-09-23 —
   every leaf upside down (owner-spotted).
