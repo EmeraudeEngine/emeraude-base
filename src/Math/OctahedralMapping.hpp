@@ -152,20 +152,18 @@ namespace EmEn::Base::Math
 	};
 
 	/**
-	 * @brief Returns the three nearest atlas cells for a direction, with their blend weights.
-	 * @note A square grid splits into triangles, so THREE cells surround any point and their
-	 * barycentric coordinates are the natural weights. Blending only the nearest cell makes the
-	 * imposter jump as the camera turns; blending four would need a bilinear weight over a quad
-	 * that the diagonal already cut in two.
+	 * @brief Returns the three lattice cells around a point of the unit square, with their barycentric weights.
+	 * @note The part octahedralBlend() and hemiOctahedralBlend() share: both maps put the cell CENTRES on the
+	 * same (gridSize - 1) lattice, only the direction-to-square step differs.
 	 * @tparam precision_t The type of floating point number. Default float.
-	 * @param direction The view direction. It does not have to be normalized.
+	 * @param point A reference to a point of the unit square.
 	 * @param gridSize The number of cells per side of the atlas. Values below 2 give a single cell.
 	 * @return OctahedralBlend< precision_t >
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
 	OctahedralBlend< precision_t >
-	octahedralBlend (const Vector< 3, precision_t > & direction, uint32_t gridSize) noexcept
+	octahedralLatticeBlend (const Vector< 2, precision_t > & point, uint32_t gridSize) noexcept
 		requires (std::is_floating_point_v< precision_t >)
 	{
 		OctahedralBlend< precision_t > blend;
@@ -177,8 +175,6 @@ namespace EmEn::Base::Math
 
 			return blend;
 		}
-
-		const auto point = octahedralEncode(direction);
 
 		/* The cell CENTRES sit on a (gridSize - 1) lattice, so the corner cells hold the extreme
 		 * directions and the map covers the whole square with no half-cell margin. */
@@ -210,6 +206,26 @@ namespace EmEn::Base::Math
 	}
 
 	/**
+	 * @brief Returns the three nearest atlas cells for a direction, with their blend weights.
+	 * @note A square grid splits into triangles, so THREE cells surround any point and their
+	 * barycentric coordinates are the natural weights. Blending only the nearest cell makes the
+	 * imposter jump as the camera turns; blending four would need a bilinear weight over a quad
+	 * that the diagonal already cut in two.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 * @param direction The view direction. It does not have to be normalized.
+	 * @param gridSize The number of cells per side of the atlas. Values below 2 give a single cell.
+	 * @return OctahedralBlend< precision_t >
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	OctahedralBlend< precision_t >
+	octahedralBlend (const Vector< 3, precision_t > & direction, uint32_t gridSize) noexcept
+		requires (std::is_floating_point_v< precision_t >)
+	{
+		return octahedralLatticeBlend(octahedralEncode(direction), gridSize);
+	}
+
+	/**
 	 * @brief Returns the direction an atlas cell must be rendered from.
 	 * @note The exact inverse of octahedralBlend()'s lattice: the baker and the shader must agree
 	 * on where a cell sits, or the imposter shows a neighbouring view.
@@ -236,5 +252,163 @@ namespace EmEn::Base::Math
 			static_cast< precision_t >(std::min(cellX, gridSize - 1)) / lattice,
 			static_cast< precision_t >(std::min(cellY, gridSize - 1)) / lattice
 		});
+	}
+
+	/**
+	 * @brief Maps an UPPER-hemisphere direction to a point of the unit square (hemi-octahedral map).
+	 * @note The imposter of a tree planted on the ground is only ever seen from above the horizon, so the
+	 * atlas spends all its cells there: the upper half of the octahedron, |x| + |z| <= 1 - y, is a diamond,
+	 * and turning it by 45° fills the whole square — u = x + z, v = z - x. Unlike the full map there is NO
+	 * fold and NO 2-to-1 border: the square's edge is the horizon, every point of it a distinct direction.
+	 * The same parametrisation as Ryan Brucks' octahedral imposters (Unreal Engine, "Octahedral Impostors",
+	 * 2018), which introduced the hemi variant for foliage.
+	 * @note A direction BELOW the horizon is clamped onto it (y set to 0): a tree seen from slightly below
+	 * shows its horizon view.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 * @param direction The direction. It does not have to be normalized.
+	 * @return Vector< 2, precision_t > A point in [0, 1]².
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	Vector< 2, precision_t >
+	hemiOctahedralEncode (const Vector< 3, precision_t > & direction) noexcept
+		requires (std::is_floating_point_v< precision_t >)
+	{
+		constexpr auto Half = static_cast< precision_t >(0.5);
+
+		const auto clampedY = std::max(direction[Y], static_cast< precision_t >(0));
+		const auto norm = std::abs(direction[X]) + clampedY + std::abs(direction[Z]);
+
+		if ( norm <= static_cast< precision_t >(0) )
+		{
+			return {Half, Half};
+		}
+
+		const auto projectedX = direction[X] / norm;
+		const auto projectedZ = direction[Z] / norm;
+
+		/* The diamond turned by 45°, then [-1, 1] to [0, 1]. */
+		return {(projectedX + projectedZ) * Half + Half, (projectedZ - projectedX) * Half + Half};
+	}
+
+	/**
+	 * @brief Maps a point of the unit square back to an upper-hemisphere direction.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 * @param point A reference to a point in [0, 1]².
+	 * @return Vector< 3, precision_t > A normalized direction, y >= 0.
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	Vector< 3, precision_t >
+	hemiOctahedralDecode (const Vector< 2, precision_t > & point) noexcept
+		requires (std::is_floating_point_v< precision_t >)
+	{
+		constexpr auto One = static_cast< precision_t >(1);
+		constexpr auto Two = static_cast< precision_t >(2);
+		constexpr auto Half = static_cast< precision_t >(0.5);
+
+		const auto u = point[X] * Two - One;
+		const auto v = point[Y] * Two - One;
+
+		/* The inverse of the 45° turn: |x| + |z| = max(|u|, |v|) <= 1, so y never goes negative. */
+		const auto resultX = (u - v) * Half;
+		const auto resultZ = (u + v) * Half;
+		const auto resultY = std::max(One - std::abs(resultX) - std::abs(resultZ), static_cast< precision_t >(0));
+
+		return Vector< 3, precision_t >{resultX, resultY, resultZ}.normalized();
+	}
+
+	/**
+	 * @brief Returns the three nearest hemi-octahedral atlas cells for a direction, with their blend weights.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 * @param direction The view direction (from the object toward the eye). It does not have to be normalized.
+	 * @param gridSize The number of cells per side of the atlas. Values below 2 give a single cell.
+	 * @return OctahedralBlend< precision_t >
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	OctahedralBlend< precision_t >
+	hemiOctahedralBlend (const Vector< 3, precision_t > & direction, uint32_t gridSize) noexcept
+		requires (std::is_floating_point_v< precision_t >)
+	{
+		return octahedralLatticeBlend(hemiOctahedralEncode(direction), gridSize);
+	}
+
+	/**
+	 * @brief Returns the direction a hemi-octahedral atlas cell must be rendered from.
+	 * @note The exact inverse of hemiOctahedralBlend()'s lattice. The cells of the outer ring hold the horizon.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 * @param cellX The cell column, in [0, gridSize - 1].
+	 * @param cellY The cell row, in [0, gridSize - 1].
+	 * @param gridSize The number of cells per side of the atlas.
+	 * @return Vector< 3, precision_t > A normalized direction, y >= 0.
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	Vector< 3, precision_t >
+	hemiOctahedralCellDirection (uint32_t cellX, uint32_t cellY, uint32_t gridSize) noexcept
+		requires (std::is_floating_point_v< precision_t >)
+	{
+		if ( gridSize < 2 )
+		{
+			return Vector< 3, precision_t >::positiveY();
+		}
+
+		const auto lattice = static_cast< precision_t >(gridSize - 1);
+
+		return hemiOctahedralDecode(Vector< 2, precision_t >{
+			static_cast< precision_t >(std::min(cellX, gridSize - 1)) / lattice,
+			static_cast< precision_t >(std::min(cellY, gridSize - 1)) / lattice
+		});
+	}
+
+	/**
+	 * @brief The camera frame an imposter cell is rendered with, and read back with.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 */
+	template< typename precision_t = float >
+	struct ImposterCellFrame final
+	{
+		/** @brief The image's +X, in object space. */
+		Vector< 3, precision_t > right;
+		/** @brief The image's +Y, in object space. */
+		Vector< 3, precision_t > up;
+		/** @brief Toward the camera (the cell direction); the camera looks along its opposite. */
+		Vector< 3, precision_t > back;
+	};
+
+	/**
+	 * @brief Returns the camera frame of the view along a direction: right-handed, back = the direction, up = the
+	 * world +Y made orthogonal to it.
+	 * @note ⚠️ The baker renders a cell with this frame and the shader projects onto the cell's plane with it:
+	 * they must build it the SAME way, from the SAME direction (the one hemiOctahedralCellDirection() returns),
+	 * or the view turns in its cell. Near the pole the world up is parallel to the direction; the frame then
+	 * takes -Z as its up, so the image of the top view keeps -Z (forward) at its top. The frames of the cells
+	 * around the pole turn about it — a property of any frame field on a sphere, harmless because each cell
+	 * is read with its own frame.
+	 * @tparam precision_t The type of floating point number. Default float.
+	 * @param direction The direction toward the camera. It does not have to be normalized.
+	 * @return ImposterCellFrame< precision_t >
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	ImposterCellFrame< precision_t >
+	imposterCellFrame (const Vector< 3, precision_t > & direction) noexcept
+		requires (std::is_floating_point_v< precision_t >)
+	{
+		constexpr auto PoleThreshold = static_cast< precision_t >(0.9999);
+
+		ImposterCellFrame< precision_t > frame;
+
+		frame.back = direction.normalized();
+
+		const auto reference = std::abs(frame.back[Y]) >= PoleThreshold ?
+			Vector< 3, precision_t >::negativeZ() :
+			Vector< 3, precision_t >::positiveY();
+
+		frame.up = (reference - frame.back * Vector< 3, precision_t >::dotProduct(reference, frame.back)).normalized();
+		frame.right = Vector< 3, precision_t >::crossProduct(frame.up, frame.back);
+
+		return frame;
 	}
 }

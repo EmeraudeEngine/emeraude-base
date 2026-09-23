@@ -30,11 +30,13 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <type_traits>
+#include <vector>
 
 /* Local inclusions. */
 #include "Math/Space2D/Circle.hpp"
@@ -1106,6 +1108,139 @@ namespace EmEn::Base::PixelFactory
 					case FilteringMode::Nearest :
 						resizeNearest(source, width, height, destination, pool);
 						break;
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief Reduces a pixmap with an exact AREA-WEIGHTED box filter: every destination pixel is the mean of the
+			 * source footprint it covers, fractional pixels weighted by the fraction covered. The mip filter.
+			 * @note ⚠️ Not resize(): its Linear mode is a BILINEAR RESAMPLE for display — it reads the two source pixels
+			 * around one point per destination pixel, at x·(w−1)/W from the top-left corner, so a 1 × 1 target is the
+			 * corner pixel alone. Used to build a mip chain, it lost the mean of every texture: measured on a 23 % leaf
+			 * mask (1022 × 2048), 0.35 at 3 × 8, then 0.001 at 1 × 4 — the needles vanished beyond ~300 m (Sept 2026).
+			 * This filter keeps the mean EXACTLY at every size, odd and non-power-of-two ones included (the footprint
+			 * of an odd width is 2.x pixels, split across its neighbours by coverage, never truncated).
+			 * @note Integral channels are rounded to nearest; the accumulation is in double.
+			 * @param source A reference to the source pixmap.
+			 * @param width The destination width, in [1, source width].
+			 * @param height The destination height, in [1, source height].
+			 * @param destination A writable reference to the destination pixmap.
+			 * @return bool False on an invalid source or an enlarging size.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			downsample (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & destination) noexcept
+			{
+				if ( !source.isValid() || width == 0 || height == 0 || width > source.width() || height > source.height() )
+				{
+					return false;
+				}
+
+				if ( width == source.width() && height == source.height() )
+				{
+					destination = source;
+
+					return true;
+				}
+
+				if ( !destination.initialize(width, height, source.channelMode()) )
+				{
+					return false;
+				}
+
+				struct Tap final
+				{
+					size_t index;
+					double weight;
+				};
+
+				/* The taps of one destination column (or row): every source pixel its footprint overlaps, weighted by
+				 * the overlap, normalised by the footprint so the weights sum to 1. */
+				const auto buildTaps = [] (size_t sourceSize, size_t destinationSize) {
+					std::vector< std::vector< Tap > > taps(destinationSize);
+
+					const auto scale = static_cast< double >(sourceSize) / static_cast< double >(destinationSize);
+
+					for ( size_t target = 0; target < destinationSize; ++target )
+					{
+						const auto start = static_cast< double >(target) * scale;
+						const auto end = static_cast< double >(target + 1) * scale;
+
+						for ( auto index = static_cast< size_t >(std::floor(start)); index < std::min(static_cast< size_t >(std::ceil(end)), sourceSize); ++index )
+						{
+							const auto overlap = std::min(end, static_cast< double >(index + 1)) - std::max(start, static_cast< double >(index));
+
+							if ( overlap > 0.0 )
+							{
+								taps[target].push_back({index, overlap / scale});
+							}
+						}
+					}
+
+					return taps;
+				};
+
+				const auto channels = static_cast< size_t >(source.colorCount());
+				const auto sourceWidth = static_cast< size_t >(source.width());
+				const auto sourceHeight = static_cast< size_t >(source.height());
+				const auto targetWidth = static_cast< size_t >(width);
+				const auto targetHeight = static_cast< size_t >(height);
+
+				const auto columnTaps = buildTaps(sourceWidth, targetWidth);
+				const auto rowTaps = buildTaps(sourceHeight, targetHeight);
+
+				const auto & sourceData = source.data();
+
+				/* Separable: the rows first, into a double buffer, then the columns of that buffer. */
+				std::vector< double > horizontal(sourceHeight * targetWidth * channels, 0.0);
+
+				for ( size_t y = 0; y < sourceHeight; ++y )
+				{
+					for ( size_t x = 0; x < targetWidth; ++x )
+					{
+						auto * output = &horizontal[(y * targetWidth + x) * channels];
+
+						for ( const auto & tap : columnTaps[x] )
+						{
+							const auto * input = &sourceData[(y * sourceWidth + tap.index) * channels];
+
+							for ( size_t channel = 0; channel < channels; ++channel )
+							{
+								output[channel] += static_cast< double >(input[channel]) * tap.weight;
+							}
+						}
+					}
+				}
+
+				auto & targetData = destination.data();
+
+				for ( size_t y = 0; y < targetHeight; ++y )
+				{
+					for ( size_t x = 0; x < targetWidth; ++x )
+					{
+						for ( size_t channel = 0; channel < channels; ++channel )
+						{
+							double value = 0.0;
+
+							for ( const auto & tap : rowTaps[y] )
+							{
+								value += horizontal[(tap.index * targetWidth + x) * channels + channel] * tap.weight;
+							}
+
+							if constexpr ( std::is_integral_v< pixel_data_t > )
+							{
+								constexpr auto Lowest = static_cast< double >(std::numeric_limits< pixel_data_t >::lowest());
+								constexpr auto Highest = static_cast< double >(std::numeric_limits< pixel_data_t >::max());
+
+								value = std::clamp(std::round(value), Lowest, Highest);
+							}
+
+							targetData[(y * targetWidth + x) * channels + channel] = static_cast< pixel_data_t >(value);
+						}
+					}
 				}
 
 				return true;

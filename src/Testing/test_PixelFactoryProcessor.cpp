@@ -27,6 +27,10 @@
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
+/* STL inclusions. */
+#include <algorithm>
+#include <array>
+
 /* Local inclusions. */
 #include "Constants.hpp"
 #include "PixelFactory/FileIO.hpp"
@@ -1195,4 +1199,104 @@ TEST(PixelFactoryProcessor, pixmapStencilRespectsMask)
 		ASSERT_TRUE(processor.stencil(source, Math::Space2D::AARectangle< uint32_t >{0, 0, 4, 2}, mask, DrawPixelMode::Replace, 1.0F));
 		checkResult(target);
 	}
+}
+
+namespace
+{
+	/** @brief The mean of channel 0 of a pixmap, in [0, 1]. */
+	double
+	channelMean (const Pixmap< uint8_t > & pixmap) noexcept
+	{
+		const auto & data = pixmap.data();
+		const auto stride = static_cast< size_t >(pixmap.colorCount());
+
+		double sum = 0.0;
+
+		for ( size_t index = 0; index < data.size(); index += stride )
+		{
+			sum += data[index];
+		}
+
+		return sum / (255.0 * static_cast< double >(data.size() / stride));
+	}
+}
+
+/* A 2:1 reduction of an even pixmap is exactly the 2 × 2 box average (rounded). */
+TEST(PixelFactoryProcessor, downsampleHalvesAsTheTwoByTwoBox)
+{
+	Pixmap< uint8_t > source;
+	ASSERT_TRUE(source.initialize(4, 2, ChannelMode::Grayscale));
+
+	const std::array< uint8_t, 8 > values{0, 255, 10, 20, 255, 0, 30, 41};
+	std::copy(values.begin(), values.end(), source.data().begin());
+
+	Pixmap< uint8_t > target;
+	ASSERT_TRUE(Processor< uint8_t >::downsample(source, 2, 1, target));
+
+	EXPECT_EQ(target.data()[0], 128);
+	EXPECT_EQ(target.data()[1], 25);
+}
+
+/* THE mip property: the mean survives every level, down to 1 × 1, on a SPARSE mask whose width is odd at every
+ * level (1022 → 511 → 255 …). resize(Linear) reads the corner pixel for a 1 × 1 target and sent a 23 % leaf mask to
+ * 0.001 at 1 × 4 — distant pines lost their needles. */
+TEST(PixelFactoryProcessor, downsampleKeepsTheMeanDownToOnePixelOnANonPowerOfTwoMask)
+{
+	Pixmap< uint8_t > mask;
+	ASSERT_TRUE(mask.initialize(1022, 2048, ChannelMode::Grayscale));
+
+	/* Thin diagonal needles on black, about a quarter covered, none in the corner. */
+	for ( uint32_t y = 0; y < mask.height(); ++y )
+	{
+		for ( uint32_t x = 0; x < mask.width(); ++x )
+		{
+			const bool needle = x > 8 && y > 8 && ((x + y) % 8) < 2;
+
+			mask.data()[static_cast< size_t >(y) * mask.width() + x] = needle ? 255 : 0;
+		}
+	}
+
+	const auto baseMean = channelMean(mask);
+
+	ASSERT_GT(baseMean, 0.2);
+
+	auto level = mask;
+
+	while ( level.width() > 1 || level.height() > 1 )
+	{
+		Pixmap< uint8_t > next;
+
+		ASSERT_TRUE(Processor< uint8_t >::downsample(level, std::max(level.width() / 2, 1U), std::max(level.height() / 2, 1U), next));
+
+		/* The truncating halving of an odd width drops no pixel: the footprint is 2.x wide. Rounding to 8 bits
+		 * costs at most half a code value per level. */
+		EXPECT_NEAR(channelMean(next), baseMean, 2.0 / 255.0) << "at " << next.width() << " x " << next.height();
+
+		level = std::move(next);
+	}
+}
+
+/* Every channel is filtered, and an enlarging request is refused. */
+TEST(PixelFactoryProcessor, downsampleFiltersEveryChannelAndRefusesToEnlarge)
+{
+	Pixmap< uint8_t > source;
+	ASSERT_TRUE(source.initialize(3, 3, ChannelMode::RGBA));
+
+	for ( size_t index = 0; index < source.data().size(); index += 4 )
+	{
+		source.data()[index] = 90;
+		source.data()[index + 1] = 180;
+		source.data()[index + 2] = 30;
+		source.data()[index + 3] = 255;
+	}
+
+	Pixmap< uint8_t > target;
+	ASSERT_TRUE(Processor< uint8_t >::downsample(source, 1, 1, target));
+
+	EXPECT_EQ(target.data()[0], 90);
+	EXPECT_EQ(target.data()[1], 180);
+	EXPECT_EQ(target.data()[2], 30);
+	EXPECT_EQ(target.data()[3], 255);
+
+	EXPECT_FALSE(Processor< uint8_t >::downsample(source, 4, 3, target));
 }

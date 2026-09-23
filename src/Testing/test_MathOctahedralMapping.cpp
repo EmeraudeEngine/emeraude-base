@@ -189,3 +189,151 @@ TEST(MathOctahedralMapping, aSmallRotationMovesTheEncodedPointOnlyALittle)
 
 	EXPECT_LT(worst, 0.05F) << "a " << Step << " rotation moved the encoded point by " << worst << " of the square";
 }
+
+namespace
+{
+	/** @brief A spread of UPPER-hemisphere directions, the pole and the horizon included. */
+	std::vector< Vector< 3, float > >
+	upperHemisphereSamples ()
+	{
+		std::vector< Vector< 3, float > > directions{
+			{0.0F, 1.0F, 0.0F},
+			{1.0F, 0.0F, 0.0F}, {-1.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 1.0F}, {0.0F, 0.0F, -1.0F},
+			{0.7071F, 0.0F, 0.7071F}, {-0.7071F, 0.0F, -0.7071F}
+		};
+
+		for ( uint32_t parallel = 0; parallel <= 12; ++parallel )
+		{
+			const auto theta = 0.5F * std::numbers::pi_v< float > * static_cast< float >(parallel) / 12.0F;
+
+			for ( uint32_t meridian = 0; meridian < 24; ++meridian )
+			{
+				const auto phi = 2.0F * std::numbers::pi_v< float > * static_cast< float >(meridian) / 24.0F;
+
+				directions.emplace_back(Vector< 3, float >{
+					std::sin(theta) * std::cos(phi),
+					std::cos(theta),
+					std::sin(theta) * std::sin(phi)
+				}.normalized());
+			}
+		}
+
+		return directions;
+	}
+}
+
+/* The hemi map spends the whole square on the upper hemisphere: every direction above the horizon, the
+ * horizon itself included, must come back unchanged. */
+TEST(MathOctahedralMapping, everyUpperDirectionSurvivesTheHemiRoundTrip)
+{
+	for ( const auto & direction : upperHemisphereSamples() )
+	{
+		const auto encoded = hemiOctahedralEncode(direction);
+
+		ASSERT_GE(encoded[X], -1e-5F);
+		ASSERT_LE(encoded[X], 1.0F + 1e-5F);
+		ASSERT_GE(encoded[Y], -1e-5F);
+		ASSERT_LE(encoded[Y], 1.0F + 1e-5F);
+
+		const auto decoded = hemiOctahedralDecode(encoded);
+
+		EXPECT_NEAR((Vector< 3, float >::dotProduct(direction, decoded)), 1.0F, 1e-4F)
+			<< "direction (" << direction[X] << ", " << direction[Y] << ", " << direction[Z]
+			<< ") came back as (" << decoded[X] << ", " << decoded[Y] << ", " << decoded[Z] << ")";
+	}
+}
+
+/* The whole square decodes to the upper hemisphere: no point of the atlas describes a view from below. */
+TEST(MathOctahedralMapping, theHemiSquareNeverDecodesBelowTheHorizon)
+{
+	for ( uint32_t row = 0; row <= 32; ++row )
+	{
+		for ( uint32_t column = 0; column <= 32; ++column )
+		{
+			const auto decoded = hemiOctahedralDecode(Vector< 2, float >{static_cast< float >(column) / 32.0F, static_cast< float >(row) / 32.0F});
+
+			EXPECT_GE(decoded[Y], 0.0F);
+			EXPECT_NEAR(decoded.length(), 1.0F, 1e-5F);
+		}
+	}
+}
+
+/* A tree seen from slightly below shows its horizon view: a lower direction encodes onto the horizon. */
+TEST(MathOctahedralMapping, aDirectionBelowTheHorizonClampsOntoIt)
+{
+	const Vector< 3, float > below{0.8F, -0.3F, 0.2F};
+	const Vector< 3, float > horizon{0.8F, 0.0F, 0.2F};
+
+	const auto encodedBelow = hemiOctahedralEncode(below);
+	const auto encodedHorizon = hemiOctahedralEncode(horizon);
+
+	EXPECT_NEAR(encodedBelow[X], encodedHorizon[X], 1e-6F);
+	EXPECT_NEAR(encodedBelow[Y], encodedHorizon[Y], 1e-6F);
+}
+
+/* Unlike the full map, the hemi map has NO 2-to-1 border: every cell's own direction must blend back onto
+ * that very cell with a weight of 1 — which the full map cannot promise (see the border test above). */
+TEST(MathOctahedralMapping, everyHemiCellBlendsBackOntoItself)
+{
+	for ( const auto gridSize : {2U, 3U, 8U, 16U} )
+	{
+		for ( uint32_t cellY = 0; cellY < gridSize; ++cellY )
+		{
+			for ( uint32_t cellX = 0; cellX < gridSize; ++cellX )
+			{
+				const auto direction = hemiOctahedralCellDirection(cellX, cellY, gridSize);
+				const auto blend = hemiOctahedralBlend(direction, gridSize);
+
+				float ownWeight = 0.0F;
+				float sum = 0.0F;
+
+				for ( size_t index = 0; index < 3; ++index )
+				{
+					EXPECT_GE(blend.weights[index], -1e-5F);
+
+					sum += blend.weights[index];
+
+					if ( blend.cells[index][0] == cellX && blend.cells[index][1] == cellY )
+					{
+						ownWeight += blend.weights[index];
+					}
+				}
+
+				EXPECT_NEAR(sum, 1.0F, 1e-4F);
+				EXPECT_NEAR(ownWeight, 1.0F, 1e-3F) << "grid " << gridSize << ", cell (" << cellX << ", " << cellY << ") does not recognise its own view";
+			}
+		}
+	}
+}
+
+/* The frame the baker renders a cell with and the shader reads it back with: orthonormal, right-handed,
+ * looking along -direction, upright (its up leans toward +Y) everywhere but at the pole. */
+TEST(MathOctahedralMapping, theImposterCellFrameIsOrthonormalRightHandedAndUpright)
+{
+	for ( const auto & direction : upperHemisphereSamples() )
+	{
+		const auto frame = imposterCellFrame(direction);
+
+		EXPECT_NEAR(frame.right.length(), 1.0F, 1e-5F);
+		EXPECT_NEAR(frame.up.length(), 1.0F, 1e-5F);
+		EXPECT_NEAR(frame.back.length(), 1.0F, 1e-5F);
+
+		EXPECT_NEAR((Vector< 3, float >::dotProduct(frame.right, frame.up)), 0.0F, 1e-5F);
+		EXPECT_NEAR((Vector< 3, float >::dotProduct(frame.right, frame.back)), 0.0F, 1e-5F);
+		EXPECT_NEAR((Vector< 3, float >::dotProduct(frame.up, frame.back)), 0.0F, 1e-5F);
+
+		EXPECT_NEAR((Vector< 3, float >::dotProduct(Vector< 3, float >::crossProduct(frame.right, frame.up), frame.back)), 1.0F, 1e-5F) << "the frame is left-handed";
+		EXPECT_NEAR((Vector< 3, float >::dotProduct(frame.back, direction.normalized())), 1.0F, 1e-5F);
+
+		if ( direction[Y] < 0.9999F )
+		{
+			EXPECT_GE(frame.up[Y], 0.0F) << "the view of (" << direction[X] << ", " << direction[Y] << ", " << direction[Z] << ") is upside down";
+		}
+	}
+
+	/* The engine's own camera convention: a view from +Z sees +X on its right and +Y up. */
+	const auto front = imposterCellFrame(Vector< 3, float >{0.0F, 0.0F, 1.0F});
+
+	EXPECT_NEAR(front.right[X], 1.0F, 1e-6F);
+	EXPECT_NEAR(front.up[Y], 1.0F, 1e-6F);
+}

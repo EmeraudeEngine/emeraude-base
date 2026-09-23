@@ -447,6 +447,13 @@ away from the border).
 Reference: Cigolle, Donow, Evangelakos, Mara, McGuire & Meyer, *A Survey of Efficient
 Representations for Independent Unit Vectors*, JCGT 3(2), 2014, § 3.3.
 
+**The HEMI variant has no such border (Sept 2026).** `hemiOctahedralEncode/Decode/CellDirection/Blend()` — the
+imposter's mapping (owner decision: views above the horizon only) — turn the upper diamond by 45° to fill the square
+(u = x + z, v = z − x): the square's edge is the horizon and every point of it a distinct direction, so there a cell
+DOES blend back onto itself with weight 1 (`everyHemiCellBlendsBackOntoItself`). `imposterCellFrame(direction)` is
+the camera frame a view is baked and read with (back = direction, up = +Y made orthogonal, −Z at the pole). The GLSL
+copy is the engine's `Saphir/ImposterGLSL.hpp`: change both at once.
+
 ### A negative float converted straight to an unsigned integer is UNDEFINED — `PerlinNoise` did it for every coordinate below zero (Sept 2026, FIXED)
 
 `PerlinNoise::generate()` found its lattice cell with `static_cast< uint32_t >(std::floor(x))`: undefined
@@ -457,6 +464,14 @@ mask and the noise stays periodic across zero). Tests `AlgorithmsPerlinNoise.*`.
 the fix too: the discriminating machine is ARM.
 
 ## PixelFactory
+
+### ⚠⚠⚠ `Processor::resize(Linear)` is NOT a mip filter — use `Processor::downsample()` (Sept 2026, FIXED)
+
+`resizeLinear()` is a bilinear RESAMPLE for display: one point per destination pixel, at x·(w−1)/W from the top-left
+corner, so a 1 × 1 target is the corner pixel and the mean drifts at every halving. The engine built its BC7 mip
+chains with it: a 23 % leaf mask (1022 × 2048) read 0.001 at 1 × 4, a 35 % one (1024²) 0.000 at 1 × 1, and distant
+foliage vanished. `Processor::downsample(source, width, height, destination)` is an exact area-weighted box filter:
+the mean holds at every size, odd and non-power-of-two widths included (tests `PixelFactoryProcessor.downsample*`).
 
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count
 
