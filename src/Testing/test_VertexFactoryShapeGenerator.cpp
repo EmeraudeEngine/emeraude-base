@@ -583,7 +583,8 @@ TEST(VertexFactoryShapeGenerator, sphereMapsUToLongitudeAndVToLatitude)
 {
 	constexpr auto Slices = 16;
 	constexpr auto Stacks = 8;
-	constexpr auto Tolerance = 1.0E-4F;
+	/* The test's own tolerance: a global Tolerance exists (C4459 under MSVC /WX if shadowed). */
+	constexpr auto LocalTolerance = 1.0E-4F;
 
 	const auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, Slices, Stacks, uvOptions());
 
@@ -607,8 +608,8 @@ TEST(VertexFactoryShapeGenerator, sphereMapsUToLongitudeAndVToLatitude)
 	}
 
 	/* V = 0 is the image TOP and must pair with the +Y pole, as for every other generator. */
-	EXPECT_NEAR(vAtMaxY, 0.0F, Tolerance) << "the +Y pole must carry V = 0, the image top";
-	EXPECT_NEAR(vAtMinY, 1.0F, Tolerance) << "the -Y pole must carry V = 1, the image bottom";
+	EXPECT_NEAR(vAtMaxY, 0.0F, LocalTolerance) << "the +Y pole must carry V = 0, the image top";
+	EXPECT_NEAR(vAtMinY, 1.0F, LocalTolerance) << "the -Y pole must carry V = 1, the image bottom";
 
 	/* The most populated ring away from the poles, where a ring is a genuine circle of vertices
 	 * rather than a collapsed point. */
@@ -642,7 +643,7 @@ TEST(VertexFactoryShapeGenerator, sphereMapsUToLongitudeAndVToLatitude)
 		<< "U must sweep the longitude along a latitude ring (measured span " << (uMax - uMin)
 		<< "). A near-zero span means U carries the LATITUDE: the coordinates are transposed.";
 
-	EXPECT_NEAR(vMax - vMin, 0.0F, Tolerance)
+	EXPECT_NEAR(vMax - vMin, 0.0F, LocalTolerance)
 		<< "V must stay constant along a latitude ring (measured span " << (vMax - vMin)
 		<< "). A wide span means V carries the LONGITUDE: the coordinates are transposed.";
 }
@@ -746,7 +747,8 @@ TEST(VertexFactoryShapeGenerator, sphereUGrowsEastwardNotWestward)
  */
 TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
 {
-	constexpr auto Tolerance = 1.0E-3F;
+	/* The test's own tolerance: a global Tolerance exists (C4459 under MSVC /WX if shadowed). */
+	constexpr auto LocalTolerance = 1.0E-3F;
 
 	const auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16, 8, uvOptions());
 
@@ -766,15 +768,15 @@ TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
 
 		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
 
-		if ( u < Tolerance || u > 1.0F - Tolerance )
+		if ( u < LocalTolerance || u > 1.0F - LocalTolerance )
 		{
 			EXPECT_NEAR(position[EmEn::Base::Math::X], 0.0F, 0.01F) << "the seam must sit on the Z axis";
 			EXPECT_GT(position[EmEn::Base::Math::Z], 0.0F) << "the seam must sit on +Z, not -Z";
 
-			if ( u < Tolerance ) { ++seamAtZeroU; } else { ++seamAtOneU; }
+			if ( u < LocalTolerance ) { ++seamAtZeroU; } else { ++seamAtOneU; }
 		}
 
-		if ( std::abs(u - 0.5F) < Tolerance )
+		if ( std::abs(u - 0.5F) < LocalTolerance )
 		{
 			EXPECT_LT(position[EmEn::Base::Math::Z], 0.0F)
 				<< "U = 0.5 is the prime meridian and must face -Z, the engine's forward";
@@ -810,7 +812,8 @@ TEST(VertexFactoryShapeGenerator, sphereSeamSitsOnPositiveZ)
 TEST(VertexFactoryShapeGenerator, geodesicSphereWritesGenerateSphereConvention)
 {
 	constexpr auto Depth = 3U;
-	constexpr auto Tolerance = 1.0E-4F;
+	/* The test's own tolerance: a global Tolerance exists (C4459 under MSVC /WX if shadowed). */
+	constexpr auto LocalTolerance = 1.0E-4F;
 	constexpr auto PoleRadiusSquared = 1.0E-8F;
 	constexpr auto TwoPi = 2.0F * std::numbers::pi_v< float >;
 
@@ -831,7 +834,7 @@ TEST(VertexFactoryShapeGenerator, geodesicSphereWritesGenerateSphereConvention)
 		/* V is the polar angle from +Y, whatever the longitude does. */
 		const auto expectedV = std::acos(std::clamp(y, -1.0F, 1.0F)) / std::numbers::pi_v< float >;
 
-		EXPECT_NEAR(v, expectedV, Tolerance)
+		EXPECT_NEAR(v, expectedV, LocalTolerance)
 			<< "V must be the latitude acos(y)/pi at (" << x << ", " << y << ", " << z << "), got " << v
 			<< ". A V that tracks the longitude means the coordinates are transposed.";
 
@@ -856,7 +859,7 @@ TEST(VertexFactoryShapeGenerator, geodesicSphereWritesGenerateSphereConvention)
 		const auto difference = std::abs((u - std::floor(u)) - expectedU);
 		const auto wrapped = std::min(difference, 1.0F - difference);
 
-		EXPECT_LT(wrapped, Tolerance)
+		EXPECT_LT(wrapped, LocalTolerance)
 			<< "U must be the longitude atan2(x, z)/(2pi) at (" << x << ", " << y << ", " << z << "), got " << u
 			<< ". +Z is 0, +X is 0.25, -Z is 0.5, -X is 0.75: anything else is a transposition, an inversion or a mirror.";
 
@@ -945,7 +948,8 @@ TEST(VertexFactoryShapeGenerator, geodesicSphereUGrowsEastwardNotWestward)
 TEST(VertexFactoryShapeGenerator, geodesicSphereSeamSitsOnPositiveZ)
 {
 	constexpr auto Depth = 3U;
-	constexpr auto Tolerance = 1.0E-3F;
+	/* The test's own tolerance: a global Tolerance exists (C4459 under MSVC /WX if shadowed). */
+	constexpr auto LocalTolerance = 1.0E-3F;
 
 	const auto shape = ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, Depth, uvOptions());
 
@@ -965,20 +969,20 @@ TEST(VertexFactoryShapeGenerator, geodesicSphereSeamSitsOnPositiveZ)
 
 		const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
 
-		if ( u > 1.0F + Tolerance )
+		if ( u > 1.0F + LocalTolerance )
 		{
 			continue;
 		}
 
-		if ( u < Tolerance || u > 1.0F - Tolerance )
+		if ( u < LocalTolerance || u > 1.0F - LocalTolerance )
 		{
 			EXPECT_NEAR(position[EmEn::Base::Math::X], 0.0F, 0.01F) << "the seam must sit on the Z axis";
 			EXPECT_GT(position[EmEn::Base::Math::Z], 0.0F) << "the seam must sit on +Z, not -Z";
 
-			if ( u < Tolerance ) { ++seamAtZeroU; } else { ++seamAtOneU; }
+			if ( u < LocalTolerance ) { ++seamAtZeroU; } else { ++seamAtOneU; }
 		}
 
-		if ( std::abs(u - 0.5F) < Tolerance )
+		if ( std::abs(u - 0.5F) < LocalTolerance )
 		{
 			EXPECT_LT(position[EmEn::Base::Math::Z], 0.0F)
 				<< "U = 0.5 is the prime meridian and must face -Z, the engine's forward";
