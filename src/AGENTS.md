@@ -25,6 +25,15 @@ runtime. Everything here lives under the `EmEn::Base` namespace.
 - Optimized for real-time usage
 - **DiamondSquare**: Procedural terrain heightmap generation (see below)
 - **DelaunayTriangulation**: Constrained Delaunay 2D triangulation with boundary polygon filtering (Bowyer-Watson + ray-casting interior test)
+- **WorleyNoise** (Sep 2026): TILEABLE 3D cellular noise (F1) with an ARBITRARY period and a
+  cross-platform deterministic integer hash ("lowbias32", C. Wellons, public domain), plus
+  `generateBillows()` (fractal `1 - F1`, the cumulus billows of Schneider & Vos 2015). Written for the
+  engine's volumetric clouds (their 32³ detail texture must tile, their shapes must grow identically on
+  every platform). ⚠️ **Not a duplicate of `VoronoiNoise`, but an overlap to consolidate** (owner
+  question, open): `VoronoiNoise` gives F1+F2 over a FIXED 256-cell permutation period and seeds it
+  through `std::default_random_engine` + `std::ranges::shuffle`, whose sequence is
+  implementation-defined — the same seed is a different pattern on MSVC and libstdc++. Tests
+  `AlgorithmsWorleyNoise.*` (period, billow period, 1-Lipschitz, range, seed determinism).
 
 **Compression/** - Compression/decompression abstraction
 - Standardized data compression logic
