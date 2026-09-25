@@ -65,11 +65,11 @@ namespace EmEn::Base::VertexFactory
 		public:
 
 			/** @brief The live crown lengthens as H^0.6 while the tree grows as H: the bare foot of the trunk rises with age. */
-			static constexpr vertex_data_t CrownLengthExponent{0.6};
+			static constexpr vertex_data_t CrownLengthExponent{static_cast< vertex_data_t >(0.6)};
 			/** @brief The highest bare fraction age can reach: an old tree keeps a fifth of its height in leaves. */
-			static constexpr vertex_data_t MaxBaseSize{0.8};
+			static constexpr vertex_data_t MaxBaseSize{static_cast< vertex_data_t >(0.8)};
 			/** @brief The widest foot age can give, as a multiple of the preset's flare. */
-			static constexpr vertex_data_t MaxFlareFactor{2.5};
+			static constexpr vertex_data_t MaxFlareFactor{static_cast< vertex_data_t >(2.5)};
 
 			/**
 			 * @brief Constructs a growth curve: a middle-aged, moderately fast temperate tree.

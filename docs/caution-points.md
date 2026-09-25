@@ -117,6 +117,20 @@ intent — and the expression is evaluated once instead of four times.
 **Rule:** never let an integer maximum reach a floating-point division implicitly. Cast at the
 source, where the precision loss is a deliberate, reviewable decision.
 
+### A `double` literal brace-initialising a `vertex_data_t` constant — MSVC `/WX` C4305 (Sep 2026)
+
+`TreeGrowthCurve< vertex_data_t >` declared `static constexpr vertex_data_t CrownLengthExponent{0.6};`.
+GCC and clang accept it in silence (a brace-init from a constant expression within range is not
+narrowing), while MSVC reports **C4305** "truncation from 'double' to 'const vertex_data_t'" — an error
+under `/WX` — for every literal that float cannot represent exactly: `0.6` and `0.8` failed, `2.5`
+passed. The vertex library, and everything linking it, failed to build on Windows only.
+
+**Fix:** `static_cast< vertex_data_t >(0.6)`, as the file's own members did: the `double`
+instantiation keeps its precision and the rounding is stated.
+
+**Catch it on Linux before pushing:** compile the translation unit with GCC `-Wfloat-conversion`
+("conversion from 'double' to 'float' changes value") — it flagged exactly the two lines MSVC did.
+
 ## Network
 
 ### ⚠️⚠️ A `mutable` member is NOT a per-call output — it was a data race for a year (fixed Aug 2026)
