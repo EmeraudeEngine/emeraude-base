@@ -61,3 +61,27 @@ TEST(PixelFactoryColor, ColorFromInteger)
 	ASSERT_EQ(ColorFromInteger< uint64_t >(0, max_uint64_t, 0, max_uint64_t), Green);
 	ASSERT_EQ(ColorFromInteger< uint64_t >(0, 0, max_uint64_t, max_uint64_t), Blue);
 }
+
+TEST(PixelFactoryColor, IntegerComponentsAreRefusedAtCompileTime)
+{
+	/* The float constructor clamps each channel to [0, 1]: an 8-bit literal colour used to build white
+	 * (Color< float >{255U, 140U, 40U} == White), silently. It no longer compiles. */
+	static_assert(!std::is_constructible_v< Color< float >, unsigned int, unsigned int, unsigned int >);
+	static_assert(!std::is_constructible_v< Color< float >, int, int, int, int >);
+	static_assert(std::is_constructible_v< Color< float >, float, float, float >);
+	static_assert(std::is_constructible_v< Color< float >, float, int, int >);
+
+	SUCCEED();
+}
+
+TEST(PixelFactoryColor, ColorFromIntegerOfAnEightBitOrange)
+{
+	/* The input type is NAMED: ColorFromInteger(255U, 140U, 40U) would deduce unsigned int and divide by
+	 * 4 294 967 295 — black. */
+	const auto orange = ColorFromInteger< uint8_t >(255, 140, 40);
+
+	ASSERT_NEAR(orange.red(), 1.0F, 1.0e-6F);
+	ASSERT_NEAR(orange.green(), 140.0F / 255.0F, 1.0e-6F);
+	ASSERT_NEAR(orange.blue(), 40.0F / 255.0F, 1.0e-6F);
+	ASSERT_NEAR(orange.alpha(), 1.0F, 1.0e-6F);
+}

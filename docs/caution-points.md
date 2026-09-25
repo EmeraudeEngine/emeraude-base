@@ -117,6 +117,23 @@ intent — and the expression is evaluated once instead of four times.
 **Rule:** never let an integer maximum reach a floating-point division implicitly. Cast at the
 source, where the precision loss is a deliberate, reviewable decision.
 
+### ⚠️⚠️ `Color< float >{255U, 140U, 40U}` built WHITE — integer components are now refused (Sep 2026)
+
+`Color< float >`'s component constructor clamps each channel to [0, 1] (`Math::clampToUnit`). An 8-bit literal
+colour brace-initialised into a `Color< float >` parameter compiled silently — `255U` converts exactly to `255.0F` —
+and clamped to 1 on every non-zero channel: `{255U, 140U, 40U}` (a fire orange) was `(1, 1, 1)`. Nineteen lights
+and ambient colours of the testbed demos were white for that reason (found 2026-09-25 when the `sprite` pin-ups,
+finally lit, came out neutral under "orange" fire lights).
+
+**Fix:** a deleted constructor template for integral components (`Color (integral_t, integral_t, integral_t,
+integral_t = 1) = delete`) — an exact match that wins overload resolution, so every such call is a compile error.
+A mixed call (`{1.0F, 0, 0}`) fails template deduction and keeps the float constructor.
+
+⚠️ **The migration trap:** `ColorFromInteger(255U, 140U, 40U)` DEDUCES `input_t = unsigned int` — a deduced
+argument beats the `uint8_t` default — and divides by 4 294 967 295: black. Name the type:
+`ColorFromInteger< uint8_t >(255, 140, 40)`. Unit tests: `PixelFactoryColor.IntegerComponentsAreRefusedAtCompileTime`,
+`PixelFactoryColor.ColorFromIntegerOfAnEightBitOrange`.
+
 ### A `double` literal brace-initialising a `vertex_data_t` constant — MSVC `/WX` C4305 (Sep 2026)
 
 `TreeGrowthCurve< vertex_data_t >` declared `static constexpr vertex_data_t CrownLengthExponent{0.6};`.

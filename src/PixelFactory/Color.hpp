@@ -81,6 +81,19 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Refuses INTEGER components at compile time.
+			 * @note ⚠️⚠️ The constructor above clamps each channel to [0, 1], so `Color< float >{255U, 140U, 40U}`,
+			 * meant as an 8-bit orange, built WHITE: 19 lights and ambient colours of the demos were white for that
+			 * reason until 2026-09-25. An integer channel is either an 8-bit value — write
+			 * `ColorFromInteger< uint8_t >(255, 140, 40)` — or a 0/1 literal — write `1.0F`.
+			 * @note ⚠️ Name the input type: `ColorFromInteger(255U, 140U, 40U)` DEDUCES `unsigned int` (a deduced
+			 * argument beats the `uint8_t` default) and divides by 4 294 967 295 — black.
+			 */
+			template< typename integral_t >
+			requires (std::is_integral_v< integral_t >)
+			Color (integral_t red, integral_t green, integral_t blue, integral_t alpha = 1) = delete;
+
+			/**
 			 * @brief Constructs a color from a color and a new alpha component.
 			 * @param color RGB component from another color.
 			 * @param alpha Alpha component.
