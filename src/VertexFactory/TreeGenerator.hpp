@@ -33,6 +33,7 @@
 
 /* Local inclusions for usages. */
 #include "TreeColonizationGrower.hpp"
+#include "TreeGrowthCurve.hpp"
 #include "TreeMesh.hpp"
 #include "TreeParameters.hpp"
 #include "TreeSkinningOptions.hpp"
@@ -218,6 +219,54 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Sets the age of the tree to grow, in years.
+			 * @note Zero (the default) grows the species at the reference age of its growth curve: exactly the preset.
+			 * An older tree is taller (the growth curve), much thicker at the foot, with a raised crown; a younger one
+			 * the opposite. See TreeGrowthCurve. The age acts on a copy at generate(): the parameters keep describing
+			 * the reference tree.
+			 * @param years The age. Negative values mean zero.
+			 * @return void
+			 */
+			void
+			setAge (float years) noexcept
+			{
+				m_age = std::max(years, 0.0F);
+			}
+
+			/**
+			 * @brief Returns the age of the tree to grow, in years; zero means the reference age.
+			 * @return float
+			 */
+			[[nodiscard]]
+			float
+			age () const noexcept
+			{
+				return m_age;
+			}
+
+			/**
+			 * @brief Sets how the species grows with age. The presets set theirs.
+			 * @param curve A reference to the growth curve.
+			 * @return void
+			 */
+			void
+			setGrowthCurve (const TreeGrowthCurve< float > & curve) noexcept
+			{
+				m_growthCurve = curve;
+			}
+
+			/**
+			 * @brief Returns how the species grows with age.
+			 * @return const TreeGrowthCurve< float > &
+			 */
+			[[nodiscard]]
+			const TreeGrowthCurve< float > &
+			growthCurve () const noexcept
+			{
+				return m_growthCurve;
+			}
+
+			/**
 			 * @brief Gives mutable access to the skinning options of the FINEST level; the coarser
 			 * ones are derived from it.
 			 * @return TreeSkinningOptions< float > &
@@ -320,8 +369,10 @@ namespace EmEn::Base::VertexFactory
 			TreeParameters< float > m_parameters;
 			TreeColonizationGrower< float > m_colonizationGrower;
 			TreeSkinningOptions< float > m_skinningOptions;
+			TreeGrowthCurve< float > m_growthCurve;
 			std::string m_barkMaterial;
 			std::string m_leafMaterial;
+			float m_age{0.0F};
 			uint32_t m_levelOfDetailCount{3};
 			uint32_t m_imposterQuadCount{3};
 			GrowerType m_growerType{GrowerType::Parametric};

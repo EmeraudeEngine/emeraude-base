@@ -169,6 +169,37 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
   branches and the branches that carry neither a child nor a leaf, before touching the skinner or the LOD.
 - See: `TreeSkinningOptions.hpp`, `TreeSkinner.hpp`, `TreeMesh.hpp`
 
+**TreeGrowthCurve** - the AGE of a tree (Sept 2026, owner: "improve the generator to take the age into account")
+- `TreeGenerator::setAge(years)`: 0 (the default) grows the preset exactly as it always was
+  (guard: `VertexFactoryTreeGrowthCurve.theReferenceAgeLeavesThePresetUntouched`, bit-exact).
+- The model is allometric, applied to a COPY of the parameters at `generate()`; the owner chose it
+  over a year-by-year growth simulation (Palubicki et al. 2009).
+- Height: Chapman-Richards, used as a RATIO to the preset's reference age, so Hmax cancels.
+  `heightFactor(a) = ((1 - e^(-k·a)) / (1 - e^(-k·ref)))^p`: 1 at `ref`, monotonic, saturating.
+- From the height ratio h:
+  - the trunk radius/length as h^0.5 (elastic similarity, McMahon 1973);
+  - the bare foot of the trunk as `1 - (1 - b)·h^(0.6 - 1)` — the crown lifts, capped at 0.8;
+  - the flare as h^0.5, capped at 2.5×;
+  - the upward attraction divided by h^0.5 (old limbs droop);
+  - the leaf count × h and the leaf card × h^0.5, which keeps the foliage cover for h times the leaf
+    triangles.
+  - Colonization: the crown and clear trunk × h, the spacing × h^0.5, the attractors × h² (the crown
+    surface), the iterations × h.
+- Preset curves `{referenceAge, k, p}`:
+  - aspen `{25, 0.05, 1.3}`: 13 m, ×1.5 at 100 y;
+  - broadleaf `{25, 0.02, 1.3}`: 9 m, ×3.3 at 200 y, ~30 m;
+  - conifer `{35, 0.025, 1.3}`: 18 m, ×2.0 at 200 y;
+  - colonized `{25, 0.03, 1.3}`: ×2.3 at 150 y.
+
+  These are the model's own choices, not one species' measurements.
+- ⚠️ **The curve drives the TRUNK, not the bounding box.** An old broadleaf's skeleton came out 3.87×
+  taller for a factor of 3.28: its lifted crown starts higher and the branch tips overtop the trunk.
+  The test reads the order-0 top.
+- ⚠️ **Cost**: the old broadleaf is 724 638 triangles at LOD 0 against 287 622 (×2.5), the old conifer
+  ×1.8, the old colonized crown ×4.2 (the attractors). On `terrain`, ~10 % of the woods as old stands cost
+  +10-11 ms next to one (projet-alpha `src/Builtin/AGENTS.md` § 6d).
+- See: `TreeGrowthCurve.hpp`, tests `VertexFactoryTreeGrowthCurve.*`.
+
 **TreeGenerator** - the façade
 - Picks a grower, skins the chain, optionally builds the card, and returns a `TreeMesh`. Use it
   unless you want a skeleton with no mesh, or a mesh from a skeleton you built yourself.

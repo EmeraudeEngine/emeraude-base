@@ -26,6 +26,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <cmath>
 #include <cstdint>
 #include <algorithm>
 #include <vector>
@@ -33,6 +34,8 @@
 /* Local inclusions. */
 #include "Math/Vector.hpp"
 #include "VertexFactory/TreeColonizationGrower.hpp"
+#include "VertexFactory/TreeGenerator.hpp"
+#include "VertexFactory/TreeGrowthCurve.hpp"
 #include "VertexFactory/TreeParametricGrower.hpp"
 #include "VertexFactory/TreeSkeleton.hpp"
 
@@ -324,4 +327,157 @@ TEST(VertexFactoryTreeParametricGrower, degenerateParametersGrowNothing)
 	grower.setAttractorCount(0);
 
 	EXPECT_TRUE(grower.grow(1).empty());
+}
+
+namespace
+{
+	/**
+	 * @brief Returns the thickest radius of a skeleton: the foot of its trunk.
+	 * @param skeleton A reference to the skeleton.
+	 * @return float
+	 */
+	float
+	trunkRadius (const TreeSkeleton< float > & skeleton)
+	{
+		float radius = 0.0F;
+
+		for ( const auto & segment : skeleton.segments() )
+		{
+			radius = std::max(radius, segment.startRadius());
+		}
+
+		return radius;
+	}
+
+	/**
+	 * @brief Returns the height of the top of the trunk (the order-0 stems), which the growth curve drives.
+	 * @param skeleton A reference to the skeleton.
+	 * @return float
+	 */
+	float
+	trunkTop (const TreeSkeleton< float > & skeleton)
+	{
+		float top = 0.0F;
+
+		for ( const auto & segment : skeleton.segments() )
+		{
+			if ( segment.order() == 0 )
+			{
+				top = std::max(top, segment.endPoint()[Math::Y]);
+			}
+		}
+
+		return top;
+	}
+
+	/**
+	 * @brief Returns where the crown starts, as a fraction of the height: the lowest first-order branch.
+	 * @param skeleton A reference to the skeleton.
+	 * @return float
+	 */
+	float
+	crownBaseFraction (const TreeSkeleton< float > & skeleton)
+	{
+		float lowest = skeleton.height();
+
+		for ( const auto & segment : skeleton.segments() )
+		{
+			if ( segment.order() == 1 )
+			{
+				lowest = std::min(lowest, segment.startPoint()[Math::Y]);
+			}
+		}
+
+		return lowest / skeleton.height();
+	}
+}
+
+/* The growth curve IS the age model: 1 at the reference age, rising, and bounded — an old tree stops growing up. */
+TEST(VertexFactoryTreeGrowthCurve, theHeightFactorIsOneAtTheReferenceAgeRisesAndSaturates)
+{
+	const TreeGrowthCurve< float > curve{25.0F, 0.02F, 1.3F};
+
+	EXPECT_FLOAT_EQ(curve.heightFactor(25.0F), 1.0F);
+	EXPECT_FLOAT_EQ(curve.heightFactor(0.0F), 1.0F) << "zero must mean the reference age";
+	EXPECT_LT(curve.heightFactor(10.0F), 1.0F) << "a younger tree must be shorter";
+
+	float previous = 0.0F;
+
+	for ( float years = 5.0F; years <= 300.0F; years += 5.0F )
+	{
+		const auto factor = curve.heightFactor(years);
+
+		EXPECT_GT(factor, previous) << "the height fell at " << years << " years";
+
+		previous = factor;
+	}
+
+	/* The analytic ceiling of Chapman-Richards relative to the reference: (1 - exp(-k ref))^-p. */
+	const auto ceiling = std::pow(1.0F / (1.0F - std::exp(-0.02F * 25.0F)), 1.3F);
+
+	EXPECT_LE(curve.heightFactor(1000.0F), ceiling * 1.0001F) << "the height ran past the curve's ceiling";
+	EXPECT_GT(curve.heightFactor(1000.0F), ceiling * 0.99F) << "a thousand-year-old tree did not reach the ceiling";
+}
+
+/* At the reference age (or zero) a preset must stay BIT-EXACT: forest and terrain grew their trees before age existed. */
+TEST(VertexFactoryTreeGrowthCurve, theReferenceAgeLeavesThePresetUntouched)
+{
+	auto generator = TreeGenerator::broadleaf();
+	generator.setLevelOfDetailCount(1);
+
+	const auto reference = generator.generate(3);
+
+	generator.setAge(generator.growthCurve().referenceAge());
+
+	const auto same = generator.generate(3);
+
+	ASSERT_FALSE(reference.skeleton().empty());
+	EXPECT_TRUE(sameSkeleton(reference.skeleton(), same.skeleton())) << "the reference age changed the preset";
+}
+
+/* An old tree: taller by the growth curve, a trunk thickening FASTER than it lengthens (elastic similarity, radius as
+ * h^1.5), and a crown that lifts (natural pruning). */
+TEST(VertexFactoryTreeGrowthCurve, anOldBroadleafIsTallerThickerAndItsCrownLifts)
+{
+	auto young = TreeParameters< float >::broadleaf();
+	young.setScaleVariation(0.0F);
+
+	auto old = young;
+
+	const TreeGrowthCurve< float > curve{25.0F, 0.02F, 1.3F};
+	curve.apply(old, 200.0F);
+
+	const auto factor = curve.heightFactor(200.0F);
+
+	const auto youngTree = TreeParametricGrower< float >{young}.grow(4);
+	const auto oldTree = TreeParametricGrower< float >{old}.grow(4);
+
+	ASSERT_FALSE(youngTree.empty());
+	ASSERT_FALSE(oldTree.empty());
+
+	/* The curve drives the TRUNK. The whole skeleton comes out taller still (measured 3.87 against a factor of 3.28):
+	 * the lifted crown starts its branches higher, and their tips overtop the trunk. */
+	EXPECT_NEAR(trunkTop(oldTree) / trunkTop(youngTree), factor, factor * 0.05F) << "the trunk did not follow the growth curve";
+	EXPECT_GE(oldTree.height() / youngTree.height(), factor * 0.95F) << "the tree came out shorter than its trunk's growth";
+	EXPECT_GT(trunkRadius(oldTree) / trunkRadius(youngTree), factor * 1.2F) << "the trunk did not thicken faster than it grew";
+	EXPECT_GT(crownBaseFraction(oldTree), crownBaseFraction(youngTree)) << "the crown did not lift with age";
+}
+
+/* The space colonization tree ages too: its crown and clear trunk grow with the curve. */
+TEST(VertexFactoryTreeGrowthCurve, anOldColonizedCrownIsTaller)
+{
+	const auto young = TreeGenerator::colonizedCrown().colonizationGrower();
+	auto old = young;
+
+	const TreeGrowthCurve< float > curve{25.0F, 0.03F, 1.3F};
+	curve.apply(old, 150.0F);
+
+	const auto youngTree = young.grow(2);
+	const auto oldTree = old.grow(2);
+
+	ASSERT_FALSE(youngTree.empty());
+	ASSERT_FALSE(oldTree.empty());
+
+	EXPECT_GT(oldTree.height(), youngTree.height() * 1.5F) << "the aged colonized crown did not grow taller";
+	EXPECT_GT(trunkRadius(oldTree), trunkRadius(youngTree)) << "the pipe model did not thicken the aged trunk";
 }

@@ -44,6 +44,8 @@ namespace EmEn::Base::VertexFactory
 	{
 		TreeGenerator generator;
 		generator.parameters() = TreeParameters< float >::quakingAspen();
+		/* A fast pioneer: 13 m at 25 years, ~20 m at a hundred, where aspens stop. */
+		generator.setGrowthCurve({25.0F, 0.05F, 1.3F});
 		generator.setBarkMaterial(DefaultBark);
 		generator.setLeafMaterial("Vegetals/leaf001");
 		generator.skinningOptions().setLeafAspectRatio(1.0F);
@@ -56,6 +58,8 @@ namespace EmEn::Base::VertexFactory
 	{
 		TreeGenerator generator;
 		generator.parameters() = TreeParameters< float >::broadleaf();
+		/* A slow broadleaf: 9 m at 25 years, ~30 m at two hundred — an old beech. */
+		generator.setGrowthCurve({25.0F, 0.02F, 1.3F});
 		generator.setBarkMaterial(DefaultBark);
 		generator.setLeafMaterial("Vegetals/leaf003");
 		generator.skinningOptions().setLeafAspectRatio(1.0F);
@@ -68,6 +72,8 @@ namespace EmEn::Base::VertexFactory
 	{
 		TreeGenerator generator;
 		generator.parameters() = TreeParameters< float >::conifer();
+		/* 18 m at 35 years, ~36 m at two hundred. */
+		generator.setGrowthCurve({35.0F, 0.025F, 1.3F});
 		generator.setBarkMaterial(DefaultBark);
 		generator.setLeafMaterial("Vegetals/leaf007");
 		/* leaf007 is 1024 x 2048: a card twice as long as wide keeps the twig undistorted. ⚠️ The card is a whole
@@ -85,6 +91,8 @@ namespace EmEn::Base::VertexFactory
 	{
 		TreeGenerator generator;
 		generator.setGrowerType(GrowerType::SpaceColonization);
+		/* A maple-like crown: ~11.5 m at 25 years, ~26 m at a hundred and fifty. */
+		generator.setGrowthCurve({25.0F, 0.03F, 1.3F});
 		generator.colonizationGrower().setAttractorCount(1600);
 		generator.colonizationGrower().setCrownCenter({0.0F, 8.0F, 0.0F});
 		generator.colonizationGrower().setCrownRadii({4.5F, 3.5F, 4.5F});
@@ -105,9 +113,23 @@ namespace EmEn::Base::VertexFactory
 		TreeMesh< float > mesh;
 		mesh.setMaterialNames(m_barkMaterial, m_leafMaterial);
 
-		auto skeleton = m_growerType == GrowerType::Parametric ?
-			TreeParametricGrower< float >{m_parameters}.grow(seed) :
-			m_colonizationGrower.grow(seed);
+		/* The age acts on a COPY: the generator keeps describing its reference tree. */
+		auto skeleton = [this, seed] {
+			if ( m_growerType == GrowerType::Parametric )
+			{
+				auto parameters = m_parameters;
+
+				m_growthCurve.apply(parameters, m_age);
+
+				return TreeParametricGrower< float >{parameters}.grow(seed);
+			}
+
+			auto grower = m_colonizationGrower;
+
+			m_growthCurve.apply(grower, m_age);
+
+			return grower.grow(seed);
+		}();
 
 		if ( skeleton.empty() )
 		{
