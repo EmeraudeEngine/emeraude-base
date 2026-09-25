@@ -126,6 +126,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Logging.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MD5AnimParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathBasics.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathBSpline.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathCartesianFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathMatrix.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathOrientedCuboid.cpp

@@ -134,6 +134,21 @@ argument beats the `uint8_t` default — and divides by 4 294 967 295: black. Na
 `ColorFromInteger< uint8_t >(255, 140, 40)`. Unit tests: `PixelFactoryColor.IntegerComponentsAreRefusedAtCompileTime`,
 `PixelFactoryColor.ColorFromIntegerOfAnEightBitOrange`.
 
+### ⚠️⚠️ A `requires (A, B)` is a COMMA expression — only `B` is checked (Sep 2026)
+
+`requires (std::is_arithmetic_v< T >, std::is_floating_point_v< U >)` parses as a parenthesised comma expression whose
+value is its LAST operand: the first constraint is evaluated and thrown away. Write `requires (A && B)`. Seventeen
+clauses of this repository were written that way (item `requires-clause-comma-operator`); one of them let the scalar
+`Math::linearInterpolation()` accept vectors and matrices, which `BSpline`, the engine's `Sequence`, `Grid` and
+`CartesianFrame` (among others) silently depended on. ⚠️ `Vector::linearInterpolation()` runs the other way (item
+`vector-lerp-runs-backwards`). A
+too-wide constraint never breaks a build — only a negative test (`static_assert(!requires { … })`) proves one.
+
+⚠️ A header must include what it calls: `BSpline.hpp` used `linearInterpolation()` without including `Base.hpp` and
+compiled only in translation units that had included it first — its first unit test did not compile (fixed
+2026-09-25 with an explicit lerp; the same fix removed an out-of-bounds read of `m_points[index + 1]` for the last
+point, pinned by `MathBSpline.lastPointIsTheTerminalSampleForEveryCurveType`).
+
 ### A `double` literal brace-initialising a `vertex_data_t` constant — MSVC `/WX` C4305 (Sep 2026)
 
 `TreeGrowthCurve< vertex_data_t >` declared `static constexpr vertex_data_t CrownLengthExponent{0.6};`.

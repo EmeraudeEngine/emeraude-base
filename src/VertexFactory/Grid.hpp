@@ -907,9 +907,10 @@ namespace EmEn::Base::VertexFactory
 			 * @param positionX World coordinate on X axis.
 			 * @param positionY World coordinate on Z axis.
 			 *
-			 * @return Interpolated height value, or 0 if coordinates are outside grid bounds.
+			 * @return Interpolated height value. Outside the grid, the height at the nearest point of its edge.
 			 *
-			 * @note Coordinates outside range [-halfSquaredSize, +halfSquaredSize] return 0
+			 * @note Each coordinate is clamped to [-halfSquaredSize + 1e-4, +halfSquaredSize - 1e-4]: the terrain continues
+			 * flat at its edge height, it never falls to 0 (this note said "return 0" until 2026-09-25).
 			 * @note Uses bilinear interpolation for smooth results
 			 *
 			 * @see getHeightAt(index_data_t, index_data_t)
@@ -955,9 +956,11 @@ namespace EmEn::Base::VertexFactory
 			 * @param positionX World coordinate on X axis.
 			 * @param positionY World coordinate on Z axis.
 			 *
-			 * @return Interpolated normalized surface normal vector, or positive Y if outside bounds.
+			 * @return Bilinearly interpolated surface normal, NOT renormalized (normalize it if a unit length is needed).
+			 * Outside the grid, the normal at the nearest point of its edge.
 			 *
-			 * @note Coordinates outside range [-halfSquaredSize, +halfSquaredSize] return (0, 1, 0)
+			 * @note Each coordinate is clamped like getHeightAt()'s: it never returns (0, 1, 0) for being outside (this note
+			 * said so until 2026-09-25).
 			 * @note Uses bilinear interpolation for smooth normal transitions
 			 *
 			 * @see getHeightAt(vertex_data_t, vertex_data_t)

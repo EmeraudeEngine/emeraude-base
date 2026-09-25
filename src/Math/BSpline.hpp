@@ -369,7 +369,11 @@ namespace EmEn::Base::Math
 						timeStep /= currentPoint.segments();
 					}
 
-					if ( currentPoint.segments() > 1 )
+					/* The LAST point never opens a curve: it has no next point, and it is the terminal sample the time
+					 * step above was computed for (segments of points 0..n-2 only). It used to take the curve branch
+					 * whenever it had more than one segment — every point gets the default segment count — and read
+					 * m_points[index + 1], one past the end (2026-09-25, projet-alpha basic-scenery's flying lights). */
+					if ( index + 1 < m_points.size() && currentPoint.segments() > 1 )
 					{
 						/* Curve generation. */
 						switch ( m_points[index].curveType() )
@@ -435,7 +439,14 @@ namespace EmEn::Base::Math
 
 				for ( size_t segment = 0; segment < currentPoint.segments(); segment++ )
 				{
-					if ( !callback(currentTime, linearInterpolation(currentPoint.position(), nextPoint.position(), factor)) )
+					/* An explicit vector LERP from the current point (factor 0) to the next one (factor 1). The unqualified
+					 * linearInterpolation() this used compiled only when Base.hpp came first, and only because that scalar
+					 * function's constraint is a COMMA expression that ignores its is_arithmetic half (emeraude-base item
+					 * requires-clause-comma-operator); Vector::linearInterpolation() runs the other way (factor 0 = B), and
+					 * the Bezier branches below inherit that through the Vector Bezier helpers (item vector-lerp-runs-backwards). */
+					const auto position = currentPoint.position() + ((nextPoint.position() - currentPoint.position()) * static_cast< vector_precision_t >(factor));
+
+					if ( !callback(currentTime, position) )
 					{
 						return false;
 					}
