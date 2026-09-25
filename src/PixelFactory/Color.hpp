@@ -1000,6 +1000,29 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Returns the colour as an EMISSION chromaticity: the RGB triplet scaled to unit Rec.709 luminance.
+			 * @note A light's colour is a chromaticity and its intensity the photometric quantity (owner decision,
+			 * 2026-09-25): intensity × this triplet delivers exactly the intensity in luminance, whatever the hue. The
+			 * components are taken RAW — no sRGB decode — like every colour constant of the engine. A channel may
+			 * exceed 1 (pure blue: 1 / 0.0722 = 13.85), so the result is a vector, never a clamping Color. Black
+			 * (luminance ≤ 1e-6) gives zero: it keeps meaning "emits nothing".
+			 * @return Math::Vector< 3, data_t >
+			 */
+			[[nodiscard]]
+			Math::Vector< 3, data_t >
+			unitLuminanceChromaticity () const noexcept
+			{
+				const auto luma = this->luminance(GrayscaleConversionMode::LumaRec709);
+
+				if ( luma <= static_cast< data_t >(1.0e-6) )
+				{
+					return {0, 0, 0};
+				}
+
+				return {m_components[R] / luma, m_components[G] / luma, m_components[B] / luma};
+			}
+
+			/**
 			 * @brief Returns the RGB luminance in an unsigned integer type.
 			 * @tparam output_t The type of unsigned integer data. Default uint8_t.
 			 * @param mode The conversion mode. Default LumaRec709.
