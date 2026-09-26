@@ -1903,9 +1903,12 @@ namespace EmEn::Base::Math
 			}
 
 			/**
-			 * @brief Performs a linear interpolation between two vectors (LERP).
-			 * @param operandA A reference to a vector.
-			 * @param operandB A reference to a vector.
+			 * @brief Performs a linear interpolation between two vectors (LERP): operandA at factor 0, operandB at factor 1.
+			 * @warning ⚠️ It returned `A * t + B * (1 - t)` — factor 0 gave B — until 2026-09-26, so every Bezier segment
+			 * built on it below ran backwards and three projet-alpha actors snapped to their target instead of turning.
+			 * The convention is now the scalar Math::linearInterpolation()'s one.
+			 * @param operandA A reference to a vector, the value at factor 0.
+			 * @param operandB A reference to a vector, the value at factor 1.
 			 * @param factor The factor between 0 and 1.
 			 * @return Vector
 			 */
@@ -1914,7 +1917,74 @@ namespace EmEn::Base::Math
 			Vector
 			linearInterpolation (const Vector & operandA, const Vector & operandB, precision_t factor) noexcept
 			{
-				return (operandA * factor) + (operandB * (1 - factor));
+				return operandA + ((operandB - operandA) * factor);
+			}
+
+			/**
+			 * @brief Rotates a direction toward another one by at most an angle — the turn of a head, a turret or a
+			 * character that has a maximum angular speed.
+			 * @note Both inputs are DIRECTIONS: their lengths are ignored and the result is a unit vector. The rotation
+			 * happens in the plane of the two directions (around their cross product), so, unlike a LERP, it keeps a unit
+			 * length all the way and does not stall between opposite directions: those turn around `fallbackAxis` (made
+			 * perpendicular to `from`), +Y by default so that two opposite horizontal headings turn horizontally.
+			 * A zero `from` returns the normalised `to`, a zero `to` returns the normalised `from`.
+			 * @param from The current direction.
+			 * @param to The desired direction.
+			 * @param maxRadians The largest angle to turn this call, in radians. When the remaining angle is smaller, the
+			 * result is `to` itself; a non-positive value returns `from`.
+			 * @param fallbackAxis The turning axis when the directions are opposite. Default +Y.
+			 * @return Vector
+			 */
+			[[nodiscard]]
+			static
+			Vector
+			rotateTowards (const Vector & from, const Vector & to, precision_t maxRadians, const Vector & fallbackAxis = positiveY()) noexcept
+				requires (dim_t == 3 && std::is_floating_point_v< precision_t >)
+			{
+				const auto current = from.normalized();
+				const auto target = to.normalized();
+
+				if ( current.isZero() )
+				{
+					return target;
+				}
+
+				if ( target.isZero() || maxRadians <= 0 )
+				{
+					return current;
+				}
+
+				const auto cosine = std::clamp(dotProduct(current, target), static_cast< precision_t >(-1), static_cast< precision_t >(1));
+
+				if ( std::acos(cosine) <= maxRadians )
+				{
+					return target;
+				}
+
+				auto axis = crossProduct(current, target);
+
+				if ( Utility::isZero(axis.lengthSquared()) )
+				{
+					/* Parallel within float resolution: nothing left to turn (acos may still read a few 1e-4 rad). */
+					if ( cosine > 0 )
+					{
+						return target;
+					}
+
+					/* Opposite directions: every axis perpendicular to `from` is a shortest path. Take the fallback's
+					 * component perpendicular to `from`, or any perpendicular one if the fallback is parallel to it. */
+					axis = fallbackAxis - (current * dotProduct(fallbackAxis, current));
+
+					if ( Utility::isZero(axis.lengthSquared()) )
+					{
+						axis = crossProduct(current, std::abs(current[X]) < static_cast< precision_t >(0.9) ? positiveX() : positiveZ());
+					}
+				}
+
+				axis = axis.normalized();
+
+				/* Rodrigues' rotation of `current` around `axis` (perpendicular to it, so the (axis · current) term is 0). */
+				return ((current * std::cos(maxRadians)) + (crossProduct(axis, current) * std::sin(maxRadians))).normalized();
 			}
 
 			/**

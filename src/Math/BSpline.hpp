@@ -442,8 +442,7 @@ namespace EmEn::Base::Math
 					/* An explicit vector LERP from the current point (factor 0) to the next one (factor 1). The unqualified
 					 * linearInterpolation() this used compiled only when Base.hpp came first, and only because that scalar
 					 * function's constraint is a COMMA expression that ignores its is_arithmetic half (emeraude-base item
-					 * requires-clause-comma-operator); Vector::linearInterpolation() runs the other way (factor 0 = B), and
-					 * the Bezier branches below inherit that through the Vector Bezier helpers (item vector-lerp-runs-backwards). */
+					 * requires-clause-comma-operator). */
 					const auto position = currentPoint.position() + ((nextPoint.position() - currentPoint.position()) * static_cast< vector_precision_t >(factor));
 
 					if ( !callback(currentTime, position) )

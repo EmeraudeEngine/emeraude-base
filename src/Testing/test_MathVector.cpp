@@ -25,12 +25,15 @@
  */
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
+#include <cmath>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "Math/Base.hpp"
 #include "Math/Vector.hpp"
 
 using namespace EmEn::Base::Math;
@@ -740,6 +743,99 @@ TYPED_TEST(MathVector, LinearInterpolation)
 		ASSERT_TRUE(nearEqual(mid[X], TypeParam{5}));
 		ASSERT_TRUE(nearEqual(mid[Y], TypeParam{5}));
 		ASSERT_TRUE(nearEqual(mid[Z], TypeParam{5}));
+	}
+}
+
+/* 2026-09-26: Vector::linearInterpolation() returned `A * t + B * (1 - t)` — factor 0 gave B. The test above never
+ * called it, and at t = 0.5 no test can tell the two directions apart: these check the ENDS. */
+TYPED_TEST(MathVector, LinearInterpolationRunsFromTheFirstOperand)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		using V3 = Vector< 3, TypeParam >;
+
+		const V3 start{TypeParam{1}, TypeParam{0}, TypeParam{0}};
+		const V3 end{TypeParam{0}, TypeParam{0}, TypeParam{1}};
+
+		ASSERT_EQ(V3::linearInterpolation(start, end, TypeParam{0}), start);
+		ASSERT_EQ(V3::linearInterpolation(start, end, TypeParam{1}), end);
+
+		const auto quarter = V3::linearInterpolation(start, end, static_cast< TypeParam >(0.25));
+
+		ASSERT_TRUE(nearEqual(quarter[X], static_cast< TypeParam >(0.75)));
+		ASSERT_TRUE(nearEqual(quarter[Z], static_cast< TypeParam >(0.25)));
+	}
+}
+
+/* The Bezier helpers are built on the LERP: through the reversed one, each returned its LAST point at factor 0, and every
+ * BSpline / BezierCurve segment ran from the next point back to the current one. */
+TYPED_TEST(MathVector, BezierInterpolationsRunFromTheirFirstPoint)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		using V3 = Vector< 3, TypeParam >;
+
+		const V3 a{TypeParam{0}, TypeParam{0}, TypeParam{0}};
+		const V3 b{TypeParam{10}, TypeParam{10}, TypeParam{10}};
+		const V3 c{TypeParam{20}, TypeParam{0}, TypeParam{0}};
+		const V3 d{TypeParam{30}, TypeParam{10}, TypeParam{0}};
+
+		ASSERT_EQ(V3::quadraticBezierInterpolation(a, b, c, TypeParam{0}), a);
+		ASSERT_EQ(V3::quadraticBezierInterpolation(a, b, c, TypeParam{1}), c);
+		ASSERT_EQ(V3::cubicBezierInterpolation(a, b, c, d, TypeParam{0}), a);
+		ASSERT_EQ(V3::cubicBezierInterpolation(a, b, c, d, TypeParam{1}), d);
+
+		/* The standard quadratic at t = 0.25: A (1-t)² + 2 B t (1-t) + C t² = (5, 3.75, 3.75); run backwards (t = 0.75)
+		 * it would read (15, 3.75, 3.75). */
+		const auto quarter = V3::quadraticBezierInterpolation(a, b, c, static_cast< TypeParam >(0.25));
+
+		ASSERT_TRUE(nearEqual(quarter[X], static_cast< TypeParam >(5)));
+		ASSERT_TRUE(nearEqual(quarter[Y], static_cast< TypeParam >(3.75)));
+		ASSERT_TRUE(nearEqual(quarter[Z], static_cast< TypeParam >(3.75)));
+	}
+}
+
+TYPED_TEST(MathVector, RotateTowardsTurnsAtMostTheGivenAngle)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		using V3 = Vector< 3, TypeParam >;
+
+		const auto angleBetween = [] (const V3 & lhs, const V3 & rhs) {
+			return std::acos(std::clamp(V3::dotProduct(lhs.normalized(), rhs.normalized()), TypeParam{-1}, TypeParam{1}));
+		};
+
+		const V3 north{TypeParam{0}, TypeParam{0}, TypeParam{-1}};
+		const V3 east{TypeParam{1}, TypeParam{0}, TypeParam{0}};
+		const auto step = Radian(static_cast< TypeParam >(10));
+
+		/* A limited turn: exactly `step` away from where it started, in the plane of the two directions, unit length. */
+		const auto turned = V3::rotateTowards(north, east * TypeParam{5}, step);
+
+		ASSERT_TRUE(nearEqual(angleBetween(north, turned), step));
+		ASSERT_TRUE(nearEqual(angleBetween(turned, east), Radian(static_cast< TypeParam >(80))));
+		ASSERT_TRUE(nearEqual(turned.length(), TypeParam{1}));
+		ASSERT_TRUE(nearEqual(turned[Y], TypeParam{0}));
+
+		/* Close enough: the target itself (normalised). */
+		ASSERT_EQ(V3::rotateTowards(north, east, Radian(static_cast< TypeParam >(95))), east);
+
+		/* Opposite headings do not stall: they turn around +Y, and stay horizontal. */
+		const auto away = V3::rotateTowards(north, -north, step);
+
+		ASSERT_TRUE(nearEqual(angleBetween(north, away), step));
+		ASSERT_TRUE(nearEqual(away[Y], TypeParam{0}));
+
+		/* Nearly parallel (below the cross product's resolution): it must not take the opposite-direction fallback and turn
+		 * AWAY from the target (review, 2026-09-26). */
+		const V3 almost{-std::sin(static_cast< TypeParam >(3.0e-4)), TypeParam{0}, -std::cos(static_cast< TypeParam >(3.0e-4))};
+
+		ASSERT_TRUE(V3::rotateTowards(north, almost, static_cast< TypeParam >(1.0e-4))[X] <= TypeParam{0});
+
+		/* Degenerate inputs. */
+		ASSERT_EQ(V3::rotateTowards(V3{}, east, step), east);
+		ASSERT_EQ(V3::rotateTowards(north, V3{}, step), north);
+		ASSERT_EQ(V3::rotateTowards(north, east, TypeParam{0}), north);
 	}
 }
 

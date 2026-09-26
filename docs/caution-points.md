@@ -140,14 +140,25 @@ argument beats the `uint8_t` default — and divides by 4 294 967 295: black. Na
 value is its LAST operand: the first constraint is evaluated and thrown away. Write `requires (A && B)`. Seventeen
 clauses of this repository were written that way (item `requires-clause-comma-operator`); one of them let the scalar
 `Math::linearInterpolation()` accept vectors and matrices, which `BSpline`, the engine's `Sequence`, `Grid` and
-`CartesianFrame` (among others) silently depended on. ⚠️ `Vector::linearInterpolation()` runs the other way (item
-`vector-lerp-runs-backwards`). A
+`CartesianFrame` (among others) silently depended on. A
 too-wide constraint never breaks a build — only a negative test (`static_assert(!requires { … })`) proves one.
 
 ⚠️ A header must include what it calls: `BSpline.hpp` used `linearInterpolation()` without including `Base.hpp` and
 compiled only in translation units that had included it first — its first unit test did not compile (fixed
 2026-09-25 with an explicit lerp; the same fix removed an out-of-bounds read of `m_points[index + 1]` for the last
 point, pinned by `MathBSpline.lastPointIsTheTerminalSampleForEveryCurveType`).
+
+### Fixed: `Vector::linearInterpolation()` ran BACKWARDS — every Bezier segment, and three actors, with it (Sep 2026)
+
+It returned `a * t + b * (1 - t)`: factor 0 gave **b**. The Vector Bezier helpers are de Casteljau on it, so they
+returned their LAST point at factor 0, and every Bezier segment of a `BSpline` (BezierQuadratic / BezierCubic) and of
+`BezierCurve` was drawn from the next point back to the current one — a sawtooth jumping ~1 850-2 270 units at each
+point of projet-alpha `basic-scenery`'s Green and Blue flying lights. Three actors (Paladin, Fox, Drone) called it as "move the heading a fraction toward the player per
+tick" and SNAPPED in one tick instead of turning. Fixed 2026-09-26 (`a + (b - a) * t`, the scalar convention; the
+other 34 interpolations of the cascade already followed it). Why nobody saw it: the only test computed
+`start + (end - start) * 0.5` by hand and never called the function — and at t = 0.5 the two directions agree.
+⚠️ **Test an interpolation at its ENDS.** The actors now turn with `Vector::rotateTowards(from, to, maxRadians)` (an angular-rate
+turn: a correct fraction-LERP would have taken seconds and STALLED at 180°, where the two headings stay collinear).
 
 ### A `double` literal brace-initialising a `vertex_data_t` constant — MSVC `/WX` C4305 (Sep 2026)
 

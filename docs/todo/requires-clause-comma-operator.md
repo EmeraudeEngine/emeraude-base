@@ -36,10 +36,9 @@ The sites (grep `requires (std::is_[a-z_]*< [a-z_]* >, std::` in `src/`): `FlagT
 
 ## ⚠️ Traps
 
-- ⚠️⚠️ `Vector::linearInterpolation(a, b, t)` (`Math/Vector.hpp:1915`) returns `a * t + b * (1 - t)` — factor 0 gives
-  **B**, the OPPOSITE of the scalar `Math::linearInterpolation()` (factor 0 gives A) — and it IS live: the Bezier
-  helpers of `Vector.hpp:1933-1960` (hence `BSpline`, `BezierCurve`) and three projet-alpha actors call it. Item
-  `vector-lerp-runs-backwards`. Do NOT swap a hole-relying call for it until that item is fixed.
+- `Vector::linearInterpolation(a, b, t)` ran BACKWARDS until 2026-09-26 (factor 0 gave b; `docs/caution-points.md`
+  § *Fixed: `Vector::linearInterpolation()` ran BACKWARDS*). It now follows the scalar convention, so it is the safe
+  replacement for the VECTOR callers of the hole; `Matrix` has no member lerp.
 - A constraint that is too wide never fails to compile, it silently accepts types it was written to refuse: the
   build is green before AND after the bug. Only a negative test proves a constraint.
 
