@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <bit>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <numbers>
@@ -359,8 +360,24 @@ namespace EmEn::Base::Math
 	}
 
 	/**
-	 * @brief Performs a linear interpolation between values.
-	 * @tparam number_t The type of number. Default float.
+	 * @brief A type linearInterpolation() and cosineInterpolation() accept: `a + (b - a) * t` is defined and gives the
+	 * type back — scalars, and the vectors and matrices of this library. The cubic, Catmull-Rom and Hermite
+	 * interpolations stay scalar-only.
+	 * @note Explicit since 2026-09-26: the constraints used to read `requires (is_arithmetic_v< number_t >, …)`, a COMMA
+	 * expression that checked only its second half, and vectors and matrices got in through that hole (the engine's
+	 * Sequence.cpp, and this library's CartesianFrame.hpp and Grid.hpp). They are now accepted on purpose, and anything
+	 * else is refused.
+	 * @tparam value_t The interpolated type.
+	 * @tparam scale_t The type of the interpolation factor.
+	 */
+	template< typename value_t, typename scale_t >
+	concept LinearlyInterpolable = requires (const value_t & operandA, const value_t & operandB, scale_t factor) {
+		{ operandA + ((operandB - operandA) * factor) } -> std::convertible_to< value_t >;
+	};
+
+	/**
+	 * @brief Performs a linear interpolation between values: operandA at factor 0, operandB at factor 1.
+	 * @tparam number_t The type of number (or any LinearlyInterpolable type). Default float.
 	 * @tparam scale_number_t The type of floating point number for the scale. Default float.
 	 * @param operandA The operand A.
 	 * @param operandB The operand B.
@@ -372,7 +389,7 @@ namespace EmEn::Base::Math
 	constexpr
 	number_t
 	linearInterpolation (number_t operandA, number_t operandB, scale_number_t factor) noexcept
-		requires (std::is_arithmetic_v< number_t >, std::is_floating_point_v< scale_number_t >)
+		requires (LinearlyInterpolable< number_t, scale_number_t > && std::is_floating_point_v< scale_number_t >)
 	{
 		return operandA + ((operandB - operandA) * factor);
 	}
@@ -391,7 +408,7 @@ namespace EmEn::Base::Math
 	[[nodiscard]]
 	number_t
 	cosineInterpolation (number_t operandA, number_t operandB, scale_number_t factor) noexcept
-		requires (std::is_arithmetic_v< number_t >, std::is_floating_point_v< scale_number_t >)
+		requires (LinearlyInterpolable< number_t, scale_number_t > && std::is_floating_point_v< scale_number_t >)
 	{
 		/* Cosine version only modifies 'factor' before performing a simple linear interpolation. */
 		factor = (static_cast< scale_number_t >(1) - std::cos(factor * std::numbers::pi_v< scale_number_t >)) * static_cast< scale_number_t >(0.5);
@@ -414,7 +431,7 @@ namespace EmEn::Base::Math
 	[[nodiscard]]
 	number_t
 	cubicInterpolation (number_t valueA, number_t valueB, number_t valueC, number_t valueD, scale_number_t factor) noexcept
-		requires (std::is_arithmetic_v< number_t >, std::is_floating_point_v< scale_number_t >)
+		requires (std::is_arithmetic_v< number_t > && std::is_floating_point_v< scale_number_t >)
 	{
 		const auto tmpA = valueD - valueC - valueA + valueB;
 		const auto tmpB = valueA - valueB - tmpA;
@@ -475,7 +492,7 @@ namespace EmEn::Base::Math
 	[[nodiscard]]
 	number_t
 	cubicCatmullRomInterpolation (number_t valueA, number_t valueB, number_t valueC, number_t valueD, scale_number_t factor) noexcept
-		requires (std::is_arithmetic_v< number_t >, std::is_floating_point_v< scale_number_t >)
+		requires (std::is_arithmetic_v< number_t > && std::is_floating_point_v< scale_number_t >)
 	{
 		const auto tmpA = (static_cast< scale_number_t >(-0.5) * valueA) + (static_cast< scale_number_t >(1.5) * valueB) - (static_cast< scale_number_t >(1.5) * valueC) + (static_cast< scale_number_t >(0.5) * valueD);
 		const auto tmpB = valueA - (static_cast< scale_number_t >(2.5) * valueB) + (static_cast< scale_number_t >(2) * valueC) - (static_cast< scale_number_t >(0.5) * valueD);
@@ -508,7 +525,7 @@ namespace EmEn::Base::Math
 	[[nodiscard]]
 	number_t
 	hermiteInterpolate (number_t valueA, number_t valueB, number_t valueC, number_t valueD, scale_number_t factor, scale_number_t tension, scale_number_t bias) noexcept
-		requires (std::is_arithmetic_v< number_t >, std::is_floating_point_v< scale_number_t >)
+		requires (std::is_arithmetic_v< number_t > && std::is_floating_point_v< scale_number_t >)
 	{
 		const auto factor2 = factor * factor;
 		const auto factor3 = factor2 * factor;
@@ -574,7 +591,7 @@ namespace EmEn::Base::Math
 	constexpr
 	output_number_t
 	normalize (input_number_t value, input_number_t scale) noexcept
-		requires (std::is_arithmetic_v< input_number_t >, std::is_arithmetic_v< output_number_t >)
+		requires (std::is_arithmetic_v< input_number_t > && std::is_arithmetic_v< output_number_t >)
 	{
 		return scale > 0 ? static_cast< output_number_t >(value / scale) : 0;
 	}

@@ -38,7 +38,7 @@ namespace EmEn::Base
 	 * @tparam data_t The size of the flag. Default uint32_t.
 	 */
 	template< typename data_t = uint32_t >
-	requires (std::is_integral_v< data_t >, std::is_unsigned_v< data_t >)
+	requires (std::is_integral_v< data_t > && std::is_unsigned_v< data_t >)
 	class FlagTrait
 	{
 		public:

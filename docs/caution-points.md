@@ -134,14 +134,24 @@ argument beats the `uint8_t` default — and divides by 4 294 967 295: black. Na
 `ColorFromInteger< uint8_t >(255, 140, 40)`. Unit tests: `PixelFactoryColor.IntegerComponentsAreRefusedAtCompileTime`,
 `PixelFactoryColor.ColorFromIntegerOfAnEightBitOrange`.
 
-### ⚠️⚠️ A `requires (A, B)` is a COMMA expression — only `B` is checked (Sep 2026)
+### ⚠️⚠️ A `requires (A, B)` is a COMMA expression — only `B` is checked (Sep 2026, FIXED)
 
 `requires (std::is_arithmetic_v< T >, std::is_floating_point_v< U >)` parses as a parenthesised comma expression whose
-value is its LAST operand: the first constraint is evaluated and thrown away. Write `requires (A && B)`. Seventeen
-clauses of this repository were written that way (item `requires-clause-comma-operator`); one of them let the scalar
-`Math::linearInterpolation()` accept vectors and matrices, which `BSpline`, the engine's `Sequence`, `Grid` and
-`CartesianFrame` (among others) silently depended on. A
-too-wide constraint never breaks a build — only a negative test (`static_assert(!requires { … })`) proves one.
+value is its LAST operand: the first constraint is evaluated and thrown away. Write `requires (A && B)`. Nineteen
+clauses of the cascade were written that way (17 here — `FlagTrait`, `Math/Base.hpp` ×6, `Color` ×6 `ColorFromInteger`,
+`Gradient`, `Margin`, `Pixmap::dataConversion`, `Wave` — and 2 in the engine, `OctreeSector.hpp`, `Toolkit.hpp`); all
+fixed on 2026-09-26. Closing the hole broke exactly the callers that lived in it: the engine's `Sequence.cpp`, this
+repository's `CartesianFrame.hpp` and `Grid.hpp` interpolate VECTORS and MATRICES through the scalar
+`linearInterpolation()` / `cosineInterpolation()`. They are now accepted ON PURPOSE by the concept
+`Math::LinearlyInterpolable< T, S >` (`a + (b - a) * t` is defined and gives a `T`), and everything else is refused.
+A too-wide constraint never breaks a build — only a NEGATIVE test proves one (`test_MathBasics.cpp`,
+`test_PixelFactoryColor.cpp`: every fixed clause whose dropped half was reachable). `FlagTrait`, `Margin` and the two
+`dataConversion` have none (their dropped half is implied by the other one), nor the engine's `OctreeSector` and
+`BuiltEntity` (the engine has no unit suite).
+
+⚠️ **A requires-expression outside a template is checked EAGERLY**: `static_assert(!requires { f(bad); })` at namespace
+scope is a hard error, not `false`. Put the probe in a concept (`template< typename T > concept Accepts = requires (T v)
+{ f(v); };`) so the call is dependent.
 
 ⚠️ A header must include what it calls: `BSpline.hpp` used `linearInterpolation()` without including `Base.hpp` and
 compiled only in translation units that had included it first — its first unit test did not compile (fixed
@@ -159,6 +169,18 @@ other 34 interpolations of the cascade already followed it). Why nobody saw it: 
 `start + (end - start) * 0.5` by hand and never called the function — and at t = 0.5 the two directions agree.
 ⚠️ **Test an interpolation at its ENDS.** The actors now turn with `Vector::rotateTowards(from, to, maxRadians)` (an angular-rate
 turn: a correct fraction-LERP would have taken seconds and STALLED at 180°, where the two headings stay collinear).
+
+### Fixed: `BezierCurve` chained OVERLAPPING segments — it jumped at every boundary and never closed (Sep 2026)
+
+Segment i was the quadratic (P[i], P[i+1], P[i+2]), so segment i ended at P[i+2] while segment i+1 started at P[i+1]:
+~2 200-2 650-unit jumps on projet-alpha `basic-scenery`'s White flying light, and a closed curve stopped short of its
+start (141 units on `game-logic`'s smoke circuit). The class's own comment described the intended scheme and the code
+said "for simplicity". Fixed 2026-09-26 (owner decision): the MIDPOINT chain — segment i from midpoint(P[i], P[i+1]) to
+midpoint(P[i+1], P[i+2]) with P[i+1] as its handle, the uniform quadratic B-spline, C1; an open curve is clamped to start
+at P[0] and end at P[n-1], a closed one closes exactly. The interior points are handles: the curve passes NEAR them.
+⚠️ Do not repeat the first point as the last one before `close()` (both closed consumers did): it gives the control
+polygon a zero-length closing edge, so the two segments around P[0] turn into straight lines meeting there at a corner,
+and the motion slows to a stop at that point. Tests: `test_MathBezierCurve.cpp`.
 
 ### A `double` literal brace-initialising a `vertex_data_t` constant — MSVC `/WX` C4305 (Sep 2026)
 

@@ -29,8 +29,69 @@
 
 /* Local inclusions. */
 #include "Math/Base.hpp"
+#include "Math/Vector.hpp"
 
 using namespace EmEn::Base::Math;
+
+/* 2026-09-26: 19 requires-clauses of the cascade were COMMA expressions (`requires (A, B)`) that checked only B — a too
+ * wide constraint never breaks a build, so only a NEGATIVE test proves one. These must stay refused. */
+namespace
+{
+	struct NotInterpolable
+	{
+	};
+}
+
+/* A requires-expression outside a template is checked eagerly (an invalid call is a hard error, not `false`): the probes
+ * are concepts, so the calls are dependent. */
+template< typename value_t, typename scale_t >
+concept AcceptsLinearInterpolation = requires (value_t operandA, value_t operandB, scale_t factor) {
+	linearInterpolation(operandA, operandB, factor);
+};
+
+template< typename value_t, typename scale_t >
+concept AcceptsCosineInterpolation = requires (value_t operandA, value_t operandB, scale_t factor) {
+	cosineInterpolation(operandA, operandB, factor);
+};
+
+template< typename value_t, typename scale_t >
+concept AcceptsCubicInterpolation = requires (value_t operand, scale_t factor) {
+	cubicInterpolation(operand, operand, operand, operand, factor);
+};
+
+template< typename value_t >
+concept AcceptsCatmullRomInterpolation = requires (value_t operand, float factor) {
+	cubicCatmullRomInterpolation(operand, operand, operand, operand, factor);
+};
+
+template< typename value_t >
+concept AcceptsHermiteInterpolation = requires (value_t operand, float factor) {
+	hermiteInterpolate(operand, operand, operand, operand, factor, factor, factor);
+};
+
+template< typename input_t >
+concept AcceptsNormalize = requires (input_t value) {
+	normalize< input_t, float >(value, value);
+};
+
+/* The first half is enforced again — each of these was ACCEPTED by the comma form: a type with no `a + (b - a) * t` is
+ * refused by the linear and cosine interpolations, vectors by the scalar-only cubic, Catmull-Rom and Hermite ones, and a
+ * non-arithmetic input by normalize(). */
+static_assert(!AcceptsLinearInterpolation< NotInterpolable, float >);
+static_assert(!AcceptsCosineInterpolation< NotInterpolable, float >);
+static_assert(!AcceptsCubicInterpolation< Vector< 3, float >, float >);
+static_assert(!AcceptsCatmullRomInterpolation< Vector< 3, float > >);
+static_assert(!AcceptsHermiteInterpolation< Vector< 3, float > >);
+static_assert(!AcceptsNormalize< NotInterpolable >);
+/* The second half, which the comma always kept, still holds: an integral scale is refused. */
+static_assert(!AcceptsLinearInterpolation< float, int >);
+/* ... and what is accepted on purpose (LinearlyInterpolable). */
+static_assert(AcceptsLinearInterpolation< float, float >);
+static_assert(AcceptsLinearInterpolation< Vector< 3, float >, float >);
+static_assert(AcceptsCosineInterpolation< Vector< 3, float >, float >);
+static_assert(AcceptsCubicInterpolation< float, float >);
+static_assert(AcceptsCatmullRomInterpolation< float >);
+static_assert(!LinearlyInterpolable< NotInterpolable, float >);
 
 // FIXME: Test disabled due to deprecation.
 /*TEST(Math, clamp)

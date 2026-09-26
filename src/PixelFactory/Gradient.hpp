@@ -41,7 +41,7 @@ namespace EmEn::Base::PixelFactory
 	 * @tparam color_data_t
 	 */
 	template< typename scale_data_t = float, typename color_data_t = float >
-	requires (std::is_floating_point_v< scale_data_t >, std::is_floating_point_v< color_data_t >)
+	requires (std::is_floating_point_v< scale_data_t > && std::is_floating_point_v< color_data_t >)
 	class Gradient final
 	{
 		public:

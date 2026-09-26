@@ -24,14 +24,54 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+/* STL inclusions. */
+#include <array>
+
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "Math/Vector.hpp"
 #include "PixelFactory/Color.hpp"
+#include "PixelFactory/Gradient.hpp"
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::PixelFactory;
+
+/* 2026-09-26: ColorFromInteger's constraint was a COMMA expression that checked only the output type: a float input was
+ * accepted. Both halves are enforced now. */
+template< typename input_t, typename output_t >
+concept AcceptsColorFromInteger = requires (input_t component) {
+	ColorFromInteger< input_t, output_t >(component, component, component);
+};
+
+template< typename input_t, typename output_t >
+concept AcceptsColorFromIntegerArray = requires (std::array< input_t, 3 > rgb, std::array< input_t, 4 > rgba) {
+	ColorFromInteger< input_t, output_t >(rgb);
+	ColorFromInteger< input_t, output_t >(rgba);
+};
+
+template< typename input_t, typename output_t >
+concept AcceptsColorFromIntegerVector = requires (Math::Vector< 3, input_t > rgb, Math::Vector< 4, input_t > rgba) {
+	ColorFromInteger< input_t, output_t >(rgb);
+	ColorFromInteger< input_t, output_t >(rgba);
+};
+
+/* Each overload: a FLOAT input used to be accepted (only the output half was checked). */
+static_assert(!AcceptsColorFromInteger< float, float >);
+static_assert(!AcceptsColorFromIntegerArray< float, float >);
+static_assert(!AcceptsColorFromIntegerVector< float, float >);
+static_assert(!AcceptsColorFromInteger< uint8_t, int >);
+static_assert(AcceptsColorFromInteger< uint8_t, float >);
+static_assert(AcceptsColorFromIntegerArray< uint8_t, float >);
+static_assert(AcceptsColorFromIntegerVector< uint8_t, float >);
+
+/* Gradient< scale, colour >: both halves floating point — an integral scale used to be accepted. */
+template< typename scale_t, typename color_t >
+concept MakesGradient = requires { sizeof(Gradient< scale_t, color_t >); };
+
+static_assert(!MakesGradient< int, float >);
+static_assert(MakesGradient< float, float >);
 
 TEST(PixelFactoryColor, ColorFromInteger)
 {

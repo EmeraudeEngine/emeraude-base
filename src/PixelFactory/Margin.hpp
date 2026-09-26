@@ -47,7 +47,7 @@ namespace EmEn::Base::PixelFactory
 	 * @tparam data_t The unsigned integer precision. Default size_t.
 	 */
 	template< typename data_t = size_t >
-	requires (std::is_integral_v< data_t >, std::is_unsigned_v< data_t >)
+	requires (std::is_integral_v< data_t > && std::is_unsigned_v< data_t >)
 	class Margin
 	{
 		public:

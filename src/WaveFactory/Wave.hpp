@@ -432,7 +432,7 @@ namespace EmEn::Base::WaveFactory
 	[[nodiscard]]
 	Wave< output_data_t >
 	dataConversion (const Wave< input_data_t > & input) noexcept
-	requires (std::is_arithmetic_v< input_data_t >, std::is_arithmetic_v< output_data_t >)
+	requires (std::is_arithmetic_v< input_data_t > && std::is_arithmetic_v< output_data_t >)
 	{
 		Wave< output_data_t > output{input.sampleCount(), input.channels(), input.frequency()};
 

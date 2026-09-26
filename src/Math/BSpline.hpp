@@ -439,11 +439,11 @@ namespace EmEn::Base::Math
 
 				for ( size_t segment = 0; segment < currentPoint.segments(); segment++ )
 				{
-					/* An explicit vector LERP from the current point (factor 0) to the next one (factor 1). The unqualified
-					 * linearInterpolation() this used compiled only when Base.hpp came first, and only because that scalar
-					 * function's constraint is a COMMA expression that ignores its is_arithmetic half (emeraude-base item
-					 * requires-clause-comma-operator). */
-					const auto position = currentPoint.position() + ((nextPoint.position() - currentPoint.position()) * static_cast< vector_precision_t >(factor));
+					/* From the current point (factor 0) to the next one (factor 1). ⚠️ This used an UNQUALIFIED
+					 * linearInterpolation() that compiled only when Base.hpp came first and only through a comma-expression
+					 * hole in its constraint (fixed 2026-09-26, docs/caution-points.md § A requires (A, B) is a COMMA
+					 * expression): the vector's own LERP says what it means. */
+					const auto position = Vector< vector_dim_t, vector_precision_t >::linearInterpolation(currentPoint.position(), nextPoint.position(), static_cast< vector_precision_t >(factor));
 
 					if ( !callback(currentTime, position) )
 					{

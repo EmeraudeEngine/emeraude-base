@@ -1688,7 +1688,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_t = uint8_t, typename output_t = float >
 	[[nodiscard]]
 	Color< output_t >
-	ColorFromInteger (input_t red, input_t green, input_t blue, input_t alpha) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
+	ColorFromInteger (input_t red, input_t green, input_t blue, input_t alpha) noexcept requires (std::is_integral_v< input_t > && std::is_floating_point_v< output_t >)
 	{
 		/* NOTE: the divisor is cast explicitly. For a wide input_t (uint32_t, uint64_t) the exact
 		 * maximum is not representable in output_t, and the implicit conversion clang flags
@@ -1717,7 +1717,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_t = uint8_t, typename output_t = float >
 	[[nodiscard]]
 	Color< output_t >
-	ColorFromInteger (input_t red, input_t green, input_t blue) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
+	ColorFromInteger (input_t red, input_t green, input_t blue) noexcept requires (std::is_integral_v< input_t > && std::is_floating_point_v< output_t >)
 	{
 		return {
 			static_cast< output_t >(red) / std::numeric_limits< input_t >::max(),
@@ -1737,7 +1737,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_t = uint8_t, typename output_t = float >
 	[[nodiscard]]
 	Color< output_t >
-	ColorFromInteger (const std::array< input_t, 4 > & color) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
+	ColorFromInteger (const std::array< input_t, 4 > & color) noexcept requires (std::is_integral_v< input_t > && std::is_floating_point_v< output_t >)
 	{
 		return {
 			static_cast< output_t >(color[0]) / std::numeric_limits< input_t >::max(),
@@ -1758,7 +1758,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_t = uint8_t, typename output_t = float >
 	[[nodiscard]]
 	Color< output_t >
-	ColorFromInteger (const std::array< input_t, 3 > & color) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
+	ColorFromInteger (const std::array< input_t, 3 > & color) noexcept requires (std::is_integral_v< input_t > && std::is_floating_point_v< output_t >)
 	{
 		return {
 			static_cast< output_t >(color[0]) / std::numeric_limits< input_t >::max(),
@@ -1778,7 +1778,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_t = uint8_t, typename output_t = float >
 	[[nodiscard]]
 	Color< output_t >
-	ColorFromInteger (const Math::Vector< 4, input_t > & color) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
+	ColorFromInteger (const Math::Vector< 4, input_t > & color) noexcept requires (std::is_integral_v< input_t > && std::is_floating_point_v< output_t >)
 	{
 		return {
 			static_cast< output_t >(color.x()) / std::numeric_limits< input_t >::max(),
@@ -1799,7 +1799,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_t = uint8_t, typename output_t = float >
 	[[nodiscard]]
 	Color< output_t >
-	ColorFromInteger (const Math::Vector< 3, input_t > & color) noexcept requires (std::is_integral_v< input_t >, std::is_floating_point_v< output_t >)
+	ColorFromInteger (const Math::Vector< 3, input_t > & color) noexcept requires (std::is_integral_v< input_t > && std::is_floating_point_v< output_t >)
 	{
 		return {
 			static_cast< output_t >(color.x()) / std::numeric_limits< input_t >::max(),

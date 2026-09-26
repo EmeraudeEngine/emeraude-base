@@ -3091,7 +3091,7 @@ namespace EmEn::Base::PixelFactory
 	template< typename input_pixel_data_t, typename output_pixel_data_t >
 	[[nodiscard]]
 	Pixmap< output_pixel_data_t >
-	dataConversion (const Pixmap< input_pixel_data_t > & input) noexcept requires (std::is_arithmetic_v< input_pixel_data_t >, std::is_arithmetic_v< output_pixel_data_t >)
+	dataConversion (const Pixmap< input_pixel_data_t > & input) noexcept requires (std::is_arithmetic_v< input_pixel_data_t > && std::is_arithmetic_v< output_pixel_data_t >)
 	{
 		Pixmap< output_pixel_data_t > output{input.width(), input.height(), input.channelMode()};
 
