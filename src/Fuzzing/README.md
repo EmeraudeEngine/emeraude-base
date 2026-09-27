@@ -107,7 +107,7 @@ clean for millions of runs under ASan + UBSan (`UBSAN_OPTIONS=halt_on_error=1`).
 
 > The fuzzers are header-instrumented by clang while linking the g++ `libEmeraudeBase.a`; the
 > `setjmp`/`longjmp` error handling for libpng/libjpeg is the sanctioned mechanism under the
-> library's `-fno-exceptions` policy. See [`../docs/error-handling.md`](../docs/error-handling.md).
+> library's `-fno-exceptions` policy. See [`../docs/error-handling.md`](../../docs/error-handling.md).
 ### Gap: `FileFormatHDR` (RGBE) has no target
 
 `FileFormatHDR` was added by `ceb83c2`, **after** the campaign above, and no `fuzz_hdr` target was
