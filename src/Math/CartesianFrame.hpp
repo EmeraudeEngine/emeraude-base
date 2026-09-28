@@ -1111,6 +1111,46 @@ namespace EmEn::Base::Math
 			}
 
 			/**
+			 * @brief Returns the model matrix to place an UPRIGHT billboard: turned toward the camera around the
+			 * world's vertical (+Y) only.
+			 * @note getSpriteModelMatrix() faces the camera fully (a spherical billboard): anchored at its foot, a
+			 * sprite standing on the ground — a flame, a figure — leans back as the camera rises or comes close
+			 * above it, and reads as drawing away. This one keeps it standing.
+			 * @note With the camera straight above or below the position (no horizontal offset), the previous
+			 * facing cannot be known: the billboard faces +Z.
+			 * @param cameraPosition The camera world position.
+			 * @return Matrix< 4, precision_t >
+			 */
+			[[nodiscard]]
+			Matrix< 4, precision_t >
+			getUprightSpriteModelMatrix (const Vector< 3, float > & cameraPosition) const noexcept
+			{
+				auto backward = cameraPosition - m_position;
+				backward[Y] = 0;
+
+				if ( backward.lengthSquared() <= std::numeric_limits< precision_t >::epsilon() )
+				{
+					backward = {0, 0, 1};
+				}
+				else
+				{
+					backward.normalize();
+				}
+
+				const Vector< 3, precision_t > upward{0, 1, 0};
+				const auto right = Vector< 3, precision_t >::crossProduct(upward, backward);
+
+				Matrix< 4, precision_t > modelMatrix{right, upward, backward, m_position};
+
+				if ( !m_scaling.isAllComponentOne() )
+				{
+					modelMatrix *= Matrix< 4, precision_t >::scaling(m_scaling);
+				}
+
+				return modelMatrix;
+			}
+
+			/**
 			 * @brief Returns the inverted model matrix to place an object in a 3D scene.
 			 * @note This method don't use the generic inverse() method.
 			 * Matrix Layout :

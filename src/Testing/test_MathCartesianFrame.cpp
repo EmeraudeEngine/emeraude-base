@@ -1107,3 +1107,45 @@ TYPED_TEST(MathCartesianFrame, CosineInterpolationEndpoints)
 		ASSERT_NEAR(interpolatedB.position()[X], frameB.position()[X], static_cast< TypeParam >(1e-5));
 	}
 }
+
+TYPED_TEST(MathCartesianFrame, GetUprightSpriteModelMatrix)
+{
+	/* The camera position is a float vector: only the float frame can take it. */
+	if constexpr ( !std::is_same_v< TypeParam, float > )
+	{
+		std::cout << "Upright billboards are float-only !" "\n";
+
+		ASSERT_EQ(true, true);
+	}
+	else
+	{
+		auto frame = CartesianFrame< float >{};
+		frame.setPosition(1.0F, 0.0F, 2.0F);
+
+		/* The camera 3 m east, 4 m south and 10 m ABOVE: the billboard turns toward it in the horizontal
+		 * plane only (backward = (0.6, 0, 0.8)), its up axis stays the world's +Y. */
+		const auto modelMatrix = frame.getUprightSpriteModelMatrix({4.0F, 10.0F, 6.0F});
+
+		/* Right = up × backward = (0.8, 0, -0.6). */
+		ASSERT_NEAR(modelMatrix[M4x4Col0Row0], 0.8F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col0Row1], 0.0F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col0Row2], -0.6F, 1e-5F);
+		/* Up = +Y, whatever the camera height. */
+		ASSERT_NEAR(modelMatrix[M4x4Col1Row0], 0.0F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col1Row1], 1.0F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col1Row2], 0.0F, 1e-5F);
+		/* Backward, horizontal. */
+		ASSERT_NEAR(modelMatrix[M4x4Col2Row0], 0.6F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col2Row1], 0.0F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col2Row2], 0.8F, 1e-5F);
+		/* Position. */
+		ASSERT_NEAR(modelMatrix[M4x4Col3Row0], 1.0F, 1e-5F);
+		ASSERT_NEAR(modelMatrix[M4x4Col3Row2], 2.0F, 1e-5F);
+
+		/* The camera straight above: no horizontal offset, the billboard faces +Z. */
+		const auto aboveMatrix = frame.getUprightSpriteModelMatrix({1.0F, 10.0F, 2.0F});
+
+		ASSERT_NEAR(aboveMatrix[M4x4Col1Row1], 1.0F, 1e-5F);
+		ASSERT_NEAR(aboveMatrix[M4x4Col2Row2], 1.0F, 1e-5F);
+	}
+}
