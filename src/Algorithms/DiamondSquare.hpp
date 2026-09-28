@@ -42,6 +42,15 @@ namespace EmEn::Base::Algorithms
 {
 	/**
 	 * @brief Class performing the diamond square algorithm for terrain generation.
+	 * @note Every new point is the 4-POINT CUBIC midpoint of its line (Dyn, Levin, Gregory, "A 4-point interpolatory
+	 * subdivision scheme for curve design", Computer Aided Geometric Design 4, 1987): (−p₋₃ + 9 p₋₁ + 9 p₊₁ − p₊₃) / 16,
+	 * along both diagonals for a square's centre, along both axes for an edge's midpoint. The classical LINEAR average
+	 * left a cone tip at every coarse point and creases along the coarse grid lines — the midpoint-displacement artefact
+	 * (G. S. P. Miller, "The Definition and Rendering of Terrain Maps", SIGGRAPH 1986) — measured on 513 points at
+	 * hurst 1.25: the coarse points stood 7.8× above the median Laplacian of the others (item
+	 * diamond-square-coarse-point-cones, owner decision 2026-09-28). The scheme is interpolating: the coarse points stay
+	 * where they are, so the large relief is kept. Near the border an outer sample is missing: the quadratic through the
+	 * three others, then the linear mean.
 	 * @tparam number_t The type of number. Default float.
 	 */
 	template< typename number_t = float > requires (std::is_floating_point_v< number_t >)
@@ -183,6 +192,66 @@ namespace EmEn::Base::Algorithms
 			}
 
 			/**
+			 * @brief Returns the midpoint of a line of the lattice, from its samples at −3, −1, +1 and +3 half-steps.
+			 * @note 4-point cubic rule (see the class note); with one outer sample outside the grid, the quadratic through
+			 * the three others ((3 p₋₁ + 6 p₊₁ − p₊₃) / 8 and its mirror); with both, the linear mean.
+			 * @param coordX The midpoint's coordinate in X.
+			 * @param coordY The midpoint's coordinate in Y.
+			 * @param stepX The line's direction in X, in half-steps (−1, 0 or 1).
+			 * @param stepY The line's direction in Y, in half-steps (−1, 0 or 1).
+			 * @param halfSize The half-step of this level.
+			 * @param midpoint Receives the interpolated value.
+			 * @return bool False when an inner sample (±1) lies outside the grid: the line does not exist there.
+			 */
+			[[nodiscard]]
+			bool
+			lineMidpoint (size_t coordX, size_t coordY, int64_t stepX, int64_t stepY, size_t halfSize, number_t & midpoint) const noexcept
+			{
+				const auto size = static_cast< int64_t >(m_size);
+				const auto half = static_cast< int64_t >(halfSize);
+				number_t samples[4]{};
+				bool present[4]{};
+				constexpr int64_t Offsets[4]{-3, -1, 1, 3};
+
+				for ( size_t sample = 0; sample < 4; ++sample )
+				{
+					const auto x = static_cast< int64_t >(coordX) + (Offsets[sample] * stepX * half);
+					const auto y = static_cast< int64_t >(coordY) + (Offsets[sample] * stepY * half);
+
+					present[sample] = x >= 0 && x < size && y >= 0 && y < size;
+
+					if ( present[sample] )
+					{
+						samples[sample] = m_data[this->index(static_cast< size_t >(x), static_cast< size_t >(y))];
+					}
+				}
+
+				if ( !present[1] || !present[2] )
+				{
+					return false;
+				}
+
+				if ( present[0] && present[3] )
+				{
+					midpoint = ((static_cast< number_t >(9) * (samples[1] + samples[2])) - samples[0] - samples[3]) / static_cast< number_t >(16);
+				}
+				else if ( present[3] )
+				{
+					midpoint = ((static_cast< number_t >(3) * samples[1]) + (static_cast< number_t >(6) * samples[2]) - samples[3]) / static_cast< number_t >(8);
+				}
+				else if ( present[0] )
+				{
+					midpoint = ((static_cast< number_t >(6) * samples[1]) + (static_cast< number_t >(3) * samples[2]) - samples[0]) / static_cast< number_t >(8);
+				}
+				else
+				{
+					midpoint = (samples[1] + samples[2]) * static_cast< number_t >(0.5);
+				}
+
+				return true;
+			}
+
+			/**
 			 * @brief Performs the corner step.
 			 * @return void
 			 */
@@ -219,22 +288,19 @@ namespace EmEn::Base::Algorithms
 			void
 			diamondStep (size_t size, size_t halfSize, number_t amplitude) noexcept
 			{
+				/* The centre of each tile: the mean of the 4-point midpoints along its two diagonals (both always exist:
+				 * their inner samples are the tile's corners). */
 				for ( size_t coordX = halfSize; coordX < m_size; coordX += size )
 				{
 					for ( size_t coordY = halfSize; coordY < m_size; coordY += size )
 					{
-						const auto posX = coordX - halfSize;
-						const auto negX = coordX + halfSize;
-						const auto negY = coordY - halfSize;
-						const auto posY = coordY + halfSize;
+						number_t first = 0;
+						number_t second = 0;
 
-						auto average = m_data[this->index(negX, negY)];
-						average += m_data[this->index(negX, posY)];
-						average += m_data[this->index(posX, posY)];
-						average += m_data[this->index(posX, negY)];
-						average *= 0.25;
+						static_cast< void >(this->lineMidpoint(coordX, coordY, 1, 1, halfSize, first));
+						static_cast< void >(this->lineMidpoint(coordX, coordY, 1, -1, halfSize, second));
 
-						m_data[this->index(coordX, coordY)] = average + m_randomizer.value(-amplitude, amplitude);
+						m_data[this->index(coordX, coordY)] = ((first + second) * static_cast< number_t >(0.5)) + m_randomizer.value(-amplitude, amplitude);
 					}
 				}
 			}
@@ -264,31 +330,22 @@ namespace EmEn::Base::Algorithms
 
 					for ( size_t coordY = offset; coordY < m_size; coordY += size )
 					{
+						/* The midpoint of a tile's side: the mean of the 4-point midpoints along the axes that exist there
+						 * (one on the grid's border). */
 						number_t sum = 0;
-						size_t count = 0;
+						number_t count = 0;
+						number_t midpoint = 0;
 
-						if ( coordX >= halfSize )
+						if ( this->lineMidpoint(coordX, coordY, 1, 0, halfSize, midpoint) )
 						{
-							sum += m_data[index(coordX - halfSize, coordY)];
-							count++;
+							sum += midpoint;
+							count += 1;
 						}
 
-						if ( coordX + halfSize < m_size )
+						if ( this->lineMidpoint(coordX, coordY, 0, 1, halfSize, midpoint) )
 						{
-							sum += m_data[index(coordX + halfSize, coordY)];
-							count++;
-						}
-
-						if ( coordY >= halfSize )
-						{
-							sum += m_data[index(coordX, coordY - halfSize)];
-							count++;
-						}
-
-						if ( coordY + halfSize < m_size )
-						{
-							sum += m_data[index(coordX, coordY + halfSize)];
-							count++;
+							sum += midpoint;
+							count += 1;
 						}
 
 						m_data[this->index(coordX, coordY)] = (sum / count) + m_randomizer.value(-amplitude, amplitude);

@@ -196,6 +196,35 @@ instantiation keeps its precision and the rounding is stated.
 **Catch it on Linux before pushing:** compile the translation unit with GCC `-Wfloat-conversion`
 ("conversion from 'double' to 'float' changes value") — it flagged exactly the two lines MSVC did.
 
+## Algorithms
+
+### Diamond-square: a CONE TIP at every coarse point — the linear averages of midpoint displacement (Sep 2026, FIXED)
+
+Owner report (projet-alpha `water-world`, 2026-09-28): isolated thin spikes out of smooth dunes, one right under the spawn
+camera. Not an implementation bug: a point created at a coarse level is never touched again and every finer level filled
+around it by LINEAR averages, so the slope broke at each coarse point — a cone tip — with creases along the coarse grid
+lines (the midpoint-displacement artefact, G. S. P. Miller, "The Definition and Rendering of Terrain Maps", SIGGRAPH 1986).
+
+`Algorithms::DiamondSquare` now builds each new point with the 4-point cubic rule (Dyn, Levin, Gregory, CAGD 4, 1987):
+(−p₋₃ + 9 p₋₁ + 9 p₊₁ − p₊₃) / 16 along both diagonals (diamond step) or both axes (square step), the quadratic through
+the three remaining samples when an outer one lies outside the grid, the linear mean when both do. Owner decision
+2026-09-28, chosen over Miller's square-square subdivision (approximating: the coarse points would move), random additions
+(the linear slopes still meet at the coarse points) and switching to fBm noise.
+
+Measured on `water-world`'s relief (513 points, roughness 0.5, hurst 1.25, seed 0, × 75 m), |Laplacian| = a point against
+the mean of its 4 neighbours:
+
+| | linear | 4-point cubic |
+|---|---|---|
+| median at coarse points (step ≥ 32) / elsewhere | 0.218 / 0.028 m (7.8×) | 0.056 / 0.025 m (2.2×) |
+| maximum | 0.87 m | 0.30 m |
+| grid centre (the spawn) | 0.75 m | 0.12 m |
+
+The large relief is kept (correlation 0.96 between the two, same seed: the random draws come in the same order).
+⚠️ A higher `hurst` did not cause the cones — it UNMASKED them, by removing the fine noise that hid them (7.8× at 1.25,
+3.3× at 1.0). ⚠️ Every diamond-square terrain changed shape slightly with the fix (same seed, other interpolation).
+Regression test `AlgorithmsDiamondSquare.TheCoarsePointsAreNoConeTips` (bound 3.5×).
+
 ## Network
 
 ### ⚠️⚠️ A `mutable` member is NOT a per-call output — it was a data race for a year (fixed Aug 2026)

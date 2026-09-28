@@ -28,6 +28,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <vector>
 
 /* Local inclusions. */
 #include "Algorithms/DiamondSquare.hpp"
@@ -80,6 +81,35 @@ namespace
 		}
 
 		return count > 0 ? static_cast< float >(sum / static_cast< double >(count)) : 0.0F;
+	}
+
+	/**
+	 * @brief Median |Laplacian| (a point against the mean of its 4 neighbours) over the interior points that do, or do
+	 * not, lie on the lattice of a coarse level (both coordinates multiples of `coarseStep`).
+	 */
+	float
+	medianLaplacian (const DiamondSquare< float > & generator, size_t size, size_t coarseStep, bool coarse) noexcept
+	{
+		std::vector< float > values;
+
+		for ( size_t y = 1; y + 1 < size; ++y )
+		{
+			for ( size_t x = 1; x + 1 < size; ++x )
+			{
+				if ( ((x % coarseStep == 0) && (y % coarseStep == 0)) != coarse )
+				{
+					continue;
+				}
+
+				const auto neighbours = generator.value(x - 1, y) + generator.value(x + 1, y) + generator.value(x, y - 1) + generator.value(x, y + 1);
+
+				values.emplace_back(std::abs(generator.value(x, y) - (0.25F * neighbours)));
+			}
+		}
+
+		std::ranges::nth_element(values, values.begin() + static_cast< std::ptrdiff_t >(values.size() / 2));
+
+		return values[values.size() / 2];
 	}
 }
 
@@ -163,4 +193,24 @@ TEST(AlgorithmsDiamondSquare, AZeroHurstExponentKeepsEveryLevelAtTheSameAmplitud
 	ASSERT_TRUE(brownian.generate(Size, 1.0F, 1.0F));
 
 	ASSERT_GT(meanStep(white, Size, 1) / meanStep(white, Size, 16), meanStep(brownian, Size, 1) / meanStep(brownian, Size, 16));
+}
+
+TEST(AlgorithmsDiamondSquare, TheCoarsePointsAreNoConeTips)
+{
+	/* Midpoint displacement with LINEAR averages leaves a cone tip at every coarse point (Miller, SIGGRAPH 1986): the
+	 * point is never touched again and the finer levels fill around it linearly, so the slope breaks there. Measured on
+	 * water-world's relief (513 points, roughness 0.5, hurst 1.25, seed 0) before the 4-point cubic rule: the coarse
+	 * points (step >= 32) stood at 7.8x the median Laplacian of the others; 2.2x after (item
+	 * diamond-square-coarse-point-cones, 2026-09-28). A bound of 3.5 leaves room for the seed and stays far from 7.8. */
+	constexpr size_t Size{513};
+
+	DiamondSquare< float > generator{0, false};
+
+	ASSERT_TRUE(generator.generate(Size, 0.5F, 1.25F));
+
+	const auto coarse = medianLaplacian(generator, Size, 32, true);
+	const auto elsewhere = medianLaplacian(generator, Size, 32, false);
+
+	ASSERT_GT(elsewhere, 0.0F);
+	ASSERT_LT(coarse / elsewhere, 3.5F);
 }
