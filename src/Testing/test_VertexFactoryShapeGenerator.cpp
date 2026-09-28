@@ -1284,3 +1284,34 @@ TEST(VertexFactoryShapeGenerator, gemVertexColoursAgreeWithGeometry)
 	expectGreenGrowsWithY(ShapeGenerator::generateHeartCutGem< float, uint32_t >(), "heart cut");
 	expectGreenGrowsWithY(ShapeGenerator::generateRoseCutGem< float, uint32_t >(), "rose cut");
 }
+
+/* Ave robustus! (Axis B — correction marker): the poles were computed as sin(π) and cos(π/2) in float,
+ * -8.74e-8 and -4.37e-8 instead of 0, so the pole vertices of the sphere (-Y), the hemisphere (+Y) and
+ * the capsule (both) sat on a ~1e-7 ring: a microscopic hole that no position welding closes.
+ * VertexFactory::Silhouette reported 48 spurious sliver edges at a 16x8 sphere's -Y pole. Every vertex
+ * that lies on the Y axis within that noise must now lie on it exactly. */
+TEST(VertexFactoryShapeGenerator, polesLieExactlyOnTheAxis)
+{
+	const auto expectExactPoles = [] (const Shape< float, uint32_t > & shape, const char * name) {
+		auto onAxis = 0;
+
+		for ( const auto & vertex : shape.vertices() )
+		{
+			const auto & position = vertex.position();
+
+			if ( (position.x() * position.x()) + (position.z() * position.z()) < 1.0E-10F )
+			{
+				EXPECT_EQ(position.x(), 0.0F) << name << ": pole vertex off the axis at y = " << position.y();
+				EXPECT_EQ(position.z(), 0.0F) << name << ": pole vertex off the axis at y = " << position.y();
+
+				++onAxis;
+			}
+		}
+
+		EXPECT_GT(onAxis, 0) << name << ": no pole vertex found, the check would be vacuous";
+	};
+
+	expectExactPoles(ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16U, 8U), "sphere");
+	expectExactPoles(ShapeGenerator::generateHemisphere< float, uint32_t >(1.0F, 16U, 8U), "hemisphere");
+	expectExactPoles(ShapeGenerator::generateCapsule< float, uint32_t >(1.0F, 1.0F, 16U, 8U), "capsule");
+}

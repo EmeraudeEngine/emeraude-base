@@ -927,8 +927,12 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto sineRHO = std::sin(RHO);
 			const auto cosineRHO = std::cos(RHO);
 
-			const auto sineRHOdRHO = std::sin(RHO + dRHO);
-			const auto cosineRHOdRHO = std::cos(RHO + dRHO);
+			/* NOTE: The -Y pole is set exactly: sin(π) in float is -8.74e-8, not 0, which left the pole
+			 * vertices on a ~1e-7 ring, a hole no position welding closes (VertexFactory::Silhouette
+			 * reported its slivers). The +Y pole is already exact, sin(0) = 0. */
+			const auto isLastStack = stackIndex + 1 == stacks;
+			const auto sineRHOdRHO = isLastStack ? static_cast< vertex_data_t >(0) : std::sin(RHO + dRHO);
+			const auto cosineRHOdRHO = isLastStack ? -one : std::cos(RHO + dRHO);
 
 			/* Many sources of OpenGL sphere drawing code uses a triangle fan
 			 * for the caps of the sphere. This however introduces texturing
@@ -2634,10 +2638,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto betaA = halfPi - (static_cast< vertex_data_t >(stack) * dAngle);
 			const auto betaB = halfPi - (static_cast< vertex_data_t >(stack + 1) * dAngle);
 
-			const auto cosBetaA = std::cos(betaA);
-			const auto sinBetaA = std::sin(betaA);
-			const auto cosBetaB = std::cos(betaB);
-			const auto sinBetaB = std::sin(betaB);
+			/* NOTE: The pole (first stack) and the equator (last stack) are set exactly: cos(π/2) in
+			 * float is -4.37e-8, not 0, which left the pole vertices on a ~1e-8 ring, a hole. */
+			const auto isPoleStack = stack == 0;
+			const auto isEquatorStack = stack + 1 == stacks;
+			const auto cosBetaA = isPoleStack ? static_cast< vertex_data_t >(0) : std::cos(betaA);
+			const auto sinBetaA = isPoleStack ? one : std::sin(betaA);
+			const auto cosBetaB = isEquatorStack ? one : std::cos(betaB);
+			const auto sinBetaB = isEquatorStack ? static_cast< vertex_data_t >(0) : std::sin(betaB);
 
 			const auto yA = halfLen + (radius * sinBetaA);
 			const auto yB = halfLen + (radius * sinBetaB);
@@ -2707,8 +2715,10 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			const auto cosAlphaA = std::cos(alphaA);
 			const auto sinAlphaA = std::sin(alphaA);
-			const auto cosAlphaB = std::cos(alphaB);
-			const auto sinAlphaB = std::sin(alphaB);
+			/* NOTE: The -Y pole (last stack) is set exactly, see the top hemisphere. alphaA = 0 is exact. */
+			const auto isPoleStack = stack + 1 == stacks;
+			const auto cosAlphaB = isPoleStack ? static_cast< vertex_data_t >(0) : std::cos(alphaB);
+			const auto sinAlphaB = isPoleStack ? one : std::sin(alphaB);
 
 			const auto yA = -halfLen - (radius * sinAlphaA);
 			const auto yB = -halfLen - (radius * sinAlphaB);
@@ -2819,10 +2829,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto betaA = halfPi - (static_cast< vertex_data_t >(stack) * dAngle);
 			const auto betaB = halfPi - (static_cast< vertex_data_t >(stack + 1) * dAngle);
 
-			const auto cosBetaA = std::cos(betaA);
-			const auto sinBetaA = std::sin(betaA);
-			const auto cosBetaB = std::cos(betaB);
-			const auto sinBetaB = std::sin(betaB);
+			/* NOTE: The pole (first stack) and the equator (last stack) are set exactly: cos(π/2) in
+			 * float is -4.37e-8, not 0, which left the pole vertices on a ~1e-8 ring, a hole. */
+			const auto isPoleStack = stack == 0;
+			const auto isEquatorStack = stack + 1 == stacks;
+			const auto cosBetaA = isPoleStack ? static_cast< vertex_data_t >(0) : std::cos(betaA);
+			const auto sinBetaA = isPoleStack ? one : std::sin(betaA);
+			const auto cosBetaB = isEquatorStack ? one : std::cos(betaB);
+			const auto sinBetaB = isEquatorStack ? static_cast< vertex_data_t >(0) : std::sin(betaB);
 
 			const auto yA = radius * sinBetaA;
 			const auto yB = radius * sinBetaB;
