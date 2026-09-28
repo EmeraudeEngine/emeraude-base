@@ -255,7 +255,19 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
 normal-map dilation helper.
 **ShapeAssembler** - Groups several shapes into one.
 **ShapeSplitter** - Splits a shape (returns a split result).
-**Silhouette** - Silhouette-edge detection.
+**Silhouette** - Silhouette (contour) edge extraction for a perspective (`build(eyePosition)`) or an
+orthographic (`buildOrthographic(viewDirection)`) viewer, both in the shape's local space. A contour
+edge joins a front- and a back-facing triangle; a boundary edge is kept when its triangle faces the
+viewer. `prepare(shape)` computes the adjacency and the triangle planes once; a build then allocates
+nothing (redo `prepare()` when positions change: skinning, deformation). Edges come from the visible
+triangle, counter-clockwise, so their indexes carry the visible side of a seam.
+- ⚠️ It does NOT use `Shape::edges()`: those half-edges pair by vertex INDEX, so a cuboid (one vertex
+  set per face) pairs no edge between faces and a UV seam splits a sphere. It welds by EXACT position
+  instead (meshoptimizer's shadow index buffer approach). Positions that differ by float noise stay
+  apart and read as a hole — which is how the generators' pole defect below was found.
+- Rewritten 2026-09-28: the old class refused every valid shape (inverted `isValid()` test), called
+  methods `Shape` does not have (it never compiled once instantiated), returned the front wireframe
+  instead of the contour, and was orthographic only. Tests: `test_VertexFactorySilhouette.cpp`.
 **XRayAnalyzer** - X-ray cross-section analysis.
 **CapUVMapping / Normal / TextureCoordinates** - UV-mapping helpers for caps and spherical/cubic
 coordinate generation.
