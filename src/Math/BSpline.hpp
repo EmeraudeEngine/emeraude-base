@@ -418,6 +418,19 @@ namespace EmEn::Base::Math
 				return true;
 			}
 
+			/**
+			 * @brief Returns the points: an anchor with its handles (offsets from the anchor), the curve type and the
+			 * segment count of the span it opens.
+			 * @note Math/CurveTessellation.hpp tessellates them adaptively (a chord tolerance instead of segment counts).
+			 * @return const std::vector< BSplinePoint< vector_dim_t, vector_precision_t > > &
+			 */
+			[[nodiscard]]
+			const std::vector< BSplinePoint< vector_dim_t, vector_precision_t > > &
+			points () const noexcept
+			{
+				return m_points;
+			}
+
 		private:
 
 			/**

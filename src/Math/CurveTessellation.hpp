@@ -1,0 +1,397 @@
+/*
+ * src/Math/CurveTessellation.hpp
+ * This file is part of Emeraude-Base
+ *
+ * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
+ *
+ * Emeraude-Base is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * Emeraude-Base is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Emeraude-Base; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ * Complete project and additional information can be found at :
+ * https://github.com/EmeraudeEngine/emeraude-base
+ *
+ * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
+ */
+
+#pragma once
+
+/* STL inclusions. */
+#include <algorithm>
+#include <cmath>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <span>
+#include <vector>
+
+/* Local inclusions. */
+#include "BSpline.hpp"
+#include "Vector.hpp"
+
+/*
+ * Adaptive tessellation of curves into polylines (for Scenes::Component::Path, 2026-09-29).
+ *
+ * Every curve kind is converted into CUBIC BÉZIER spans, then each span is split by de Casteljau at t = 1/2 until it
+ * is flat: its two inner control points lie within `tolerance` of the chord. The curve lies inside the convex hull of
+ * its control points, so the polyline never strays further than `tolerance` from the curve (a chord error, in the
+ * curve's units — metres for a Path). A straight span costs one segment, a tight bend as many as it needs.
+ *
+ * - polyline(): the points as they are.
+ * - bezierPath(): a Math::BSpline — anchors with handles (offsets from the anchor), a curve type per span (None =
+ *   straight, BezierQuadratic elevated to a cubic, BezierCubic). Its segment counts are ignored.
+ * - uniformBSpline(): a uniform cubic B-spline (C2, does not pass through its control points). Open curves clamp to
+ *   their end points (tripled end points); closed ones wrap.
+ * - catmullRom(): a Catmull-Rom spline through every point; alpha 0.5 = CENTRIPETAL (no cusp nor self-intersection
+ *   within a span: Yuksel, Schaefer, Keyser, "Parameterization and applications of Catmull-Rom curves", CAD 2011).
+ *
+ * Consecutive coincident points are dropped first (they would make a zero-length span or a division by zero).
+ */
+namespace EmEn::Base::Math::CurveTessellation
+{
+	/** @brief The chord tolerance used when none is given: 1 cm for curves in metres. */
+	template< std::floating_point precision_t >
+	constexpr precision_t DefaultTolerance{static_cast< precision_t >(0.01)};
+
+	/** @brief The deepest subdivision of one span (2^16 segments): a guard against a degenerate span, never a target. */
+	constexpr uint32_t MaxDepth{16};
+
+	/**
+	 * @brief Returns the distance from a point to a segment.
+	 * @tparam precision_t The floating point type.
+	 * @param point The point.
+	 * @param start The segment start.
+	 * @param end The segment end.
+	 * @return precision_t
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	precision_t
+	distanceToSegment (const Vector< 3, precision_t > & point, const Vector< 3, precision_t > & start, const Vector< 3, precision_t > & end) noexcept
+	{
+		const auto segment = end - start;
+		const auto lengthSquared = Vector< 3, precision_t >::dotProduct(segment, segment);
+
+		if ( lengthSquared <= std::numeric_limits< precision_t >::min() )
+		{
+			return (point - start).length();
+		}
+
+		const auto t = std::clamp(Vector< 3, precision_t >::dotProduct(point - start, segment) / lengthSquared, static_cast< precision_t >(0), static_cast< precision_t >(1));
+
+		return (point - (start + segment * t)).length();
+	}
+
+	/**
+	 * @brief Appends a cubic Bézier span to a polyline, EXCLUDING its first point (the previous span's last one).
+	 * @tparam precision_t The floating point type.
+	 * @param p0 The start.
+	 * @param p1 The first inner control point.
+	 * @param p2 The second inner control point.
+	 * @param p3 The end.
+	 * @param tolerance The chord tolerance (> 0).
+	 * @param polyline The polyline to append to.
+	 * @param depth The current subdivision depth.
+	 * @return void
+	 */
+	template< std::floating_point precision_t >
+	void
+	appendCubic (const Vector< 3, precision_t > & p0, const Vector< 3, precision_t > & p1, const Vector< 3, precision_t > & p2, const Vector< 3, precision_t > & p3, precision_t tolerance, std::vector< Vector< 3, precision_t > > & polyline, uint32_t depth = 0) noexcept
+	{
+		/* Flat: the convex hull, hence the curve, is within the tolerance of the chord. */
+		if ( depth >= MaxDepth || std::max(distanceToSegment(p1, p0, p3), distanceToSegment(p2, p0, p3)) <= tolerance )
+		{
+			polyline.emplace_back(p3);
+
+			return;
+		}
+
+		/* de Casteljau at t = 1/2. */
+		constexpr auto Half = static_cast< precision_t >(0.5);
+
+		const auto p01 = (p0 + p1) * Half;
+		const auto p12 = (p1 + p2) * Half;
+		const auto p23 = (p2 + p3) * Half;
+		const auto p012 = (p01 + p12) * Half;
+		const auto p123 = (p12 + p23) * Half;
+		const auto middle = (p012 + p123) * Half;
+
+		appendCubic(p0, p01, p012, middle, tolerance, polyline, depth + 1);
+		appendCubic(middle, p123, p23, p3, tolerance, polyline, depth + 1);
+	}
+
+	/**
+	 * @brief Returns the points without their consecutive duplicates.
+	 * @tparam precision_t The floating point type.
+	 * @param points The points.
+	 * @param closed Whether the last point also joins the first one (a closing duplicate is dropped too).
+	 * @return std::vector< Vector< 3, precision_t > >
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	withoutDuplicates (std::span< const Vector< 3, precision_t > > points, bool closed = false) noexcept
+	{
+		constexpr auto Epsilon = static_cast< precision_t >(1.0E-6);
+
+		std::vector< Vector< 3, precision_t > > unique;
+		unique.reserve(points.size());
+
+		for ( const auto & point : points )
+		{
+			if ( unique.empty() || (point - unique.back()).length() > Epsilon )
+			{
+				unique.emplace_back(point);
+			}
+		}
+
+		if ( closed && unique.size() > 1 && (unique.back() - unique.front()).length() <= Epsilon )
+		{
+			unique.pop_back();
+		}
+
+		return unique;
+	}
+
+	/**
+	 * @brief Returns a polyline as it is (its consecutive duplicates dropped).
+	 * @tparam precision_t The floating point type.
+	 * @param points The points.
+	 * @param closed Whether the polyline closes (the first point is repeated at the end).
+	 * @return std::vector< Vector< 3, precision_t > >
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	polyline (std::span< const Vector< 3, precision_t > > points, bool closed = false) noexcept
+	{
+		auto result = withoutDuplicates(points, closed);
+
+		if ( closed && result.size() > 2 )
+		{
+			result.emplace_back(result.front());
+		}
+
+		return result;
+	}
+
+	/**
+	 * @brief Tessellates a piecewise Bézier path (Math::BSpline: anchors, handles, a curve type per span).
+	 * @tparam precision_t The floating point type.
+	 * @param path The path.
+	 * @param tolerance The chord tolerance (> 0).
+	 * @return std::vector< Vector< 3, precision_t > >
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	bezierPath (const BSpline< 3, precision_t > & path, precision_t tolerance = DefaultTolerance< precision_t >) noexcept
+	{
+		const auto & points = path.points();
+
+		std::vector< Vector< 3, precision_t > > result;
+
+		if ( points.empty() )
+		{
+			return result;
+		}
+
+		result.emplace_back(points.front().position());
+
+		constexpr auto TwoThirds = static_cast< precision_t >(2) / static_cast< precision_t >(3);
+
+		for ( size_t index = 0; index + 1 < points.size(); ++index )
+		{
+			const auto & from = points[index];
+			const auto & to = points[index + 1];
+			const auto & p0 = from.position();
+			const auto & p3 = to.position();
+
+			switch ( from.curveType() )
+			{
+				case CurveType::BezierQuadratic :
+				{
+					/* Degree elevation: the quadratic's single control point (the out handle) as two cubic ones. */
+					const auto control = p0 + from.handleOut();
+
+					appendCubic(p0, p0 + (control - p0) * TwoThirds, p3 + (control - p3) * TwoThirds, p3, tolerance, result);
+				}
+					break;
+
+				case CurveType::BezierCubic :
+					appendCubic(p0, p0 + from.handleOut(), p3 + to.handleIn(), p3, tolerance, result);
+					break;
+
+				case CurveType::None :
+				default :
+					result.emplace_back(p3);
+					break;
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * @brief Tessellates a uniform cubic B-spline.
+	 * @note Each span of four control points (Q0, Q1, Q2, Q3) is the cubic Bézier ((Q0 + 4 Q1 + Q2) / 6, (2 Q1 + Q2) / 3,
+	 * (Q1 + 2 Q2) / 3, (Q1 + 4 Q2 + Q3) / 6). An open curve triples its end points: it starts on the first control point
+	 * and ends on the last.
+	 * @tparam precision_t The floating point type.
+	 * @param controlPoints The control points (2 at least).
+	 * @param tolerance The chord tolerance (> 0).
+	 * @param closed Whether the curve closes on itself (3 control points at least).
+	 * @return std::vector< Vector< 3, precision_t > >
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	uniformBSpline (std::span< const Vector< 3, precision_t > > controlPoints, precision_t tolerance = DefaultTolerance< precision_t >, bool closed = false) noexcept
+	{
+		const auto unique = withoutDuplicates(controlPoints, closed);
+
+		if ( unique.size() < 2 || (closed && unique.size() < 3) )
+		{
+			return polyline(std::span< const Vector< 3, precision_t > >{unique}, false);
+		}
+
+		/* The span sequence: wrapped when closed, the end points tripled when open. */
+		std::vector< Vector< 3, precision_t > > sequence;
+
+		if ( closed )
+		{
+			sequence = unique;
+			sequence.emplace_back(unique[0]);
+			sequence.emplace_back(unique[1]);
+			sequence.emplace_back(unique[2]);
+		}
+		else
+		{
+			sequence.emplace_back(unique.front());
+			sequence.emplace_back(unique.front());
+			sequence.insert(sequence.end(), unique.begin(), unique.end());
+			sequence.emplace_back(unique.back());
+			sequence.emplace_back(unique.back());
+		}
+
+		constexpr auto Sixth = static_cast< precision_t >(1) / static_cast< precision_t >(6);
+		constexpr auto Third = static_cast< precision_t >(1) / static_cast< precision_t >(3);
+		constexpr auto Four = static_cast< precision_t >(4);
+		constexpr auto Two = static_cast< precision_t >(2);
+
+		std::vector< Vector< 3, precision_t > > result;
+
+		for ( size_t index = 0; index + 3 < sequence.size(); ++index )
+		{
+			const auto & q0 = sequence[index];
+			const auto & q1 = sequence[index + 1];
+			const auto & q2 = sequence[index + 2];
+			const auto & q3 = sequence[index + 3];
+
+			const auto b0 = (q0 + q1 * Four + q2) * Sixth;
+			const auto b1 = (q1 * Two + q2) * Third;
+			const auto b2 = (q1 + q2 * Two) * Third;
+			const auto b3 = (q1 + q2 * Four + q3) * Sixth;
+
+			if ( result.empty() )
+			{
+				result.emplace_back(b0);
+			}
+
+			appendCubic(b0, b1, b2, b3, tolerance, result);
+		}
+
+		return result;
+	}
+
+	/**
+	 * @brief Tessellates a Catmull-Rom spline, which passes through every point.
+	 * @note Span P1 → P2 with its neighbours P0 and P3, knot intervals d = |ΔP|^alpha, becomes the cubic Bézier
+	 * (P1, P1 + m1 / 3, P2 − m2 / 3, P2), where m1 = (P2 − P1) + d12 ((P1 − P0) / d01 − (P2 − P0) / (d01 + d12)) and
+	 * m2 = (P2 − P1) + d12 ((P3 − P2) / d23 − (P3 − P1) / (d12 + d23)) — the Barry-Goldman tangents rescaled to the span.
+	 * An open curve extends its ends by mirrored phantom points.
+	 * @tparam precision_t The floating point type.
+	 * @param points The points the curve passes through (2 at least).
+	 * @param tolerance The chord tolerance (> 0).
+	 * @param alpha 0 uniform, 0.5 centripetal (the default: no cusp, no self-intersection within a span), 1 chordal.
+	 * @param closed Whether the curve closes on itself (3 points at least).
+	 * @return std::vector< Vector< 3, precision_t > >
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	catmullRom (std::span< const Vector< 3, precision_t > > points, precision_t tolerance = DefaultTolerance< precision_t >, precision_t alpha = static_cast< precision_t >(0.5), bool closed = false) noexcept
+	{
+		const auto unique = withoutDuplicates(points, closed);
+
+		/* Two points: the curve through them is their segment. */
+		if ( unique.size() < 3 )
+		{
+			return polyline(std::span< const Vector< 3, precision_t > >{unique}, false);
+		}
+
+		const auto count = unique.size();
+		const auto at = [&unique, count, closed] (std::ptrdiff_t index) noexcept -> Vector< 3, precision_t > {
+			const auto size = static_cast< std::ptrdiff_t >(count);
+
+			if ( closed )
+			{
+				return unique[static_cast< size_t >(((index % size) + size) % size)];
+			}
+
+			/* Mirrored phantom points beyond the ends. */
+			if ( index < 0 )
+			{
+				return unique[0] * static_cast< precision_t >(2) - unique[1];
+			}
+
+			if ( index >= size )
+			{
+				return unique[count - 1] * static_cast< precision_t >(2) - unique[count - 2];
+			}
+
+			return unique[static_cast< size_t >(index)];
+		};
+
+		const auto interval = [alpha] (const Vector< 3, precision_t > & from, const Vector< 3, precision_t > & to) noexcept {
+			return std::pow((to - from).length(), alpha);
+		};
+
+		constexpr auto Third = static_cast< precision_t >(1) / static_cast< precision_t >(3);
+
+		const auto spanCount = static_cast< std::ptrdiff_t >(closed ? count : count - 1);
+
+		std::vector< Vector< 3, precision_t > > result;
+		result.emplace_back(unique.front());
+
+		for ( std::ptrdiff_t span = 0; span < spanCount; ++span )
+		{
+			const auto p0 = at(span - 1);
+			const auto p1 = at(span);
+			const auto p2 = at(span + 1);
+			const auto p3 = at(span + 2);
+
+			const auto d01 = interval(p0, p1);
+			const auto d12 = interval(p1, p2);
+			const auto d23 = interval(p2, p3);
+
+			const auto m1 = (p2 - p1) + ((p1 - p0) / d01 - (p2 - p0) / (d01 + d12)) * d12;
+			const auto m2 = (p2 - p1) + ((p3 - p2) / d23 - (p3 - p1) / (d12 + d23)) * d12;
+
+			appendCubic(p1, p1 + m1 * Third, p2 - m2 * Third, p2, tolerance, result);
+		}
+
+		return result;
+	}
+}
