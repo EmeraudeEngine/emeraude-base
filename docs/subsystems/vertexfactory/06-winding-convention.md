@@ -13,6 +13,14 @@ A front face winds **counter-clockwise around its own outward normal** —
 > All nine measured 100% correct in Aug 2026: the migration plan had listed them as "still mirrored"
 > for weeks, and they were not.
 
+> [!WARNING]
+> **The generators were not the only emitters.** `ShapeProcessor::sealBoundaryLoop()` (the caps of a
+> sealed `ShapeSplitter` cut) kept a C/B/A reversal until Sep 2026 — outside this gate, so every cap
+> was culled and the cut showed the inside of the model. Now A/B/C, gated by
+> `VertexFactoryShapeSplitter.sealedCapsWindCCWAndFaceOutOfTheirPart`, which also checks the cap faces
+> OUT of its part and was verified to fail on the old order. Any new emitter of triangles needs its
+> own computed-winding test.
+
 > [!CAUTION]
 > **Two triangle families carry NO evidence about winding. Excluding them is not optional.**
 > 1. **Degenerate** triangles (zero area) — the collapsed quads at a sphere's poles.

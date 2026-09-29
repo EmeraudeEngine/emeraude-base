@@ -686,9 +686,12 @@ namespace EmEn::Base::VertexFactory
 					m_shape.vertices()[capVertexMap[i]].setTangent(axisU);
 				}
 
-				/* Emit the ear-clipped triangles using the new cap vertices.
-				 * Reverse vertex order (CBA) so that the face normal aligns with capNormal
-				 * under Vulkan's CCW front-face convention. */
+				/* Emit the ear-clipped triangles using the new cap vertices, in their NATURAL A/B/C order.
+				 * (axisU, axisV, capNormal) is right-handed (axisU x axisV = capNormal) and the ear clipper
+				 * walks the polygon CCW in that 2D basis, so A/B/C already winds CCW around capNormal: the
+				 * engine's front face (docs/coordinate-system.md § Winding Conventions). A former CBA
+				 * reversal here was a Y-down mirror compensation; after the Y-up migration it turned every
+				 * cap inside out. */
 				for ( const auto & [localA, localB, localC] : earTriangles )
 				{
 					const auto vA = capVertexMap[localA];
@@ -699,10 +702,10 @@ namespace EmEn::Base::VertexFactory
 					const auto cB = m_shape.saveVertexColor({});
 					const auto cC = m_shape.saveVertexColor({});
 
-					ShapeTriangle< vertex_data_t, index_data_t > triangle(vC, vB, vA);
-					triangle.setVertexColorIndex(0, cC);
+					ShapeTriangle< vertex_data_t, index_data_t > triangle(vA, vB, vC);
+					triangle.setVertexColorIndex(0, cA);
 					triangle.setVertexColorIndex(1, cB);
-					triangle.setVertexColorIndex(2, cA);
+					triangle.setVertexColorIndex(2, cC);
 					triangle.setSurfaceNormal(capNormal);
 					triangle.setSurfaceTangent(axisU);
 
@@ -1758,11 +1761,18 @@ namespace EmEn::Base::VertexFactory
 
 						if ( bestJ < workLoops.size() )
 						{
-							/* Append loop j to loop i. */
+							/* Append loop j to loop i (j != i: two distinct vectors).
+							 * NOTE: reserve + push_back rather than dst.insert(dst.end(), src...): GCC 14 inlines
+							 * _M_range_insert and raises a false -Wstringop-overflow on it (a region of size 0). */
 							auto & dst = workLoops[i].vertexIndices;
 							const auto & src = workLoops[bestJ].vertexIndices;
 
-							dst.insert(dst.end(), src.begin(), src.end());
+							dst.reserve(dst.size() + src.size());
+
+							for ( const auto index : src )
+							{
+								dst.push_back(index);
+							}
 
 							merged[bestJ] = true;
 							didMerge = true;

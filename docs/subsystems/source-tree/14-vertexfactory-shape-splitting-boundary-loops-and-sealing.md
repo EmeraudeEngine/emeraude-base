@@ -39,7 +39,13 @@ Geometry analysis and modification on a `Shape` reference:
   - CCW winding enforcement
   - Reflex/ear classification with only-reflex containment test
   - New cap vertices with correct normal + planar UV projection (square, normalized [0,1])
-  - Reversed winding (CBA) for Vulkan CCW front-face convention
+  - Cap triangles emitted in NATURAL A/B/C order: `(axisU, axisV, capNormal)` is right-handed, so a CCW ear
+    in the 2D basis winds CCW around `capNormal` — the front face. ⚠️ Until Sep 2026 they were emitted C/B/A, a
+    Y-down mirror compensation the Y-up migration missed: every sealed cap was culled and showed the inside of
+    the model (projet-alpha `geometry-generator`). Gate: `VertexFactoryShapeSplitter.sealedCapsWindCCWAndFaceOutOfTheirPart`
+    (computes the winding and checks the cap faces OUT of its part; fails on the C/B/A order).
+  - ⚠️ The Newell fallback (no `expectedNormal`) takes the cap normal from the loop's traversal direction, so
+    it is only as outward as the loop order; the splitter always passes the plane normal and never uses it.
 - **`sealAllBoundaryLoops()`**: Uses pre-computed `Shape::boundaryLoops()` if available, falls back to `findBoundaryLoops()`
 
 ### ShapeDecimator (QEM Mesh Decimation)
