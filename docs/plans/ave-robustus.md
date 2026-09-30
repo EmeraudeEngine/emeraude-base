@@ -1,5 +1,10 @@
 # Plan — "Ave robustus!"
 
+> **2026-09-30 — successor.** This first epoch (emeraude-base governance, closed by the owner on 2026-08-27) is
+> HISTORY. "Ave Robustus" is now a permanent, cascade-wide plan (rank 1 of three, with "Allocatus Reduxus" and
+> "Ave Performus"), kept in projet-alpha `docs/plans/`. Its surviving rules (no fix without a test, the error
+> contract `docs/error-handling.md`) are part of it; the clang-tidy results live in `docs/clang-tidy-ledger.md`.
+
 > **Status:** VALIDATED 2026-05-31 (owner-approved; feature freeze + perimeter in effect). **Axis A complete** (Phase 0, A.0–A.5 all done, owner-closed 2026-06-03); **Axis B complete — all gaps closed, including Network production-grade (last item, done 2026-07-04).** Every planned deliverable is now landed, verified (suite 1960/1960 incl. 3 opt-in live tests skipped, Release + ASan/UBSan; projet-alpha cascade links), **committed and pushed** to `develop` on both repos (emeraude-base tip `7c8f644` — feature `60cb19dc` + doc/test follow-ups: tracker push-state, "external resource" URL note, and the 404/unavailable live-test diagnostic; ext-deps-generator tip `7921762`). **AWAITING OWNER'S FORMAL CLOSURE:** per §0 the owner declares "Ave robustus!" complete and lifts the feature freeze — the AI does not self-declare it. Open follow-ups that are NOT blockers to closure (carried as post-plan items): Windows/macOS build+run validation of the TLS stack on those hosts; a versioned LibreSSL release in ext-deps-generator for non-symlink machines; live-network (non-hermetic) validation of the HTTPS client. See the §6 tracker.
 > **Type:** Long-term governance plan for **emeraude-base**.
 > **Scope:** emeraude-base first. The engine and projet-alpha inherit the hardening later.

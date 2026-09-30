@@ -36,6 +36,7 @@ policy.
 | Unit tests (`EmeraudeBaseUnitTests`) | [`src/Testing/AGENTS.md`](src/Testing/AGENTS.md) |
 | Supported image formats (PixelFactory) | [`docs/agents/10-6b-pixelfactory-supported-image-formats.md`](docs/agents/10-6b-pixelfactory-supported-image-formats.md) |
 | Pitfalls | [`docs/caution-points.md`](docs/caution-points.md) (search it, do not read it whole) |
+| clang-tidy results and on-purpose findings (zero NEW finding per change) | [`docs/clang-tidy-ledger.md`](docs/clang-tidy-ledger.md) |
 
 ## The former content of this file (`docs/agents/`)
 
