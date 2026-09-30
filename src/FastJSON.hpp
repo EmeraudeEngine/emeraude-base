@@ -30,9 +30,13 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
+#include <array>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -167,7 +171,132 @@ namespace EmEn::Base::FastJSON
 	}
 
 	/**
-	 * @brief Returns a number from a JSON node.
+	 * @brief Converts ONE JSON value to a number, a boolean or a string: the checked counterpart of jsoncpp's as*()
+	 * accessors, which ABORT on a value of the wrong type or out of the target's range (the library throws
+	 * Json::LogicError, std::terminate under -fno-exceptions).
+	 * @note A boolean is read from a JSON boolean only, a string from a JSON string only, a number from a JSON number
+	 * only (a boolean is not a number). An integral target refuses a value outside its range; a fractional value
+	 * truncates toward zero. A floating-point target refuses a non-finite value (the parser accepts NaN and Infinity,
+	 * and 1e999 reads as infinity) and, below double, a finite value beyond its range.
+	 * @tparam value_t The type to read: an arithmetic type or std::string.
+	 * @param node A reference to a JSON value.
+	 * @return std::optional< value_t > Empty when the value does not convert.
+	 */
+	template< typename value_t >
+	[[nodiscard]]
+	std::optional< value_t >
+	asValue (const Json::Value & node) noexcept requires (std::is_arithmetic_v< value_t > || std::is_same_v< value_t, std::string >)
+	{
+		if constexpr ( std::is_same_v< value_t, std::string > )
+		{
+			if ( !node.isString() )
+			{
+				return std::nullopt;
+			}
+
+			return node.asString();
+		}
+		else if constexpr ( std::is_same_v< value_t, bool > )
+		{
+			if ( !node.isBool() )
+			{
+				return std::nullopt;
+			}
+
+			return node.asBool();
+		}
+		else if constexpr ( std::is_integral_v< value_t > )
+		{
+			using Limits = std::numeric_limits< value_t >;
+
+			if ( !node.isNumeric() )
+			{
+				return std::nullopt;
+			}
+
+			/* NOTE: A number holding an integer (an int, a uint, or a real such as 64.0) goes through jsoncpp's own
+			 * range predicate before the 64-bit read, then against the target's limits. */
+			if ( node.isIntegral() )
+			{
+				if constexpr ( std::is_signed_v< value_t > )
+				{
+					if ( !node.isInt64() )
+					{
+						return std::nullopt;
+					}
+
+					const auto value = node.asInt64();
+
+					if constexpr ( sizeof(value_t) < sizeof(int64_t) )
+					{
+						if ( value < Limits::min() || value > Limits::max() )
+						{
+							return std::nullopt;
+						}
+					}
+
+					return static_cast< value_t >(value);
+				}
+				else
+				{
+					if ( !node.isUInt64() )
+					{
+						return std::nullopt;
+					}
+
+					const auto value = node.asUInt64();
+
+					if constexpr ( sizeof(value_t) < sizeof(uint64_t) )
+					{
+						if ( value > Limits::max() )
+						{
+							return std::nullopt;
+						}
+					}
+
+					return static_cast< value_t >(value);
+				}
+			}
+
+			/* A fractional number truncates toward zero, when the truncated value fits. */
+			const auto value = node.asDouble();
+
+			if ( !std::isfinite(value) || value <= static_cast< double >(Limits::min()) - 1.0 || value >= static_cast< double >(Limits::max()) + 1.0 )
+			{
+				return std::nullopt;
+			}
+
+			return static_cast< value_t >(value);
+		}
+		else
+		{
+			if ( !node.isNumeric() )
+			{
+				return std::nullopt;
+			}
+
+			const auto value = node.asDouble();
+
+			if ( !std::isfinite(value) )
+			{
+				return std::nullopt;
+			}
+
+			if constexpr ( sizeof(value_t) < sizeof(double) )
+			{
+				if ( std::abs(value) > static_cast< double >(std::numeric_limits< value_t >::max()) )
+				{
+					return std::nullopt;
+				}
+			}
+
+			return static_cast< value_t >(value);
+		}
+	}
+
+	/**
+	 * @brief Returns a number or a boolean from a JSON node.
+	 * @note The checks of asValue() apply: a wrong type, an out-of-range integer or a non-finite float is absent.
 	 * @tparam value_t The type of the number.
 	 * @param parentNode A reference to a JSON node.
 	 * @param key The JSON key name to look for.
@@ -188,61 +317,17 @@ namespace EmEn::Base::FastJSON
 			return std::nullopt;
 		}
 
-		const auto & node = parentNode[key];
-
-		if constexpr ( std::is_same_v< value_t, bool > )
-		{
-			if ( node.isBool() )
-			{
-				return parentNode[key].asBool();
-			}
-		}
-		else
-		{
-			if ( node.isNumeric() )
-			{
-				/* NOTE: match by size + signedness rather than by exact typedef.
-				 * On macOS, size_t is `unsigned long` while uint64_t is `unsigned long long`
-				 * (same width, distinct types), so std::is_same_v<size_t, uint64_t> is false
-				 * — unlike on Linux/Windows. Using sizeof avoids that ABI trap. */
-				if constexpr ( std::is_integral_v< value_t > && std::is_signed_v< value_t > && sizeof(value_t) <= 4 )
-				{
-					return static_cast< value_t >(node.asInt());
-				}
-
-				if constexpr ( std::is_integral_v< value_t > && std::is_signed_v< value_t > && sizeof(value_t) == 8 )
-				{
-					return static_cast< value_t >(node.asInt64());
-				}
-
-				if constexpr ( std::is_integral_v< value_t > && std::is_unsigned_v< value_t > && sizeof(value_t) <= 4 )
-				{
-					return static_cast< value_t >(node.asUInt());
-				}
-
-				if constexpr ( std::is_integral_v< value_t > && std::is_unsigned_v< value_t > && sizeof(value_t) == 8 )
-				{
-					return static_cast< value_t >(node.asUInt64());
-				}
-
-				if constexpr ( std::is_same_v< value_t, float_t > )
-				{
-					return node.asFloat();
-				}
-
-				if constexpr ( std::is_same_v< value_t, double_t > )
-				{
-					return node.asDouble();
-				}
-			}
-		}
+		const auto value = asValue< value_t >(parentNode[key]);
 
 		if constexpr ( IsDebug )
 		{
-			std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not convertible to a numeric value !" << std::endl;
+			if ( !value.has_value() )
+			{
+				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not convertible to the requested type (wrong type, out of range or non-finite) !" "\n";
+			}
 		}
 
-		return std::nullopt;
+		return value;
 	}
 
 	/**
@@ -267,69 +352,48 @@ namespace EmEn::Base::FastJSON
 			return std::nullopt;
 		}
 
-		const auto & node = parentNode[key];
+		auto value = asValue< std::string >(parentNode[key]);
 
-		if ( !node.isString() )
+		if constexpr ( IsDebug )
 		{
-			if constexpr ( IsDebug )
+			if ( !value.has_value() )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not a string !" << std::endl;
+				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not a string !" "\n";
 			}
-
-			return std::nullopt;
 		}
 
-		return node.asString();
+		return value;
 	}
 
 	/**
-	 * @brief Helper to choose the correct function to cast a number.
-	 * @tparam precision_t The type of precision to cast
-	 */
-	template< typename precision_t >
-	struct JsonValueCaster;
-
-	/**
-	 * @brief Helper specialization for float casting.
-	 */
-	template<>
-	struct JsonValueCaster< float >
-	{
-		static
-		float
-		cast (const Json::Value & node) noexcept
-		{
-			return node.asFloat();
-		}
-	};
-
-	/**
-	 * @brief Helper specialization for double casting.
-	 */
-	template<>
-	struct JsonValueCaster< double >
-	{
-		static
-		double
-		cast (const Json::Value & node) noexcept
-		{
-			return node.asDouble();
-		}
-	};
-
-	/**
-	 * @brief Helpers to construct multiple same parameters objects like vectors or matrices.
+	 * @brief Builds an object of several numbers (a vector, a matrix, a color) from the first items of a JSON array.
 	 * @tparam object_t The type of object to instantiate.
-	 * @tparam parameter_count The number of parameters.
-	 * @tparam Is
-	 * @param node A reference to a JSON node.
-	 * @return object_t
+	 * @tparam precision_t The type of one item.
+	 * @tparam Is The item indexes.
+	 * @param node A reference to a JSON array holding at least sizeof...(Is) items.
+	 * @return std::optional< object_t > Empty when one item is not a finite number (asValue()).
 	 */
-	template< typename object_t, typename parameter_count, std::size_t... Is >
-	object_t
-	createFromJsonImpl (const Json::Value & node, std::index_sequence< Is... >)
+	template< typename object_t, typename precision_t, std::size_t... Is >
+	[[nodiscard]]
+	std::optional< object_t >
+	createFromJsonImpl (const Json::Value & node, std::index_sequence< Is... > /*indexes*/) noexcept
 	{
-		return object_t{ JsonValueCaster< parameter_count >::cast(node[static_cast< Json::Value::ArrayIndex >(Is)])... };
+		std::array< precision_t, sizeof...(Is) > values{};
+		Json::Value::ArrayIndex index = 0;
+
+		for ( auto & slot : values )
+		{
+			const auto value = asValue< precision_t >(node[index++]);
+
+			if ( !value.has_value() )
+			{
+				return std::nullopt;
+			}
+
+			slot = *value;
+		}
+
+		return object_t{values[Is]...};
 	}
 
 	/**
@@ -480,11 +544,9 @@ namespace EmEn::Base::FastJSON
 	{
 		if ( const std::string keyString{key}; data.isObject() && data.isMember(keyString) )
 		{
-			if ( const auto & node = data[keyString]; node.isString() )
+			if ( auto foundValue = asValue< std::string >(data[keyString]); foundValue.has_value() )
 			{
-				auto foundValue = node.asString();
-
-				if ( std::ranges::any_of(possibleValues, [&] (std::string_view value) {return value == foundValue;}) )
+				if ( std::ranges::any_of(possibleValues, [&foundValue] (std::string_view value) {return value == *foundValue;}) )
 				{
 					return foundValue;
 				}

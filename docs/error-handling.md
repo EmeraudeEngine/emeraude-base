@@ -211,3 +211,23 @@ caller skips the notification (owner decision, plan Ave Robustus). The 40 value-
 projet-alpha 12, all in `onNotification()` handlers) were converted at once. Test
 `Observer.anyValueNeverThrowsOnAMismatchedPayload`.
 
+## JSON: the checked FastJSON reads, never jsoncpp's as*() (2026-09-30)
+
+jsoncpp's LIBRARY is built with exceptions: `asUInt()` on `-1`, `asInt()` on `1e20`, `asFloat()` on a string,
+`isMember()` / `operator[]` / `getMemberNames()` on an array all throw `Json::LogicError` — under -fno-exceptions,
+through a `noexcept`, the process aborts (`JSON_USE_EXCEPTION 0` in our headers only changes jsoncpp's INLINE code; the
+library would `abort()` anyway). Reproduced 2026-09-30 by dropping a scene definition on the engine. Rules (owner
+decision, plan Ave Robustus, engine triad 6c):
+
+- A value is read with `FastJSON::getValue< T >(object, key)` or, for a bare node (an array item), `FastJSON::asValue<
+  T >(node)`: `std::nullopt` on a wrong type, an integer out of the target's range (no silent wrap), a non-finite float
+  (the parser accepts `NaN` / `Infinity`, and `1e999` reads as infinity) or a finite double beyond the float range. A
+  fractional number still truncates toward zero into an integer. A boolean is not a number. Vector / Matrix / Color
+  reads check every element the same way.
+- A parsed ROOT, or any node reached by key, is checked `isObject()` before a member access.
+- The six raw converters left in the cascade are inside `asValue()` itself, each behind its predicate. Census method
+  (exact, not a grep: base `Variant` has `asFloat()` too): a scratch copy of `json/value.h` with the converters
+  `[[deprecated]]`, put first as `-isystem`, and `-fsyntax-only -Wno-everything -Wdeprecated-declarations` over the
+  compile database — 89 sites in 19 files before, 6 (the helper) after.
+- Tests: `FastJSON.outOfRangeIntegersAreRefused`, `nonFiniteFloatsAreRefused`, `nonNumericElementsAreRefused`,
+  `asValueOnBareNodes`.

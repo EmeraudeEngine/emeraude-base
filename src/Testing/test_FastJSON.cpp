@@ -162,4 +162,82 @@ namespace EmEn::Base::FastJSON
 		EXPECT_FALSE(getArray(array, "x").has_value());
 		EXPECT_FALSE(getObject(array, "x").has_value());
 	}
+
+	/* ===== Checked conversions (triad 6c, 2026-09-30): jsoncpp's as*() ABORT on an out-of-range integer or a
+	 * non-number (its library throws Json::LogicError, std::terminate here) — every accessor answers nullopt. ===== */
+
+	TEST(FastJSON, outOfRangeIntegersAreRefused)
+	{
+		const auto root = getRootFromString(R"({"negative":-1,"huge":1e20,"big":4294967296,"small":300,"frac":3.7,"negFrac":-3.7})");
+		ASSERT_TRUE(root.has_value());
+
+		EXPECT_FALSE(getValue< uint32_t >(*root, "negative").has_value());
+		EXPECT_FALSE(getValue< uint64_t >(*root, "negative").has_value());
+		EXPECT_FALSE(getValue< int32_t >(*root, "huge").has_value());
+		EXPECT_FALSE(getValue< int64_t >(*root, "huge").has_value());
+		EXPECT_FALSE(getValue< uint32_t >(*root, "big").has_value());
+		EXPECT_FALSE(getValue< uint8_t >(*root, "small").has_value());   /* no silent wrap to 44 */
+		EXPECT_FALSE(getValue< uint32_t >(*root, "negFrac").has_value());
+
+		EXPECT_EQ(getValue< uint64_t >(*root, "big"), 4294967296ULL);
+		EXPECT_EQ(getValue< int16_t >(*root, "small"), 300);
+		EXPECT_EQ(getValue< int32_t >(*root, "negative"), -1);
+		/* A fractional number still truncates toward zero, as before. */
+		EXPECT_EQ(getValue< int32_t >(*root, "frac"), 3);
+		EXPECT_EQ(getValue< int32_t >(*root, "negFrac"), -3);
+	}
+
+	TEST(FastJSON, nonFiniteFloatsAreRefused)
+	{
+		/* The parser accepts NaN / Infinity (allowSpecialFloats), and 1e999 reads as inf regardless. */
+		const auto root = getRootFromString(R"({"nan":NaN,"inf":Infinity,"minusInf":-Infinity,"over":1e999,"wide":1e300,"ok":2.5})", 16, true);
+		ASSERT_TRUE(root.has_value());
+
+		for ( const auto * key : {"nan", "inf", "minusInf", "over", "wide"} )
+		{
+			EXPECT_FALSE(getValue< float >(*root, key).has_value()) << key;
+		}
+
+		EXPECT_FALSE(getValue< double >(*root, "nan").has_value());
+		EXPECT_FALSE(getValue< double >(*root, "over").has_value());
+		EXPECT_DOUBLE_EQ(getValue< double >(*root, "wide").value_or(0.0), 1e300);
+		EXPECT_FLOAT_EQ(getValue< float >(*root, "ok").value_or(0.0F), 2.5F);
+	}
+
+	TEST(FastJSON, nonNumericElementsAreRefused)
+	{
+		const auto root = getRootFromString(R"({"letters":["a","b","c"],"mixed":[1,"x",3],"withBool":[1,true,0],"withNaN":[1,NaN,3],"good":[1,2,3],
+			"matrix":[1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,"z",1]})", 16, true);
+		ASSERT_TRUE(root.has_value());
+
+		using Vector3 = Math::Vector< 3, float >;
+		using Matrix4 = Math::Matrix< 4, float >;
+
+		EXPECT_FALSE(getValue< Vector3 >(*root, "letters").has_value());
+		EXPECT_FALSE(getValue< Vector3 >(*root, "mixed").has_value());
+		EXPECT_FALSE(getValue< Vector3 >(*root, "withBool").has_value());
+		EXPECT_FALSE(getValue< Vector3 >(*root, "withNaN").has_value());
+		EXPECT_FALSE(getValue< PixelFactory::Color< float > >(*root, "mixed").has_value());
+		EXPECT_FALSE(getValue< Matrix4 >(*root, "matrix").has_value());
+
+		const auto good = getValue< Vector3 >(*root, "good");
+		ASSERT_TRUE(good.has_value());
+		EXPECT_FLOAT_EQ(good->z(), 3.0F);
+	}
+
+	TEST(FastJSON, asValueOnBareNodes)
+	{
+		EXPECT_FALSE(asValue< float >(Json::Value{"1.5"}).has_value());   /* a string is not a number */
+		EXPECT_FALSE(asValue< float >(Json::Value{true}).has_value());    /* nor is a boolean */
+		EXPECT_FALSE(asValue< bool >(Json::Value{1}).has_value());
+		EXPECT_FALSE(asValue< std::string >(Json::Value{3}).has_value());
+		EXPECT_FALSE(asValue< uint32_t >(Json::Value{-1}).has_value());
+		EXPECT_FALSE(asValue< float >(Json::Value{Json::objectValue}).has_value());
+		EXPECT_FALSE(asValue< float >(Json::Value{}).has_value());        /* null: absent, not 0 */
+
+		EXPECT_FLOAT_EQ(asValue< float >(Json::Value{1.5}).value_or(0.0F), 1.5F);
+		EXPECT_EQ(asValue< uint32_t >(Json::Value{64.0}), 64U);           /* an integral real */
+		EXPECT_EQ(asValue< bool >(Json::Value{false}), false);
+		EXPECT_EQ(asValue< std::string >(Json::Value{"hotel"}), std::string{"hotel"});
+	}
 }

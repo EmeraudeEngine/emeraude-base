@@ -26,6 +26,7 @@ those whose file is inside the module (the header filter also reports every incl
 | Module | Date | Findings by check | Notes |
 |---|---|---|---|
 | — | — | no full run recorded yet under this ledger | |
+| `src/FastJSON.hpp` (checked conversions, engine triad 6c) | 2026-09-30 | clang-tidy 21.1.6 through the engine TUs: 0 new finding on the changed lines (a readability-simplify-boolean-expr refused — its De Morgan form would let NaN through the integral range test: rewritten with an explicit `std::isfinite()`). The file's pre-existing `std::endl` debug lines (performance-avoid-endl) are left for a base pass. | Partial (one header) |
 
 ## Findings kept ON PURPOSE
 
