@@ -35,8 +35,10 @@
 #include <charconv>
 #include <cstring>
 #include <limits>
+#include <span>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <type_traits>
 #include <vector>
@@ -356,12 +358,37 @@ namespace EmEn::Base::String
 
 	/**
 	 * @brief Encodes a byte buffer to a standard Base64 string (RFC 4648 alphabet, '=' padding).
-	 * @note The input string is treated as a raw byte container (may hold arbitrary binary data).
-	 * @param data A reference to the bytes to encode.
+	 * @param data The bytes to encode (read in place: no copy).
 	 * @return std::string
 	 */
 	[[nodiscard]]
-	std::string encodeBase64 (const std::string & data) noexcept;
+	std::string encodeBase64 (std::span< const std::byte > data) noexcept;
+
+	/**
+	 * @brief Encodes a byte buffer held in a string (may hold arbitrary binary data) to a standard Base64 string.
+	 * @param data The bytes to encode (read in place: no copy).
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	inline
+	std::string
+	encodeBase64 (std::string_view data) noexcept
+	{
+		return encodeBase64(std::as_bytes(std::span< const char >{data.data(), data.size()}));
+	}
+
+	/**
+	 * @brief Encodes an unsigned byte buffer (an image file, a blob) to a standard Base64 string.
+	 * @param data The bytes to encode (read in place: no copy).
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	inline
+	std::string
+	encodeBase64 (std::span< const uint8_t > data) noexcept
+	{
+		return encodeBase64(std::as_bytes(data));
+	}
 
 	/**
 	 * @brief Decodes a standard Base64 string back to its raw bytes.
@@ -540,7 +567,42 @@ namespace EmEn::Base::String
 	bool toBool (std::string value) noexcept;
 
 	/**
+	 * @brief Concatenates any number of string-like parts with ONE allocation: the exact total size is reserved, then
+	 * every part is appended (a chain of operator+ allocates a temporary per step).
+	 * @pre A `const char *` part is not null (as for std::string_view).
+	 * @tparam parts_t The part types, each convertible to std::string_view (std::string, literals, C-strings, views).
+	 * @param parts The parts, in order.
+	 * @return std::string
+	 */
+	template< typename... parts_t >
+	requires ( std::is_convertible_v< const parts_t &, std::string_view > && ... )
+	[[nodiscard]]
+	std::string
+	concatenate (const parts_t & ... parts) noexcept
+	{
+		const std::array< std::string_view, sizeof...(parts_t) > views{std::string_view{parts}...};
+
+		size_t totalSize = 0;
+
+		for ( const auto view : views )
+		{
+			totalSize += view.size();
+		}
+
+		std::string result;
+		result.reserve(totalSize);
+
+		for ( const auto view : views )
+		{
+			result.append(view);
+		}
+
+		return result;
+	}
+
+	/**
 	 * @brief Concatenates two C-strings.
+	 * @pre Neither pointer is null.
 	 * @param strA A C-String
 	 * @param strB A C-String
 	 * @return std::string
@@ -550,7 +612,7 @@ namespace EmEn::Base::String
 	std::string
 	concat (const char * strA, const char * strB) noexcept
 	{
-		return std::string{strA} + std::string{strB};
+		return concatenate(strA, strB);
 	}
 
 	/**
@@ -565,7 +627,7 @@ namespace EmEn::Base::String
 	std::string
 	concat (const char * str, data_t append) noexcept
 	{
-		return std::string{str} + std::to_string(append);
+		return concatenate(str, std::to_string(append));
 	}
 
 	/**
@@ -579,7 +641,7 @@ namespace EmEn::Base::String
 	std::string
 	concat (const std::string & str, const char * append) noexcept
 	{
-		return str + append;
+		return concatenate(str, append);
 	}
 
 	/**
@@ -594,7 +656,7 @@ namespace EmEn::Base::String
 	std::string
 	concat (const std::string & str, data_t append) noexcept
 	{
-		return str + std::to_string(append);
+		return concatenate(str, std::to_string(append));
 	}
 
 	/**

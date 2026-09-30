@@ -192,3 +192,12 @@ the A.1 sanitizers.
 - Plan & doctrine design: [`plans/ave-robustus.md`](plans/ave-robustus.md) (§A.0).
 - Logging hook: [`/src/Logging/Logging.hpp`](../src/Logging/Logging.hpp), `Severity.hpp`.
 - Compile policy (`-fno-exceptions`, `-Werror`, FORTIFY): root `CMakeLists.txt`, `AGENTS.md`.
+
+## asio: the error_code out-parameter is the only channel (2026-09-30)
+
+`cmake/SetupASIO.cmake` defines `ASIO_NO_DEPRECATED` (owner decision, plan Ave Robustus): every synchronous asio
+operation returns `void` and reports through its `asio::error_code &` out-parameter. Read that code after EACH step
+(never let a later call overwrite an unread one); a best-effort teardown (`close`, `shutdown` of a dying socket) may
+ignore it, saying so in a comment. The deprecated returned copy of the code (and the clang-tidy
+`bugprone-unused-return-value` it raised) is gone. The whole cascade built with the define on the first try
+(2026-09-30): no other deprecated asio API is used.

@@ -7,5 +7,7 @@ message("Enabling ASIO library (header-only) ...")
 set(ASIO_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/dependencies/asio/include)
 
 target_include_directories(${TARGET_BINARY_FOR_SETUP} SYSTEM PUBLIC ${ASIO_SOURCE_DIR})
-target_compile_definitions(${TARGET_BINARY_FOR_SETUP} PUBLIC ASIO_STANDALONE ASIO_NO_EXCEPTIONS ASIO_DISABLE_CO_AWAIT)
+# ASIO_NO_DEPRECATED (owner decision 2026-09-30, plan Ave Robustus): the synchronous operations return void and report
+# through their error_code out-parameter only — the deprecated returned copy of that code is gone.
+target_compile_definitions(${TARGET_BINARY_FOR_SETUP} PUBLIC ASIO_STANDALONE ASIO_NO_EXCEPTIONS ASIO_DISABLE_CO_AWAIT ASIO_NO_DEPRECATED)
 

@@ -546,7 +546,7 @@ namespace EmEn::Base::String
 	}
 
 	std::string
-	encodeBase64 (const std::string & data) noexcept
+	encodeBase64 (std::span< const std::byte > data) noexcept
 	{
 		static constexpr std::string_view alphabet{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
 
@@ -559,9 +559,9 @@ namespace EmEn::Base::String
 		/* Encode the bulk of the input, three bytes at a time into four characters. */
 		while ( i + 2 < size )
 		{
-			const auto b0 = static_cast< unsigned char >(data[i]);
-			const auto b1 = static_cast< unsigned char >(data[i + 1]);
-			const auto b2 = static_cast< unsigned char >(data[i + 2]);
+			const auto b0 = std::to_integer< unsigned char >(data[i]);
+			const auto b1 = std::to_integer< unsigned char >(data[i + 1]);
+			const auto b2 = std::to_integer< unsigned char >(data[i + 2]);
 
 			output += alphabet[b0 >> 2];
 			output += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];
@@ -574,7 +574,7 @@ namespace EmEn::Base::String
 		/* Handle the 1 or 2 trailing bytes with '=' padding. */
 		if ( const auto remaining = size - i; remaining == 1 )
 		{
-			const auto b0 = static_cast< unsigned char >(data[i]);
+			const auto b0 = std::to_integer< unsigned char >(data[i]);
 
 			output += alphabet[b0 >> 2];
 			output += alphabet[(b0 & 0x03) << 4];
@@ -583,8 +583,8 @@ namespace EmEn::Base::String
 		}
 		else if ( remaining == 2 )
 		{
-			const auto b0 = static_cast< unsigned char >(data[i]);
-			const auto b1 = static_cast< unsigned char >(data[i + 1]);
+			const auto b0 = std::to_integer< unsigned char >(data[i]);
+			const auto b1 = std::to_integer< unsigned char >(data[i + 1]);
 
 			output += alphabet[b0 >> 2];
 			output += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];

@@ -279,6 +279,49 @@ TEST(String, toNumber)
 	ASSERT_EQ(String::toNumber< long double >("-42.56418561798676658688764578127878746"), -42.56418561798676658688764578127878746L);
 }
 
+TEST(String, concatenateKeepsOrderAndMixesTypes)
+{
+	const std::string path{"Core.SceneManagerService"};
+	const std::string_view name{"LineLight"};
+
+	const auto result = String::concatenate(path, ".", name);
+
+	ASSERT_EQ(result, "Core.SceneManagerService.LineLight");
+	ASSERT_EQ(String::concatenate(), "");
+	ASSERT_EQ(String::concatenate("", "", ""), "");
+	ASSERT_EQ(String::concatenate("a"), "a");
+
+	const char * cString = "tail";
+	ASSERT_EQ(String::concatenate(std::string{"head-"}, cString), "head-tail");
+}
+
+TEST(String, encodeBase64MatchesRFC4648Vectors)
+{
+	/* RFC 4648 § 10 test vectors. */
+	ASSERT_EQ(String::encodeBase64(std::string_view{""}), "");
+	ASSERT_EQ(String::encodeBase64(std::string_view{"f"}), "Zg==");
+	ASSERT_EQ(String::encodeBase64(std::string_view{"fo"}), "Zm8=");
+	ASSERT_EQ(String::encodeBase64(std::string_view{"foo"}), "Zm9v");
+	ASSERT_EQ(String::encodeBase64(std::string_view{"foob"}), "Zm9vYg==");
+	ASSERT_EQ(String::encodeBase64(std::string_view{"fooba"}), "Zm9vYmE=");
+	ASSERT_EQ(String::encodeBase64(std::string_view{"foobar"}), "Zm9vYmFy");
+}
+
+TEST(String, encodeBase64OverloadsAgreeOnBinaryBytes)
+{
+	/* 0x00 and 0xFF included: the buffer is binary, never a C string. */
+	const std::vector< uint8_t > unsignedBytes{0x00, 0xFF, 0x10, 0x80, 0x7F};
+	const std::vector< std::byte > rawBytes{std::byte{0x00}, std::byte{0xFF}, std::byte{0x10}, std::byte{0x80}, std::byte{0x7F}};
+	const std::string asString{reinterpret_cast< const char * >(unsignedBytes.data()), unsignedBytes.size()};
+
+	const auto expected = String::encodeBase64(std::span< const uint8_t >{unsignedBytes});
+
+	ASSERT_EQ(expected, "AP8QgH8=");
+	ASSERT_EQ(String::encodeBase64(std::span< const std::byte >{rawBytes}), expected);
+	ASSERT_EQ(String::encodeBase64(asString), expected);
+	ASSERT_EQ(String::decodeBase64(expected), asString);
+}
+
 TEST(String, concat)
 {
 	ASSERT_EQ(String::concat("Year ", 2023), "Year 2023");
