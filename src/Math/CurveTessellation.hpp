@@ -435,7 +435,7 @@ namespace EmEn::Base::Math::CurveTessellation
 
 		const auto step = total / static_cast< precision_t >(minimumSegments);
 		/* A segment exactly N steps long must not become N + 1 pieces through rounding. */
-		constexpr auto Slack = static_cast< precision_t >(1.0E-4);
+		constexpr auto RoundingSlack = static_cast< precision_t >(1.0E-4);
 
 		result.clear();
 		result.emplace_back(polyline.front());
@@ -444,7 +444,7 @@ namespace EmEn::Base::Math::CurveTessellation
 		{
 			const auto & from = polyline[index - 1];
 			const auto & to = polyline[index];
-			const auto pieces = std::max< uint32_t >(1U, static_cast< uint32_t >(std::ceil((to - from).length() / step - Slack)));
+			const auto pieces = std::max< uint32_t >(1U, static_cast< uint32_t >(std::ceil((to - from).length() / step - RoundingSlack)));
 
 			for ( uint32_t piece = 1; piece < pieces; ++piece )
 			{

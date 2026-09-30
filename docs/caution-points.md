@@ -196,6 +196,18 @@ instantiation keeps its precision and the rounding is stated.
 **Catch it on Linux before pushing:** compile the translation unit with GCC `-Wfloat-conversion`
 ("conversion from 'double' to 'float' changes value") — it flagged exactly the two lines MSVC did.
 
+### A template's local constant shadows a name of the INCLUDING file — MSVC `/WX` C4459 (Sep 2026)
+
+`CurveTessellation::subdivided()` declared a local `constexpr auto Slack`; the unit test that instantiates it has its
+own `constexpr double Slack` in an anonymous namespace, where its vector type `V3` lives too. MSVC checks the template
+at INSTANTIATION, finds the test's `Slack` through the argument's namespace and reports **C4459** "declaration of
+'Slack' hides global declaration" — an error under `/WX`: `EmeraudeBaseUnitTests` did not build on Windows. GCC and
+clang (`-Wshadow` included) check at definition time and say nothing: nothing on Linux catches it.
+
+**Fix:** a specific name for a template's local constant (`RoundingSlack`), never a generic word a caller may also use
+(`Slack`, `Tolerance`, `Epsilon`, `Step`). **Before pushing** a header template: compare its `constexpr` locals with the
+names at namespace scope of the test file that instantiates it.
+
 ## Algorithms
 
 ### Diamond-square: a CONE TIP at every coarse point — the linear averages of midpoint displacement (Sep 2026, FIXED)
