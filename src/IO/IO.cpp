@@ -264,19 +264,38 @@ namespace EmEn::Base::IO
 	{
 		std::vector< std::filesystem::path > entries{};
 
-		std::error_code errorCode;
-
-		for ( const auto & entry : std::filesystem::directory_iterator(path, errorCode) )
-		{
+		/* NOTE: a failed walk is logged by forEachDirectoryEntry(); the entries read before the error are returned. */
+		static_cast< void >(forEachDirectoryEntry(path, false, [&entries] (const std::filesystem::directory_entry & entry) {
 			entries.emplace_back(entry.path());
-		}
 
-		if ( errorCode.value() > 0 ) [[unlikely]]
-		{
-			Logging::error("IO", std::string{"IO::directoryEntries(), an error occurs when reading path "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
-		}
+			return true;
+		}));
 
 		return entries;
+	}
+
+	std::optional< std::filesystem::path >
+	confinedPath (const std::filesystem::path & base, const std::filesystem::path & relative) noexcept
+	{
+		if ( relative.empty() || relative.is_absolute() || relative.has_root_name() || relative.has_root_directory() )
+		{
+			return std::nullopt;
+		}
+
+		const auto normalized = relative.lexically_normal();
+
+		if ( normalized.empty() || *normalized.begin() == ".." )
+		{
+			return std::nullopt;
+		}
+
+		return base / normalized;
+	}
+
+	void
+	logDirectoryWalkError (const std::filesystem::path & path, const std::error_code & errorCode) noexcept
+	{
+		Logging::error("IO", std::string{"IO::forEachDirectoryEntry(), unable to walk the directory "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 	}
 
 	bool

@@ -208,6 +208,32 @@ clang (`-Wshadow` included) check at definition time and say nothing: nothing on
 (`Slack`, `Tolerance`, `Epsilon`, `Step`). **Before pushing** a header template: compare its `constexpr` locals with the
 names at namespace scope of the test file that instantiates it.
 
+## IO / std::filesystem (triad, 2026-09-30)
+
+### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate
+
+- **Symptom:** the process dies on the first unreadable directory, broken link, vanished file or empty path — no log.
+- **The traps:** `exists(p)`, `is_directory(p)`, `relative(a, b)`, `canonical(p)`, `create_directories(p)`,
+  `permissions(...)`, `current_path(p)`, a directory_entry's `is_regular_file()` / `file_size()`… AND the
+  range-for over `directory_iterator` / `recursive_directory_iterator`: even built with an `error_code`, its
+  `operator++` throws. Unqualified calls find the throwing overload by ADL (`is_directory(path)`).
+- **Rule:** the `error_code` overloads, the `IO::` wrappers (`IO::exists`, `IO::fileExists`, `IO::directoryExists`,
+  `IO::createDirectory`), and `IO::forEachDirectoryEntry(path, recursive, visitor)` for every walk (or
+  `IO::directoryEntries()`). `file_size(ec)` answers `static_cast< uintmax_t >(-1)` on error: never add it blindly.
+- 2026-09-30: 38 calls + 9 walks + 9 ADL calls moved, cascade-wide (base, engine, projet-alpha).
+
+### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
+
+`base / "/etc/passwd"` is `/etc/passwd`; `base / "../../x"` leaves `base`. Every path written in data (a resource
+definition, a ZIP entry name — "Zip Slip") is joined with `IO::confinedPath(base, relative)`, which refuses empty,
+absolute, root-named and `..`-escaping paths (lexical, no system call; a symlink inside the base is not resolved).
+`ZipReader::extract()` refuses such an entry (test `ZipArchive.extractionRefusesEntriesThatLeaveTheDestination`).
+
+### `ZipWriter::addFilepathToSources()` / `addDirectoryToSources()` accepted the wrong kind of path (FIXED 2026-09-30)
+
+`!is_regular_file(p) && !exists(p)` accepted an existing DIRECTORY as a file (and the reverse), while the message
+said "or"; given a file, the directory walk then threw. Test `ZipArchive.sourcesRefuseTheWrongKindOfPath`.
+
 ## Algorithms
 
 ### Diamond-square: a CONE TIP at every coarse point — the linear averages of midpoint displacement (Sep 2026, FIXED)

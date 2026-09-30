@@ -34,6 +34,9 @@
 #include <fstream>
 #include <iostream>
 
+/* Local inclusions. */
+#include "IO.hpp"
+
 namespace EmEn::Base::IO
 {
 	ZipReader::ZipReader (std::filesystem::path filepath) noexcept
@@ -50,7 +53,7 @@ namespace EmEn::Base::IO
 	bool
 	ZipReader::isArchiveFile (const std::filesystem::path & filepath) noexcept
 	{
-		if ( !std::filesystem::exists(filepath) )
+		if ( !IO::exists(filepath) )
 		{
 			return false;
 		}
@@ -98,7 +101,7 @@ namespace EmEn::Base::IO
 	bool
 	ZipReader::open () noexcept
 	{
-		if ( !std::filesystem::exists(m_filepath) )
+		if ( !IO::exists(m_filepath) )
 		{
 			std::cerr << ClassId << " : The archive file " << m_filepath << " doesn't exists !" "\n";
 
@@ -163,23 +166,32 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		/* NOTE: Complete the final destination. This can hold subdirectories. */
-		std::filesystem::path filepath = destinationPath;
-		filepath.append(entryName);
+		/* NOTE: Complete the final destination. This can hold subdirectories. The entry name comes from the ARCHIVE:
+		 * "../" or an absolute name would write outside the destination ("Zip Slip"). */
+		const auto confined = IO::confinedPath(destinationPath, std::filesystem::path{entryName});
+
+		if ( !confined )
+		{
+			std::cerr << ClassId << " : The entry " << entryName << " would be extracted outside " << destinationPath << ", refused !" "\n";
+
+			return false;
+		}
+
+		const auto & filepath = *confined;
 
 		/* NOTE: Check the final destination. */
 		const auto finalDirectory = filepath.parent_path();
 
-		if ( std::filesystem::exists(finalDirectory) )
+		if ( IO::exists(finalDirectory) )
 		{
-			if ( !is_directory(finalDirectory) )
+			if ( !IO::directoryExists(finalDirectory) )
 			{
 				std::cerr << ClassId << " : Unable to use the destination directory " << finalDirectory << " !" "\n";
 
 				return false;
 			}
 
-			if ( std::filesystem::exists(filepath) && !overwrite )
+			if ( IO::exists(filepath) && !overwrite )
 			{
 				std::cerr << ClassId << " : The destination file " << filepath << " already exists !" "\n";
 
@@ -188,7 +200,7 @@ namespace EmEn::Base::IO
 		}
 		else
 		{
-			if ( !std::filesystem::create_directories(finalDirectory) )
+			if ( !IO::createDirectory(finalDirectory) )
 			{
 				std::cerr << ClassId << " : Unable to create the destination directory " << finalDirectory << " !" "\n";
 
@@ -225,9 +237,9 @@ namespace EmEn::Base::IO
 		size_t fileExtracted = 0;
 
 		/* NOTE: Check the main destination. */
-		if ( std::filesystem::exists(destinationPath) )
+		if ( IO::exists(destinationPath) )
 		{
-			if ( !is_directory(destinationPath) )
+			if ( !IO::directoryExists(destinationPath) )
 			{
 				std::cerr << ClassId << " : Unable to use the destination directory " << destinationPath << " !" "\n";
 
@@ -236,7 +248,7 @@ namespace EmEn::Base::IO
 		}
 		else
 		{
-			if ( !std::filesystem::create_directories(destinationPath) )
+			if ( !IO::createDirectory(destinationPath) )
 			{
 				std::cerr << ClassId << " : Unable to create the destination directory " << destinationPath << " !" "\n";
 

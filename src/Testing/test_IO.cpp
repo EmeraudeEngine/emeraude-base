@@ -360,3 +360,70 @@ TEST(IOFileUtils, permissionsOnRealFile)
 
 	std::filesystem::remove_all(dir, errorCode);
 }
+
+TEST(IOForEachDirectoryEntry, walksFlatAndRecursiveStopsEarlyAndNeverThrows)
+{
+	std::error_code errorCode;
+
+	const auto root = std::filesystem::temp_directory_path(errorCode) / "emeraude_forEachDirectoryEntry";
+	std::filesystem::remove_all(root, errorCode);
+	ASSERT_TRUE(std::filesystem::create_directories(root / "sub", errorCode));
+
+	std::ofstream{root / "a.txt"} << "a";
+	std::ofstream{root / "b.txt"} << "b";
+	std::ofstream{root / "sub" / "c.txt"} << "c";
+
+	size_t flat = 0;
+	ASSERT_TRUE(EmEn::Base::IO::forEachDirectoryEntry(root, false, [&flat] (const std::filesystem::directory_entry &) { ++flat; return true; }));
+	/* a.txt, b.txt and the sub directory itself. */
+	EXPECT_EQ(flat, 3U);
+
+	size_t regularFiles = 0;
+	ASSERT_TRUE(EmEn::Base::IO::forEachDirectoryEntry(root, true, [&regularFiles] (const std::filesystem::directory_entry & entry) {
+		std::error_code entryError;
+
+		if ( entry.is_regular_file(entryError) )
+		{
+			++regularFiles;
+		}
+
+		return true;
+	}));
+	EXPECT_EQ(regularFiles, 3U);
+
+	/* The visitor stops the walk: the walk still reports success. */
+	size_t visited = 0;
+	ASSERT_TRUE(EmEn::Base::IO::forEachDirectoryEntry(root, true, [&visited] (const std::filesystem::directory_entry &) { ++visited; return false; }));
+	EXPECT_EQ(visited, 1U);
+
+	/* A missing directory is a logged failure, never a terminate (the range-for over directory_iterator threw here). */
+	size_t missing = 0;
+	EXPECT_FALSE(EmEn::Base::IO::forEachDirectoryEntry(root / "does-not-exist", false, [&missing] (const std::filesystem::directory_entry &) { ++missing; return true; }));
+	EXPECT_EQ(missing, 0U);
+	EXPECT_TRUE(EmEn::Base::IO::directoryEntries(root / "does-not-exist").empty());
+
+	std::filesystem::remove_all(root, errorCode);
+}
+
+TEST(IOConfinedPath, refusesEveryPathThatLeavesTheBase)
+{
+	const std::filesystem::path base{"/data/stores"};
+
+	/* Accepted: a relative path that stays inside, "." and ".." segments that resolve inside included. */
+	ASSERT_TRUE(EmEn::Base::IO::confinedPath(base, "Images/a.png").has_value());
+	EXPECT_EQ(EmEn::Base::IO::confinedPath(base, "Images/a.png").value(), base / "Images/a.png");
+	EXPECT_EQ(EmEn::Base::IO::confinedPath(base, "Images/../Meshes/./m.obj").value(), base / "Meshes/m.obj");
+
+	/* Refused: empty, absolute (append() would REPLACE the base), escaping with "..". */
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "/etc/passwd").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "../secret").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "Images/../../secret").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "a/b/../../../x").has_value());
+#if IS_WINDOWS
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "C:\\Windows\\win.ini").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "C:relative").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "\\\\server\\share\\x").has_value());
+	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "..\\secret").has_value());
+#endif
+}

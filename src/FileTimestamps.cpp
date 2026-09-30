@@ -33,6 +33,9 @@
 #include <chrono>
 #include <system_error> /* For std::error_code */
 
+/* Local inclusions. */
+#include "IO/IO.hpp"
+
 /* Third-party inclusions. */
 #if IS_LINUX
 	#include <sys/stat.h>
@@ -100,7 +103,7 @@ namespace EmEn::Base
 	{
 		m_fetched = true;
 
-		if ( !std::filesystem::exists(m_file) )
+		if ( !IO::exists(m_file) )
 		{
 			return;
 		}

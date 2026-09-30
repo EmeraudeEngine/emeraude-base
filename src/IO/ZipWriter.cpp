@@ -55,7 +55,8 @@ namespace EmEn::Base::IO
 	bool
 	ZipWriter::addFilepathToSources (const std::filesystem::path & path, const std::string & entryName) noexcept
 	{
-		if ( !std::filesystem::is_regular_file(path) && !std::filesystem::exists(path) )
+		/* NOTE: "&&" here used to accept an existing DIRECTORY as a file (the message always said "or"). */
+		if ( !IO::fileExists(path) )
 		{
 			std::cerr << ClassId << " : The path " << path << " is not a regular file or doesn't exists !" "\n";
 
@@ -77,39 +78,54 @@ namespace EmEn::Base::IO
 	bool
 	ZipWriter::addDirectoryToSources (const std::filesystem::path & path) noexcept
 	{
-		if ( !std::filesystem::is_directory(path) && !std::filesystem::exists(path) )
+		/* NOTE: "&&" here used to accept an existing regular FILE, then walk it (the message always said "or"). */
+		if ( !IO::directoryExists(path) )
 		{
 			std::cerr << ClassId << " : The path " << path << " is not a directory or doesn't exists !" "\n";
 
 			return false;
 		}
 
-		for ( const auto & entry : std::filesystem::recursive_directory_iterator(path) )
-		{
-			if ( entry.is_regular_file() )
+		bool duplicate = false;
+
+		const auto walked = IO::forEachDirectoryEntry(path, true, [this, &path, &duplicate] (const std::filesystem::directory_entry & entry) {
+			std::error_code errorCode;
+
+			if ( !entry.is_regular_file(errorCode) )
 			{
-				if ( ZipWriter::sourceExists(entry) )
-				{
-					std::cerr << ClassId << " : The file " << entry << " already exists in source !" "\n";
-
-					return false;
-				}
-
-				auto filepathString = IO::toGenericU8String(entry.path());
-
-				const auto entryName = std::filesystem::relative(filepathString, path).generic_string();
-
-				m_sources.emplace_back(entry, entryName);
+				return true;
 			}
-		}
 
-		return true;
+			if ( ZipWriter::sourceExists(entry.path()) )
+			{
+				std::cerr << ClassId << " : The file " << entry.path() << " already exists in source !" "\n";
+
+				duplicate = true;
+
+				return false;
+			}
+
+			const auto relativePath = std::filesystem::relative(IO::toGenericU8String(entry.path()), path, errorCode);
+
+			if ( errorCode )
+			{
+				std::cerr << ClassId << " : Unable to name the entry " << entry.path() << " relative to " << path << " (" << errorCode.message() << ") !" "\n";
+
+				return true;
+			}
+
+			m_sources.emplace_back(entry.path(), relativePath.generic_string());
+
+			return true;
+		});
+
+		return walked && !duplicate;
 	}
 
 	bool
 	ZipWriter::create () noexcept
 	{
-		if ( std::filesystem::exists(m_filepath) )
+		if ( IO::exists(m_filepath) )
 		{
 			std::cerr << ClassId << " : The archive file " << m_filepath << " already exists !" "\n";
 

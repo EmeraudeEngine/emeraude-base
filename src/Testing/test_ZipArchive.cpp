@@ -193,3 +193,49 @@ TEST(ZipArchive, writerAbandonedAfterAddDoesNotLeak)
 
 	SUCCEED();
 }
+TEST(ZipArchive, sourcesRefuseTheWrongKindOfPath)
+{
+	const auto dir = freshTempDir("emeraude_zip_kinds");
+	writeFile(dir / "file.txt", "payload");
+
+	ZipWriter writer{dir / "archive.zip"};
+
+	/* A directory is not a file, a file is not a directory ("&&" used to accept both), a missing path is neither. */
+	EXPECT_FALSE(writer.addFilepathToSources(dir, "dir"));
+	EXPECT_FALSE(writer.addDirectoryToSources(dir / "file.txt"));
+	EXPECT_FALSE(writer.addFilepathToSources(dir / "missing.txt", "missing.txt"));
+	EXPECT_FALSE(writer.addDirectoryToSources(dir / "missing"));
+	EXPECT_TRUE(writer.addFilepathToSources(dir / "file.txt", "file.txt"));
+
+	std::error_code errorCode;
+	std::filesystem::remove_all(dir, errorCode);
+}
+
+TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
+{
+	const auto dir = freshTempDir("emeraude_zip_slip");
+	writeFile(dir / "payload.txt", "evil");
+
+	const auto archive = dir / "slip.zip";
+
+	{
+		/* "Zip Slip": entry names written by whoever built the archive. */
+		ZipWriter writer{archive};
+		ASSERT_TRUE(writer.addFilepathToSources(dir / "payload.txt", "../escaped.txt"));
+		ASSERT_TRUE(writer.create());
+	}
+
+	const auto destination = dir / "out";
+
+	ZipReader reader{archive};
+	ASSERT_TRUE(reader.open());
+	ASSERT_EQ(reader.entries().size(), 1U);
+
+	EXPECT_FALSE(reader.extract("../escaped.txt", destination));
+	EXPECT_FALSE(reader.extractAll(destination));
+
+	std::error_code errorCode;
+	EXPECT_FALSE(std::filesystem::exists(dir / "escaped.txt", errorCode));
+
+	std::filesystem::remove_all(dir, errorCode);
+}

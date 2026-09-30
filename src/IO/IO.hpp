@@ -32,9 +32,12 @@
 /* STL inclusions. */
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <type_traits>
 #include <vector>
 
 /* Local inclusions. */
@@ -137,6 +140,86 @@ namespace EmEn::Base::IO
 	 */
 	[[nodiscard]]
 	std::vector< std::filesystem::path > directoryEntries (const std::filesystem::path & path) noexcept;
+
+	/**
+	 * @brief Joins a RELATIVE path under a base directory, refusing any path that could leave it (lexical check).
+	 * @note Refused: an empty path, an absolute path, a root name or root directory (C:, \\server, /), and a path whose
+	 * lexically_normal() form starts with "..". std::filesystem::path::append() REPLACES the base with an absolute
+	 * path, and "../" walks out of it: every path that comes from data (a resource definition, a ZIP entry name)
+	 * goes through here. A symbolic link placed INSIDE the base is not resolved (no system call).
+	 * @param base The directory the result must stay in.
+	 * @param relative The path to join, as written in the data.
+	 * @return std::optional< std::filesystem::path > The joined path, or nothing when it would leave the base.
+	 */
+	[[nodiscard]]
+	std::optional< std::filesystem::path > confinedPath (const std::filesystem::path & base, const std::filesystem::path & relative) noexcept;
+
+	/**
+	 * @brief Logs a failed directory walk (the non-template half of forEachDirectoryEntry()).
+	 * @param path The walked directory.
+	 * @param errorCode The error.
+	 * @return void
+	 */
+	void logDirectoryWalkError (const std::filesystem::path & path, const std::error_code & errorCode) noexcept;
+
+	/**
+	 * @brief Visits every entry of a directory — recursively on demand — WITHOUT EVER THROWING.
+	 * @note Under -fno-exceptions a range-for over std::filesystem::directory_iterator terminates the process on the
+	 * first filesystem error: its constructor without std::error_code AND its operator++ throw. This walk uses the
+	 * error_code constructor and increment(error_code) only. A recursive walk skips the directories it may not enter
+	 * (directory_options::skip_permission_denied). A directory_entry's own queries (is_regular_file(), file_size(), …)
+	 * throw too: call their std::error_code overloads in the visitor.
+	 * @tparam visitor_t A callable `bool (const std::filesystem::directory_entry &)`: return false to stop the walk.
+	 * @param path The directory.
+	 * @param recursive Whether to enter the sub-directories.
+	 * @param visitor The visitor.
+	 * @return bool True when the walk reached its end or the visitor stopped it, false on a filesystem error (logged).
+	 */
+	template< typename visitor_t >
+	requires std::is_invocable_r_v< bool, visitor_t &, const std::filesystem::directory_entry & >
+	[[nodiscard]]
+	bool
+	forEachDirectoryEntry (const std::filesystem::path & path, bool recursive, visitor_t && visitor) noexcept
+	{
+		std::error_code errorCode;
+
+		const auto walk = [&] (auto iterator) -> bool {
+			if ( errorCode ) [[unlikely]]
+			{
+				logDirectoryWalkError(path, errorCode);
+
+				return false;
+			}
+
+			const decltype(iterator) end{};
+
+			while ( iterator != end )
+			{
+				if ( !visitor(*iterator) )
+				{
+					return true;
+				}
+
+				iterator.increment(errorCode);
+
+				if ( errorCode ) [[unlikely]]
+				{
+					logDirectoryWalkError(path, errorCode);
+
+					return false;
+				}
+			}
+
+			return true;
+		};
+
+		if ( recursive )
+		{
+			return walk(std::filesystem::recursive_directory_iterator{path, std::filesystem::directory_options::skip_permission_denied, errorCode});
+		}
+
+		return walk(std::filesystem::directory_iterator{path, errorCode});
+	}
 
 	/**
 	 * @brief Creates a directory and all necessary parent directories.
