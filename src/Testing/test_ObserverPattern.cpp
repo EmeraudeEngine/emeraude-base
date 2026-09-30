@@ -27,11 +27,13 @@
 /* STL inclusions. */
 #include <any>
 #include <cstddef>
+#include <string>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "AnyValue.hpp"
 #include "ObservableTrait.hpp"
 #include "ObserverTrait.hpp"
 
@@ -199,4 +201,25 @@ TEST(Observer, watch)
 
 	ASSERT_EQ(watcher.noiseEventIntercepted(), true);
 	ASSERT_EQ(watcher.dummyEventIntercepted(), true);
+}
+
+TEST(Observer, anyValueNeverThrowsOnAMismatchedPayload)
+{
+	/* A notification payload read with the value form std::any_cast< T >(data) throws on a mismatch — under
+	 * -fno-exceptions that aborts. anyValue() answers the value, or nullptr (and logs) without throwing. */
+	const std::any integer{42};
+	const std::any text{std::string{"payload"}};
+	const std::any empty{};
+
+	const auto * value = EmEn::Base::anyValue< int >(integer, "test");
+	ASSERT_NE(value, nullptr);
+	EXPECT_EQ(*value, 42);
+
+	EXPECT_EQ(EmEn::Base::anyValue< float >(integer, "test"), nullptr);
+	EXPECT_EQ(EmEn::Base::anyValue< int >(text, "test"), nullptr);
+	EXPECT_EQ(EmEn::Base::anyValue< int >(empty, "test"), nullptr);
+
+	const auto * string = EmEn::Base::anyValue< std::string >(text, "test");
+	ASSERT_NE(string, nullptr);
+	EXPECT_EQ(*string, "payload");
 }

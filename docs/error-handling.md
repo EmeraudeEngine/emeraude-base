@@ -201,3 +201,13 @@ operation returns `void` and reports through its `asio::error_code &` out-parame
 ignore it, saying so in a comment. The deprecated returned copy of the code (and the clang-tidy
 `bugprone-unused-return-value` it raised) is gone. The whole cascade built with the define on the first try
 (2026-09-30): no other deprecated asio API is used.
+
+## std::any payloads: `Base::anyValue< T >()`, never the value form of std::any_cast (2026-09-30)
+
+`std::any_cast< T >(data)` (the VALUE form) throws `std::bad_any_cast` on a type mismatch — under -fno-exceptions the
+process aborts, silently. An Observer notification's payload is read with `Base::anyValue< T >(data, context)`
+(`src/AnyValue.hpp`): the pointer form, nullptr (and an error log naming `context`) on a mismatch or an empty any; the
+caller skips the notification (owner decision, plan Ave Robustus). The 40 value-form sites of the cascade (engine 28,
+projet-alpha 12, all in `onNotification()` handlers) were converted at once. Test
+`Observer.anyValueNeverThrowsOnAMismatchedPayload`.
+
