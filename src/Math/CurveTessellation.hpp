@@ -57,6 +57,13 @@
  *   within a span: Yuksel, Schaefer, Keyser, "Parameterization and applications of Catmull-Rom curves", CAD 2011).
  *
  * Consecutive coincident points are dropped first (they would make a zero-length span or a division by zero).
+ *
+ * Along a tessellated curve (for Scenes::Component::Beam, 2026-09-30):
+ * - subdivided(): every segment split into equal pieces no longer than the curve's length / N — the corners kept
+ *   exactly, at least N segments over the whole curve (an arc needs regular stations, a laser only the corners).
+ * - rotationMinimizingNormals(): a normal per point that does not twist around the curve — the double reflection
+ *   method (W. Wang, B. Jüttler, D. Zheng, Y. Liu, "Computation of Rotation Minimizing Frames", ACM Transactions on
+ *   Graphics 27(1), 2008). On a straight line it is constant.
  */
 namespace EmEn::Base::Math::CurveTessellation
 {
@@ -393,5 +400,135 @@ namespace EmEn::Base::Math::CurveTessellation
 		}
 
 		return result;
+	}
+	/**
+	 * @brief Returns a polyline whose every segment is split into equal pieces no longer than its total length divided
+	 * by a segment count: every original point is kept, and the whole polyline has at least that many segments.
+	 * @tparam precision_t The floating point type.
+	 * @param polyline The polyline (its consecutive points distinct).
+	 * @param minimumSegments The segment count over the whole polyline (1 keeps it as it is).
+	 * @return std::vector< Vector< 3, precision_t > >
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	subdivided (std::span< const Vector< 3, precision_t > > polyline, uint32_t minimumSegments) noexcept
+	{
+		std::vector< Vector< 3, precision_t > > result{polyline.begin(), polyline.end()};
+
+		if ( polyline.size() < 2 || minimumSegments <= 1 )
+		{
+			return result;
+		}
+
+		precision_t total = 0;
+
+		for ( size_t index = 1; index < polyline.size(); ++index )
+		{
+			total += (polyline[index] - polyline[index - 1]).length();
+		}
+
+		if ( total <= std::numeric_limits< precision_t >::min() )
+		{
+			return result;
+		}
+
+		const auto step = total / static_cast< precision_t >(minimumSegments);
+		/* A segment exactly N steps long must not become N + 1 pieces through rounding. */
+		constexpr auto Slack = static_cast< precision_t >(1.0E-4);
+
+		result.clear();
+		result.emplace_back(polyline.front());
+
+		for ( size_t index = 1; index < polyline.size(); ++index )
+		{
+			const auto & from = polyline[index - 1];
+			const auto & to = polyline[index];
+			const auto pieces = std::max< uint32_t >(1U, static_cast< uint32_t >(std::ceil((to - from).length() / step - Slack)));
+
+			for ( uint32_t piece = 1; piece < pieces; ++piece )
+			{
+				result.emplace_back(from + (to - from) * (static_cast< precision_t >(piece) / static_cast< precision_t >(pieces)));
+			}
+
+			result.emplace_back(to);
+		}
+
+		return result;
+	}
+
+	/**
+	 * @brief Returns a unit normal per point of a polyline that does not twist around it: a rotation minimizing frame
+	 * (the double reflection method, Wang, Jüttler, Zheng, Liu, ACM TOG 2008), the binormal being cross(tangent, normal).
+	 * @note The tangent at a point is the direction from its previous point to its next one (one-sided at the ends). The
+	 * first normal is cross(tangent, +Y) — +X when the tangent is within 8° of Y — normalized: a straight line keeps it.
+	 * @tparam precision_t The floating point type.
+	 * @param polyline The polyline (its consecutive points distinct).
+	 * @return std::vector< Vector< 3, precision_t > > As many normals as points (empty below 2 points).
+	 */
+	template< std::floating_point precision_t >
+	[[nodiscard]]
+	std::vector< Vector< 3, precision_t > >
+	rotationMinimizingNormals (std::span< const Vector< 3, precision_t > > polyline) noexcept
+	{
+		using V3 = Vector< 3, precision_t >;
+
+		std::vector< V3 > normals;
+
+		if ( polyline.size() < 2 )
+		{
+			return normals;
+		}
+
+		const auto count = polyline.size();
+		const auto tangentAt = [&polyline, count] (size_t index) noexcept {
+			const auto & before = polyline[index > 0 ? index - 1 : 0];
+			const auto & after = polyline[index + 1 < count ? index + 1 : count - 1];
+
+			return (after - before).normalized();
+		};
+
+		constexpr auto Two = static_cast< precision_t >(2);
+		constexpr auto Epsilon = static_cast< precision_t >(1.0E-12);
+
+		auto tangent = tangentAt(0);
+		const auto reference = std::abs(tangent[Y]) < static_cast< precision_t >(0.99) ? V3::positiveY() : V3::positiveX();
+
+		normals.reserve(count);
+		normals.emplace_back(V3::crossProduct(tangent, reference).normalized());
+
+		for ( size_t index = 0; index + 1 < count; ++index )
+		{
+			const auto & normal = normals.back();
+			const auto nextTangent = tangentAt(index + 1);
+
+			/* Reflection 1, by the plane bisecting the two points; reflection 2, by the plane bisecting the reflected
+			 * tangent and the next one. */
+			const auto v1 = polyline[index + 1] - polyline[index];
+			const auto c1 = V3::dotProduct(v1, v1);
+
+			if ( c1 <= Epsilon )
+			{
+				normals.emplace_back(normal);
+				tangent = nextTangent;
+
+				continue;
+			}
+
+			const auto reflectedNormal = normal - v1 * (Two / c1 * V3::dotProduct(v1, normal));
+			const auto reflectedTangent = tangent - v1 * (Two / c1 * V3::dotProduct(v1, tangent));
+			const auto v2 = nextTangent - reflectedTangent;
+			const auto c2 = V3::dotProduct(v2, v2);
+
+			auto next = c2 <= Epsilon ? reflectedNormal : reflectedNormal - v2 * (Two / c2 * V3::dotProduct(v2, reflectedNormal));
+
+			/* Kept exactly perpendicular and unit: the rounding of a long curve does not accumulate. */
+			next = (next - nextTangent * V3::dotProduct(next, nextTangent)).normalized();
+
+			normals.emplace_back(next);
+			tangent = nextTangent;
+		}
+
+		return normals;
 	}
 }

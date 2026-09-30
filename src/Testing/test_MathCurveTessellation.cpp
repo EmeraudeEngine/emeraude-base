@@ -33,6 +33,7 @@
 
 /* Local inclusions. */
 #include "Math/BSpline.hpp"
+#include "Math/CurveShape.hpp"
 #include "Math/CurveTessellation.hpp"
 #include "Math/Vector.hpp"
 
@@ -303,5 +304,167 @@ TEST(MathCurveTessellation, everyKindWorksInFloat)
 	{
 		ASSERT_GE(polyline.size(), 2U);
 		EXPECT_NEAR(polyline.back()[X], 4.0F, 1.0E-5F);
+	}
+}
+
+/* Every original point is kept (a corner stays sharp), no piece is longer than length / N, and a segment exactly N
+ * steps long is cut into exactly N pieces (no extra piece from rounding). */
+TEST(MathCurveTessellation, subdividedKeepsCornersAndBoundsTheSteps)
+{
+	const std::vector< V3 > corner{V3{0, 0, 0}, V3{3, 0, 0}, V3{3, 1, 0}};
+
+	const auto result = CurveTessellation::subdivided(std::span< const V3 >{corner}, 8);
+
+	ASSERT_EQ(result.size(), 9U);
+	EXPECT_NEAR((result[6] - V3{3, 0, 0}).length(), 0.0, 1.0E-12);
+	EXPECT_NEAR((result.back() - V3{3, 1, 0}).length(), 0.0, 1.0E-12);
+
+	for ( size_t index = 1; index < result.size(); ++index )
+	{
+		EXPECT_LE((result[index] - result[index - 1]).length(), 0.5 + 1.0E-12);
+	}
+
+	const std::vector< V3 > line{V3{0, 0, 0}, V3{10, 0, 0}};
+
+	EXPECT_EQ(CurveTessellation::subdivided(std::span< const V3 >{line}, 96).size(), 97U);
+	EXPECT_EQ(CurveTessellation::subdivided(std::span< const V3 >{line}, 1).size(), 2U);
+	EXPECT_EQ(CurveTessellation::subdivided(std::span< const V3 >{corner}, 1).size(), 3U);
+}
+
+/* A straight line keeps its first normal, cross(tangent, +Y) — the beam's historical arc axes. */
+TEST(MathCurveTessellation, rotationMinimizingNormalsOfALineAreConstant)
+{
+	const std::vector< V3 > line{V3{0, 0, 0}, V3{0, 0, 1}, V3{0, 0, 2}, V3{0, 0, 5}};
+
+	const auto normals = CurveTessellation::rotationMinimizingNormals(std::span< const V3 >{line});
+
+	ASSERT_EQ(normals.size(), line.size());
+
+	const auto expected = V3::crossProduct(V3{0, 0, 1}, V3::positiveY()).normalized();
+
+	for ( const auto & normal : normals )
+	{
+		EXPECT_NEAR((normal - expected).length(), 0.0, 1.0E-12);
+	}
+}
+
+/* A PLANAR curve's rotation minimizing frame does not turn out of its plane: the normal of a circle in XY, starting
+ * along Z, stays along Z all the way round. On a helix the normals stay unit and perpendicular to the tangent. */
+TEST(MathCurveTessellation, rotationMinimizingNormalsDoNotTwist)
+{
+	std::vector< V3 > circle;
+	std::vector< V3 > helix;
+
+	for ( int index = 0; index <= 64; ++index )
+	{
+		const double angle = static_cast< double >(index) * 0.0981747704246810387;
+
+		circle.emplace_back(std::sin(angle), 1.0 - std::cos(angle), 0.0);
+		helix.emplace_back(std::cos(angle), std::sin(angle), static_cast< double >(index) * 0.05);
+	}
+
+	const auto circleNormals = CurveTessellation::rotationMinimizingNormals(std::span< const V3 >{circle});
+
+	ASSERT_EQ(circleNormals.size(), circle.size());
+
+	for ( const auto & normal : circleNormals )
+	{
+		EXPECT_NEAR(std::abs(normal[Z]), 1.0, 1.0E-9);
+	}
+
+	const auto helixNormals = CurveTessellation::rotationMinimizingNormals(std::span< const V3 >{helix});
+
+	ASSERT_EQ(helixNormals.size(), helix.size());
+
+	for ( size_t index = 1; index + 1 < helix.size(); ++index )
+	{
+		const auto tangent = (helix[index + 1] - helix[index - 1]).normalized();
+
+		EXPECT_NEAR(helixNormals[index].length(), 1.0, 1.0E-9);
+		EXPECT_NEAR(V3::dotProduct(helixNormals[index], tangent), 0.0, 1.0E-9);
+	}
+}
+
+/* The description tessellates as the free functions do, and moving the end anchors of a Bézier path keeps the handles. */
+TEST(MathCurveTessellation, curveShapeMovesItsEndsAndTessellates)
+{
+	const std::vector< V3 > points{V3{0, 0, 0}, V3{1, 2, 0}, V3{3, 2, 1}, V3{4, 0, 0}};
+
+	CurveShape< double > shape;
+	shape.setCatmullRom(std::span< const V3 >{points});
+
+	EXPECT_EQ(shape.kind(), CurveKind::CatmullRom);
+	EXPECT_EQ(shape.tessellate(Tolerance).size(), CurveTessellation::catmullRom(std::span< const V3 >{points}, Tolerance).size());
+
+	shape.setLastPoint(V3{5, 0, 0});
+
+	EXPECT_NEAR((shape.tessellate(Tolerance).back() - V3{5, 0, 0}).length(), 0.0, 1.0E-12);
+
+	BSpline< 3, double > path{4, CurveType::BezierCubic};
+	path.addPoint(V3{0, 0, 0}, V3{0, 1, 0});
+	path.addPoint(V3{4, 0, 0}, V3{0, 1, 0});
+
+	shape.setBezierPath(path);
+	shape.setFirstPoint(V3{-1, 0, 0});
+
+	ASSERT_EQ(shape.bezierPath().points().size(), 2U);
+	EXPECT_NEAR((shape.bezierPath().points().front().position() - V3{-1, 0, 0}).length(), 0.0, 1.0E-12);
+	EXPECT_NEAR((shape.bezierPath().points().front().handleOut() - path.points().front().handleOut()).length(), 0.0, 1.0E-12);
+	EXPECT_EQ(shape.bezierPath().points().front().curveType(), CurveType::BezierCubic);
+	EXPECT_NEAR((shape.tessellate(Tolerance).front() - V3{-1, 0, 0}).length(), 0.0, 1.0E-12);
+	EXPECT_STREQ(to_cstring(CurveKind::UniformBSpline), "UniformBSpline");
+}
+
+/* The frame is rotation minimizing, not merely perpendicular: on a helix (curvature 1 / (1 + c²), torsion
+ * c / (1 + c²)) the exact RMF turns against the Frenet frame at minus the torsion, θ(s) = θ(0) − τ s. Measured over
+ * two turns at 64 points per turn: 7e-7 rad for the double reflection, 1.5e-5 for a single reflection followed by a
+ * projection (the mutation this tolerance was chosen to catch). */
+TEST(MathCurveTessellation, rotationMinimizingNormalsFollowTheTorsion)
+{
+	constexpr double C{0.3};
+	constexpr double Step{0.0981747704246810387};
+	const double speed = std::sqrt(1.0 + C * C);
+	const double torsion = C / (1.0 + C * C);
+
+	std::vector< V3 > helix;
+
+	for ( int index = 0; index <= 128; ++index )
+	{
+		const double a = static_cast< double >(index) * Step;
+
+		helix.emplace_back(std::cos(a), std::sin(a), C * a);
+	}
+
+	const auto normals = CurveTessellation::rotationMinimizingNormals(std::span< const V3 >{helix});
+
+	ASSERT_EQ(normals.size(), helix.size());
+
+	const auto frenetAngle = [&] (size_t index) noexcept {
+		const double a = static_cast< double >(index) * Step;
+		const V3 tangent = V3{-std::sin(a), std::cos(a), C} / speed;
+		const V3 normal{-std::cos(a), -std::sin(a), 0.0};
+		const auto binormal = V3::crossProduct(tangent, normal);
+
+		return std::atan2(V3::dotProduct(normals[index], binormal), V3::dotProduct(normals[index], normal));
+	};
+
+	const double start = frenetAngle(1);
+	double previous = start;
+	double unwrapped = start;
+
+	/* The end points' tangents are one-sided: compare the interior. */
+	for ( size_t index = 2; index + 1 < helix.size(); ++index )
+	{
+		double angle = frenetAngle(index);
+
+		while ( angle - previous > 3.14159265358979 ) { angle -= 6.28318530717959; }
+		while ( angle - previous < -3.14159265358979 ) { angle += 6.28318530717959; }
+
+		previous = angle;
+		unwrapped = angle;
+
+		const double arcLength = static_cast< double >(index - 1) * Step * speed;
+
+		EXPECT_NEAR(unwrapped - start, -torsion * arcLength, 3.0E-6) << "at point " << index;
 	}
 }

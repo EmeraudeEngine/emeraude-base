@@ -28,5 +28,5 @@ Context for developing the **emeraude-base** foundation library. This was the en
 | VertexFactory: Parametric Gem Generators | [`docs/subsystems/source-tree/12-vertexfactory-parametric-gem-generators.md`](../docs/subsystems/source-tree/12-vertexfactory-parametric-gem-generators.md) | 3 KB |
 | Unified ByteStream I/O Architecture | [`docs/subsystems/source-tree/13-unified-bytestream-i-o-architecture.md`](../docs/subsystems/source-tree/13-unified-bytestream-i-o-architecture.md) | 2 KB |
 | VertexFactory: Shape Splitting, Boundary Loops and Sealing | [`docs/subsystems/source-tree/14-vertexfactory-shape-splitting-boundary-loops-and-sealing.md`](../docs/subsystems/source-tree/14-vertexfactory-shape-splitting-boundary-loops-and-sealing.md) | 6 KB |
-| Math: adaptive curve tessellation (2026-09-29) | [`docs/subsystems/source-tree/16-math-curve-tessellation.md`](../docs/subsystems/source-tree/16-math-curve-tessellation.md) | 3 KB |
+| Math: adaptive curve tessellation, arc-length subdivision, rotation minimizing frames, CurveShape (2026-09-29/30) | [`docs/subsystems/source-tree/16-math-curve-tessellation.md`](../docs/subsystems/source-tree/16-math-curve-tessellation.md) | 5 KB |
 | Detailed Documentation | [`docs/subsystems/source-tree/15-detailed-documentation.md`](../docs/subsystems/source-tree/15-detailed-documentation.md) | 1 KB |

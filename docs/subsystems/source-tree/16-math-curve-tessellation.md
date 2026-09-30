@@ -23,10 +23,28 @@ References: P. Barry, R. Goldman, "A recursive evaluation algorithm for a class 
 C. Yuksel, S. Schaefer, J. Keyser, "Parameterization and applications of Catmull-Rom curves", CAD 43(7), 2011
 (centripetal: no cusp nor self-intersection within a span).
 
-**Tests** (`test_MathCurveTessellation.cpp`, 8) compare against INDEPENDENT evaluations — the Bernstein form of the
+**Along a tessellated curve** (2026-09-30, for the engine's `Scenes::Component::Beam` on curves):
+- `subdivided(polyline, N)`: every segment split into equal pieces no longer than length / N — every original point
+  KEPT (a relay laser's corners stay exact), at least N segments over the whole curve (an arc's regular stations). A
+  segment exactly k steps long gives k pieces, not k + 1 (a 1e-4 slack on the ceil).
+- `rotationMinimizingNormals(polyline)`: a unit normal per point that does not twist around the curve — the DOUBLE
+  REFLECTION method (W. Wang, B. Jüttler, D. Zheng, Y. Liu, "Computation of Rotation Minimizing Frames", ACM TOG 27(1),
+  2008), re-orthogonalized each step. Tangent = next − previous point (one-sided at the ends). First normal =
+  cross(tangent, +Y), +X within 8° of vertical: a straight line keeps it (the beam's historical arc axes).
+
+**`Math::CurveShape< precision_t >`** (`Math/CurveShape.hpp`, 2026-09-30): the DESCRIPTION of a curve — `CurveKind`
+(Polyline, BezierPath, UniformBSpline, CatmullRom; `to_cstring()`), its points, closed, the Catmull-Rom alpha — and
+`tessellate(tolerance)`. Shared by the engine's Path and Beam (one set of kinds, one tessellation). `setFirstPoint()` /
+`setLastPoint()` move an end alone (a beam's endpoints, an end following an entity); for a Bézier path the anchor
+moves with its handles and curve type kept — a `BSplinePoint` is immutable, so the path is rebuilt.
+
+**Tests** (`test_MathCurveTessellation.cpp`, 14; 8 before 2026-09-30) compare against INDEPENDENT evaluations — the Bernstein form of the
 cubic, the uniform B-spline BASIS functions — never against the conversion under test. Mutation-checked
 (2026-09-29): a wrong B-spline coefficient fails `aUniformBSplineMatchesItsBasis`; a flatness test 1000× too lax
-fails 6 of the 8.
+fails 6 of the 8. The RMF test on a HELIX checks the defining property — the exact frame turns against the Frenet
+frame at minus the torsion, θ(s) = θ(0) − τ s — to 3e-6 rad: the double reflection measures 7e-7, a single reflection
+plus projection 1.5e-5, and that mutation FAILS it (verified 2026-09-30; a planar-curve test could not tell the two
+apart).
 
 `Math::BSpline` gained `points()` for this (it had no read access to its points). Its NAME is historical: it is a
 piecewise Bézier path, not a B-spline — the uniform B-spline is `CurveTessellation::uniformBSpline()`.
