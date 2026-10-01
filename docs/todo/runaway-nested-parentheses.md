@@ -35,4 +35,4 @@ be reviewed.
 
 ## References
 
-- Engine `docs/todo/triad-engine-pass.md` § 11.
+- projet-alpha `docs/plans/triad-engine-pass-report.md` (per-section record) § 11.

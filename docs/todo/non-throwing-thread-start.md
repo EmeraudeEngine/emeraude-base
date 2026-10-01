@@ -43,4 +43,4 @@ The owner chose a base helper and a dedicated pass over a change inside section 
 ## References
 
 - `projet-alpha/docs/plans/ave-robustus.md` (no throwing std call).
-- Engine `docs/todo/triad-engine-pass.md` § 2 (the lead) and § 14.
+- projet-alpha `docs/plans/triad-engine-pass-report.md` (per-section record) § 2 (the lead) and § 14.
