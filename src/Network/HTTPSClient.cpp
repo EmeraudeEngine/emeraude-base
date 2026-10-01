@@ -27,6 +27,7 @@
 #include "HTTPSClient.hpp"
 
 /* STL inclusions. */
+#include <charconv>
 #include <cctype>
 #include <cstdlib>
 #include <algorithm>
@@ -858,7 +859,13 @@ namespace EmEn::Base::Network
 									return character >= '0' && character <= '9';
 								}) && contentLength.size() <= 19 )
 								{
-									progressTotal = std::stoull(contentLength);
+									/* NOTE: std::from_chars, not the throwing std::stoull (digits only, at most 19). */
+									uint64_t total = 0;
+
+									if ( const auto [end, error] = std::from_chars(contentLength.data(), contentLength.data() + contentLength.size(), total); error == std::errc{} )
+									{
+										progressTotal = total;
+									}
 								}
 							}
 						}
