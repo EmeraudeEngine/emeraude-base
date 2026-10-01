@@ -208,6 +208,23 @@ clang (`-Wshadow` included) check at definition time and say nothing: nothing on
 (`Slack`, `Tolerance`, `Epsilon`, `Step`). **Before pushing** a header template: compare its `constexpr` locals with the
 names at namespace scope of the test file that instantiates it.
 
+⚠️ **It happened again on 2026-10-01** (`Casts/ShapeCast.hpp`'s `constexpr auto Tolerance` vs the cast test's `Tolerance`,
+`a6343db`), by an author who had not read this entry. The physics overhaul's `Contacts/`, `Casts/` and `OrientedBox`
+headers now prefix every local constant per file (`CastContactTolerance`, `BoxBoxFaceBias`, …); measured: clang's
+`-Wshadow-all` does not catch it either for a template inside a nested namespace.
+
+## Math
+
+### ⚠️⚠️ A small rotation read back with `2 acos(w)` is ZERO in float — use `2 atan2(|v|, w)` (2026-10-01, FIXED)
+
+> [!CAUTION]
+> `Quaternion::toAngleAxis()` computed `angle = 2 acos(w)`. For a rotation of 1e-5 rad, `w = cos(5e-6)` rounds to exactly
+> `1.0F`, and `acos(1) = 0`: the angle came back as 0. The engine's physics step (physics overhaul P2) converts each
+> body's per-step rotation with it — a body turning at less than ~1e-3 rad/s never turned, while the solver's angular
+> velocity, believing it did, kept growing: the bench's stack crept sideways faster and faster. Now
+> `2 atan2(sin(angle/2), w)`, exact for small angles and unchanged for large ones (test
+> `MathRigidBody.aTinyRotationKeepsItsAngle`). Any other `acos` of a near-1 cosine has the same trap.
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate

@@ -1047,13 +1047,14 @@ namespace EmEn::Base::Math
 					return;
 				}
 
-				/* Clamp w to [-1, 1] to avoid numerical errors with acos() */
-				const auto w_clamped = std::clamp(m_data[W], -One, One);
-
-				angle = Two * static_cast< precision_t >(std::acos(w_clamped));
-
 				/* sin(angle/2) = sqrt(x² + y² + z²) for unit quaternion */
 				const auto sinHalfAngle = static_cast< precision_t >(std::sqrt((m_data[X] * m_data[X]) + (m_data[Y] * m_data[Y]) + (m_data[Z] * m_data[Z])));
+
+				/* ⚠️ 2 atan2(|v|, w), never 2 acos(w): for a small angle, w = cos(angle / 2) rounds to exactly 1 in float and
+				 * acos(1) = 0 — a rotation of 1e-5 rad read back as 0 (the physics step lost its small rotations while its
+				 * angular velocity kept growing, a creeping stack, 2026-10-01). atan2 keeps the angle from the vector part,
+				 * exact for small angles, the same for large ones, and needs no clamp. */
+				angle = Two * static_cast< precision_t >(std::atan2(sinHalfAngle, m_data[W]));
 
 				if ( Utility::isZero(sinHalfAngle) )
 				{

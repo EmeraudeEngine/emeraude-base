@@ -197,3 +197,28 @@ TEST(MathRigidBody, zeroAngularVelocityLeavesTheOrientation)
 	EXPECT_NEAR(after.rotatedVector(probe)[Y], orientation.rotatedVector(probe)[Y], RigidBodyTolerance);
 	EXPECT_NEAR(after.rotatedVector(probe)[Z], orientation.rotatedVector(probe)[Z], RigidBodyTolerance);
 }
+
+TEST(MathRigidBody, aTinyRotationKeepsItsAngle)
+{
+	/* A rotation of 1e-5 rad (2 rad/s ... a physics step's angle is ~1e-5 rad for a body turning at 6e-4 rad/s): in
+	 * float, w = cos(angle / 2) rounds to exactly 1, so the former 2 acos(w) answered 0 — the solver's small rotations
+	 * were silently lost while its angular velocity kept growing (a creeping stack, 2026-10-01). */
+	Quaternion< float > rotation;
+
+	rotation.setFromScaledAxis(Vec3{0.0F, 0.0F, 1.0e-5F});
+
+	float angle = 0.0F;
+	Vec3 axis;
+
+	rotation.toAngleAxis(angle, axis);
+
+	EXPECT_NEAR(angle, 1.0e-5F, 1.0e-7F);
+	EXPECT_NEAR(axis[Z], 1.0F, 1.0e-4F);
+
+	/* A large angle is unchanged by the fix. */
+	rotation.setFromScaledAxis(Vec3{0.0F, 2.5F, 0.0F});
+	rotation.toAngleAxis(angle, axis);
+
+	EXPECT_NEAR(angle, 2.5F, 1.0e-5F);
+	EXPECT_NEAR(axis[Y], 1.0F, 1.0e-5F);
+}
