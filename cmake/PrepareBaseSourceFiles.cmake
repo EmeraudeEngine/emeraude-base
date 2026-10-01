@@ -116,6 +116,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/main.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AnimationChannelSampling.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AnimationCubicSpline.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AnimationSkin.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_BaseUtility.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Debug.cpp

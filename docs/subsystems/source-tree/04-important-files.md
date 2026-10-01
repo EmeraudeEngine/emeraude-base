@@ -5,7 +5,7 @@
 - `Animation/Skeleton.hpp` - Ordered joint collection, name lookup, hierarchy validation
 - `Animation/AnimationChannel.hpp` - Keyframes for one `targetIndex` (joint OR node), 3 interpolation modes, ChannelTarget enum, `sampleVector()`/`sampleQuaternion()`
 - `Animation/AnimationClip.hpp` - Named channel collection, auto-computed duration
-- `Animation/Skin.hpp` - Mesh-to-skeleton binding, joint remapping, inverse bind matrices
+- `Animation/Skin.hpp` - Mesh-to-skeleton binding, joint remapping, inverse bind matrices, and the root transform above the root joints (`setRootTransform()`, the glTF mesh-node correction, 2026-10-01)
 
 ### Math (critical)
 - `Vector.hpp` - 2D/3D/4D vectors

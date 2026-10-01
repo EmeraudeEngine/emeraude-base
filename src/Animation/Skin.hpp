@@ -144,6 +144,32 @@ namespace EmEn::Base::Animation
 				return m_inverseBindMatrices;
 			}
 
+			/**
+			 * @brief Sets the transform applied above every root joint of the skeleton (the identity by default).
+			 * @note glTF skins a vertex with the WORLD matrix of each joint, all its ancestors included, and ignores the
+			 * transform of the node that holds the mesh; an engine that places the mesh at that node must take the
+			 * node's transform back out. This is that correction: the inverse of the mesh node's world transform times
+			 * the world transform of the common ancestor of the mesh and the skeleton.
+			 * @param rootTransform The transform, in the space of the node that holds the skinned mesh.
+			 * @return void
+			 */
+			void
+			setRootTransform (const Matrix< 4, precision_t > & rootTransform) noexcept
+			{
+				m_rootTransform = rootTransform;
+			}
+
+			/**
+			 * @brief Returns the transform applied above every root joint of the skeleton.
+			 * @return const Matrix< 4, precision_t > &
+			 */
+			[[nodiscard]]
+			const Matrix< 4, precision_t > &
+			rootTransform () const noexcept
+			{
+				return m_rootTransform;
+			}
+
 		private:
 
 			/** @brief Maps skin-local index → skeleton-global joint index. */
@@ -151,6 +177,9 @@ namespace EmEn::Base::Animation
 
 			/** @brief Per-joint inverse bind matrices, indexed by skin-local index. */
 			std::vector< Matrix< 4, precision_t > > m_inverseBindMatrices{};
+
+			/** @brief The transform above every root joint (setRootTransform()); a default Matrix is the identity. */
+			Matrix< 4, precision_t > m_rootTransform{};
 	};
 
 	using SkinF = Skin< float >;
