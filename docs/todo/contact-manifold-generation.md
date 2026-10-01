@@ -31,11 +31,15 @@ sphere / capsule pairs (engine `docs/physics-overhaul.md` § 1.5).
   `docs/subsystems/source-tree/17-math-space3d-contacts.md`.
 - Sphere ↔ box (`Contacts/SphereBox.hpp`) and capsule ↔ box (`Contacts/CapsuleBox.hpp`, exact segment-box closest
   points, 2 points along a face), both orders; 32 tests in all including 3 randomised property tests.
+- Sphere ↔ triangle, capsule ↔ triangle (two-sided; a piercing capsule leaves towards its centre's side), sphere ↔
+  sphere, sphere ↔ capsule, capsule ↔ capsule (2 points when parallel): 50 tests, 6 of them randomised.
 
 ## What remains
 
-- [ ] Sphere / capsule ↔ triangle with a contact point; then sphere ↔ sphere, sphere ↔ capsule, capsule ↔ capsule. The
-  AABB variants become the special case of the oriented ones, or stay as fast paths with the same output.
+- [ ] Decide at the engine integration (P2, `physics-unified-contact-pipeline`): the AABB pairs become the special case
+  of the oriented ones (an unrotated `OrientedBox`), or keep a fast path with the same output — measure first.
+- [ ] Owner decision pending: one-sided triangles for the meshes of P5. (The +Y fallback for coincident centres is
+  decided: kept, determinism first — owner 2026-10-01.)
 - [ ] Unit tests for each new pair (Release + ASan/UBSan), on the model of `test_MathSpace3DContacts.cpp`.
 
 ## ⚠️ Traps

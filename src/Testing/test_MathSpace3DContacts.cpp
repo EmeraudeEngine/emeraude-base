@@ -41,10 +41,14 @@
 #include "Math/Space3D/Capsule.hpp"
 #include "Math/Space3D/Contacts/BoxBox.hpp"
 #include "Math/Space3D/Contacts/CapsuleBox.hpp"
+#include "Math/Space3D/Contacts/CapsuleTriangle.hpp"
 #include "Math/Space3D/Contacts/ContactManifold.hpp"
+#include "Math/Space3D/Contacts/RoundShapes.hpp"
 #include "Math/Space3D/Contacts/SphereBox.hpp"
+#include "Math/Space3D/Contacts/SphereTriangle.hpp"
 #include "Math/Space3D/OrientedBox.hpp"
 #include "Math/Space3D/Sphere.hpp"
+#include "Math/Space3D/Triangle.hpp"
 #include "Math/Vector.hpp"
 
 using namespace EmEn::Base::Math;
@@ -851,4 +855,422 @@ TEST(MathSpace3DContacts, randomCapsulesMatchTheExactDistance)
 	}
 
 	EXPECT_GT(shallow, 200U);
+}
+
+/* ===== Sphere / capsule ↔ triangle (two-sided) ===== */
+
+namespace
+{
+	/** A triangle in the plane Y = 0, winding normal +Y: A(-1, 0, 1), B(1, 0, 1), C(0, 0, -1). */
+	Triangle< float >
+	floorTriangle ()
+	{
+		return Triangle< float >{Vec3{-1.0F, 0.0F, 1.0F}, Vec3{1.0F, 0.0F, 1.0F}, Vec3{0.0F, 0.0F, -1.0F}};
+	}
+}
+
+TEST(MathSpace3DContacts, sphereAboveATriangleFace)
+{
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.0F, 0.4F, 0.0F}}, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+	EXPECT_NEAR(manifold.points()[0].position()[Y], -0.05F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), static_cast< uint32_t >(TriangleDetail::Region::Face));
+
+	ContactManifold< float > swapped;
+
+	ASSERT_TRUE(computeContactManifold(floorTriangle(), Sphere< float >{0.5F, Vec3{0.0F, 0.4F, 0.0F}}, swapped));
+	expectNormal(swapped, {0.0F, 1.0F, 0.0F});
+}
+
+TEST(MathSpace3DContacts, sphereUnderATriangleIsPushedDown)
+{
+	/* Two-sided: from under the triangle, the sphere leaves downwards. */
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.0F, -0.4F, 0.0F}}, floorTriangle(), manifold));
+	expectNormal(manifold, {0.0F, 1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+}
+
+TEST(MathSpace3DContacts, sphereAgainstATriangleVertexAndEdge)
+{
+	ContactManifold< float > manifold;
+
+	/* Near vertex A (-1, 0, 1). */
+	const Vec3 nearVertex{-1.3F, 0.1F, 1.3F};
+	const Vec3 offset = nearVertex - Vec3{-1.0F, 0.0F, 1.0F};
+
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, nearVertex}, floorTriangle(), manifold));
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.5F - offset.length(), Tolerance);
+	expectNormal(manifold, -offset.normalized());
+	EXPECT_EQ(manifold.points()[0].featureId(), static_cast< uint32_t >(TriangleDetail::Region::VertexA));
+
+	/* Beyond edge AB (z = 1). */
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.0F, 0.2F, 1.3F}}, floorTriangle(), manifold));
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.5F - std::hypot(0.2F, 0.3F), Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), static_cast< uint32_t >(TriangleDetail::Region::EdgeAB));
+}
+
+TEST(MathSpace3DContacts, sphereAndTriangleSpecialCases)
+{
+	ContactManifold< float > manifold;
+
+	EXPECT_FALSE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.0F, 0.6F, 0.0F}}, floorTriangle(), manifold));
+
+	/* A collinear triangle has no plane: no contact. */
+	const Triangle< float > collinear{Vec3{0.0F, 0.0F, 0.0F}, Vec3{1.0F, 0.0F, 0.0F}, Vec3{2.0F, 0.0F, 0.0F}};
+
+	EXPECT_FALSE(computeContactManifold(Sphere< float >{0.5F, Vec3{1.0F, 0.1F, 0.0F}}, collinear, manifold));
+
+	/* A centre ON the triangle leaves along the winding normal. */
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.3F, Vec3{0.0F, 0.0F, 0.0F}}, floorTriangle(), manifold));
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.3F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), 0x107U);
+}
+
+TEST(MathSpace3DContacts, capsuleLyingOnATriangleGivesTwoPoints)
+{
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{-0.3F, 0.4F, 0.2F}, Vec3{0.3F, 0.4F, 0.2F}, 0.5F}, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 2U);
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_NEAR(point.depth(), 0.1F, Tolerance);
+		EXPECT_NEAR(std::abs(point.position()[X]), 0.3F, Tolerance);
+	}
+}
+
+TEST(MathSpace3DContacts, capsuleOverhangingATriangleIsClippedToItsPrism)
+{
+	/* At z = 0.2 the triangle spans x in [-0.6, 0.6]. */
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{-2.0F, 0.4F, 0.2F}, Vec3{2.0F, 0.4F, 0.2F}, 0.5F}, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 2U);
+
+	float minX = 10.0F;
+	float maxX = -10.0F;
+
+	for ( const auto & point : manifold.points() )
+	{
+		minX = std::min(minX, point.position()[X]);
+		maxX = std::max(maxX, point.position()[X]);
+	}
+
+	EXPECT_NEAR(minX, -0.6F, Tolerance);
+	EXPECT_NEAR(maxX, 0.6F, Tolerance);
+}
+
+TEST(MathSpace3DContacts, capsuleStandingOnATriangle)
+{
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{0.1F, 0.4F, 0.0F}, Vec3{0.1F, 2.0F, 0.0F}, 0.5F}, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), 0x2000U | static_cast< uint32_t >(TriangleDetail::Region::Face));
+}
+
+TEST(MathSpace3DContacts, piercingCapsuleIsPushedTowardsItsCentre)
+{
+	/* The former overlap test pushed a piercing capsule by its radius whatever its side: this one leaves towards the
+	 * side holding its centre, by the depth of its end below the plane plus the radius. */
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{0.0F, -0.1F, 0.0F}, Vec3{0.0F, 1.5F, 0.0F}, 0.2F}, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.3F, Tolerance);
+	EXPECT_NE(manifold.points()[0].featureId() & 0x4000U, 0U);
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{0.0F, 0.1F, 0.0F}, Vec3{0.0F, -1.5F, 0.0F}, 0.2F}, floorTriangle(), manifold));
+	expectNormal(manifold, {0.0F, 1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.3F, Tolerance);
+}
+
+TEST(MathSpace3DContacts, capsuleAcrossATriangleEdge)
+{
+	/* A sloping capsule beyond edge AB (z = 1) at z = 1.3, crossing the plane's height at x = 0.25: its closest point
+	 * to the edge is inside the segment (0.3 away), not one of its ends (an end parallel to the edge would tie). */
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{-0.5F, 0.3F, 1.3F}, Vec3{0.5F, -0.1F, 1.3F}, 0.4F}, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+	EXPECT_NEAR(manifold.points()[0].position()[X], 0.25F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), 0x2010U);
+
+	EXPECT_FALSE(computeContactManifold(Capsule< float >{Vec3{-0.5F, 0.1F, 1.6F}, Vec3{0.5F, 0.1F, 1.6F}, 0.4F}, floorTriangle(), manifold));
+}
+
+TEST(MathSpace3DContacts, degenerateCapsuleOnATriangleActsAsASphere)
+{
+	ContactManifold< float > fromCapsule;
+	ContactManifold< float > fromSphere;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{0.2F, 0.3F, 0.1F}, Vec3{0.2F, 0.3F, 0.1F}, 0.5F}, floorTriangle(), fromCapsule));
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.2F, 0.3F, 0.1F}}, floorTriangle(), fromSphere));
+	EXPECT_NEAR(fromCapsule.points()[0].depth(), fromSphere.points()[0].depth(), Tolerance);
+	expectNormal(fromCapsule, fromSphere.normal());
+}
+
+TEST(MathSpace3DContacts, randomSpheresMatchABruteForceTriangleDistance)
+{
+	Draw draw{0x7A1AU};
+	size_t shallow = 0;
+
+	for ( int trial = 0; trial < 500; ++trial )
+	{
+		const Triangle< float > triangle{
+			Vec3{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)},
+			Vec3{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)},
+			Vec3{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)}
+		};
+		const Sphere< float > sphere{draw.uniform(0.1F, 1.0F), Vec3{draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F)}};
+
+		/* Brute force: a 300 × 300 barycentric grid over the triangle. */
+		float distance = 1.0e9F;
+		constexpr int Steps = 300;
+
+		for ( int u = 0; u <= Steps; ++u )
+		{
+			for ( int v = 0; v <= Steps - u; ++v )
+			{
+				const float fu = static_cast< float >(u) / static_cast< float >(Steps);
+				const float fv = static_cast< float >(v) / static_cast< float >(Steps);
+				const Vec3 point = triangle.pointA() + ((triangle.pointB() - triangle.pointA()) * fu) + ((triangle.pointC() - triangle.pointA()) * fv);
+
+				distance = std::min(distance, (point - sphere.position()).length());
+			}
+		}
+
+		ContactManifold< float > manifold;
+		const bool contact = computeContactManifold(sphere, triangle, manifold);
+
+		/* The grid is coarser than the exact answer by at most ~1 cm on these triangles. */
+		if ( distance > 0.02F && distance < sphere.radius() - 0.02F )
+		{
+			++shallow;
+
+			ASSERT_TRUE(contact) << "trial " << trial;
+			expectWellFormed(manifold);
+			EXPECT_NEAR(manifold.maximumDepth(), sphere.radius() - distance, 0.012F) << "trial " << trial;
+			EXPECT_LE(manifold.maximumDepth(), sphere.radius() - distance + 1.0e-4F) << "trial " << trial;
+		}
+		else if ( distance > sphere.radius() + 1.0e-4F )
+		{
+			EXPECT_FALSE(contact) << "trial " << trial;
+		}
+	}
+
+	EXPECT_GT(shallow, 50U);
+}
+
+TEST(MathSpace3DContacts, randomCapsulesMatchTheExactTriangleDistance)
+{
+	Draw draw{0x7A1BU};
+	size_t shallow = 0;
+
+	for ( int trial = 0; trial < 2000; ++trial )
+	{
+		const Triangle< float > triangle{
+			Vec3{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)},
+			Vec3{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)},
+			Vec3{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)}
+		};
+		const Vec3 start{draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F)};
+		const Vec3 end = start + (draw.unitVector() * draw.uniform(0.0F, 1.5F));
+		const Capsule< float > capsule{start, end, draw.uniform(0.1F, 0.8F)};
+
+		Vec3 normal;
+
+		if ( !TriangleDetail::unitNormal(triangle, normal) )
+		{
+			continue;
+		}
+
+		/* Dense sampling of the segment against the exact point ↔ triangle distance (validated above). */
+		float distance = 1.0e9F;
+
+		for ( int step = 0; step <= 2000; ++step )
+		{
+			const Vec3 point = start + ((end - start) * (static_cast< float >(step) / 2000.0F));
+			TriangleDetail::Region region{TriangleDetail::Region::Face};
+
+			distance = std::min(distance, (TriangleDetail::closestPointOnTriangle(point, triangle, region) - point).length());
+		}
+
+		ContactManifold< float > manifold;
+		const bool contact = computeContactManifold(capsule, triangle, manifold);
+
+		if ( distance > 1.0e-2F && distance < capsule.radius() - 1.0e-3F )
+		{
+			++shallow;
+
+			ASSERT_TRUE(contact) << "trial " << trial;
+			expectWellFormed(manifold);
+			EXPECT_NEAR(manifold.maximumDepth(), capsule.radius() - distance, 1.0e-3F) << "trial " << trial;
+		}
+		else if ( distance > capsule.radius() + 1.0e-3F )
+		{
+			EXPECT_FALSE(contact) << "trial " << trial;
+		}
+		else if ( contact )
+		{
+			expectWellFormed(manifold);
+		}
+	}
+
+	EXPECT_GT(shallow, 200U);
+}
+
+/* ===== Round shapes: sphere ↔ sphere, sphere ↔ capsule, capsule ↔ capsule ===== */
+
+TEST(MathSpace3DContacts, twoSpheres)
+{
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.0F, 0.0F, 0.0F}}, Sphere< float >{0.5F, Vec3{0.8F, 0.0F, 0.0F}}, manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	expectNormal(manifold, {1.0F, 0.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.2F, Tolerance);
+	EXPECT_NEAR(manifold.points()[0].position()[X], 0.4F, Tolerance);
+
+	EXPECT_FALSE(computeContactManifold(Sphere< float >{0.5F, Vec3{0.0F, 0.0F, 0.0F}}, Sphere< float >{0.5F, Vec3{1.1F, 0.0F, 0.0F}}, manifold));
+
+	/* Coincident centres: the documented +Y fallback, the full reach as depth. */
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.5F, Vec3{1.0F, 2.0F, 3.0F}}, Sphere< float >{0.5F, Vec3{1.0F, 2.0F, 3.0F}}, manifold));
+	expectNormal(manifold, {0.0F, 1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 1.0F, Tolerance);
+}
+
+TEST(MathSpace3DContacts, sphereAgainstACapsuleCylinderAndCap)
+{
+	const Capsule< float > capsule{Vec3{-1.0F, 0.0F, 0.0F}, Vec3{1.0F, 0.0F, 0.0F}, 0.3F};
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.4F, Vec3{0.5F, 0.6F, 0.0F}}, capsule, manifold));
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), 3U);
+
+	ASSERT_TRUE(computeContactManifold(Sphere< float >{0.3F, Vec3{1.5F, 0.0F, 0.0F}}, capsule, manifold));
+	expectNormal(manifold, {-1.0F, 0.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), 2U);
+
+	ASSERT_TRUE(computeContactManifold(capsule, Sphere< float >{0.3F, Vec3{1.5F, 0.0F, 0.0F}}, manifold));
+	expectNormal(manifold, {1.0F, 0.0F, 0.0F});
+}
+
+TEST(MathSpace3DContacts, crossedCapsulesGiveOnePoint)
+{
+	const Capsule< float > alongX{Vec3{-1.0F, 0.0F, 0.0F}, Vec3{1.0F, 0.0F, 0.0F}, 0.3F};
+	const Capsule< float > alongZ{Vec3{0.0F, 0.5F, -1.0F}, Vec3{0.0F, 0.5F, 1.0F}, 0.3F};
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(alongX, alongZ, manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	expectNormal(manifold, {0.0F, 1.0F, 0.0F});
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.1F, Tolerance);
+	EXPECT_NEAR(manifold.points()[0].position()[Y], 0.25F, Tolerance);
+	EXPECT_EQ(manifold.points()[0].featureId(), 0x33U);
+}
+
+TEST(MathSpace3DContacts, parallelCapsulesGiveTwoPoints)
+{
+	/* B lies 0.5 above A, overlapping it over x in [0, 1]. */
+	const Capsule< float > capsuleA{Vec3{-1.0F, 0.0F, 0.0F}, Vec3{1.0F, 0.0F, 0.0F}, 0.3F};
+	const Capsule< float > capsuleB{Vec3{2.0F, 0.5F, 0.0F}, Vec3{0.0F, 0.5F, 0.0F}, 0.3F};
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(capsuleA, capsuleB, manifold));
+	ASSERT_EQ(manifold.points().size(), 2U);
+	expectNormal(manifold, {0.0F, 1.0F, 0.0F});
+
+	float minX = 10.0F;
+	float maxX = -10.0F;
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_NEAR(point.depth(), 0.1F, Tolerance);
+		minX = std::min(minX, point.position()[X]);
+		maxX = std::max(maxX, point.position()[X]);
+	}
+
+	EXPECT_NEAR(minX, 0.0F, Tolerance);
+	EXPECT_NEAR(maxX, 1.0F, Tolerance);
+}
+
+TEST(MathSpace3DContacts, capsulesWithCrossingAxesUseTheirCommonPerpendicular)
+{
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(Capsule< float >{Vec3{-1.0F, 0.0F, 0.0F}, Vec3{1.0F, 0.0F, 0.0F}, 0.3F}, Capsule< float >{Vec3{0.0F, 0.0F, -1.0F}, Vec3{0.0F, 0.0F, 1.0F}, 0.3F}, manifold));
+	ASSERT_EQ(manifold.points().size(), 1U);
+	EXPECT_NEAR(manifold.normal().length(), 1.0F, Tolerance);
+	EXPECT_NEAR(std::abs(manifold.normal()[Y]), 1.0F, Tolerance);
+	EXPECT_NEAR(manifold.points()[0].depth(), 0.6F, Tolerance);
+}
+
+TEST(MathSpace3DContacts, randomCapsulePairsMatchABruteForceDistance)
+{
+	Draw draw{0xCA2CU};
+	size_t shallow = 0;
+
+	for ( int trial = 0; trial < 500; ++trial )
+	{
+		const Vec3 startA{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)};
+		const Vec3 endA = startA + (draw.unitVector() * draw.uniform(0.0F, 1.5F));
+		const Vec3 startB{draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F), draw.uniform(-1.0F, 1.0F)};
+		const Vec3 endB = startB + (draw.unitVector() * draw.uniform(0.0F, 1.5F));
+		const Capsule< float > capsuleA{startA, endA, draw.uniform(0.1F, 0.6F)};
+		const Capsule< float > capsuleB{startB, endB, draw.uniform(0.1F, 0.6F)};
+
+		/* Brute force: both segments sampled, 300 × 300. */
+		float distance = 1.0e9F;
+
+		for ( int i = 0; i <= 300; ++i )
+		{
+			const Vec3 pointA = startA + ((endA - startA) * (static_cast< float >(i) / 300.0F));
+
+			for ( int j = 0; j <= 300; ++j )
+			{
+				distance = std::min(distance, (pointA - (startB + ((endB - startB) * (static_cast< float >(j) / 300.0F)))).length());
+			}
+		}
+
+		const float reach = capsuleA.radius() + capsuleB.radius();
+
+		ContactManifold< float > manifold;
+		const bool contact = computeContactManifold(capsuleA, capsuleB, manifold);
+
+		if ( distance > 0.02F && distance < reach - 0.02F )
+		{
+			++shallow;
+
+			ASSERT_TRUE(contact) << "trial " << trial;
+			expectWellFormed(manifold);
+			EXPECT_NEAR(manifold.maximumDepth(), reach - distance, 0.006F) << "trial " << trial;
+			EXPECT_LE(manifold.maximumDepth(), reach - distance + 1.0e-4F) << "trial " << trial;
+		}
+		else if ( distance > reach + 1.0e-4F )
+		{
+			EXPECT_FALSE(contact) << "trial " << trial;
+		}
+	}
+
+	EXPECT_GT(shallow, 100U);
 }

@@ -57,16 +57,43 @@ a box resting on a face. Open work: `docs/todo/contact-manifold-generation.md`.
   `0x4000 | face << 4 | end` (deep face), `0x8000 | box axis` (deep edge).
 - Each pair has its reversed overload (box first): the same manifold, `flip()`ped.
 
-### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 32)
+### Triangles (`Contacts/SphereTriangle.hpp`, `Contacts/CapsuleTriangle.hpp`) — TWO-SIDED
+- `TriangleDetail::closestPointOnTriangle()`: the exact closest point by Voronoi regions (Ericson § 5.1.5), with the
+  region (`TriangleDetail::Region`: vertices 1-3, edges AB 4 / AC 5 / BC 6, face 7) used in the feature ids. A
+  collinear triangle (`unitNormal()` false) gives no contact — `Triangle::isValid()` accepts one.
+- Sphere: one point; a centre ON the triangle leaves along the winding normal (B - A) × (C - A).
+- Capsule: the exact segment ↔ triangle closest points (the segment piercing it, else its ends against the triangle
+  and the segment against the 3 edges); shallow → one point, or two when the segment lies along the face (normal
+  within ~2.6° of the face normal — a TIE between the face and an edge at the same distance must not hide it);
+  deep (touching / piercing) → pushed along the face normal TOWARDS THE SIDE OF THE CAPSULE'S CENTRE, the segment
+  clipped to the triangle's prism, each end's depth from the plane. The overlap test `Collisions/CapsuleTriangle.hpp`
+  pushed a piercing capsule by its radius whatever its side and depth (item `collision-pair-test-defects`).
+- A one-sided mode (back faces ignored, Jolt's `EBackFaceMode`) is for the triangle meshes of P5: owner decision then.
+
+### Round shapes (`Contacts/RoundShapes.hpp`) — sphere ↔ sphere, sphere ↔ capsule, capsule ↔ capsule
+- Each reduces to the closest points of a point or a segment, then two spheres. Two parallel capsules (within
+  ~2.6°) side by side get two points, the ends of their overlap.
+- ⚠️ Coincident centres / crossing axes leave the direction undefined: crossing axes take their common perpendicular
+  (from A's centre towards B's), coincident centres or coincident parallel axes take +Y — owner decision 2026-10-01:
+  a fixed, deterministic answer ("I prefer determinism"), not a caller-supplied direction.
+- Feature ids: sphere ↔ capsule = the capsule region (1 start cap, 2 end cap, 3 cylinder); capsule ↔ capsule =
+  region A << 4 | region B, or 0x100 | end for the parallel pair.
+
+### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 50)
 Flat (4 points, depth and positions exact), swapped A/B (normal negated), on an edge (2), on a corner (1), yawed 45°
 (the 4 corners), the 45° stacked cubes (octagon → 4 spanning points), feature ids stable under a 1 mm / 0.1° move,
 crossed edges (1 edge point), deep penetration, a zero-thickness box, determinism, the manifold's capacity.
 Sphere ↔ box: on the ground (and swapped), a corner, separated, centre inside, a rotated edge. Capsule ↔ box: lying (2
 points), overhanging (clipped to x 4 … 5), standing, tilted, separated, crossing a cube (deep face, 2 points), across a
 rotated edge (deep edge), degenerate = sphere, a rotated box vs a 20 000-sample exact distance.
+Triangles: above / under the face (two-sided), a vertex and an edge region, special cases (collinear, centre on it),
+a capsule lying (2), overhanging (clipped to the prism, x ±0.6), standing, piercing (pushed towards its centre, both
+sides), across an edge, degenerate = sphere. Round shapes: two spheres (and coincident), sphere vs capsule cylinder and
+cap, crossed capsules, parallel capsules (2 points, x 0 … 1), crossing axes.
 Randomised properties (2000 draws each, a local LCG so the draws are identical on every platform): box pairs — moving B
 along the normal by the deepest depth separates them; spheres and capsules — the depth equals radius minus the
-densely sampled exact distance (1e-4 / 1e-3), no contact beyond the radius.
+densely sampled exact distance (1e-4 / 1e-3), no contact beyond the radius; spheres vs triangles against a 300 × 300
+barycentric brute force (500 draws); capsules vs triangles; capsule pairs against a 300 × 300 brute force (500 draws).
 Release and ASan/UBSan green.
 
 ### ⚠️ Traps
