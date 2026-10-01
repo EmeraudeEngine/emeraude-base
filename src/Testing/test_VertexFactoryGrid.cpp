@@ -36,6 +36,44 @@
 using namespace EmEn::Base;
 using namespace EmEn::Base::VertexFactory;
 
+/* (cellCount + 1)² points must fit the index type: 254 cells per side is the last count a 16-bit grid
+ * can index (255² = 65025 points), 255 would wrap 256² = 65536 to 0. */
+
+TEST(VertexFactoryGrid, ACellCountWhosePointCountOverflowsTheIndexTypeIsRefused)
+{
+	Grid< float, uint16_t > smallGrid;
+
+	ASSERT_EQ((Grid< float, uint16_t >::MaxCellCount), 254U);
+	ASSERT_EQ((Grid< float, uint32_t >::MaxCellCount), 65534U);
+
+	ASSERT_TRUE(smallGrid.initializeByCellSize(254U));
+	ASSERT_EQ(smallGrid.pointCount(), 65025U);
+
+	ASSERT_FALSE(smallGrid.initializeByCellSize(255U));
+	ASSERT_FALSE(smallGrid.initializeByGridSize(10.0F, 255U));
+
+	Grid< float > grid;
+
+	ASSERT_FALSE(grid.initializeByGridSize(1.0F, 65535U));
+	/* cellCount + 1 itself would wrap to 0. */
+	ASSERT_FALSE(grid.initializeByGridSize(1.0F, UINT32_MAX));
+	ASSERT_FALSE(grid.initializeByCellSize(UINT32_MAX));
+}
+
+TEST(VertexFactoryGrid, ANonFiniteSizeIsRefused)
+{
+	Grid< float > grid;
+
+	ASSERT_FALSE(grid.initializeByGridSize(NAN, 4U));
+	ASSERT_FALSE(grid.initializeByGridSize(INFINITY, 4U));
+	ASSERT_FALSE(grid.initializeByCellSize(4U, NAN));
+	ASSERT_FALSE(grid.initializeByCellSize(4U, INFINITY));
+
+	/* A finite one still goes. */
+	ASSERT_TRUE(grid.initializeByGridSize(8.0F, 4U));
+	ASSERT_EQ(grid.pointCount(), 25U);
+}
+
 /* A 1024 m grid of 1 m cells, streamed through a 256-cell window: the window's centre may travel
  * from -384 to +384 m; beyond that the window would leave the grid and is held at the border. */
 

@@ -32,6 +32,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -123,6 +124,14 @@ namespace EmEn::Base::VertexFactory
 	{
 		public:
 
+			static_assert(std::numeric_limits< index_data_t >::digits % 2 == 0, "The index type must have an even bit count.");
+
+			/**
+			 * @brief The largest cell count per side whose point count, (cellCount + 1)², fits index_data_t.
+			 * @note With D bits, floor(sqrt(2^D - 1)) = 2^(D/2) - 1 points per side, so one cell less: 65534 for uint32_t.
+			 */
+			static constexpr index_data_t MaxCellCount{static_cast< index_data_t >((static_cast< uint64_t >(1) << (std::numeric_limits< index_data_t >::digits / 2)) - 2)};
+
 			/**
 			 * @brief Constructs a default empty grid.
 			 * @note Creates an uninitialized grid with zero dimensions. You must call initializeData() before using the grid.
@@ -165,8 +174,8 @@ namespace EmEn::Base::VertexFactory
 			 *
 			 * @return True if initialization succeeded, false if parameters are invalid.
 			 *
-			 * @pre cellCount must be at least 1
-			 * @pre cellSize must be positive
+			 * @pre cellCount must be at least 1 and at most MaxCellCount (else refused)
+			 * @pre cellSize must be finite and positive (else refused)
 			 * @post Grid is cleared before initialization
 			 * @post Bounding box is initialized for a flat grid at Y=0
 			 * @post Point count = (cellCount + 1)²
@@ -187,9 +196,16 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				if ( cellSize < 0 )
+				if ( cellCount > MaxCellCount )
 				{
-					std::cerr << "Grid::initializeByCellSize(), the cell size parameter must be positive !" "\n";
+					std::cerr << "Grid::initializeByCellSize(), the cell count " << static_cast< uint64_t >(cellCount) << " exceeds " << static_cast< uint64_t >(MaxCellCount) << " (the point count would overflow the index type) !" "\n";
+
+					return false;
+				}
+
+				if ( !std::isfinite(cellSize) || cellSize < 0 )
+				{
+					std::cerr << "Grid::initializeByCellSize(), the cell size parameter must be finite and positive !" "\n";
 
 					return false;
 				}
@@ -235,8 +251,8 @@ namespace EmEn::Base::VertexFactory
 			 *
 			 * @return True if initialization succeeded, false if parameters are invalid.
 			 *
-			 * @pre gridSize must be positive
-			 * @pre gridDivision must be at least 1
+			 * @pre gridSize must be finite and positive (else refused)
+			 * @pre gridDivision must be at least 1 and at most MaxCellCount (else refused)
 			 * @post Grid is cleared before initialization
 			 * @post Bounding box is initialized for a flat grid at Y=0
 			 * @post Point count = (gridDivision + 1)²
@@ -250,9 +266,9 @@ namespace EmEn::Base::VertexFactory
 			bool
 			initializeByGridSize (vertex_data_t gridSize, index_data_t gridDivision) noexcept
 			{
-				if ( gridSize < 0 )
+				if ( !std::isfinite(gridSize) || gridSize < 0 )
 				{
-					std::cerr << "Grid::initializeByGridSize(), the grid size parameter must be positive !" "\n";
+					std::cerr << "Grid::initializeByGridSize(), the grid size parameter must be finite and positive !" "\n";
 
 					return false;
 				}
@@ -260,6 +276,13 @@ namespace EmEn::Base::VertexFactory
 				if ( gridDivision == 0 )
 				{
 					std::cerr << "Grid::initializeByGridSize(), the grid division parameter must be at least 1 !" "\n";
+
+					return false;
+				}
+
+				if ( gridDivision > MaxCellCount )
+				{
+					std::cerr << "Grid::initializeByGridSize(), the grid division " << static_cast< uint64_t >(gridDivision) << " exceeds " << static_cast< uint64_t >(MaxCellCount) << " (the point count would overflow the index type) !" "\n";
 
 					return false;
 				}

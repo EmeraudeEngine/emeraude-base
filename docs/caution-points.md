@@ -305,6 +305,16 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 
 ## VertexFactory
 
+### ⚠️ `Grid`'s point count is computed in its INDEX type — a large division wrapped it (2026-10-01, FIXED)
+
+> [!CAUTION]
+> `Grid::pointCount()` is `(cellCount + 1)²` in `index_data_t`: with `uint32_t`, a division of 65535 wrapped the count
+> to 0 (65536²), and `UINT32_MAX` wrapped `cellCount + 1` to 0, so `initializeByCellSize()` / `initializeByGridSize()`
+> returned TRUE on a grid of 0 points and every later index walked out of it. Both now refuse a count above
+> `Grid::MaxCellCount` (65534 for `uint32_t`, 254 for `uint16_t`: `2^(D/2) - 2`) and a non-finite size. Tests
+> `VertexFactoryGrid.ACellCountWhosePointCountOverflowsTheIndexTypeIsRefused`, `ANonFiniteSizeIsRefused`. The bound is
+> the TYPE's; a caller reading data caps far lower (the engine's JSON grounds: 4096, terrains: 16384).
+
 ### `exceedsStream()` is a PRE-READ bound — using it after the parse rejects every valid file (Aug 2026)
 
 > [!CRITICAL]
