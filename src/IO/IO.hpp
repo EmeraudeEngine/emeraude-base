@@ -42,6 +42,7 @@
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
+#include "String.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -508,7 +509,8 @@ namespace EmEn::Base::IO
 
 	/**
 	 * @brief Construct a std::filesystem::path from a UTF-8 encoded std::string.
-	 * On Windows, uses C++20 char8_t constructor to bypass ANSI code page.
+	 * On Windows, through String::utf8ToUTF16() into the native wide path: the ANSI code page is bypassed, and invalid
+	 * UTF-8 becomes U+FFFD (the char8_t constructor THREW std::system_error on it, an abort — triad 15, 2026-10-01).
 	 * On POSIX, direct construction (native encoding is already UTF-8).
 	 * @param UTF8String A reference to a string.
 	 * @return std::filesystem::path
@@ -520,10 +522,9 @@ namespace EmEn::Base::IO
 	{
 		if constexpr ( IsWindows )
 		{
-			return {
-				reinterpret_cast< const char8_t * >(UTF8String.data()),
-				reinterpret_cast< const char8_t * >(UTF8String.data() + UTF8String.size())
-			};
+			const auto UTF16String = String::utf8ToUTF16(UTF8String);
+
+			return std::filesystem::path{std::wstring{UTF16String.begin(), UTF16String.end()}};
 		}
 		else
 		{
@@ -533,6 +534,8 @@ namespace EmEn::Base::IO
 
 	/**
 	 * @brief Convert a path to a UTF-8 encoded std::string (native separators).
+	 * @note On Windows, from the native wide string through String::utf16ToUTF8(): a lone surrogate (NTFS allows one)
+	 * becomes U+FFFD (path::u8string() THREW on it, an abort — triad 15, 2026-10-01).
 	 * @param path A reference to a filesystem path.
 	 * @return std::string
 	 */
@@ -543,9 +546,9 @@ namespace EmEn::Base::IO
 	{
 		if constexpr ( IsWindows )
 		{
-			const auto UTF8String = path.u8string();
+			const auto & native = path.native();
 
-			return {UTF8String.begin(), UTF8String.end()};
+			return String::utf16ToUTF8(std::u16string{native.begin(), native.end()});
 		}
 		else
 		{
@@ -565,9 +568,10 @@ namespace EmEn::Base::IO
 	{
 		if constexpr ( IsWindows )
 		{
-			const auto UTF8String = path.generic_u8string();
+			/* NOTE: generic_wstring() only swaps the separators of the native wide string (no conversion, no throw). */
+			const auto generic = path.generic_wstring();
 
-			return {UTF8String.begin(), UTF8String.end()};
+			return String::utf16ToUTF8(std::u16string{generic.begin(), generic.end()});
 		}
 		else
 		{

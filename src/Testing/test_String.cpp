@@ -646,3 +646,37 @@ TEST(String, unicodeToUTF8Range)
 	/* Emoji range (if supported) */
 	ASSERT_EQ(String::unicodeToUTF8(128512).empty(), false); // 😀
 }
+
+/* 2026-10-01 (engine triad 15): the UTF-8 <-> UTF-16 conversions behind IO::u8path() / IO::toU8String() on Windows. MSVC's
+ * char8_t path conversion THROWS on invalid UTF-8 or a lone surrogate (an abort with exceptions off); these never throw
+ * and replace every invalid sequence with U+FFFD. */
+TEST(String, utf8ToUTF16)
+{
+	ASSERT_EQ(String::utf8ToUTF16("abc"), u"abc");
+	ASSERT_EQ(String::utf8ToUTF16("J\xC3\xA9r\xC3\xB4me"), u"J\u00E9r\u00F4me");
+	ASSERT_EQ(String::utf8ToUTF16("\xE6\xBC\xA2"), u"\u6F22");
+	ASSERT_EQ(String::utf8ToUTF16("\xF0\x9F\x98\x80"), u"\U0001F600");
+	ASSERT_EQ(String::utf8ToUTF16(""), u"");
+	/* Invalid: a Latin-1 byte, a truncated sequence, an overlong form, a CESU-8 surrogate, a code point past U+10FFFF. */
+	ASSERT_EQ(String::utf8ToUTF16("J\xE9r"), u"J\uFFFDr");
+	ASSERT_EQ(String::utf8ToUTF16("a\xF0\x9F"), u"a\uFFFD");
+	ASSERT_EQ(String::utf8ToUTF16("\xC0\xAF"), u"\uFFFD\uFFFD");
+	ASSERT_EQ(String::utf8ToUTF16("\xED\xA0\x80"), u"\uFFFD\uFFFD\uFFFD");
+	ASSERT_EQ(String::utf8ToUTF16("\xF4\x90\x80\x80"), u"\uFFFD\uFFFD\uFFFD\uFFFD");
+	ASSERT_EQ(String::utf8ToUTF16(std::string_view{"a\0b", 3}), std::u16string(u"a\0b", 3));
+}
+
+TEST(String, utf16ToUTF8)
+{
+	ASSERT_EQ(String::utf16ToUTF8(u"abc"), "abc");
+	ASSERT_EQ(String::utf16ToUTF8(u"J\u00E9r\u00F4me"), "J\xC3\xA9r\xC3\xB4me");
+	ASSERT_EQ(String::utf16ToUTF8(u"\U0001F600"), "\xF0\x9F\x98\x80");
+	/* A lone surrogate (NTFS allows one in a file name), high or low. */
+	ASSERT_EQ(String::utf16ToUTF8(std::u16string{u'a', static_cast< char16_t >(0xDC00), u'b'}), "a\xEF\xBF\xBD" "b");
+	ASSERT_EQ(String::utf16ToUTF8(std::u16string{static_cast< char16_t >(0xD83D)}), "\xEF\xBF\xBD");
+
+	/* A round trip of valid text is exact. */
+	const std::string text{"Abc \xC3\xA9\xE6\xBC\xA2\xF0\x9F\x98\x80 \xE2\x82\xAC"};
+	ASSERT_EQ(String::utf16ToUTF8(String::utf8ToUTF16(text)), text);
+}
+

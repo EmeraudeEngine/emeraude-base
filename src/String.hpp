@@ -357,6 +357,27 @@ namespace EmEn::Base::String
 	std::string unicodeToUTF8 (unsigned int unicode) noexcept;
 
 	/**
+	 * @brief Converts UTF-8 to UTF-16, never failing: every invalid sequence becomes U+FFFD.
+	 * @note Strict decoding (RFC 3629): an overlong form, an encoded surrogate (CESU-8), a code point past U+10FFFF, a
+	 * stray continuation byte and a truncated sequence are invalid; each maximal invalid subpart gives one U+FFFD.
+	 * Behind IO::u8path() on Windows, where MSVC's char8_t path conversion throws on invalid UTF-8 (an abort).
+	 * @param utf8 The UTF-8 bytes (an embedded NUL is kept).
+	 * @return std::u16string
+	 */
+	[[nodiscard]]
+	std::u16string utf8ToUTF16 (std::string_view utf8) noexcept;
+
+	/**
+	 * @brief Converts UTF-16 to UTF-8, never failing: a lone surrogate becomes U+FFFD.
+	 * @note Behind IO::toU8String() on Windows, where MSVC's path::u8string() throws on a lone surrogate (NTFS allows
+	 * one in a file name).
+	 * @param utf16 The UTF-16 code units.
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	std::string utf16ToUTF8 (std::u16string_view utf16) noexcept;
+
+	/**
 	 * @brief Encodes a byte buffer to a standard Base64 string (RFC 4648 alphabet, '=' padding).
 	 * @param data The bytes to encode (read in place: no copy).
 	 * @return std::string

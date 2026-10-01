@@ -514,6 +514,182 @@ namespace EmEn::Base::String
 		return source.substr(pos + match.size());
 	}
 
+	namespace
+	{
+		/* Appends a Unicode scalar value (no surrogate, at most U+10FFFF) as UTF-8. */
+		void
+		appendUTF8 (std::string & output, char32_t codePoint) noexcept
+		{
+			if ( codePoint <= 0x7F )
+			{
+				output += static_cast< char >(codePoint);
+			}
+			else if ( codePoint <= 0x7FF )
+			{
+				output += static_cast< char >(0xC0 | (codePoint >> 6));
+				output += static_cast< char >(0x80 | (codePoint & 0x3F));
+			}
+			else if ( codePoint <= 0xFFFF )
+			{
+				output += static_cast< char >(0xE0 | (codePoint >> 12));
+				output += static_cast< char >(0x80 | ((codePoint >> 6) & 0x3F));
+				output += static_cast< char >(0x80 | (codePoint & 0x3F));
+			}
+			else
+			{
+				output += static_cast< char >(0xF0 | (codePoint >> 18));
+				output += static_cast< char >(0x80 | ((codePoint >> 12) & 0x3F));
+				output += static_cast< char >(0x80 | ((codePoint >> 6) & 0x3F));
+				output += static_cast< char >(0x80 | (codePoint & 0x3F));
+			}
+		}
+
+		/* Appends a Unicode scalar value as UTF-16 (a surrogate pair past U+FFFF). */
+		void
+		appendUTF16 (std::u16string & output, char32_t codePoint) noexcept
+		{
+			if ( codePoint <= 0xFFFF )
+			{
+				output += static_cast< char16_t >(codePoint);
+			}
+			else
+			{
+				const auto offset = codePoint - 0x10000;
+
+				output += static_cast< char16_t >(0xD800 + (offset >> 10));
+				output += static_cast< char16_t >(0xDC00 + (offset & 0x3FF));
+			}
+		}
+
+		constexpr char32_t ReplacementCharacter{0xFFFD};
+	}
+
+	std::u16string
+	utf8ToUTF16 (std::string_view utf8) noexcept
+	{
+		std::u16string output;
+		output.reserve(utf8.size());
+
+		size_t index = 0;
+
+		while ( index < utf8.size() )
+		{
+			const auto lead = static_cast< unsigned char >(utf8[index]);
+
+			if ( lead <= 0x7F )
+			{
+				output += static_cast< char16_t >(lead);
+				++index;
+
+				continue;
+			}
+
+			/* The sequence length and the valid range of the FIRST continuation byte (RFC 3629, table 3-7 of the
+			 * Unicode standard): it excludes the overlong forms, the surrogates and the code points past U+10FFFF. */
+			size_t length = 0;
+			unsigned char firstLow = 0x80;
+			unsigned char firstHigh = 0xBF;
+			char32_t codePoint = 0;
+
+			if ( lead >= 0xC2 && lead <= 0xDF )
+			{
+				length = 2;
+				codePoint = lead & 0x1F;
+			}
+			else if ( lead >= 0xE0 && lead <= 0xEF )
+			{
+				length = 3;
+				codePoint = lead & 0x0F;
+				firstLow = lead == 0xE0 ? 0xA0 : 0x80;
+				firstHigh = lead == 0xED ? 0x9F : 0xBF;
+			}
+			else if ( lead >= 0xF0 && lead <= 0xF4 )
+			{
+				length = 4;
+				codePoint = lead & 0x07;
+				firstLow = lead == 0xF0 ? 0x90 : 0x80;
+				firstHigh = lead == 0xF4 ? 0x8F : 0xBF;
+			}
+			else
+			{
+				/* A stray continuation byte, C0, C1, or F5-FF. */
+				output += static_cast< char16_t >(ReplacementCharacter);
+				++index;
+
+				continue;
+			}
+
+			/* Consumes the maximal valid subpart; an invalid or a missing byte ends it with one U+FFFD. */
+			size_t consumed = 1;
+			bool valid = true;
+
+			for ( ; consumed < length; ++consumed )
+			{
+				if ( index + consumed >= utf8.size() )
+				{
+					valid = false;
+
+					break;
+				}
+
+				const auto byte = static_cast< unsigned char >(utf8[index + consumed]);
+				const auto low = consumed == 1 ? firstLow : static_cast< unsigned char >(0x80);
+				const auto high = consumed == 1 ? firstHigh : static_cast< unsigned char >(0xBF);
+
+				if ( byte < low || byte > high )
+				{
+					valid = false;
+
+					break;
+				}
+
+				codePoint = (codePoint << 6) | (byte & 0x3F);
+			}
+
+			if ( valid )
+			{
+				appendUTF16(output, codePoint);
+			}
+			else
+			{
+				output += static_cast< char16_t >(ReplacementCharacter);
+			}
+
+			index += consumed;
+		}
+
+		return output;
+	}
+
+	std::string
+	utf16ToUTF8 (std::u16string_view utf16) noexcept
+	{
+		std::string output;
+		output.reserve(utf16.size());
+
+		for ( size_t index = 0; index < utf16.size(); ++index )
+		{
+			const char32_t unit = utf16[index];
+
+			if ( unit >= 0xD800 && unit <= 0xDBFF && index + 1 < utf16.size() && utf16[index + 1] >= 0xDC00 && utf16[index + 1] <= 0xDFFF )
+			{
+				appendUTF8(output, 0x10000 + ((unit - 0xD800) << 10) + (utf16[index + 1] - 0xDC00));
+				++index;
+			}
+			else if ( unit >= 0xD800 && unit <= 0xDFFF )
+			{
+				/* A lone surrogate. */
+				appendUTF8(output, ReplacementCharacter);
+			}
+			else
+			{
+				appendUTF8(output, unit);
+			}
+		}
+
+		return output;
+	}
+
 	std::string
 	unicodeToUTF8 (unsigned int unicode) noexcept
 	{
