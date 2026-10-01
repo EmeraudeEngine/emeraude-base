@@ -39,6 +39,35 @@
 
 namespace EmEn::Base::Math::Space3D
 {
+	namespace ContactsDetail
+	{
+		/**
+		 * @brief The base-3 digit of a box region along one axis, used in feature ids: 0 inside the slab [-extent,
+		 * extent], 1 under it, 2 above it. Three digits name a face, an edge or a corner of the box.
+		 * @param local The coordinate along the box axis, relative to its centre.
+		 * @param extent The half extent along that axis.
+		 * @return uint32_t
+		 */
+		template< typename precision_t >
+		[[nodiscard]]
+		constexpr
+		uint32_t
+		regionDigit (precision_t local, precision_t extent) noexcept
+		{
+			if ( local < -extent )
+			{
+				return 1U;
+			}
+
+			if ( local > extent )
+			{
+				return 2U;
+			}
+
+			return 0U;
+		}
+	}
+
 	/**
 	 * @brief One point of a contact manifold.
 	 * @tparam precision_t The precision type. Default float.

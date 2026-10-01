@@ -35,10 +35,38 @@ a box resting on a face. Open work: `docs/todo/contact-manifold-generation.md`.
   `false` too.
 - No third-party code: the algorithms follow the cited papers / book.
 
-### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 15)
+### Sphere ↔ box (`Contacts/SphereBox.hpp`) — one point
+- The centre clamped in the box frame (Ericson § 5.1.4); normal from the sphere to the box; centre inside (or within
+  1e-6 of the surface) → the face of least penetration, depth = radius + distance to that face.
+- Feature id: the box region of the centre in base 3 per axis (`ContactsDetail::regionDigit()`: 0 inside the slab, 1
+  under, 2 above — a face, an edge or a corner); `0x100 | face` when the centre is inside.
+
+### Capsule ↔ box (`Contacts/CapsuleBox.hpp`) — one or two points
+- The EXACT closest points of the capsule's segment and the box: along the segment the squared distance is
+  Σ max(|α_i + β_i t| - e_i, 0)², a convex piecewise quadratic with at most 6 breakpoints (where |α_i + β_i t| = e_i);
+  each piece is minimised in closed form. It replaces, for this pair, the 4-iteration alternating projection of
+  `Collisions/CapsuleCuboid.hpp` (item `collision-pair-test-defects`).
+- Shallow (segment outside the box, nearer than the radius): one point; TWO when the closest feature is a face and the
+  segment lies along it (within sin = 0.05, ~3°): the segment clipped to the face's prism — a capsule lying on a floor
+  does not rock on one point.
+- Deep (the segment touches or crosses the box): SAT on the 3 face axes and the 3 cross products segment × box axis,
+  biased towards faces (0.95 × + 1e-4); a face clips the segment (≤ 2 points), an edge gives the point between the
+  segment and that box edge.
+- A zero-length capsule is a sphere (same depth and point as sphere ↔ box: tested).
+- Feature ids: `0x1000 | face << 4 | end` (shallow along a face), `0x2000 | region` (shallow single point),
+  `0x4000 | face << 4 | end` (deep face), `0x8000 | box axis` (deep edge).
+- Each pair has its reversed overload (box first): the same manifold, `flip()`ped.
+
+### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 32)
 Flat (4 points, depth and positions exact), swapped A/B (normal negated), on an edge (2), on a corner (1), yawed 45°
 (the 4 corners), the 45° stacked cubes (octagon → 4 spanning points), feature ids stable under a 1 mm / 0.1° move,
 crossed edges (1 edge point), deep penetration, a zero-thickness box, determinism, the manifold's capacity.
+Sphere ↔ box: on the ground (and swapped), a corner, separated, centre inside, a rotated edge. Capsule ↔ box: lying (2
+points), overhanging (clipped to x 4 … 5), standing, tilted, separated, crossing a cube (deep face, 2 points), across a
+rotated edge (deep edge), degenerate = sphere, a rotated box vs a 20 000-sample exact distance.
+Randomised properties (2000 draws each, a local LCG so the draws are identical on every platform): box pairs — moving B
+along the normal by the deepest depth separates them; spheres and capsules — the depth equals radius minus the
+densely sampled exact distance (1e-4 / 1e-3), no contact beyond the radius.
 Release and ASan/UBSan green.
 
 ### ⚠️ Traps

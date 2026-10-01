@@ -24,7 +24,8 @@ None is proven by a test yet: each one starts with a failing unit test.
   terrain case of a capsule character.
 - [ ] Capsule ↔ AABB, deep case (`CapsuleCuboid.hpp:166-215`): only the single closest axis point is pushed out; an
   axis spanning the box leaves the other end inside.
-- [ ] `closestPointsCapsuleTriangle` / `closestPointsCapsuleCuboid`: a fixed 4-iteration alternating projection,
+- [ ] (An exact segment ↔ box closest-point routine now exists: `Contacts/CapsuleBox.hpp`
+  `CapsuleBoxDetail::closestOfSegmentAndBox()` — reuse it.) `closestPointsCapsuleTriangle` / `closestPointsCapsuleCuboid`: a fixed 4-iteration alternating projection,
   inaccurate for a segment nearly parallel to a face or an edge. Replace by an exact segment ↔ triangle /
   segment ↔ box closest-point routine (Ericson § 5.1.9, § 5.1.10).
 - [ ] Degenerate fallbacks answer a hard-coded `negativeY()` MTV (`SamePrimitive.hpp:162/254`, `CapsuleSphere.hpp:103`):

@@ -29,12 +29,13 @@ sphere / capsule pairs (engine `docs/physics-overhaul.md` § 1.5).
   ASan/UBSan green, clang-tidy 21.1.6: 0 new finding except one `cppcoreguidelines-pro-bounds-constant-array-index` on
   `OrientedBox::axis(index)` (`@pre index < 3`), kept on purpose (owner, ledger). Doc:
   `docs/subsystems/source-tree/17-math-space3d-contacts.md`.
+- Sphere ↔ box (`Contacts/SphereBox.hpp`) and capsule ↔ box (`Contacts/CapsuleBox.hpp`, exact segment-box closest
+  points, 2 points along a face), both orders; 32 tests in all including 3 randomised property tests.
 
 ## What remains
 
-- [ ] Sphere ↔ oriented box, capsule ↔ oriented box (2 points when the capsule lies on a face), sphere / capsule ↔
-  triangle with a contact point. The AABB variants become the special case of the oriented ones, or stay as fast
-  paths with the same output.
+- [ ] Sphere / capsule ↔ triangle with a contact point; then sphere ↔ sphere, sphere ↔ capsule, capsule ↔ capsule. The
+  AABB variants become the special case of the oriented ones, or stay as fast paths with the same output.
 - [ ] Unit tests for each new pair (Release + ASan/UBSan), on the model of `test_MathSpace3DContacts.cpp`.
 
 ## ⚠️ Traps
