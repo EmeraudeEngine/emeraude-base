@@ -970,6 +970,92 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Calls a function for each triangle of the grid cells that overlap a region of the XZ plane — the
+			 * RENDERED triangulation, what the physics must collide with.
+			 * @note Each cell is split along its bottom-left → top-right diagonal, as `VertexGridResource`'s triangle strip
+			 * draws it (TL, BL, TR) + (BL, BR, TR). ⚠️ This is not the surface getHeightAt() answers: that one
+			 * interpolates the cell BILINEARLY (a curved patch), which differs from the two triangles inside the cell.
+			 * @note Each triangle is given with an UPWARD winding normal ((B − A) × (C − A) has a positive Y), in the
+			 * frame of position() (the world offset included). A region outside the grid, or a non-finite one, visits
+			 * nothing: unlike getHeightAt(), no flat extension is invented beyond the edge.
+			 * @param minX The region's minimum X.
+			 * @param minZ The region's minimum Z.
+			 * @param maxX The region's maximum X.
+			 * @param maxZ The region's maximum Z.
+			 * @param function A callable (a, b, c, cellX, cellZ, half) where half is 0 for (TL, BL, TR), 1 for (BL, BR, TR); called
+			 * once per triangle, so taken by const reference (never forwarded).
+			 * @return size_t The number of triangles visited.
+			 */
+			template< typename function_t >
+			[[nodiscard]]
+			size_t
+			forEachTriangleInRegion (vertex_data_t minX, vertex_data_t minZ, vertex_data_t maxX, vertex_data_t maxZ, const function_t & function) const noexcept
+			{
+				if ( m_squaredQuadCount == 0 || !std::isfinite(minX) || !std::isfinite(minZ) || !std::isfinite(maxX) || !std::isfinite(maxZ) || minX > maxX || minZ > maxZ )
+				{
+					return 0;
+				}
+
+				/* The region in the grid's own frame (position() adds the world offset). */
+				const vertex_data_t localMinX = minX - m_worldOffset[0] + m_halfSquaredSize;
+				const vertex_data_t localMaxX = maxX - m_worldOffset[0] + m_halfSquaredSize;
+				const vertex_data_t localMinZ = minZ - m_worldOffset[1] + m_halfSquaredSize;
+				const vertex_data_t localMaxZ = maxZ - m_worldOffset[1] + m_halfSquaredSize;
+				const vertex_data_t fullSize = m_halfSquaredSize * static_cast< vertex_data_t >(2);
+
+				if ( localMaxX < 0 || localMaxZ < 0 || localMinX > fullSize || localMinZ > fullSize )
+				{
+					return 0;
+				}
+
+				const auto toCell = [this] (vertex_data_t local) {
+					const auto cell = std::floor(local / m_quadSquaredSize);
+
+					if ( cell <= 0 )
+					{
+						return static_cast< index_data_t >(0);
+					}
+
+					return std::min(static_cast< index_data_t >(cell), m_squaredQuadCount - 1);
+				};
+
+				const index_data_t firstX = toCell(localMinX);
+				const index_data_t lastX = toCell(localMaxX);
+				const index_data_t firstZ = toCell(localMinZ);
+				const index_data_t lastZ = toCell(localMaxZ);
+				size_t visited = 0;
+
+				const auto emit = [&function, &visited] (Math::Vector< 3, vertex_data_t > a, Math::Vector< 3, vertex_data_t > b, Math::Vector< 3, vertex_data_t > c, index_data_t cellX, index_data_t cellZ, uint8_t half) {
+					/* The upward winding: swap two corners when the normal points down. */
+					if ( Math::Vector< 3, vertex_data_t >::crossProduct(b - a, c - a)[Math::Y] < 0 )
+					{
+						std::swap(b, c);
+					}
+
+					function(a, b, c, cellX, cellZ, half);
+
+					++visited;
+				};
+
+				for ( index_data_t cellZ = firstZ; cellZ <= lastZ; ++cellZ )
+				{
+					for ( index_data_t cellX = firstX; cellX <= lastX; ++cellX )
+					{
+						const auto cell = this->quad(cellX, cellZ);
+						const auto topLeft = this->position(cell.topLeftIndex());
+						const auto bottomLeft = this->position(cell.bottomLeftIndex());
+						const auto topRight = this->position(cell.topRightIndex());
+						const auto bottomRight = this->position(cell.bottomRightIndex());
+
+						emit(topLeft, bottomLeft, topRight, cellX, cellZ, 0);
+						emit(bottomLeft, bottomRight, topRight, cellX, cellZ, 1);
+					}
+				}
+
+				return visited;
+			}
+
+			/**
 			 * @brief Returns the interpolated surface normal at arbitrary world coordinates.
 			 *
 			 * Performs bilinear interpolation of normal vectors from the four surrounding grid

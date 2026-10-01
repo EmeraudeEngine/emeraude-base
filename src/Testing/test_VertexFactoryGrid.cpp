@@ -349,3 +349,127 @@ TEST(VertexFactoryGrid, An8BitHeightmapLosesItsTerracesButNotItsData)
 		ASSERT_GT(grid.getHeightAt(x + 1U, 2U), grid.getHeightAt(x, 2U));
 	}
 }
+
+/* ===== forEachTriangleInRegion(): the rendered triangulation, for the physics (overhaul P2) ===== */
+
+namespace
+{
+	struct VisitedTriangle
+	{
+		Math::Vector< 3, float > a;
+		Math::Vector< 3, float > b;
+		Math::Vector< 3, float > c;
+		uint32_t cellX{0};
+		uint32_t cellZ{0};
+		uint8_t half{0};
+	};
+
+	std::vector< VisitedTriangle >
+	collectTriangles (const Grid< float > & grid, float minX, float minZ, float maxX, float maxZ)
+	{
+		std::vector< VisitedTriangle > triangles;
+
+		const auto count = grid.forEachTriangleInRegion(minX, minZ, maxX, maxZ, [&triangles] (const auto & a, const auto & b, const auto & c, auto cellX, auto cellZ, uint8_t half) {
+			triangles.push_back({a, b, c, static_cast< uint32_t >(cellX), static_cast< uint32_t >(cellZ), half});
+		});
+
+		EXPECT_EQ(count, triangles.size());
+
+		return triangles;
+	}
+
+	bool
+	samePoint (const Math::Vector< 3, float > & lhs, const Math::Vector< 3, float > & rhs)
+	{
+		return std::abs(lhs[0] - rhs[0]) < 1.0e-5F && std::abs(lhs[1] - rhs[1]) < 1.0e-5F && std::abs(lhs[2] - rhs[2]) < 1.0e-5F;
+	}
+
+	/** Whether a triangle holds exactly the three given corners, in any order. */
+	bool
+	holdsCorners (const VisitedTriangle & triangle, const Math::Vector< 3, float > & p, const Math::Vector< 3, float > & q, const Math::Vector< 3, float > & r)
+	{
+		const auto holds = [&triangle] (const Math::Vector< 3, float > & corner) {
+			return samePoint(triangle.a, corner) || samePoint(triangle.b, corner) || samePoint(triangle.c, corner);
+		};
+
+		return holds(p) && holds(q) && holds(r);
+	}
+}
+
+TEST(VertexFactoryGrid, TrianglesOfAFlatRegionPointUp)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(16.0F, 16U));
+	grid.shiftHeight(2.0F);
+
+	/* Cells are 1 m: [0.2, 1.8] × [-1.5, 0.4] overlaps cells x 8..9, z 6..8 (the grid spans -8 … 8). */
+	const auto triangles = collectTriangles(grid, 0.2F, -1.5F, 1.8F, 0.4F);
+
+	ASSERT_EQ(triangles.size(), 2U * 2U * 3U);
+
+	for ( const auto & triangle : triangles )
+	{
+		const auto normal = Math::Vector< 3, float >::crossProduct(triangle.b - triangle.a, triangle.c - triangle.a);
+
+		EXPECT_GT(normal[1], 0.0F);
+		EXPECT_FLOAT_EQ(triangle.a[1], 2.0F);
+		EXPECT_GE(triangle.cellX, 8U);
+		EXPECT_LE(triangle.cellX, 9U);
+		EXPECT_GE(triangle.cellZ, 6U);
+		EXPECT_LE(triangle.cellZ, 8U);
+	}
+}
+
+TEST(VertexFactoryGrid, TrianglesFollowTheRenderedDiagonal)
+{
+	/* A rough grid: every triangle's corners are the grid's own points, cell by cell split along the bottom-left →
+	 * top-right diagonal (VertexGridResource's triangle strip), every normal up. */
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(8.0F, 8U));
+	grid.applyPerlinNoise(2.0F, 1.5F);
+
+	const auto triangles = collectTriangles(grid, -4.0F, -4.0F, 4.0F, 4.0F);
+
+	ASSERT_EQ(triangles.size(), 8U * 8U * 2U);
+
+	for ( const auto & triangle : triangles )
+	{
+		const auto cell = grid.quad(triangle.cellX, triangle.cellZ);
+		const auto topLeft = grid.position(cell.topLeftIndex());
+		const auto bottomLeft = grid.position(cell.bottomLeftIndex());
+		const auto topRight = grid.position(cell.topRightIndex());
+		const auto bottomRight = grid.position(cell.bottomRightIndex());
+
+		if ( triangle.half == 0 )
+		{
+			EXPECT_TRUE(holdsCorners(triangle, topLeft, bottomLeft, topRight));
+		}
+		else
+		{
+			EXPECT_TRUE(holdsCorners(triangle, bottomLeft, bottomRight, topRight));
+		}
+
+		const auto upward = Math::Vector< 3, float >::crossProduct(triangle.b - triangle.a, triangle.c - triangle.a)[1];
+
+		EXPECT_GT(upward, 0.0F);
+	}
+}
+
+TEST(VertexFactoryGrid, TrianglesOutsideOrInvalidRegionsAreNone)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(16.0F, 16U));
+
+	EXPECT_TRUE(collectTriangles(grid, 20.0F, 20.0F, 30.0F, 30.0F).empty());
+	EXPECT_TRUE(collectTriangles(grid, 1.0F, 1.0F, 0.0F, 2.0F).empty());
+	EXPECT_TRUE(collectTriangles(grid, std::nanf(""), 0.0F, 1.0F, 1.0F).empty());
+
+	/* Straddling the edge: only the cells inside (x 15, z 0..1). */
+	const auto edge = collectTriangles(grid, 7.5F, -8.5F, 9.0F, -6.5F);
+
+	EXPECT_EQ(edge.size(), 1U * 2U * 2U);
+
+	Grid< float > empty;
+
+	EXPECT_EQ(empty.forEachTriangleInRegion(-1.0F, -1.0F, 1.0F, 1.0F, [] (const auto &, const auto &, const auto &, auto, auto, uint8_t) {}), 0U);
+}

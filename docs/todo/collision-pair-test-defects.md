@@ -15,6 +15,13 @@ tags: [physics, collisions, physics-overhaul]
 Phase P1 of the physics overhaul (engine `docs/physics-overhaul.md`). A read-only survey on 2026-10-01 found these.
 None is proven by a test yet: each one starts with a failing unit test.
 
+## Owner decision (2026-10-01)
+
+The MTV overloads of `Collisions/` are only used by the engine's `Physics/*CollisionModel` (lights, the editor and the
+octree use the boolean overlaps). P2 moves those models to `Contacts/`; the MTV overloads are then RETIRED, not fixed.
+Only the defects that change a BOOLEAN answer stay to fix (the single-winding inside tests). The items below that
+concern an MTV are kept until the retirement, for the record.
+
 ## What remains
 
 - [ ] Tri ↔ tri: `SAT::checkCollision()` builds the MTV "from A to B" (`SAT.hpp:~221-230`) and `SamePrimitive.hpp:96`
