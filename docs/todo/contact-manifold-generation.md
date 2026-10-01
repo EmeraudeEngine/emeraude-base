@@ -33,6 +33,7 @@ sphere / capsule pairs (engine `docs/physics-overhaul.md` § 1.5).
   points, 2 points along a face), both orders; 32 tests in all including 3 randomised property tests.
 - Sphere ↔ triangle, capsule ↔ triangle (two-sided; a piercing capsule leaves towards its centre's side), sphere ↔
   sphere, sphere ↔ capsule, capsule ↔ capsule (2 points when parallel): 50 tests, 6 of them randomised.
+- Box ↔ triangle (`Contacts/BoxTriangle.hpp`, for the ground's triangles in P2): 57 tests in all.
 
 ## What remains
 

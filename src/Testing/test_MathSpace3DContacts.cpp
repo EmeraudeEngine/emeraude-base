@@ -40,6 +40,7 @@
 #include "Math/Space3D/AACuboid.hpp"
 #include "Math/Space3D/Capsule.hpp"
 #include "Math/Space3D/Contacts/BoxBox.hpp"
+#include "Math/Space3D/Contacts/BoxTriangle.hpp"
 #include "Math/Space3D/Contacts/CapsuleBox.hpp"
 #include "Math/Space3D/Contacts/CapsuleTriangle.hpp"
 #include "Math/Space3D/Contacts/ContactManifold.hpp"
@@ -1273,4 +1274,158 @@ TEST(MathSpace3DContacts, randomCapsulePairsMatchABruteForceDistance)
 	}
 
 	EXPECT_GT(shallow, 100U);
+}
+
+/* ===== Box ↔ triangle (two-sided) ===== */
+
+TEST(MathSpace3DContacts, boxRestingFlatOnATriangle)
+{
+	/* A 0.5 m box over the floor triangle, its bottom 1 cm into it, its footprint inside the triangle. */
+	const auto box = makeBox({0.0F, 0.24F, 0.2F}, {0.25F, 0.25F, 0.25F});
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(box, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 4U);
+	/* From the box to the triangle: down. */
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_NEAR(point.depth(), 0.01F, Tolerance);
+		EXPECT_NEAR(std::abs(point.position()[X]), 0.25F, Tolerance);
+	}
+
+	ContactManifold< float > swapped;
+
+	ASSERT_TRUE(computeContactManifold(floorTriangle(), box, swapped));
+	expectNormal(swapped, {0.0F, 1.0F, 0.0F});
+}
+
+TEST(MathSpace3DContacts, boxOnTheLowPartOfALargeSlopedTriangle)
+{
+	/* A 20 m triangle on a 20° slope, the box resting near its LOW corner: the triangle's centroid stands far above
+	 * the box — the side must come from the projections, not from the centroid. */
+	const float angle = std::numbers::pi_v< float > / 9.0F;
+	const Vec3 slopeX{std::cos(angle), std::sin(angle), 0.0F};
+	const Vec3 up{-std::sin(angle), std::cos(angle), 0.0F};
+	const Vec3 lowCorner{0.0F, 0.0F, 0.0F};
+	const Triangle< float > slope{lowCorner + (Vec3{0.0F, 0.0F, 10.0F}), lowCorner + (slopeX * 20.0F), lowCorner + (Vec3{0.0F, 0.0F, -10.0F})};
+	/* The box aligned with the slope, 1 cm into it, 2 m up the slope from the low edge. */
+	const Vec3 downSlope{std::cos(angle), std::sin(angle), 0.0F};
+	const Vec3 center = (downSlope * 2.0F) + (up * (0.25F - 0.01F));
+	const OrientedBox< float > box{center, {downSlope, up, Vec3{0.0F, 0.0F, 1.0F}}, Vec3{0.25F, 0.25F, 0.25F}};
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(box, slope, manifold));
+	ASSERT_EQ(manifold.points().size(), 4U);
+	expectNormal(manifold, -up);
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_NEAR(point.depth(), 0.01F, Tolerance);
+	}
+}
+
+TEST(MathSpace3DContacts, boxStraddlingATriangleEdgeKeepsThePointsOverIt)
+{
+	/* The box straddles edge AB (z = 1): only the corners over the triangle are kept, inside its prism. */
+	const auto box = makeBox({0.0F, 0.24F, 1.0F}, {0.25F, 0.25F, 0.25F});
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(box, floorTriangle(), manifold));
+	ASSERT_FALSE(manifold.empty());
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_LE(point.position()[Z], 1.0F + Tolerance);
+		EXPECT_NEAR(point.depth(), 0.01F, Tolerance);
+	}
+}
+
+TEST(MathSpace3DContacts, largeBoxOnASmallTriangleTouchesItsCorners)
+{
+	/* A 4 m box sitting on the 2 m floor triangle: the contact is the triangle itself, its 3 corners. */
+	const auto box = makeBox({0.0F, 1.99F, 0.0F}, {2.0F, 2.0F, 2.0F});
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(box, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 3U);
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_NEAR(point.depth(), 0.01F, Tolerance);
+	}
+}
+
+TEST(MathSpace3DContacts, boxOnAnEdgeOnATriangle)
+{
+	const float halfDiagonal = 0.25F * std::numbers::sqrt2_v< float >;
+	const auto box = makeBox({0.0F, halfDiagonal - 0.01F, 0.0F}, {0.25F, 0.25F, 0.25F}, {0.0F, 0.0F, 1.0F}, std::numbers::pi_v< float > * 0.25F);
+
+	ContactManifold< float > manifold;
+
+	ASSERT_TRUE(computeContactManifold(box, floorTriangle(), manifold));
+	ASSERT_EQ(manifold.points().size(), 2U);
+	expectNormal(manifold, {0.0F, -1.0F, 0.0F});
+
+	for ( const auto & point : manifold.points() )
+	{
+		EXPECT_NEAR(point.depth(), 0.01F, Tolerance);
+	}
+}
+
+TEST(MathSpace3DContacts, boxUnderATriangleAndSpecialCases)
+{
+	ContactManifold< float > manifold;
+
+	/* Two-sided: from under the triangle, pushed down. */
+	ASSERT_TRUE(computeContactManifold(makeBox({0.0F, -0.24F, 0.2F}, {0.25F, 0.25F, 0.25F}), floorTriangle(), manifold));
+	expectNormal(manifold, {0.0F, 1.0F, 0.0F});
+
+	EXPECT_FALSE(computeContactManifold(makeBox({0.0F, 0.26F, 0.2F}, {0.25F, 0.25F, 0.25F}), floorTriangle(), manifold));
+
+	const Triangle< float > collinear{Vec3{0.0F, 0.0F, 0.0F}, Vec3{1.0F, 0.0F, 0.0F}, Vec3{2.0F, 0.0F, 0.0F}};
+
+	EXPECT_FALSE(computeContactManifold(makeBox({1.0F, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F}), collinear, manifold));
+}
+
+TEST(MathSpace3DContacts, randomBoxTrianglePairsSeparateAlongTheNormal)
+{
+	Draw draw{0xB07AU};
+	size_t contacts = 0;
+
+	for ( int trial = 0; trial < 2000; ++trial )
+	{
+		const auto box = draw.box();
+		const Triangle< float > triangle{
+			Vec3{draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F)},
+			Vec3{draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F)},
+			Vec3{draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F), draw.uniform(-1.5F, 1.5F)}
+		};
+
+		ContactManifold< float > manifold;
+
+		if ( !computeContactManifold(box, triangle, manifold) )
+		{
+			continue;
+		}
+
+		++contacts;
+
+		expectWellFormed(manifold);
+
+		/* Moving the box (A) back along the normal by the deepest depth separates it. */
+		const OrientedBox< float > moved{box.center() - (manifold.normal() * (manifold.maximumDepth() + 1.0e-3F)), box.axes(), box.halfExtents()};
+		ContactManifold< float > after;
+
+		EXPECT_FALSE(computeContactManifold(moved, triangle, after)) << "trial " << trial;
+	}
+
+	EXPECT_GT(contacts, 300U);
 }

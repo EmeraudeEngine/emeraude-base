@@ -70,6 +70,17 @@ a box resting on a face. Open work: `docs/todo/contact-manifold-generation.md`.
   pushed a piercing capsule by its radius whatever its side and depth (item `collision-pair-test-defects`).
 - A one-sided mode (back faces ignored, Jolt's `EBackFaceMode`) is for the triangle meshes of P5: owner decision then.
 
+### Box ↔ triangle (`Contacts/BoxTriangle.hpp`) — 1 to 4 points, TWO-SIDED
+- Added for P2 (a box resting on the ground's triangles): SAT on 13 axes (the triangle normal, the 3 box faces, the 9
+  box-axis × triangle-edge products), biased towards the triangle's face, then the box faces. The triangle's face as
+  reference clips the box's incident face by its 3 edge planes; a box face as reference clips the TRIANGLE by its 4
+  side planes; an edge axis gives one point. Reduced to 4 like box ↔ box.
+- ⚠️ The side of the triangle on each axis comes from the PROJECTIONS (which bound of the box it overlaps), never from
+  its centroid: on a large sloped triangle the centroid stands far above a box resting on the triangle's low part
+  (test `boxOnTheLowPartOfALargeSlopedTriangle`).
+- Feature ids: 0x10000000 | box incident face << 16 | clipped key (triangle face reference); 0x20000000 | box reference
+  face << 16 | clipped key; 0x80000000 | box axis << 8 | triangle edge.
+
 ### Round shapes (`Contacts/RoundShapes.hpp`) — sphere ↔ sphere, sphere ↔ capsule, capsule ↔ capsule
 - Each reduces to the closest points of a point or a segment, then two spheres. Two parallel capsules (within
   ~2.6°) side by side get two points, the ends of their overlap.
@@ -79,7 +90,7 @@ a box resting on a face. Open work: `docs/todo/contact-manifold-generation.md`.
 - Feature ids: sphere ↔ capsule = the capsule region (1 start cap, 2 end cap, 3 cylinder); capsule ↔ capsule =
   region A << 4 | region B, or 0x100 | end for the parallel pair.
 
-### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 50)
+### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 57)
 Flat (4 points, depth and positions exact), swapped A/B (normal negated), on an edge (2), on a corner (1), yawed 45°
 (the 4 corners), the 45° stacked cubes (octagon → 4 spanning points), feature ids stable under a 1 mm / 0.1° move,
 crossed edges (1 edge point), deep penetration, a zero-thickness box, determinism, the manifold's capacity.
@@ -89,7 +100,10 @@ rotated edge (deep edge), degenerate = sphere, a rotated box vs a 20 000-sample 
 Triangles: above / under the face (two-sided), a vertex and an edge region, special cases (collinear, centre on it),
 a capsule lying (2), overhanging (clipped to the prism, x ±0.6), standing, piercing (pushed towards its centre, both
 sides), across an edge, degenerate = sphere. Round shapes: two spheres (and coincident), sphere vs capsule cylinder and
-cap, crossed capsules, parallel capsules (2 points, x 0 … 1), crossing axes.
+cap, crossed capsules, parallel capsules (2 points, x 0 … 1), crossing axes. Box ↔ triangle: resting flat (4), the
+low part of a large slope, straddling an edge (clipped to the triangle), a large box on a small triangle (its 3
+corners), on an edge (2), under it (two-sided), apart, collinear; randomised: moving the box back along the normal by
+its depth separates them (2000 draws).
 Randomised properties (2000 draws each, a local LCG so the draws are identical on every platform): box pairs — moving B
 along the normal by the deepest depth separates them; spheres and capsules — the depth equals radius minus the
 densely sampled exact distance (1e-4 / 1e-3), no contact beyond the radius; spheres vs triangles against a 300 × 300
