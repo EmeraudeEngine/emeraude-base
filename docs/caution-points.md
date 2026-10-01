@@ -572,6 +572,16 @@ fails on the pre-fix source with "an edge still names a vertex the merge removed
 
 ## Math
 
+### ⚠️ `Utility::quickRandom()` for integers went OUT of [min, max] for 8 / 16-bit signed types — fixed 2026-10-01
+
+`static_cast< number_t >(std::rand())` truncated rand() into a NEGATIVE `int8_t` / `int16_t`, so 46 % of
+`quickRandom< int8_t >(0, 10)` were below 0, and `1 + max - min` overflowed (signed, UB) on a wide `int32_t` range. It is
+computed in the unsigned type of the same width now (a wrapping difference, `rand() % (range + 1)`), always in range;
+`bool` is excluded. Only the first RAND_MAX + 1 values of a wider range are reachable (RAND_MAX is 32767 on Windows):
+`Randomizer` is the tool for real randomness. Proof: `BaseUtility.QuickRandomIntegerStaysInRange` / `…Bounds`
+(failing before). Found from the engine triad 12 (`Animations::RandomValue`, whose Windows build had replaced the 8-bit
+draws by a constant `Variant{0}`).
+
 ### ⚠️⚠️ `Vector / s` returns NaN once `|s| <= epsilon` — not infinity (2026-10-01)
 
 `Vector::operator/(scalar)` returns an ALL-NaN vector when `Utility::isZero(s)`, i.e. `|s| <= 1.19e-7` for a float.

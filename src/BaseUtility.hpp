@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstdlib> // std::rand
 #include <functional> // std::function
+#include <limits>
 #include <type_traits>
 #include <vector>
 
@@ -215,7 +216,9 @@ namespace EmEn::Base::Utility
 	/**
 	 * @brief Returns a random integer between a specified range.
 	 * @warning This function uses the rand() function from C, this old function is predictable and not thread-safe. Use EmEn::Base::Randomizer class instead.
-	 * @tparam number_t The type of integer number. Default int32_t.
+	 * @note The result is always inside [min, max] (bounds swapped if needed). Only the first RAND_MAX + 1 values of a
+	 * wider range are reachable (RAND_MAX is 32767 on Windows).
+	 * @tparam number_t The type of integer number (not bool). Default int32_t.
 	 * @param min The minimum number.
 	 * @param max The maximum number.
 	 * @return number_t
@@ -224,21 +227,23 @@ namespace EmEn::Base::Utility
 	[[nodiscard]]
 	number_t
 	quickRandom (number_t min, number_t max)
-		requires (std::is_integral_v< number_t >)
+		requires (std::is_integral_v< number_t > && !std::is_same_v< number_t, bool >)
 	{
+		/* NOTE: Computed in the unsigned type of the same width: the difference wraps exactly (two's complement), so
+		 * no signed overflow on a wide range, and rand() is never truncated into a negative value (that put 46 % of
+		 * quickRandom< int8_t >(0, 10) below 0). */
+		using unsigned_t = std::make_unsigned_t< number_t >;
+
 		if ( min > max )
 		{
 			std::swap(min, max);
 		}
 
-		const auto delta = (1 + max - min);
+		const auto range = static_cast< uint64_t >(static_cast< unsigned_t >(static_cast< unsigned_t >(max) - static_cast< unsigned_t >(min)));
+		const auto random = static_cast< uint64_t >(std::rand()); // NOLINT
+		const auto offset = range == std::numeric_limits< uint64_t >::max() ? random : random % (range + 1);
 
-		if ( delta <= 0 )
-		{
-			return min;
-		}
-
-		return (static_cast< number_t >(std::rand()) % delta) + min; // NOLINT
+		return static_cast< number_t >(static_cast< unsigned_t >(static_cast< unsigned_t >(min) + static_cast< unsigned_t >(offset)));
 	}
 
 	/**
