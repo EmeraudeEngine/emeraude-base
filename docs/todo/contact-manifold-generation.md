@@ -1,7 +1,7 @@
 ---
 id: contact-manifold-generation
 title: Contact manifolds — 1 to 4 contact points with feature ids for every solid pair
-status: open
+status: in-progress
 priority: unranked
 scope: Math/Space3D/Collisions, Math/OrientedCuboid
 opened: 2026-10-01
@@ -17,20 +17,25 @@ and a depth), never a contact point. The engine solver therefore gets ONE contac
 point rocks and tips at random. Stable resting and stacking need a manifold: up to 4 points on the contact face, each
 with its own depth and a stable feature id so the solver can warm-start from one tick to the next.
 
+## Owner decisions (2026-10-01)
+
+Header-only `src/Math/Space3D/Contacts/`; a new `Space3D::OrientedBox` primitive (centre, axes, half extents); the
+manifold normal points FROM A TO B; order box ↔ box, sphere ↔ box, capsule ↔ box, sphere / capsule ↔ triangle, the
+sphere / capsule pairs (engine `docs/physics-overhaul.md` § 1.5).
+
+## Done (2026-10-01)
+
+- `Space3D::OrientedBox`, `ContactPoint` / `ContactManifold` and box ↔ box (`Contacts/BoxBox.hpp`), 15 tests, Release and
+  ASan/UBSan green, clang-tidy 21.1.6: 0 new finding except one `cppcoreguidelines-pro-bounds-constant-array-index` on
+  `OrientedBox::axis(index)` (`@pre index < 3`), kept on purpose (owner, ledger). Doc:
+  `docs/subsystems/source-tree/17-math-space3d-contacts.md`.
+
 ## What remains
 
-- [ ] A manifold result type: shared normal (convention stated once, A → B or "push A out of B"), up to 4 points
-  (`StaticVector`), per-point depth, per-point feature id (which face / edge / vertex of each shape made it).
-- [ ] Oriented box ↔ oriented box: SAT on the 15 axes (exists in `OrientedCuboid::isIntersecting()`), then
-  reference / incident face selection and Sutherland-Hodgman clipping, then reduction to 4 points; edge ↔ edge case
-  gives one point from the closest points of the two edges. A tolerance that prefers face axes over edge axes, so the
-  chosen axis does not flicker (Gregorius, GDC 2015).
 - [ ] Sphere ↔ oriented box, capsule ↔ oriented box (2 points when the capsule lies on a face), sphere / capsule ↔
   triangle with a contact point. The AABB variants become the special case of the oriented ones, or stay as fast
   paths with the same output.
-- [ ] Unit tests (Release + ASan/UBSan): box resting flat (4 points, depth exact), box on an edge (2), on a corner (1),
-  rotated 45° about Y on a face, deep penetration, coplanar and degenerate inputs; the feature ids stay identical
-  when the box moves by a tiny amount.
+- [ ] Unit tests for each new pair (Release + ASan/UBSan), on the model of `test_MathSpace3DContacts.cpp`.
 
 ## ⚠️ Traps
 

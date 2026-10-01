@@ -1,0 +1,46 @@
+## Math/Space3D: OrientedBox and contact manifolds (physics overhaul P1, 2026-10-01)
+
+Phase P1 of the engine's physics overhaul (engine `docs/physics-overhaul.md`; owner decisions § 1.5). The overlap tests
+of `Space3D/Collisions/` answer ONE minimum translation vector; a rigid-body solver needs up to 4 contact points to keep
+a box resting on a face. Open work: `docs/todo/contact-manifold-generation.md`.
+
+### `Space3D::OrientedBox< T >` (`src/Math/Space3D/OrientedBox.hpp`)
+- Centre, three orthonormal axes (`std::array` of `Vector< 3 >`), half extents. `fromCuboid(localBox, frame)` places a
+  local axis-aligned box with a `CartesianFrame` (its scaling multiplies the half extents, its axes become the box axes).
+- `isValid()`: finite values, non-negative half extents, unit axes (1e-3). Zero half extents are VALID (a flat box).
+- `projectedRadius(direction)` = Σ e_i |a_i · d|, `corner(index)` (bit 0 = +X, bit 1 = +Y, bit 2 = +Z).
+- `Math::OrientedCuboid` (8 corners, 6 normals, built from a model matrix) stays for its current uses.
+
+### `ContactPoint< T >` / `ContactManifold< T >` (`src/Math/Space3D/Contacts/ContactManifold.hpp`)
+- ⚠️ **The normal points FROM A TO B** — the opposite of the overlap tests' MTV, which pushes A OUT of B. Moving A by
+  `-normal * depth` (or B by `+normal * depth`) separates a point. `flip()` swaps the roles (feature ids unchanged).
+- Up to `MaxPoints` = 4 points (`StaticVector`), each with its position HALFWAY between the two surfaces, its own
+  depth (positive = penetrating) and a feature id that stays the same while the same features touch — what a solver
+  matches to warm-start its accumulated impulses. `addPoint()` refuses a fifth point (`false`).
+
+### Box ↔ box (`src/Math/Space3D/Contacts/BoxBox.hpp`, `computeContactManifold(boxA, boxB, manifold)`)
+- SAT on the 15 axes (3 + 3 faces, 9 edge cross products; a cross product under 1e-6² is skipped as parallel).
+- The axis choice is BIASED towards faces, then towards A's faces (Gregorius GDC 2013): an edge wins only when its
+  separation exceeds `0.95 × best face + 1e-4`, a face of B only when it exceeds `0.98 × face of A + 1e-4`. Without the
+  bias the chosen axis flickers between two nearly equal ones from one step to the next.
+- Face contact: the incident face (the other box's face most anti-parallel to the reference normal) is clipped by
+  the 4 side planes of the reference face (Sutherland-Hodgman; a quad gains at most one vertex per plane, so ≤ 8), the
+  points above the reference face are dropped, the rest reduced to 4: the deepest, the farthest from it, and the
+  largest triangles on each side of that segment (ties break on the feature id → independent of the clipping order).
+- Edge contact: one point between the closest points of the two support edges (Ericson § 5.1.8).
+- Feature ids: bit 31 = edge ↔ edge (edge of A << 8 | edge of B | sign bits << 16); otherwise bit 30 = B holds the
+  reference face, bits 24-27 the reference face (axis × 2 + side), 16-19 the incident face, 0-15 the clipped point
+  (an incident corner 0-3, or `0x100 | clip plane << 4 | edge tag`).
+- Returns `false` and an empty manifold when separated; a grazing contact whose clipping keeps no point returns
+  `false` too.
+- No third-party code: the algorithms follow the cited papers / book.
+
+### Tests (`src/Testing/test_MathSpace3DContacts.cpp`, 15)
+Flat (4 points, depth and positions exact), swapped A/B (normal negated), on an edge (2), on a corner (1), yawed 45°
+(the 4 corners), the 45° stacked cubes (octagon → 4 spanning points), feature ids stable under a 1 mm / 0.1° move,
+crossed edges (1 edge point), deep penetration, a zero-thickness box, determinism, the manifold's capacity.
+Release and ASan/UBSan green.
+
+### ⚠️ Traps
+- Never `Vector / s` on a length that can be tiny (NaN under epsilon): multiply by `1 / s` after a `> threshold` test.
+- A constexpr local used in a lambda is declared INSIDE the lambda (MSVC C3493 on an uncaptured one).

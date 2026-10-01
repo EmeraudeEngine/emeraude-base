@@ -136,6 +136,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathQuaternion.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace2D.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace3D.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace3DContacts.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathTransformConversions.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPResponseParser.cpp
