@@ -17,10 +17,11 @@ None is proven by a test yet: each one starts with a failing unit test.
 
 ## Owner decision (2026-10-01)
 
-The MTV overloads of `Collisions/` are only used by the engine's `Physics/*CollisionModel` (lights, the editor and the
-octree use the boolean overlaps). P2 moves those models to `Contacts/`; the MTV overloads are then RETIRED, not fixed.
-Only the defects that change a BOOLEAN answer stay to fix (the single-winding inside tests). The items below that
-concern an MTV are kept until the retirement, for the record.
+The MTV overloads of `Collisions/` were only used by the engine's `Physics/*CollisionModel` (lights, the editor and the
+octree use the boolean overlaps). The physics moved to `Contacts/` (engine P2) and the engine's model wrappers were
+removed (P3.a, 2026-10-02). Since nothing in the engine calls the MTV overloads, the plan was to RETIRE them; the owner
+REVISED it on 2026-10-02: the base keeps them, they may serve other cases. Every defect below therefore stays to fix
+(MTV and boolean alike), each starting with its failing test.
 
 ## What remains
 
