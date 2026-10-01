@@ -27,12 +27,14 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <iomanip>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -1227,7 +1229,9 @@ namespace EmEn::Base::Math
 					{
 						const auto value = m_data[index * dim_t];
 
-						if ( Utility::isZero(value) )
+						/* NOTE: Only an EXACT zero contributes nothing. Skipping |value| <= epsilon dropped the
+						 * terms of a small matrix (diag(1e-8, 1, 1) gave 0 instead of 1e-8). */
+						if ( value == static_cast< precision_t >(0) )
 						{
 							continue;
 						}
@@ -1375,51 +1379,39 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Returns whether the matrix is invertible.
+			 * @note The test is relative to the matrix scale (see isSingular()): a small but regular matrix, such as
+			 * the inertia tensor of a small body, is invertible.
 			 * @return bool
 			 */
 			[[nodiscard]]
 			bool
 			isInvertible () const noexcept
 			{
-				return !Utility::isZero(this->determinant());
+				return !this->isSingular(this->determinant());
 			}
 
 			/**
-			 * @brief Returns the inverse copy of the matrix.
-			 * @return Matrix
+			 * @brief Returns the inverse copy of the matrix, or nothing when the matrix is singular.
+			 * @note The singularity test is relative to the matrix scale (see isSingular()).
+			 * @return std::optional< Matrix >
 			 */
 			[[nodiscard]]
-			Matrix
-			inverseTEST () const noexcept
+			std::optional< Matrix >
+			tryInverse () const noexcept
 			{
 				const auto D = this->determinant();
 
-				if ( Utility::isZero(D) )
+				if ( this->isSingular(D) )
 				{
-					return *this;
+					return std::nullopt;
 				}
 
-				//const auto invD = static_cast< precision_t >(1) / D;
-
-				Matrix inverseMatrix{};
-
-				for ( size_t rowIndex = 0; rowIndex < dim_t; rowIndex++ )
-				{
-					for ( size_t columnIndex = 0; columnIndex < dim_t; columnIndex++ )
-					{
-						const auto index = (columnIndex * dim_t) + rowIndex;
-
-						inverseMatrix[index] = index;
-
-						//BUG
-					}
-				}
-
-				return inverseMatrix;
+				return this->inverseFromDeterminant(D);
 			}
 
 			/**
 			 * @brief Returns the inverse copy of the matrix.
+			 * @warning A singular matrix (see isSingular()) is returned UNCHANGED: use tryInverse() to know it.
 			 * @return Matrix
 			 */
 			[[nodiscard]]
@@ -1429,63 +1421,12 @@ namespace EmEn::Base::Math
 			{
 				const auto D = this->determinant();
 
-				if ( Utility::isZero(D) )
+				if ( this->isSingular(D) )
 				{
 					return *this;
 				}
 
-				const auto invD = static_cast< precision_t >(1) / D;
-
-				Matrix inverse;
-
-				if constexpr ( dim_t == 2 )
-				{
-					inverse.m_data[M2x2Col0Row0] = m_data[M2x2Col1Row1] * invD;
-					inverse.m_data[M2x2Col0Row1] = -m_data[M2x2Col1Row0] * invD;
-
-					inverse.m_data[M2x2Col1Row0] = -m_data[M2x2Col0Row1] * invD;
-					inverse.m_data[M2x2Col1Row1] = m_data[M2x2Col0Row0] * invD;
-				}
-
-				if constexpr ( dim_t == 3 )
-				{
-					inverse.m_data[M3x3Col0Row0] = (m_data[M3x3Col1Row1] * m_data[M3x3Col2Row2] - m_data[M3x3Col1Row2] * m_data[M3x3Col2Row1]) * invD;
-					inverse.m_data[M3x3Col0Row1] = (m_data[M3x3Col0Row2] * m_data[M3x3Col2Row1] - m_data[M3x3Col0Row1] * m_data[M3x3Col2Row2]) * invD;
-					inverse.m_data[M3x3Col0Row2] = (m_data[M3x3Col0Row1] * m_data[M3x3Col1Row2] - m_data[M3x3Col0Row2] * m_data[M3x3Col1Row1]) * invD;
-
-					inverse.m_data[M3x3Col1Row0] = (m_data[M3x3Col1Row2] * m_data[M3x3Col2Row0] - m_data[M3x3Col1Row0] * m_data[M3x3Col2Row2]) * invD;
-					inverse.m_data[M3x3Col1Row1] = (m_data[M3x3Col0Row0] * m_data[M3x3Col2Row2] - m_data[M3x3Col0Row2] * m_data[M3x3Col2Row0]) * invD;
-					inverse.m_data[M3x3Col1Row2] = (m_data[M3x3Col0Row2] * m_data[M3x3Col1Row0] - m_data[M3x3Col0Row0] * m_data[M3x3Col1Row2]) * invD;
-
-					inverse.m_data[M3x3Col2Row0] = (m_data[M3x3Col1Row0] * m_data[M3x3Col2Row1] - m_data[M3x3Col1Row1] * m_data[M3x3Col2Row0]) * invD;
-					inverse.m_data[M3x3Col2Row1] = (m_data[M3x3Col0Row1] * m_data[M3x3Col2Row0] - m_data[M3x3Col0Row0] * m_data[M3x3Col2Row1]) * invD;
-					inverse.m_data[M3x3Col2Row2] = (m_data[M3x3Col0Row0] * m_data[M3x3Col1Row1] - m_data[M3x3Col0Row1] * m_data[M3x3Col1Row0]) * invD;
-				}
-
-				if constexpr ( dim_t == 4 )
-				{
-					inverse.m_data[M4x4Col0Row0] = (m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2] - m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] - m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3] + m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col0Row1] = (m_data[M4x4Col0Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3] - m_data[M4x4Col0Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col0Row2] = (m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row3] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col0Row3] = (m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] + m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3]) * invD;
-
-					inverse.m_data[M4x4Col1Row0] = (m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] + m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] + m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] - m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col1Row1] = (m_data[M4x4Col0Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] + m_data[M4x4Col0Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] + m_data[M4x4Col0Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col1Row2] = (m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row3] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col1Row3] = (m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] + m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3]) * invD;
-
-					inverse.m_data[M4x4Col2Row0] = (m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] + m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] - m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] + m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col2Row1] = (m_data[M4x4Col0Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] - m_data[M4x4Col0Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col2Row2] = (m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row0] + m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row3] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row3]) * invD;
-					inverse.m_data[M4x4Col2Row3] = (m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3]) * invD;
-
-					inverse.m_data[M4x4Col3Row0] = (m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] + m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] - m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2]) * invD;
-					inverse.m_data[M4x4Col3Row1] = (m_data[M4x4Col0Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] + m_data[M4x4Col0Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2]) * invD;
-					inverse.m_data[M4x4Col3Row2] = (m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row2]) * invD;
-					inverse.m_data[M4x4Col3Row3] = (m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] + m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2]) * invD;
-				}
-
-				return inverse;
+				return this->inverseFromDeterminant(D);
 			}
 
 			/**
@@ -2380,6 +2321,121 @@ namespace EmEn::Base::Math
 			}
 
 		private:
+
+			/**
+			 * @brief Returns whether a determinant of this matrix means a singular matrix.
+			 * @note The test is RELATIVE to the matrix scale: |D| against the epsilon times the product of the largest
+			 * absolute entry of each column (Hadamard: |D| <= n^(n/2) times that product). It is scale invariant. The
+			 * former absolute test (|D| <= epsilon) refused small regular matrices: the inertia tensor of a 1 kg sphere
+			 * of 10 cm radius (det 6.4e-8) came back un-inverted. For an affine 4x4 (bottom row 0, 0, 0, 1) the
+			 * determinant is the upper 3x3 one, so the translation column does not enter the bound: a large translation
+			 * must not make a regular transform singular. A NaN determinant is singular.
+			 * @param D The determinant of this matrix.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			isSingular (precision_t D) const noexcept
+			{
+				if constexpr ( std::is_integral_v< precision_t > )
+				{
+					return D == 0;
+				}
+				else
+				{
+					size_t boundDimension = dim_t;
+
+					if constexpr ( dim_t == 4 )
+					{
+						if ( m_data[M4x4Col0Row3] == 0 && m_data[M4x4Col1Row3] == 0 && m_data[M4x4Col2Row3] == 0 && m_data[M4x4Col3Row3] == 1 )
+						{
+							boundDimension = 3;
+						}
+					}
+
+					precision_t scale = 1;
+
+					for ( size_t columnIndex = 0; columnIndex < boundDimension; columnIndex++ )
+					{
+						precision_t largest = 0;
+
+						for ( size_t rowIndex = 0; rowIndex < boundDimension; rowIndex++ )
+						{
+							largest = std::max(largest, std::abs(m_data[(columnIndex * dim_t) + rowIndex]));
+						}
+
+						scale *= largest;
+					}
+
+					return !(std::abs(D) > std::numeric_limits< precision_t >::epsilon() * scale);
+				}
+			}
+
+			/**
+			 * @brief Returns the inverse of this matrix from its determinant (the adjugate over D).
+			 * @pre D is the determinant of this matrix and isSingular(D) is false.
+			 * @param D The determinant of this matrix.
+			 * @return Matrix
+			 */
+			[[nodiscard]]
+			constexpr
+			Matrix
+			inverseFromDeterminant (precision_t D) const noexcept
+			{
+				const auto invD = static_cast< precision_t >(1) / D;
+
+
+				Matrix inverse;
+
+				if constexpr ( dim_t == 2 )
+				{
+					inverse.m_data[M2x2Col0Row0] = m_data[M2x2Col1Row1] * invD;
+					inverse.m_data[M2x2Col0Row1] = -m_data[M2x2Col1Row0] * invD;
+
+					inverse.m_data[M2x2Col1Row0] = -m_data[M2x2Col0Row1] * invD;
+					inverse.m_data[M2x2Col1Row1] = m_data[M2x2Col0Row0] * invD;
+				}
+
+				if constexpr ( dim_t == 3 )
+				{
+					inverse.m_data[M3x3Col0Row0] = (m_data[M3x3Col1Row1] * m_data[M3x3Col2Row2] - m_data[M3x3Col1Row2] * m_data[M3x3Col2Row1]) * invD;
+					inverse.m_data[M3x3Col0Row1] = (m_data[M3x3Col0Row2] * m_data[M3x3Col2Row1] - m_data[M3x3Col0Row1] * m_data[M3x3Col2Row2]) * invD;
+					inverse.m_data[M3x3Col0Row2] = (m_data[M3x3Col0Row1] * m_data[M3x3Col1Row2] - m_data[M3x3Col0Row2] * m_data[M3x3Col1Row1]) * invD;
+
+					inverse.m_data[M3x3Col1Row0] = (m_data[M3x3Col1Row2] * m_data[M3x3Col2Row0] - m_data[M3x3Col1Row0] * m_data[M3x3Col2Row2]) * invD;
+					inverse.m_data[M3x3Col1Row1] = (m_data[M3x3Col0Row0] * m_data[M3x3Col2Row2] - m_data[M3x3Col0Row2] * m_data[M3x3Col2Row0]) * invD;
+					inverse.m_data[M3x3Col1Row2] = (m_data[M3x3Col0Row2] * m_data[M3x3Col1Row0] - m_data[M3x3Col0Row0] * m_data[M3x3Col1Row2]) * invD;
+
+					inverse.m_data[M3x3Col2Row0] = (m_data[M3x3Col1Row0] * m_data[M3x3Col2Row1] - m_data[M3x3Col1Row1] * m_data[M3x3Col2Row0]) * invD;
+					inverse.m_data[M3x3Col2Row1] = (m_data[M3x3Col0Row1] * m_data[M3x3Col2Row0] - m_data[M3x3Col0Row0] * m_data[M3x3Col2Row1]) * invD;
+					inverse.m_data[M3x3Col2Row2] = (m_data[M3x3Col0Row0] * m_data[M3x3Col1Row1] - m_data[M3x3Col0Row1] * m_data[M3x3Col1Row0]) * invD;
+				}
+
+				if constexpr ( dim_t == 4 )
+				{
+					inverse.m_data[M4x4Col0Row0] = (m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2] - m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] - m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3] + m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col0Row1] = (m_data[M4x4Col0Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3] - m_data[M4x4Col0Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col0Row2] = (m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row3] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col0Row3] = (m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] + m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3]) * invD;
+
+					inverse.m_data[M4x4Col1Row0] = (m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] + m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] + m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] - m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col1Row1] = (m_data[M4x4Col0Row2] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] + m_data[M4x4Col0Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] + m_data[M4x4Col0Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col1Row2] = (m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row3] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col1Row3] = (m_data[M4x4Col0Row2] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] + m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row2] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row3]) * invD;
+
+					inverse.m_data[M4x4Col2Row0] = (m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] + m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] - m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] + m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col2Row1] = (m_data[M4x4Col0Row3] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row1] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row0] * m_data[M4x4Col2Row3] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row3] - m_data[M4x4Col0Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col2Row2] = (m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row0] + m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row3] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row3]) * invD;
+					inverse.m_data[M4x4Col2Row3] = (m_data[M4x4Col0Row3] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row3] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row3] * m_data[M4x4Col2Row1] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row3] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row3]) * invD;
+
+					inverse.m_data[M4x4Col3Row0] = (m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] + m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] - m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2]) * invD;
+					inverse.m_data[M4x4Col3Row1] = (m_data[M4x4Col0Row1] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row0] + m_data[M4x4Col0Row2] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row0] * m_data[M4x4Col2Row2] * m_data[M4x4Col3Row1] - m_data[M4x4Col0Row1] * m_data[M4x4Col2Row0] * m_data[M4x4Col3Row2] + m_data[M4x4Col0Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col3Row2]) * invD;
+					inverse.m_data[M4x4Col3Row2] = (m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col3Row1] + m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col3Row2] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col3Row2]) * invD;
+					inverse.m_data[M4x4Col3Row3] = (m_data[M4x4Col0Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row0] - m_data[M4x4Col0Row2] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row0] + m_data[M4x4Col0Row2] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row0] * m_data[M4x4Col1Row2] * m_data[M4x4Col2Row1] - m_data[M4x4Col0Row1] * m_data[M4x4Col1Row0] * m_data[M4x4Col2Row2] + m_data[M4x4Col0Row0] * m_data[M4x4Col1Row1] * m_data[M4x4Col2Row2]) * invD;
+				}
+
+				return inverse;
+			}
 
 			/**
 			 * @brief STL streams printable object.

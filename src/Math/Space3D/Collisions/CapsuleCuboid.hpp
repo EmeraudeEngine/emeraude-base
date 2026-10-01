@@ -102,7 +102,8 @@ namespace EmEn::Base::Math::Space3D
 		}
 
 		/* NOTE: Find the closest points between capsule axis and cuboid. */
-		Point< precision_t > closestOnAxis, closestOnCuboid;
+		Point< precision_t > closestOnAxis;
+		Point< precision_t > closestOnCuboid;
 		closestPointsCapsuleCuboid(capsule, cuboid, closestOnAxis, closestOnCuboid);
 
 		/* NOTE: Check if the distance is within the capsule radius. */
@@ -133,7 +134,8 @@ namespace EmEn::Base::Math::Space3D
 		}
 
 		/* NOTE: Find the closest points between capsule axis and cuboid. */
-		Point< precision_t > closestOnAxis, closestOnCuboid;
+		Point< precision_t > closestOnAxis;
+		Point< precision_t > closestOnCuboid;
 		closestPointsCapsuleCuboid(capsule, cuboid, closestOnAxis, closestOnCuboid);
 
 		const auto axisToCuboid = closestOnCuboid - closestOnAxis;

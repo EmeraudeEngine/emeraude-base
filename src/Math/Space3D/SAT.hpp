@@ -196,7 +196,10 @@ namespace EmEn::Base::Math::Space3D::SAT
 		{
 			axis.normalize();
 
-			precision_t minA, maxA, minB, maxB;
+			precision_t minA;
+			precision_t maxA;
+			precision_t minB;
+			precision_t maxB;
 			project(verticesA, axis, minA, maxA);
 			project(verticesB, axis, minB, maxB);
 

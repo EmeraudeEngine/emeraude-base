@@ -26,6 +26,7 @@
 
 /* STL inclusions. */
 #include <array>
+#include <limits>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
@@ -394,6 +395,95 @@ TYPED_TEST(MathMatrix, DeterminantInverse4)
 		{
 			ASSERT_NEAR(originalMatrix[i], matrix[i], static_cast< TypeParam >(0.001));
 		}
+	}
+}
+
+TYPED_TEST(MathMatrix, DeterminantKeepsSmallTerms)
+{
+	if constexpr ( !std::is_integral_v< TypeParam > )
+	{
+		/* The cofactor expansion skipped every first-row term below the epsilon: this gave 0. */
+		const Matrix< 3, TypeParam > matrix{std::array< TypeParam, 9 >{
+			static_cast< TypeParam >(1e-8), 0, 0,
+			0, 1, 0,
+			0, 0, 1}};
+
+		ASSERT_NEAR(matrix.determinant(), static_cast< TypeParam >(1e-8), static_cast< TypeParam >(1e-12));
+	}
+}
+
+TYPED_TEST(MathMatrix, InverseOfSmallRegularMatrix)
+{
+	if constexpr ( !std::is_integral_v< TypeParam > )
+	{
+		/* The inertia tensor of a 1 kg sphere of 10 cm radius: 2/5 m r^2 = 0.004, det 6.4e-8. The absolute test
+		 * returned it un-inverted. */
+		const auto inertia = static_cast< TypeParam >(0.004);
+		const Matrix< 3, TypeParam > matrix{std::array< TypeParam, 9 >{
+			inertia, 0, 0,
+			0, inertia, 0,
+			0, 0, inertia}};
+
+		ASSERT_TRUE(matrix.isInvertible());
+
+		const auto inverse = matrix.tryInverse();
+
+		ASSERT_TRUE(inverse.has_value());
+		ASSERT_NEAR((*inverse)[0], static_cast< TypeParam >(250), static_cast< TypeParam >(1e-3));
+		ASSERT_NEAR(matrix.inverse()[4], static_cast< TypeParam >(250), static_cast< TypeParam >(1e-3));
+	}
+}
+
+TYPED_TEST(MathMatrix, InverseOfSingularMatrix)
+{
+	if constexpr ( !std::is_integral_v< TypeParam > )
+	{
+		/* Rank 2: the third column is the sum of the first two. */
+		const Matrix< 3, TypeParam > matrix{std::array< TypeParam, 9 >{
+			1, 2, 3,
+			4, 5, 6,
+			5, 7, 9}};
+
+		ASSERT_FALSE(matrix.isInvertible());
+		ASSERT_FALSE(matrix.tryInverse().has_value());
+
+		/* inverse() keeps its contract: the matrix itself. */
+		const auto same = matrix.inverse();
+
+		for ( size_t i = 0; i < 9; ++i )
+		{
+			ASSERT_EQ(same[i], matrix[i]);
+		}
+
+		/* A NaN entry is singular too. */
+		const Matrix< 3, TypeParam > nanMatrix{std::array< TypeParam, 9 >{
+			std::numeric_limits< TypeParam >::quiet_NaN(), 0, 0,
+			0, 1, 0,
+			0, 0, 1}};
+
+		ASSERT_FALSE(nanMatrix.tryInverse().has_value());
+	}
+}
+
+TYPED_TEST(MathMatrix, InverseOfAffineTransformFarFromOrigin)
+{
+	if constexpr ( !std::is_integral_v< TypeParam > )
+	{
+		/* A 1 % scale far from the origin (det 1e-6): the translation column must not enter the singularity bound. */
+		const auto scale = static_cast< TypeParam >(0.01);
+		const auto far = static_cast< TypeParam >(1e6);
+		const Matrix< 4, TypeParam > matrix{std::array< TypeParam, 16 >{
+			scale, 0, 0, 0,
+			0, scale, 0, 0,
+			0, 0, scale, 0,
+			far, -far, far, 1}};
+
+		const auto inverse = matrix.tryInverse();
+
+		ASSERT_TRUE(inverse.has_value());
+		ASSERT_NEAR((*inverse)[0], static_cast< TypeParam >(100), static_cast< TypeParam >(1e-2));
+		/* The inverse translation: -t / s. */
+		ASSERT_NEAR((*inverse)[12] / static_cast< TypeParam >(1e8), static_cast< TypeParam >(-1), static_cast< TypeParam >(1e-4));
 	}
 }
 

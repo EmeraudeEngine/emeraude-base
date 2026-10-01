@@ -572,6 +572,28 @@ fails on the pre-fix source with "an edge still names a vertex the merge removed
 
 ## Math
 
+### ⚠️⚠️ `Vector / s` returns NaN once `|s| <= epsilon` — not infinity (2026-10-01)
+
+`Vector::operator/(scalar)` returns an ALL-NaN vector when `Utility::isZero(s)`, i.e. `|s| <= 1.19e-7` for a float.
+A `normal = mtv / depth` guarded by `depth > 0` therefore still makes a NaN normal for a 1-ulp overlap, and that NaN
+reached the velocities and positions of the engine physics (fixed in engine triad 11). To normalize by a value that can
+be tiny, test `s > std::numeric_limits< float >::min()` and write `v * (1 / s)`: `1 / s` stays finite above FLT_MIN.
+
+### ⚠️⚠️ `Matrix` singularity is RELATIVE since 2026-10-01; `inverse()` still returns the matrix ITSELF when singular
+
+- `determinant()` skipped every cofactor term with `|value| <= epsilon`: `diag(1e-8, 1, 1)` gave 0. Only an exact zero is
+  skipped now.
+- `inverse()` / `isInvertible()` tested `|det| <= epsilon` (absolute): the inertia tensor of a 1 kg sphere of 10 cm
+  radius (0.004 per axis, det 6.4e-8) came back un-inverted, an angular response 62,500× too weak. The test is now
+  `|det| <= epsilon × ∏ (largest |entry| of each column)` (a Hadamard-type bound, scale invariant). For an affine 4x4
+  (bottom row 0, 0, 0, 1) the bound uses the upper 3x3 only, so a large translation does not make a regular transform
+  singular.
+- `inverse()` keeps its contract (a singular matrix comes back UNCHANGED, with no signal). Use
+  `tryInverse()` (`std::optional`) where a singular input must be detected (engine `MovableTrait` takes a zero
+  inverse inertia then).
+- Proof: `MathMatrix.DeterminantKeepsSmallTerms`, `InverseOfSmallRegularMatrix`, `InverseOfSingularMatrix`,
+  `InverseOfAffineTransformFarFromOrigin`; a sponza pixel A/B in projet-alpha stayed inside the run-to-run noise.
+
 ### ⚠️⚠️ The octahedral map is 2-to-1 on the BORDER — two atlas cells legitimately hold the same view (Sept 2026)
 
 `Math/OctahedralMapping.hpp` is the shared core of an imposter atlas: the baker asks

@@ -235,7 +235,8 @@ namespace EmEn::Base::Math
 
 				/* Collision confirmed. Ensure MTV direction pushes A out of B.
 				 * Calculate centers and check if minAxis points from B to A. */
-				Vector< 3, data_t > centerA, centerB;
+				Vector< 3, data_t > centerA;
+				Vector< 3, data_t > centerB;
 
 				for ( const auto & vertex : cuboidA.m_vertices )
 				{

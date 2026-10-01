@@ -288,7 +288,8 @@ namespace EmEn::Base::Math::Space3D
 
 		constexpr precision_t epsilon = std::numeric_limits< precision_t >::epsilon();
 
-		precision_t s, t;
+		precision_t s;
+		precision_t t;
 
 		/* NOTE: Check if both segments are degenerate (points). */
 		if ( a <= epsilon && e <= epsilon )
@@ -319,7 +320,7 @@ namespace EmEn::Base::Math::Space3D
 			{
 				/* NOTE: General non-degenerate case. */
 				const precision_t b = Vector< 3, precision_t >::dotProduct(d1, d2);
-				const precision_t denom = ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a * e)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))) - ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((b * b))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
+				const precision_t denom = (a * e) - (b * b);
 
 				/* NOTE: If segments are not parallel, compute closest points. */
 				if ( denom != 0 )
@@ -370,7 +371,8 @@ namespace EmEn::Base::Math::Space3D
 		}
 
 		/* NOTE: Find the closest points between the two capsule axes. */
-		Point< precision_t > closestOnA, closestOnB;
+		Point< precision_t > closestOnA;
+		Point< precision_t > closestOnB;
 		closestPointsBetweenSegments(capsuleA.axis(), capsuleB.axis(), closestOnA, closestOnB);
 
 		/* NOTE: Check if the distance is within the sum of radii. */
@@ -402,7 +404,8 @@ namespace EmEn::Base::Math::Space3D
 		}
 
 		/* NOTE: Find the closest points between the two capsule axes. */
-		Point< precision_t > closestOnA, closestOnB;
+		Point< precision_t > closestOnA;
+		Point< precision_t > closestOnB;
 		closestPointsBetweenSegments(capsuleA.axis(), capsuleB.axis(), closestOnA, closestOnB);
 
 		const auto aToB = closestOnB - closestOnA;
