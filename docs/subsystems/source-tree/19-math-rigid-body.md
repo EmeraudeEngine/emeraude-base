@@ -1,8 +1,9 @@
 ## Math: rigid-body helpers (physics overhaul P1, 2026-10-01)
 
 `src/Math/RigidBody.hpp`, namespace `EmEn::Base::Math::RigidBody`. Needed by the engine's rotational physics (engine
-item `rotational-physics`): until now the inertia tensor defaulted to the identity whatever the mass and the shape
-(the toolkit's generated components carry `{}`, which `Matrix< 3 >` reads as the identity).
+item `rotational-physics`, closed 2026-10-02): until P3 the inertia tensor defaulted to the identity whatever the mass
+and the shape. The engine now derives it from the collision shape through these functions (engine
+`docs/subsystems/physics/16-rigid-body-rotation.md`).
 
 | Function | Returns |
 |---|---|

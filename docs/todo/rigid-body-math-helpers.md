@@ -12,7 +12,7 @@ tags: [physics, math, physics-overhaul]
 
 ## Why
 
-Phase P1 of the physics overhaul (engine `docs/physics-overhaul.md`), needed by phase P3 (engine `rotational-physics`).
+Phase P1 of the physics overhaul (engine `docs/physics-overhaul.md`), needed by phase P3 (engine `rotational-physics`, closed 2026-10-02).
 The engine's inertia tensor defaults to the identity whatever the mass and the shape, and nothing computes it from a
 shape. The orientation is integrated as one angle-axis rotation per tick, through `CartesianFrame` (two stored
 vectors), with every quaternion round trip going through a 4×4 matrix.
@@ -26,9 +26,11 @@ vectors), with every quaternion round trip going through a 4×4 matrix.
 
 ## What remains
 
-- [ ] The sum of several tensors for a compound body (each moved by `parallelAxis()` first): add when the engine derives
-  a body's tensor from several components (`rotational-physics`).
-- [ ] A `Quaternion` from a `Matrix< 3 >` (today only from a `Matrix< 4 >`), when the engine integration needs it.
+- [ ] The sum of several tensors for a compound body (each moved by `parallelAxis()` first). ⚠️ P3 (2026-10-02) did NOT
+  need it: an entity with several massive components derives its tensor from its ONE collision shape and its total
+  mass (engine `docs/subsystems/physics/16-rigid-body-rotation.md`). Open only for a future compound-shape body.
+- [ ] A `Quaternion` from a `Matrix< 3 >` (today only from a `Matrix< 4 >`), when the engine integration needs it — P3
+  did not (the scene step reads `CartesianFrame::toQuaternion()`).
 
 ## References
 
