@@ -62,6 +62,138 @@ namespace EmEn::Base::Math::Space3D
 {
 	namespace CapsuleTriangleDetail
 	{
+		/** @brief The closest points of a segment and a triangle. */
+		template< typename precision_t >
+		struct SegmentTriangleClosest final
+		{
+			Vector< 3, precision_t > onSegment;
+			Vector< 3, precision_t > onTriangle;
+			/** 0 when the segment pierces (or touches) the triangle. */
+			precision_t distanceSquared{0};
+			/** The triangle feature: a `TriangleDetail::Region` for an end of the segment, 0x10 | edge (AB 0, BC 1, CA 2). */
+			uint32_t feature{0};
+			bool pierces{false};
+			/** Whether the closest triangle point lies inside the face (not on an edge or a vertex). */
+			bool isFace{false};
+		};
+
+		/**
+		 * @brief The EXACT closest points of a segment and a triangle: the segment piercing it (distance 0), else the
+		 * best of its two ends against the triangle and of the segment against the three edges (Ericson § 5.1.10).
+		 * @pre faceNormal is the triangle's unit winding normal (TriangleDetail::unitNormal() answered true).
+		 * @param start A reference to the segment start.
+		 * @param end A reference to the segment end.
+		 * @param triangle A reference to the triangle.
+		 * @param faceNormal A reference to its unit winding normal.
+		 * @return SegmentTriangleClosest< precision_t >
+		 */
+		template< typename precision_t >
+		[[nodiscard]]
+		SegmentTriangleClosest< precision_t >
+		closestOfSegmentAndTriangle (const Vector< 3, precision_t > & start, const Vector< 3, precision_t > & end, const Triangle< precision_t > & triangle, const Vector< 3, precision_t > & faceNormal) noexcept
+		{
+			using Vec3 = Vector< 3, precision_t >;
+			using TriangleDetail::Region;
+
+			constexpr auto Half = static_cast< precision_t >(0.5);
+			constexpr auto TouchThreshold = static_cast< precision_t >(1.0e-6);
+
+			SegmentTriangleClosest< precision_t > best;
+
+			const Vec3 segmentCenter = (start + end) * Half;
+			Vec3 direction = end - start;
+			const precision_t length = direction.length();
+			const precision_t halfLength = length > TouchThreshold ? length * Half : static_cast< precision_t >(0);
+
+			if ( halfLength > 0 )
+			{
+				direction *= static_cast< precision_t >(1) / length;
+			}
+
+			/* 1. Does the segment pierce (or touch) the triangle? */
+			const precision_t startHeight = Vec3::dotProduct(start - triangle.pointA(), faceNormal);
+			const precision_t endHeight = Vec3::dotProduct(end - triangle.pointA(), faceNormal);
+
+			if ( (startHeight <= 0 && endHeight >= 0) || (startHeight >= 0 && endHeight <= 0) )
+			{
+				const precision_t span = startHeight - endHeight;
+				/* A segment in the plane (span 0) is tested at its middle; the edge pairs below catch the rest. */
+				const Vec3 crossing = std::abs(span) > TouchThreshold ? start + ((end - start) * (startHeight / span)) : segmentCenter;
+				Region crossingRegion{Region::Face};
+				const Vec3 onTriangle = TriangleDetail::closestPointOnTriangle(crossing, triangle, crossingRegion);
+
+				if ( (onTriangle - crossing).lengthSquared() <= TouchThreshold * TouchThreshold )
+				{
+					best.onSegment = crossing;
+					best.onTriangle = crossing;
+					best.distanceSquared = 0;
+					best.feature = static_cast< uint32_t >(crossingRegion);
+					best.pierces = true;
+					best.isFace = crossingRegion == Region::Face;
+
+					return best;
+				}
+			}
+
+			/* 2. Both ends against the triangle, the segment against the 3 edges. */
+			best.distanceSquared = std::numeric_limits< precision_t >::max();
+
+			for ( const auto & endPoint : {start, end} )
+			{
+				Region region{Region::Face};
+				const Vec3 onTriangle = TriangleDetail::closestPointOnTriangle(endPoint, triangle, region);
+				const precision_t distanceSquared = (onTriangle - endPoint).lengthSquared();
+
+				if ( distanceSquared < best.distanceSquared )
+				{
+					best.distanceSquared = distanceSquared;
+					best.onSegment = endPoint;
+					best.onTriangle = onTriangle;
+					best.feature = static_cast< uint32_t >(region);
+					best.isFace = region == Region::Face;
+				}
+			}
+
+			if ( halfLength > 0 )
+			{
+				/* The edges in winding order: AB (index 0), BC (1), CA (2). */
+				const std::array< std::pair< Vec3, Vec3 >, 3 > edges{{
+					{triangle.pointA(), triangle.pointB()},
+					{triangle.pointB(), triangle.pointC()},
+					{triangle.pointC(), triangle.pointA()}
+				}};
+				uint32_t edgeIndex = 0;
+
+				for ( const auto & [edgeStart, edgeEnd] : edges )
+				{
+					Vec3 edgeDirection = edgeEnd - edgeStart;
+					const precision_t edgeLength = edgeDirection.length();
+
+					edgeDirection *= static_cast< precision_t >(1) / edgeLength;
+
+					Vec3 onSegment;
+					Vec3 onEdge;
+
+					BoxBoxDetail::closestPointsOfSegments(segmentCenter, direction, halfLength, (edgeStart + edgeEnd) * Half, edgeDirection, edgeLength * Half, onSegment, onEdge);
+
+					const precision_t distanceSquared = (onEdge - onSegment).lengthSquared();
+
+					if ( distanceSquared < best.distanceSquared )
+					{
+						best.distanceSquared = distanceSquared;
+						best.onSegment = onSegment;
+						best.onTriangle = onEdge;
+						best.feature = 0x10U | edgeIndex;
+						best.isFace = false;
+					}
+
+					++edgeIndex;
+				}
+			}
+
+			return best;
+		}
+
 		/**
 		 * @brief Clips a segment (centre + t·direction, t in [low, high]) to the prism of a triangle (its 3 edge planes,
 		 * perpendicular to the triangle).
@@ -170,95 +302,23 @@ namespace EmEn::Base::Math::Space3D
 			direction = faceNormal;
 		}
 
-		/* 1. Does the segment pierce (or touch) the triangle? */
-		const precision_t startHeight = Vec3::dotProduct(start - triangle.pointA(), faceNormal);
-		const precision_t endHeight = Vec3::dotProduct(end - triangle.pointA(), faceNormal);
-		bool pierces = false;
-		/* Where the segment touches the triangle: the crossing when it pierces, the closest point otherwise. */
-		Vec3 crossing = segmentCenter;
+		/* 1. The exact closest points of the segment and the triangle (distance 0 when it pierces). */
+		const auto closest = closestOfSegmentAndTriangle(start, end, triangle, faceNormal);
+		const bool pierces = closest.pierces;
+		const precision_t bestDistanceSquared = closest.distanceSquared;
+		const Vec3 & bestOnSegment = closest.onSegment;
+		const Vec3 & bestOnTriangle = closest.onTriangle;
+		const uint32_t bestFeature = closest.feature;
+		const bool bestIsFace = closest.isFace;
 
-		if ( (startHeight <= 0 && endHeight >= 0) || (startHeight >= 0 && endHeight <= 0) )
+		if ( !pierces && bestDistanceSquared > radius * radius )
 		{
-			const precision_t span = startHeight - endHeight;
-			/* A segment in the plane (span 0) is tested at its middle; the edge pairs below catch the rest. */
-			crossing = std::abs(span) > TouchThreshold ? start + ((end - start) * (startHeight / span)) : segmentCenter;
-			Region crossingRegion{Region::Face};
-			const Vec3 onTriangle = closestPointOnTriangle(crossing, triangle, crossingRegion);
-
-			pierces = (onTriangle - crossing).lengthSquared() <= TouchThreshold * TouchThreshold;
-		}
-
-		/* 2. Otherwise the exact closest points: both ends against the triangle, the segment against the 3 edges. */
-		precision_t bestDistanceSquared = std::numeric_limits< precision_t >::max();
-		Vec3 bestOnSegment = crossing;
-		Vec3 bestOnTriangle = crossing;
-		uint32_t bestFeature = 0;
-		bool bestIsFace = false;
-
-		if ( !pierces )
-		{
-			for ( const auto & endPoint : {start, end} )
-			{
-				Region region{Region::Face};
-				const Vec3 onTriangle = closestPointOnTriangle(endPoint, triangle, region);
-				const precision_t distanceSquared = (onTriangle - endPoint).lengthSquared();
-
-				if ( distanceSquared < bestDistanceSquared )
-				{
-					bestDistanceSquared = distanceSquared;
-					bestOnSegment = endPoint;
-					bestOnTriangle = onTriangle;
-					bestFeature = static_cast< uint32_t >(region);
-					bestIsFace = region == Region::Face;
-				}
-			}
-
-			if ( halfLength > 0 )
-			{
-				/* The edges in winding order: AB (index 0), BC (1), CA (2). */
-				const std::array< std::pair< Vec3, Vec3 >, 3 > edges{{
-					{triangle.pointA(), triangle.pointB()},
-					{triangle.pointB(), triangle.pointC()},
-					{triangle.pointC(), triangle.pointA()}
-				}};
-				uint32_t edgeIndex = 0;
-
-				for ( const auto & [edgeStart, edgeEnd] : edges )
-				{
-					Vec3 edgeDirection = edgeEnd - edgeStart;
-					const precision_t edgeLength = edgeDirection.length();
-
-					edgeDirection *= static_cast< precision_t >(1) / edgeLength;
-
-					Vec3 onSegment;
-					Vec3 onEdge;
-
-					BoxBoxDetail::closestPointsOfSegments(segmentCenter, direction, halfLength, (edgeStart + edgeEnd) * Half, edgeDirection, edgeLength * Half, onSegment, onEdge);
-
-					const precision_t distanceSquared = (onEdge - onSegment).lengthSquared();
-
-					if ( distanceSquared < bestDistanceSquared )
-					{
-						bestDistanceSquared = distanceSquared;
-						bestOnSegment = onSegment;
-						bestOnTriangle = onEdge;
-						bestFeature = 0x10U | edgeIndex;
-						bestIsFace = false;
-					}
-
-					++edgeIndex;
-				}
-			}
-
-			if ( bestDistanceSquared > radius * radius )
-			{
-				return false;
-			}
+			return false;
 		}
 
 		if ( !pierces && bestDistanceSquared > TouchThreshold * TouchThreshold )
 		{
-			/* 3. Shallow. */
+			/* 2. Shallow. */
 			const precision_t distance = std::sqrt(bestDistanceSquared);
 			const Vec3 normal = (bestOnTriangle - bestOnSegment) * (static_cast< precision_t >(1) / distance);
 
@@ -301,7 +361,7 @@ namespace EmEn::Base::Math::Space3D
 			return true;
 		}
 
-		/* 4. Deep: the segment touches or pierces the triangle. Push towards the side of the capsule's centre. */
+		/* 3. Deep: the segment touches or pierces the triangle. Push towards the side of the capsule's centre. */
 		const Vec3 sideNormal = Vec3::dotProduct(segmentCenter - triangle.pointA(), faceNormal) >= 0 ? faceNormal : -faceNormal;
 		precision_t low = -halfLength;
 		precision_t high = halfLength;

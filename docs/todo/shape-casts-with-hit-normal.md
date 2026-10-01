@@ -1,7 +1,7 @@
 ---
 id: shape-casts-with-hit-normal
 title: Ray and shape casts that answer the hit distance and the surface normal
-status: open
+status: in-progress
 priority: unranked
 scope: Math/Space3D/Intersections, Math/Space3D/Collisions
 opened: 2026-10-01
@@ -18,17 +18,19 @@ wanted motion, stops at the first hit, slides along the hit normal. It also prob
 line / segment tests answer a bool and a hit point only — no distance (t), no normal — and there is no sphere or
 capsule sweep at all.
 
+## Done (2026-10-01)
+
+- `Casts/ShapeCast.hpp`: `castRay` / `castSphere` / `castCapsule` against an `OrientedBox`, a `Triangle`, a `Sphere`, a
+  `Capsule`, with a `CastHit` (fraction, point on the target, normal back towards the caster, started inside) —
+  conservative advancement on the exact closest points. 13 tests (2 randomised), Release and ASan/UBSan green. Doc:
+  `docs/subsystems/source-tree/18-math-space3d-casts.md`.
+
 ## What remains
 
-- [ ] A hit result: `t` in [0, 1] along the cast, point, normal of the surface hit (pointing back towards the caster),
-  and whether the cast STARTED inside (t = 0, with a depenetration direction).
-- [ ] Ray / segment vs sphere, AABB, oriented box, capsule, triangle with that result. Rays are half-lines: never a
-  hit behind the origin (today `LineSphere.hpp:~119` and `LineCuboid.hpp:~159` can answer t < 0 for the infinite
-  `Line`).
-- [ ] Sphere cast and capsule cast vs sphere, AABB, oriented box, capsule, triangle (time of impact by conservative
-  advancement or by Minkowski-sum reduction to a ray, Ericson § 5.5).
-- [ ] Unit tests: grazing hits, start-inside, parallel to a face, zero-length cast, a capsule cast onto a 0.29 m step
-  edge (the citadel stairs), onto a 30° slope (the normal must be the slope's).
+- [ ] Casting a box (a moving `OrientedBox`), when a consumer needs it (the character controller casts a capsule).
+- [ ] The old `Space3D/Intersections/` line tests: `Line` is infinite, `LineSphere.hpp:~119` / `LineCuboid.hpp:~159` can
+  answer a hit behind the origin. Keep them as overlap queries or route their callers to `castRay`; decide when the
+  engine's callers are reviewed (P2).
 
 ## ⚠️ Traps
 
