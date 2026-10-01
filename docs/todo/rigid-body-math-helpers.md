@@ -1,7 +1,7 @@
 ---
 id: rigid-body-math-helpers
 title: Rigid-body math helpers — inertia tensors of the primitives, orientation integration
-status: open
+status: in-progress
 priority: unranked
 scope: Math (Matrix, Quaternion, CartesianFrame)
 opened: 2026-10-01
@@ -17,16 +17,18 @@ The engine's inertia tensor defaults to the identity whatever the mass and the s
 shape. The orientation is integrated as one angle-axis rotation per tick, through `CartesianFrame` (two stored
 vectors), with every quaternion round trip going through a 4×4 matrix.
 
+## Done (2026-10-01)
+
+- `src/Math/RigidBody.hpp`: solid box / sphere / cylinder / capsule inertia (refusing invalid inputs), the parallel-axis
+  theorem, the skew matrix, `integrateOrientation()` (world ω, exp-map, renormalised); `Quaternion::setFromScaledAxis()`
+  no longer narrows through double. 8 tests, Release and ASan/UBSan green. Doc:
+  `docs/subsystems/source-tree/19-math-rigid-body.md`.
+
 ## What remains
 
-- [ ] Inertia tensors (about the centre of mass, local frame) of a solid box, sphere, capsule (cylinder + two
-  hemispheres), cylinder, from the mass and the dimensions; the parallel-axis theorem to move a tensor; the sum of
-  several (a compound shape).
-- [ ] The cross-product (skew-symmetric) matrix of a vector.
-- [ ] Orientation integration from a world angular velocity over dt (exact exp-map, `Quaternion::setFromScaledAxis()`
-  already exists) with renormalisation; a `Quaternion` from a `Matrix< 3 >`.
-- [ ] Unit tests against the closed forms (box `m(h² + d²)/12`…), and an integration test: a torque-free body
-  spinning about a principal axis keeps its axis and its rate over 10 000 steps.
+- [ ] The sum of several tensors for a compound body (each moved by `parallelAxis()` first): add when the engine derives
+  a body's tensor from several components (`rotational-physics`).
+- [ ] A `Quaternion` from a `Matrix< 3 >` (today only from a `Matrix< 4 >`), when the engine integration needs it.
 
 ## References
 

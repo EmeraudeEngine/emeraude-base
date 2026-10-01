@@ -66,7 +66,7 @@ namespace EmEn::Base::Math::Space3D
 		using Vec3 = Vector< 3, precision_t >;
 
 		/* Under this distance the centre is ON the box surface: the outside normal is undefined, the inside one is used. */
-		constexpr auto SurfaceThreshold = static_cast< precision_t >(1.0e-6);
+		constexpr auto SphereBoxSurface = static_cast< precision_t >(1.0e-6);
 
 		manifold.clear();
 
@@ -93,7 +93,7 @@ namespace EmEn::Base::Math::Space3D
 		const Vec3 towardsCenter = center - closest;
 		const precision_t distanceSquared = towardsCenter.lengthSquared();
 
-		if ( !inside && distanceSquared > SurfaceThreshold * SurfaceThreshold )
+		if ( !inside && distanceSquared > SphereBoxSurface * SphereBoxSurface )
 		{
 			if ( distanceSquared > radius * radius )
 			{

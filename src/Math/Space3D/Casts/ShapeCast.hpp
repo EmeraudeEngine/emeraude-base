@@ -336,14 +336,14 @@ namespace EmEn::Base::Math::Space3D
 			using Vec3 = Vector< 3, precision_t >;
 
 			/* A contact is declared within 0.1 mm; a grazing cast converges linearly, hence the generous step cap. */
-			constexpr auto Tolerance = static_cast< precision_t >(1.0e-4);
-			constexpr auto DirectionThreshold = static_cast< precision_t >(1.0e-7);
-			constexpr size_t MaxIterations{64};
+			constexpr auto CastContactTolerance = static_cast< precision_t >(1.0e-4);
+			constexpr auto CastDirectionThreshold = static_cast< precision_t >(1.0e-7);
+			constexpr size_t CastMaxIterations{64};
 
 			const precision_t reach = radius + targetRadius(target);
 			precision_t fraction = 0;
 
-			for ( size_t iteration = 0; iteration < MaxIterations; ++iteration )
+			for ( size_t iteration = 0; iteration < CastMaxIterations; ++iteration )
 			{
 				const Vec3 offset = motion * fraction;
 				const auto closest = coreClosest(start + offset, end + offset, target);
@@ -360,7 +360,7 @@ namespace EmEn::Base::Math::Space3D
 				/* The direction from the target back towards the caster (the surface normal at the contact). */
 				Vec3 outward;
 
-				if ( coreDistance > DirectionThreshold )
+				if ( coreDistance > CastDirectionThreshold )
 				{
 					outward = between * (static_cast< precision_t >(-1) / coreDistance);
 				}
@@ -369,21 +369,21 @@ namespace EmEn::Base::Math::Space3D
 					/* The cores touch: undefined; back along the motion, or +Y without motion (deterministic). */
 					const precision_t motionLength = motion.length();
 
-					outward = motionLength > DirectionThreshold ? motion * (static_cast< precision_t >(-1) / motionLength) : Vec3{0, 1, 0};
+					outward = motionLength > CastDirectionThreshold ? motion * (static_cast< precision_t >(-1) / motionLength) : Vec3{0, 1, 0};
 				}
 
-				if ( distance <= Tolerance )
+				if ( distance <= CastContactTolerance )
 				{
 					/* Touching at the start but moving away (a character leaving the ground): not a contact. A start
 					 * that already PENETRATES is always reported (startedInside), for the caller to resolve. */
-					if ( iteration == 0 && distance >= 0 && coreDistance > DirectionThreshold && Vec3::dotProduct(motion, outward) > DirectionThreshold )
+					if ( iteration == 0 && distance >= 0 && coreDistance > CastDirectionThreshold && Vec3::dotProduct(motion, outward) > CastDirectionThreshold )
 					{
 						return false;
 					}
 
 					/* Started inside: penetrating, or cores overlapping (a point inside a box or a triangle's plane has a
 					 * core distance of 0, not a negative one). */
-					const bool startedInside = iteration == 0 && (distance < 0 || coreDistance <= DirectionThreshold);
+					const bool startedInside = iteration == 0 && (distance < 0 || coreDistance <= CastDirectionThreshold);
 
 					hit = {fraction, closest.onTarget + (outward * targetRadius(target)), outward, startedInside};
 
@@ -393,7 +393,7 @@ namespace EmEn::Base::Math::Space3D
 				/* The speed at which the gap closes along the direction towards the target. */
 				const precision_t approach = -Vec3::dotProduct(motion, outward);
 
-				if ( approach <= DirectionThreshold )
+				if ( approach <= CastDirectionThreshold )
 				{
 					/* Moving away or along the separating plane: no contact. */
 					return false;

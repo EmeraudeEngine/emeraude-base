@@ -125,14 +125,14 @@ namespace EmEn::Base::Math::Space3D
 
 				return std::ranges::all_of(m_axes, [] (const Vector< 3, precision_t > & axis) {
 					/* Declared here, not captured: MSVC rejects an uncaptured constexpr local in a lambda (C3493). */
-					constexpr auto UnitTolerance = static_cast< precision_t >(1.0e-3);
+					constexpr auto OrientedBoxUnitTolerance = static_cast< precision_t >(1.0e-3);
 
 					if ( !std::isfinite(axis[X]) || !std::isfinite(axis[Y]) || !std::isfinite(axis[Z]) )
 					{
 						return false;
 					}
 
-					return std::abs(axis.length() - static_cast< precision_t >(1)) <= UnitTolerance;
+					return std::abs(axis.length() - static_cast< precision_t >(1)) <= OrientedBoxUnitTolerance;
 				});
 			}
 

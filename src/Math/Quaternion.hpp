@@ -1190,14 +1190,18 @@ namespace EmEn::Base::Math
 
 				if ( theta > std::numeric_limits< precision_t >::epsilon() )
 				{
-					auto s = std::sin(theta / 2.0);
+					/* ⚠️ The half angle in precision_t: `theta / 2.0` promoted the float path to double and narrowed the
+					 * sine and the cosine back (-Wfloat-conversion; MSVC C4244 under /WX), the first time a float
+					 * instantiation existed (RigidBody::integrateOrientation(), physics overhaul P1). */
+					const precision_t halfTheta = theta * static_cast< precision_t >(0.5);
+					const precision_t s = std::sin(halfTheta);
 
-					Vector< 3, precision_t > tmp(scaledAxis / theta * s);
+					Vector< 3, precision_t > tmp(scaledAxis * (s / theta));
 
 					m_data[0] = tmp[X];
 					m_data[1] = tmp[Y];
 					m_data[2] = tmp[Z];
-					m_data[3] = std::cos(theta / 2.0);
+					m_data[3] = std::cos(halfTheta);
 				}
 				else
 				{

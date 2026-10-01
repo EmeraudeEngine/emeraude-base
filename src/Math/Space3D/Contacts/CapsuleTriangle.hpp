@@ -95,15 +95,15 @@ namespace EmEn::Base::Math::Space3D
 			using Vec3 = Vector< 3, precision_t >;
 			using TriangleDetail::Region;
 
-			constexpr auto Half = static_cast< precision_t >(0.5);
-			constexpr auto TouchThreshold = static_cast< precision_t >(1.0e-6);
+			constexpr auto CapsuleTriangleHalf = static_cast< precision_t >(0.5);
+			constexpr auto CapsuleTriangleTouch = static_cast< precision_t >(1.0e-6);
 
 			SegmentTriangleClosest< precision_t > best;
 
-			const Vec3 segmentCenter = (start + end) * Half;
+			const Vec3 segmentCenter = (start + end) * CapsuleTriangleHalf;
 			Vec3 direction = end - start;
 			const precision_t length = direction.length();
-			const precision_t halfLength = length > TouchThreshold ? length * Half : static_cast< precision_t >(0);
+			const precision_t halfLength = length > CapsuleTriangleTouch ? length * CapsuleTriangleHalf : static_cast< precision_t >(0);
 
 			if ( halfLength > 0 )
 			{
@@ -118,11 +118,11 @@ namespace EmEn::Base::Math::Space3D
 			{
 				const precision_t span = startHeight - endHeight;
 				/* A segment in the plane (span 0) is tested at its middle; the edge pairs below catch the rest. */
-				const Vec3 crossing = std::abs(span) > TouchThreshold ? start + ((end - start) * (startHeight / span)) : segmentCenter;
+				const Vec3 crossing = std::abs(span) > CapsuleTriangleTouch ? start + ((end - start) * (startHeight / span)) : segmentCenter;
 				Region crossingRegion{Region::Face};
 				const Vec3 onTriangle = TriangleDetail::closestPointOnTriangle(crossing, triangle, crossingRegion);
 
-				if ( (onTriangle - crossing).lengthSquared() <= TouchThreshold * TouchThreshold )
+				if ( (onTriangle - crossing).lengthSquared() <= CapsuleTriangleTouch * CapsuleTriangleTouch )
 				{
 					best.onSegment = crossing;
 					best.onTriangle = crossing;
@@ -174,7 +174,7 @@ namespace EmEn::Base::Math::Space3D
 					Vec3 onSegment;
 					Vec3 onEdge;
 
-					BoxBoxDetail::closestPointsOfSegments(segmentCenter, direction, halfLength, (edgeStart + edgeEnd) * Half, edgeDirection, edgeLength * Half, onSegment, onEdge);
+					BoxBoxDetail::closestPointsOfSegments(segmentCenter, direction, halfLength, (edgeStart + edgeEnd) * CapsuleTriangleHalf, edgeDirection, edgeLength * CapsuleTriangleHalf, onSegment, onEdge);
 
 					const precision_t distanceSquared = (onEdge - onSegment).lengthSquared();
 
@@ -206,7 +206,7 @@ namespace EmEn::Base::Math::Space3D
 		{
 			using Vec3 = Vector< 3, precision_t >;
 
-			constexpr auto SlopeThreshold = static_cast< precision_t >(1.0e-9);
+			constexpr auto CapsuleTriangleSlope = static_cast< precision_t >(1.0e-9);
 
 			/* The edges in winding order: AB, BC, CA. */
 			const std::array< std::pair< Vec3, Vec3 >, 3 > edges{{
@@ -222,7 +222,7 @@ namespace EmEn::Base::Math::Space3D
 				const precision_t offset = Vec3::dotProduct(inward, segmentCenter - start);
 				const precision_t slope = Vec3::dotProduct(inward, direction);
 
-				if ( std::abs(slope) <= SlopeThreshold )
+				if ( std::abs(slope) <= CapsuleTriangleSlope )
 				{
 					if ( offset < 0 )
 					{
@@ -268,12 +268,12 @@ namespace EmEn::Base::Math::Space3D
 		using namespace TriangleDetail;
 		using namespace CapsuleTriangleDetail;
 
-		constexpr auto Half = static_cast< precision_t >(0.5);
-		constexpr auto TouchThreshold = static_cast< precision_t >(1.0e-6);
-		constexpr auto ParallelSine = static_cast< precision_t >(0.05);
+		constexpr auto CapsuleTriangleHalf = static_cast< precision_t >(0.5);
+		constexpr auto CapsuleTriangleTouch = static_cast< precision_t >(1.0e-6);
+		constexpr auto CapsuleTriangleParallelSine = static_cast< precision_t >(0.05);
 		/* The contact normal counts as the face normal under ~2.6° (a tie between the face and an edge at the same
 		 * distance must not hide the two-point face contact). */
-		constexpr auto FaceAlignment = static_cast< precision_t >(0.999);
+		constexpr auto CapsuleTriangleFaceAlignment = static_cast< precision_t >(0.999);
 
 		manifold.clear();
 
@@ -287,15 +287,15 @@ namespace EmEn::Base::Math::Space3D
 		const precision_t radius = capsule.radius();
 		const Vec3 & start = capsule.startPoint();
 		const Vec3 & end = capsule.endPoint();
-		const Vec3 segmentCenter = (start + end) * Half;
+		const Vec3 segmentCenter = (start + end) * CapsuleTriangleHalf;
 		Vec3 direction = end - start;
 		const precision_t length = direction.length();
 		precision_t halfLength = 0;
 
-		if ( length > TouchThreshold )
+		if ( length > CapsuleTriangleTouch )
 		{
 			direction *= static_cast< precision_t >(1) / length;
-			halfLength = length * Half;
+			halfLength = length * CapsuleTriangleHalf;
 		}
 		else
 		{
@@ -316,20 +316,20 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		if ( !pierces && bestDistanceSquared > TouchThreshold * TouchThreshold )
+		if ( !pierces && bestDistanceSquared > CapsuleTriangleTouch * CapsuleTriangleTouch )
 		{
 			/* 2. Shallow. */
 			const precision_t distance = std::sqrt(bestDistanceSquared);
 			const Vec3 normal = (bestOnTriangle - bestOnSegment) * (static_cast< precision_t >(1) / distance);
 
 			/* Along the face: two points, the segment clipped to the prism. */
-			if ( (bestIsFace || std::abs(Vec3::dotProduct(normal, faceNormal)) > FaceAlignment) && halfLength > 0 && std::abs(Vec3::dotProduct(direction, faceNormal)) < ParallelSine )
+			if ( (bestIsFace || std::abs(Vec3::dotProduct(normal, faceNormal)) > CapsuleTriangleFaceAlignment) && halfLength > 0 && std::abs(Vec3::dotProduct(direction, faceNormal)) < CapsuleTriangleParallelSine )
 			{
 				const Vec3 sideNormal = Vec3::dotProduct(bestOnSegment - bestOnTriangle, faceNormal) >= 0 ? faceNormal : -faceNormal;
 				precision_t low = -halfLength;
 				precision_t high = halfLength;
 
-				if ( clipSegmentToPrism(segmentCenter, direction, triangle, faceNormal, low, high) && high - low > TouchThreshold )
+				if ( clipSegmentToPrism(segmentCenter, direction, triangle, faceNormal, low, high) && high - low > CapsuleTriangleTouch )
 				{
 					manifold.setNormal(-sideNormal);
 
@@ -342,7 +342,7 @@ namespace EmEn::Base::Math::Space3D
 
 						if ( height < radius )
 						{
-							manifold.addPoint({((point - (sideNormal * height)) + (point - (sideNormal * radius))) * Half, radius - height, 0x1000U | endIndex});
+							manifold.addPoint({((point - (sideNormal * height)) + (point - (sideNormal * radius))) * CapsuleTriangleHalf, radius - height, 0x1000U | endIndex});
 						}
 
 						++endIndex;
@@ -356,7 +356,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 
 			manifold.setNormal(normal);
-			manifold.addPoint({((bestOnSegment + (normal * radius)) + bestOnTriangle) * Half, radius - distance, 0x2000U | bestFeature});
+			manifold.addPoint({((bestOnSegment + (normal * radius)) + bestOnTriangle) * CapsuleTriangleHalf, radius - distance, 0x2000U | bestFeature});
 
 			return true;
 		}
@@ -379,7 +379,7 @@ namespace EmEn::Base::Math::Space3D
 
 		for ( const precision_t parameter : {low, high} )
 		{
-			if ( endIndex == 1 && high - low <= TouchThreshold )
+			if ( endIndex == 1 && high - low <= CapsuleTriangleTouch )
 			{
 				break;
 			}
@@ -389,7 +389,7 @@ namespace EmEn::Base::Math::Space3D
 
 			if ( height < radius )
 			{
-				manifold.addPoint({((point - (sideNormal * height)) + (point - (sideNormal * radius))) * Half, radius - height, 0x4000U | endIndex});
+				manifold.addPoint({((point - (sideNormal * height)) + (point - (sideNormal * radius))) * CapsuleTriangleHalf, radius - height, 0x4000U | endIndex});
 			}
 
 			++endIndex;

@@ -81,7 +81,7 @@ namespace EmEn::Base::Math::Space3D
 		{
 			using Vec3 = Vector< 3, precision_t >;
 
-			constexpr auto SlopeThreshold = static_cast< precision_t >(1.0e-9);
+			constexpr auto CapsuleBoxSlope = static_cast< precision_t >(1.0e-9);
 
 			const Vec3 offset = segmentCenter - box.center();
 			/* The box-frame coordinate along axis i is alpha[i] + beta[i] t (Vector used as a plain triple). */
@@ -100,7 +100,7 @@ namespace EmEn::Base::Math::Space3D
 				beta[index] = Vec3::dotProduct(direction, box.axis(index));
 				extent[index] = box.halfExtent(index);
 
-				if ( std::abs(beta[index]) > SlopeThreshold )
+				if ( std::abs(beta[index]) > CapsuleBoxSlope )
 				{
 					for ( const precision_t bound : {-extent[index], extent[index]} )
 					{
@@ -157,7 +157,7 @@ namespace EmEn::Base::Math::Space3D
 
 				precision_t candidate = high;
 
-				if ( quadratic > SlopeThreshold )
+				if ( quadratic > CapsuleBoxSlope )
 				{
 					candidate = std::clamp(-linear / (static_cast< precision_t >(2) * quadratic), low, high);
 				}
@@ -187,7 +187,7 @@ namespace EmEn::Base::Math::Space3D
 		{
 			using Vec3 = Vector< 3, precision_t >;
 
-			constexpr auto SlopeThreshold = static_cast< precision_t >(1.0e-9);
+			constexpr auto CapsuleBoxSlope = static_cast< precision_t >(1.0e-9);
 
 			for ( size_t sideOffset = 1; sideOffset <= 2; ++sideOffset )
 			{
@@ -196,7 +196,7 @@ namespace EmEn::Base::Math::Space3D
 				const precision_t slope = Vec3::dotProduct(direction, box.axis(sideAxis));
 				const precision_t extent = box.halfExtent(sideAxis);
 
-				if ( std::abs(slope) <= SlopeThreshold )
+				if ( std::abs(slope) <= CapsuleBoxSlope )
 				{
 					if ( std::abs(coordinate) > extent )
 					{
@@ -241,27 +241,27 @@ namespace EmEn::Base::Math::Space3D
 		using Vec3 = Vector< 3, precision_t >;
 		using namespace CapsuleBoxDetail;
 
-		constexpr auto Half = static_cast< precision_t >(0.5);
+		constexpr auto CapsuleBoxHalf = static_cast< precision_t >(0.5);
 		/* Under this distance the segment touches the box: the shallow normal is undefined, the deep path takes over. */
-		constexpr auto TouchThreshold = static_cast< precision_t >(1.0e-6);
+		constexpr auto CapsuleBoxTouch = static_cast< precision_t >(1.0e-6);
 		/* A segment counts as lying along a face when its direction is within ~3° of the face plane. */
-		constexpr auto ParallelSine = static_cast< precision_t >(0.05);
-		constexpr auto FaceRelativeTolerance = static_cast< precision_t >(0.95);
-		constexpr auto AbsoluteTolerance = static_cast< precision_t >(1.0e-4);
-		constexpr auto ParallelEdgeThreshold = static_cast< precision_t >(1.0e-6);
+		constexpr auto CapsuleBoxParallelSine = static_cast< precision_t >(0.05);
+		constexpr auto CapsuleBoxFaceBias = static_cast< precision_t >(0.95);
+		constexpr auto CapsuleBoxAbsoluteBias = static_cast< precision_t >(1.0e-4);
+		constexpr auto CapsuleBoxParallelEdge = static_cast< precision_t >(1.0e-6);
 
 		manifold.clear();
 
 		const precision_t radius = capsule.radius();
-		const Vec3 segmentCenter = (capsule.startPoint() + capsule.endPoint()) * Half;
+		const Vec3 segmentCenter = (capsule.startPoint() + capsule.endPoint()) * CapsuleBoxHalf;
 		Vec3 direction = capsule.endPoint() - capsule.startPoint();
 		const precision_t length = direction.length();
 		precision_t halfLength = 0;
 
-		if ( length > TouchThreshold )
+		if ( length > CapsuleBoxTouch )
 		{
 			direction *= static_cast< precision_t >(1) / length;
-			halfLength = length * Half;
+			halfLength = length * CapsuleBoxHalf;
 		}
 		else
 		{
@@ -276,7 +276,7 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		if ( closest.distanceSquared > TouchThreshold * TouchThreshold )
+		if ( closest.distanceSquared > CapsuleBoxTouch * CapsuleBoxTouch )
 		{
 			/* 1. Shallow: the segment is outside the box, less than a radius away. */
 			const Vec3 segmentPoint = segmentCenter + (direction * closest.parameter);
@@ -308,7 +308,7 @@ namespace EmEn::Base::Math::Space3D
 			manifold.setNormal(normal);
 
 			/* The closest box feature is a face and the segment lies along it: two points, the segment clipped to it. */
-			if ( clampedAxes == 1 && halfLength > 0 && std::abs(Vec3::dotProduct(direction, box.axis(faceAxis))) < ParallelSine )
+			if ( clampedAxes == 1 && halfLength > 0 && std::abs(Vec3::dotProduct(direction, box.axis(faceAxis))) < CapsuleBoxParallelSine )
 			{
 				const precision_t faceSide = Vec3::dotProduct(offset, box.axis(faceAxis)) > 0 ? static_cast< precision_t >(1) : static_cast< precision_t >(-1);
 				const Vec3 faceNormal = box.axis(faceAxis) * faceSide;
@@ -318,7 +318,7 @@ namespace EmEn::Base::Math::Space3D
 				precision_t low = -halfLength;
 				precision_t high = halfLength;
 
-				if ( clipSegmentToFace(segmentCenter, direction, box, faceAxis, low, high) && high - low > TouchThreshold )
+				if ( clipSegmentToFace(segmentCenter, direction, box, faceAxis, low, high) && high - low > CapsuleBoxTouch )
 				{
 					manifold.setNormal(-faceNormal);
 
@@ -334,7 +334,7 @@ namespace EmEn::Base::Math::Space3D
 							const Vec3 onFace = point - (faceNormal * height);
 							const Vec3 onCapsule = point - (faceNormal * radius);
 
-							manifold.addPoint({(onFace + onCapsule) * Half, radius - height, 0x1000U | (faceId << 4U) | end});
+							manifold.addPoint({(onFace + onCapsule) * CapsuleBoxHalf, radius - height, 0x1000U | (faceId << 4U) | end});
 						}
 
 						++end;
@@ -349,7 +349,7 @@ namespace EmEn::Base::Math::Space3D
 				}
 			}
 
-			manifold.addPoint({((segmentPoint + (normal * radius)) + boxPoint) * Half, radius - distance, 0x2000U | region});
+			manifold.addPoint({((segmentPoint + (normal * radius)) + boxPoint) * CapsuleBoxHalf, radius - distance, 0x2000U | region});
 
 			return true;
 		}
@@ -381,7 +381,7 @@ namespace EmEn::Base::Math::Space3D
 			auto axis = Vec3::crossProduct(direction, box.axis(index));
 			const precision_t lengthSquared = axis.lengthSquared();
 
-			if ( halfLength <= 0 || lengthSquared < ParallelEdgeThreshold )
+			if ( halfLength <= 0 || lengthSquared < CapsuleBoxParallelEdge )
 			{
 				continue;
 			}
@@ -399,7 +399,7 @@ namespace EmEn::Base::Math::Space3D
 			}
 		}
 
-		if ( edgeSeparation > (FaceRelativeTolerance * faceSeparation) + AbsoluteTolerance )
+		if ( edgeSeparation > (CapsuleBoxFaceBias * faceSeparation) + CapsuleBoxAbsoluteBias )
 		{
 			/* From the capsule to the box. */
 			if ( Vec3::dotProduct(edgeAxis, offset) > 0 )
@@ -426,7 +426,7 @@ namespace EmEn::Base::Math::Space3D
 			BoxBoxDetail::closestPointsOfSegments(segmentCenter, direction, halfLength, edgeCenter, box.axis(edgeAxisIndex), box.halfExtent(edgeAxisIndex), onSegment, onEdge);
 
 			manifold.setNormal(edgeAxis);
-			manifold.addPoint({((onSegment + (edgeAxis * radius)) + onEdge) * Half, -edgeSeparation, 0x8000U | static_cast< uint32_t >(edgeAxisIndex)});
+			manifold.addPoint({((onSegment + (edgeAxis * radius)) + onEdge) * CapsuleBoxHalf, -edgeSeparation, 0x8000U | static_cast< uint32_t >(edgeAxisIndex)});
 
 			return true;
 		}
@@ -453,7 +453,7 @@ namespace EmEn::Base::Math::Space3D
 
 		for ( const precision_t parameter : {low, high} )
 		{
-			if ( end == 1 && high - low <= TouchThreshold )
+			if ( end == 1 && high - low <= CapsuleBoxTouch )
 			{
 				break;
 			}
@@ -466,7 +466,7 @@ namespace EmEn::Base::Math::Space3D
 				const Vec3 onFace = point - (faceNormal * height);
 				const Vec3 onCapsule = point - (faceNormal * radius);
 
-				manifold.addPoint({(onFace + onCapsule) * Half, radius - height, 0x4000U | (faceId << 4U) | end});
+				manifold.addPoint({(onFace + onCapsule) * CapsuleBoxHalf, radius - height, 0x4000U | (faceId << 4U) | end});
 			}
 
 			++end;

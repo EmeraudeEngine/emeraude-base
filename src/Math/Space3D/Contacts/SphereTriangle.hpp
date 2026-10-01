@@ -72,13 +72,13 @@ namespace EmEn::Base::Math::Space3D
 		bool
 		unitNormal (const Triangle< precision_t > & triangle, Vector< 3, precision_t > & normal) noexcept
 		{
-			constexpr auto DegenerateThreshold = static_cast< precision_t >(1.0e-12);
+			constexpr auto TriangleDegenerate = static_cast< precision_t >(1.0e-12);
 
 			normal = Vector< 3, precision_t >::crossProduct(triangle.pointB() - triangle.pointA(), triangle.pointC() - triangle.pointA());
 
 			const precision_t lengthSquared = normal.lengthSquared();
 
-			if ( lengthSquared <= DegenerateThreshold )
+			if ( lengthSquared <= TriangleDegenerate )
 			{
 				return false;
 			}
@@ -197,8 +197,8 @@ namespace EmEn::Base::Math::Space3D
 		using Vec3 = Vector< 3, precision_t >;
 		using namespace TriangleDetail;
 
-		constexpr auto SurfaceThreshold = static_cast< precision_t >(1.0e-6);
-		constexpr auto Half = static_cast< precision_t >(0.5);
+		constexpr auto SphereTriangleSurface = static_cast< precision_t >(1.0e-6);
+		constexpr auto SphereTriangleHalf = static_cast< precision_t >(0.5);
 
 		manifold.clear();
 
@@ -222,20 +222,20 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		if ( distanceSquared > SurfaceThreshold * SurfaceThreshold )
+		if ( distanceSquared > SphereTriangleSurface * SphereTriangleSurface )
 		{
 			const precision_t distance = std::sqrt(distanceSquared);
 			const Vec3 normal = towardsCenter * (static_cast< precision_t >(-1) / distance);
 
 			manifold.setNormal(normal);
-			manifold.addPoint({((center + (normal * radius)) + closest) * Half, radius - distance, static_cast< uint32_t >(region)});
+			manifold.addPoint({((center + (normal * radius)) + closest) * SphereTriangleHalf, radius - distance, static_cast< uint32_t >(region)});
 
 			return true;
 		}
 
 		/* The centre lies on the triangle: it leaves along the winding normal. */
 		manifold.setNormal(-faceNormal);
-		manifold.addPoint({(center + (center - (faceNormal * radius))) * Half, radius, 0x100U | static_cast< uint32_t >(Region::Face)});
+		manifold.addPoint({(center + (center - (faceNormal * radius))) * SphereTriangleHalf, radius, 0x100U | static_cast< uint32_t >(Region::Face)});
 
 		return true;
 	}

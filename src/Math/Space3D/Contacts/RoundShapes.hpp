@@ -68,7 +68,7 @@ namespace EmEn::Base::Math::Space3D
 		bool
 		addSpherePair (const Vector< 3, precision_t > & centerA, precision_t radiusA, const Vector< 3, precision_t > & centerB, precision_t radiusB, const Vector< 3, precision_t > & fallbackNormal, uint32_t featureId, ContactManifold< precision_t > & manifold) noexcept
 		{
-			constexpr auto CoincidentThreshold = static_cast< precision_t >(1.0e-6);
+			constexpr auto RoundCoincident = static_cast< precision_t >(1.0e-6);
 
 			const auto offset = centerB - centerA;
 			const precision_t distanceSquared = offset.lengthSquared();
@@ -82,7 +82,7 @@ namespace EmEn::Base::Math::Space3D
 			precision_t distance = 0;
 			Vector< 3, precision_t > normal = fallbackNormal;
 
-			if ( distanceSquared > CoincidentThreshold * CoincidentThreshold )
+			if ( distanceSquared > RoundCoincident * RoundCoincident )
 			{
 				distance = std::sqrt(distanceSquared);
 				normal = offset * (static_cast< precision_t >(1) / distance);
@@ -117,14 +117,14 @@ namespace EmEn::Base::Math::Space3D
 		void
 		decompose (const Capsule< precision_t > & capsule, Vector< 3, precision_t > & center, Vector< 3, precision_t > & direction, precision_t & halfLength) noexcept
 		{
-			constexpr auto DegenerateThreshold = static_cast< precision_t >(1.0e-6);
+			constexpr auto RoundDegenerate = static_cast< precision_t >(1.0e-6);
 
 			center = (capsule.startPoint() + capsule.endPoint()) * static_cast< precision_t >(0.5);
 			direction = capsule.endPoint() - capsule.startPoint();
 
 			const precision_t length = direction.length();
 
-			if ( length > DegenerateThreshold )
+			if ( length > RoundDegenerate )
 			{
 				direction *= static_cast< precision_t >(1) / length;
 				halfLength = length * static_cast< precision_t >(0.5);
@@ -244,9 +244,9 @@ namespace EmEn::Base::Math::Space3D
 		using namespace RoundShapesDetail;
 
 		/* Within ~2.6° two axes are parallel: their overlap is a line, so two points. */
-		constexpr auto ParallelCosine = static_cast< precision_t >(0.999);
-		constexpr auto OverlapThreshold = static_cast< precision_t >(1.0e-4);
-		constexpr auto CrossThreshold = static_cast< precision_t >(1.0e-12);
+		constexpr auto RoundParallelCosine = static_cast< precision_t >(0.999);
+		constexpr auto RoundOverlap = static_cast< precision_t >(1.0e-4);
+		constexpr auto RoundCross = static_cast< precision_t >(1.0e-12);
 
 		manifold.clear();
 
@@ -263,7 +263,7 @@ namespace EmEn::Base::Math::Space3D
 		/* The fallback for crossing axes: their common perpendicular, from A towards B. */
 		Vec3 fallback = Vec3::crossProduct(directionA, directionB);
 
-		if ( fallback.lengthSquared() > CrossThreshold )
+		if ( fallback.lengthSquared() > RoundCross )
 		{
 			fallback.normalize();
 
@@ -278,14 +278,14 @@ namespace EmEn::Base::Math::Space3D
 		}
 
 		/* Parallel capsules side by side: the two ends of the overlap of B's projection on A. */
-		if ( halfLengthA > 0 && halfLengthB > 0 && std::abs(Vec3::dotProduct(directionA, directionB)) > ParallelCosine )
+		if ( halfLengthA > 0 && halfLengthB > 0 && std::abs(Vec3::dotProduct(directionA, directionB)) > RoundParallelCosine )
 		{
 			const precision_t projectedStart = Vec3::dotProduct((centerB - (directionB * halfLengthB)) - centerA, directionA);
 			const precision_t projectedEnd = Vec3::dotProduct((centerB + (directionB * halfLengthB)) - centerA, directionA);
 			const precision_t low = std::max(-halfLengthA, std::min(projectedStart, projectedEnd));
 			const precision_t high = std::min(halfLengthA, std::max(projectedStart, projectedEnd));
 
-			if ( high - low > OverlapThreshold )
+			if ( high - low > RoundOverlap )
 			{
 				uint32_t end = 0;
 

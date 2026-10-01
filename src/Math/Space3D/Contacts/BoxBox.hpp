@@ -296,11 +296,11 @@ namespace EmEn::Base::Math::Space3D
 		/* Bias towards faces, then towards the faces of A (Gregorius, GDC 2013): an edge axis or a face of B wins only
 		 * when it separates clearly more, so the choice does not flicker between nearly equal axes. Separations are
 		 * negative when penetrating: scaling a negative value by < 1 moves it towards zero, which favours the face. */
-		constexpr auto EdgeRelativeTolerance = static_cast< precision_t >(0.95);
-		constexpr auto FaceRelativeTolerance = static_cast< precision_t >(0.98);
-		constexpr auto AbsoluteTolerance = static_cast< precision_t >(1.0e-4);
+		constexpr auto BoxBoxEdgeBias = static_cast< precision_t >(0.95);
+		constexpr auto BoxBoxFaceBias = static_cast< precision_t >(0.98);
+		constexpr auto BoxBoxAbsoluteBias = static_cast< precision_t >(1.0e-4);
 		/* Under this squared length, two edges are parallel: their cross product is no axis. */
-		constexpr auto ParallelEdgeThreshold = static_cast< precision_t >(1.0e-6);
+		constexpr auto BoxBoxParallelEdge = static_cast< precision_t >(1.0e-6);
 
 		manifold.clear();
 
@@ -361,7 +361,7 @@ namespace EmEn::Base::Math::Space3D
 				auto axis = Vec3::crossProduct(boxA.axis(indexA), boxB.axis(indexB));
 				const precision_t lengthSquared = axis.lengthSquared();
 
-				if ( lengthSquared < ParallelEdgeThreshold )
+				if ( lengthSquared < BoxBoxParallelEdge )
 				{
 					continue;
 				}
@@ -388,7 +388,7 @@ namespace EmEn::Base::Math::Space3D
 		/* 4. Edge ↔ edge: one point between the two closest edges. */
 		const precision_t bestFaceSeparation = std::max(faceASeparation, faceBSeparation);
 
-		if ( edgeSeparation > (EdgeRelativeTolerance * bestFaceSeparation) + AbsoluteTolerance )
+		if ( edgeSeparation > (BoxBoxEdgeBias * bestFaceSeparation) + BoxBoxAbsoluteBias )
 		{
 			/* Orient the axis from A to B. */
 			if ( Vec3::dotProduct(edgeAxis, offset) < 0 )
@@ -434,7 +434,7 @@ namespace EmEn::Base::Math::Space3D
 		}
 
 		/* 5. Face contact. The reference box owns the chosen face; the other one is the incident box. */
-		const bool referenceIsB = faceBSeparation > (FaceRelativeTolerance * faceASeparation) + AbsoluteTolerance;
+		const bool referenceIsB = faceBSeparation > (BoxBoxFaceBias * faceASeparation) + BoxBoxAbsoluteBias;
 		const auto & reference = referenceIsB ? boxB : boxA;
 		const auto & incident = referenceIsB ? boxA : boxB;
 		const size_t referenceAxis = referenceIsB ? faceBIndex : faceAIndex;
