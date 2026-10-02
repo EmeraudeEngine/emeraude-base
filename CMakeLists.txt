@@ -542,6 +542,12 @@ if ( EMERAUDE_ENABLE_TESTS )
 	endif ()
 
 	add_executable(EmeraudeBaseUnitTests ${EMERAUDE_BASE_TEST_SOURCES})
+
+	# The system libc++ is not instrumented: its half-seen container annotations are false positives (macOS).
+	if ( EMERAUDE_ENABLE_SANITIZERS AND APPLE )
+		target_sources(EmeraudeBaseUnitTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/AsanDefaultOptions.cpp)
+	endif ()
+
 	emeraude_base_target_enable_pch(EmeraudeBaseUnitTests "${EMERAUDE_BASE_STL_PCH_HEADERS}")
 
 	set_target_properties(EmeraudeBaseUnitTests PROPERTIES
