@@ -38,6 +38,7 @@
 
 /* Local inclusions. */
 #include "Math/Base.hpp"
+#include "PortableRandom.hpp"
 
 namespace EmEn::Base::Algorithms
 {
@@ -88,11 +89,12 @@ namespace EmEn::Base::Algorithms
 				/* Fill p with values from 0 to 255. */
 				std::iota(m_permutations.begin(), m_permutations.end(), 0);
 
-				/* Initialize a random engine with seed. */
-				std::default_random_engine engine(seed);
+				/* Shuffled by std::mt19937 and PortableRandom::shuffle(): the same permutation on every platform
+				 * (std::default_random_engine and std::ranges::shuffle are implementation-defined: one seed gave
+				 * three different citadel terrains on Linux, macOS and Windows, 2026-10-02). */
+				std::mt19937 engine{seed};
 
-				/* Shuffle  using the above random engine. */
-				std::ranges::shuffle(m_permutations, engine);
+				PortableRandom::shuffle(m_permutations, engine);
 
 				/* Duplicate the permutation vector. */
 				m_permutations.insert(m_permutations.end(), m_permutations.begin(), m_permutations.end());

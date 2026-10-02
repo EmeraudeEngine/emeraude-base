@@ -668,6 +668,15 @@ to 0 — every point west or south of the origin would read cell 0 on the Mac. F
 mask and the noise stays periodic across zero). Tests `AlgorithmsPerlinNoise.*`. ⚠️ On x86 they pass without
 the fix too: the discriminating machine is ARM.
 
+### ⚠️⚠️ A seeded draw through std's distributions or `std::default_random_engine` is NOT portable (2026-10-02, FIXED)
+
+The standard fixes `std::mt19937`'s sequence and seeding, not `std::default_random_engine` (a different engine per
+standard library), nor `std::uniform_int_distribution` / `std::uniform_real_distribution` / `std::shuffle`. One seed
+gave citadel three terrains: macOS off Linux by up to 1.05 m, Windows by up to 0.45 m. Every seeded draw goes through
+`PortableRandom` (or `Randomizer`, which uses it): `docs/subsystems/source-tree/23-portable-random.md`. Only a
+`std::random_device` seed may keep std's distributions. ⚠️ A golden test that fails on one OS is the defect, never a
+value to re-record.
+
 ## PixelFactory
 
 ### ⚠⚠⚠ `Processor::resize(Linear)` is NOT a mip filter — use `Processor::downsample()` (Sept 2026, FIXED)

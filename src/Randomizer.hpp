@@ -32,6 +32,9 @@
 #include <random>
 #include <vector>
 
+/* Local inclusions for usages. */
+#include "PortableRandom.hpp"
+
 namespace EmEn::Base
 {
 	/**
@@ -40,7 +43,7 @@ namespace EmEn::Base
 	 * @tparam generator_t The type of generator. Default std::mt19937.
 	 */
 	template< typename number_t = int32_t, typename generator_t = std::mt19937 >
-	requires (std::is_arithmetic_v< number_t > && std::uniform_random_bit_generator< generator_t >)
+	requires (std::is_arithmetic_v< number_t > && !std::is_same_v< number_t, bool > && PortableRandom::FullRangeGenerator< generator_t >)
 	class Randomizer final
 	{
 		public:
@@ -56,6 +59,8 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Constructs a randomizer with a seed to reproduce results.
+			 * @note The same seed gives the same numbers on every platform (PortableRandom.hpp: std's distributions
+			 * did not, 2026-10-02).
 			 * @param seed A fixed value.
 			 */
 			explicit Randomizer (typename generator_t::result_type seed) noexcept
@@ -66,8 +71,8 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Returns a random number between a specified range.
-			 * @param min The minimum number.
-			 * @param max The maximum number.
+			 * @param min The minimum number (included).
+			 * @param max The maximum number (included for an integer, excluded for a real).
 			 * @return number_t
 			 */
 			[[nodiscard]]
@@ -79,23 +84,7 @@ namespace EmEn::Base
 					std::swap(min, max);
 				}
 
-				if constexpr ( std::is_integral_v< number_t > )
-				{
-					if constexpr (std::is_same_v< number_t, int8_t > || std::is_same_v< number_t, uint8_t > ||
-								  std::is_same_v< number_t, char >   || std::is_same_v< number_t, signed char > ||
-								  std::is_same_v< number_t, unsigned char > || std::is_same_v< number_t, char8_t >)
-					{
-						return static_cast< number_t >(std::uniform_int_distribution< int >{static_cast< int >(min), static_cast< int >(max)}(m_generator));
-					}
-					else
-					{
-						return std::uniform_int_distribution< number_t >{min, max}(m_generator);
-					}
-				}
-				else
-				{
-					return std::uniform_real_distribution< number_t >{min, max}(m_generator);
-				}
+				return this->draw(min, max);
 			}
 
 			/**
@@ -116,37 +105,9 @@ namespace EmEn::Base
 					std::swap(min, max);
 				}
 
-				if constexpr ( std::is_integral_v< number_t > )
+				for ( auto & value : range )
 				{
-					if constexpr (std::is_same_v< number_t, int8_t > || std::is_same_v< number_t, uint8_t > ||
-								  std::is_same_v< number_t, char >   || std::is_same_v< number_t, signed char > ||
-								  std::is_same_v< number_t, unsigned char > || std::is_same_v< number_t, char8_t >)
-					{
-						std::uniform_int_distribution< int > distribution{static_cast< int >(min), static_cast< int >(max)};
-
-						for ( auto & value : range )
-						{
-							value = static_cast<number_t>(distribution(m_generator));
-						}
-					}
-					else
-					{
-						std::uniform_int_distribution< number_t > distribution{min, max};
-
-						for ( auto & value : range )
-						{
-							value = distribution(m_generator);
-						}
-					}
-				}
-				else
-				{
-					std::uniform_real_distribution< number_t > distribution{min, max};
-
-					for ( auto & value : range )
-					{
-						value = distribution(m_generator);
-					}
+					value = this->draw(min, max);
 				}
 
 				return range;
@@ -171,43 +132,35 @@ namespace EmEn::Base
 					std::swap(min, max);
 				}
 
-				if constexpr ( std::is_integral_v< number_t > )
+				for ( auto & value : range )
 				{
-					if constexpr (std::is_same_v< number_t, int8_t > || std::is_same_v< number_t, uint8_t > ||
-								  std::is_same_v< number_t, char >   || std::is_same_v< number_t, signed char > ||
-								  std::is_same_v< number_t, unsigned char > || std::is_same_v< number_t, char8_t >)
-					{
-						std::uniform_int_distribution< int > distribution{static_cast< int >(min), static_cast< int >(max)};
-
-						for ( auto & value : range )
-						{
-							value = static_cast< number_t >(distribution(m_generator));
-						}
-					}
-					else
-					{
-						std::uniform_int_distribution< number_t > distribution{min, max};
-
-						for ( auto & value : range )
-						{
-							value = distribution(m_generator);
-						}
-					}
-				}
-				else
-				{
-					std::uniform_real_distribution< number_t > distribution{min, max};
-
-					for ( auto & value : range )
-					{
-						value = distribution(m_generator);
-					}
+					value = this->draw(min, max);
 				}
 
 				return range;
 			}
 
 		private:
+
+			/**
+			 * @brief One draw in [min, max] (an integer) or [min, max) (a real), the same on every platform.
+			 * @param min The minimum number.
+			 * @param max The maximum number.
+			 * @return number_t
+			 */
+			[[nodiscard]]
+			number_t
+			draw (number_t min, number_t max) noexcept
+			{
+				if constexpr ( std::is_integral_v< number_t > )
+				{
+					return PortableRandom::uniformInteger< number_t >(m_generator, min, max);
+				}
+				else
+				{
+					return PortableRandom::uniformReal< number_t >(m_generator, min, max);
+				}
+			}
 
 			std::random_device m_device;
 			generator_t m_generator;
