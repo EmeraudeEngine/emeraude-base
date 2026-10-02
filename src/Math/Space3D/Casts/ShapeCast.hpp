@@ -36,6 +36,7 @@
 
 /* Local inclusions for usages. */
 #include "Math/Space3D/Capsule.hpp"
+#include "Math/Space3D/Casts/ConvexDistance.hpp"
 #include "Math/Space3D/Contacts/BoxBox.hpp"
 #include "Math/Space3D/Contacts/CapsuleBox.hpp"
 #include "Math/Space3D/Contacts/CapsuleTriangle.hpp"
@@ -57,6 +58,9 @@
  * convex shape this never overshoots — the target lies beyond the separating plane of normal n — and converges on the
  * first contact (G. van den Bergen, "Ray Casting against General Convex Objects with Application to Continuous
  * Collision Detection", 2004; E. Catto, "Continuous Collision", GDC 2013). No third-party code.
+ * A BOX caster (castBox(), physics overhaul P5, decision 14) uses the same advancement on the closest points GJK gives
+ * between the moved box and the target's core (ConvexDistance.hpp): exact for a translating box, not its inscribed
+ * sphere.
  */
 
 namespace EmEn::Base::Math::Space3D
@@ -410,6 +414,230 @@ namespace EmEn::Base::Math::Space3D
 			/* Not converged within the step cap (a grazing pass): reported as no contact. */
 			return false;
 		}
+
+		/** @brief The core polytope of a target (its radius apart): a box, a triangle, a sphere's centre, a capsule's axis. */
+		template< typename precision_t >
+		[[nodiscard]]
+		ConvexPolytope< precision_t >
+		corePolytope (const OrientedBox< precision_t > & box) noexcept
+		{
+			return ConvexPolytope< precision_t >{box};
+		}
+
+		template< typename precision_t >
+		[[nodiscard]]
+		ConvexPolytope< precision_t >
+		corePolytope (const Triangle< precision_t > & triangle) noexcept
+		{
+			Vector< 3, precision_t > faceNormal;
+
+			/* A degenerate triangle is no target (empty: GJK answers overlapping, refused below). */
+			if ( !TriangleDetail::unitNormal(triangle, faceNormal) )
+			{
+				return {};
+			}
+
+			return ConvexPolytope< precision_t >{triangle};
+		}
+
+		template< typename precision_t >
+		[[nodiscard]]
+		ConvexPolytope< precision_t >
+		corePolytope (const Sphere< precision_t > & sphere) noexcept
+		{
+			return ConvexPolytope< precision_t >{sphere.position()};
+		}
+
+		template< typename precision_t >
+		[[nodiscard]]
+		ConvexPolytope< precision_t >
+		corePolytope (const Capsule< precision_t > & capsule) noexcept
+		{
+			return ConvexPolytope< precision_t >{capsule.startPoint(), capsule.endPoint()};
+		}
+
+		/** @brief The face normals a box cast's normal may snap to: a target box's, a triangle's (none for a round target). */
+		template< typename precision_t >
+		bool
+		snapToFace (const OrientedBox< precision_t > & box, Vector< 3, precision_t > & normal, precision_t cosine) noexcept
+		{
+			for ( const auto & axis : box.axes() )
+			{
+				for ( const auto & face : {axis, -axis} )
+				{
+					if ( Vector< 3, precision_t >::dotProduct(normal, face) >= cosine )
+					{
+						normal = face;
+
+						return true;
+					}
+				}
+			}
+
+			return false;
+		}
+
+		template< typename precision_t >
+		bool
+		snapToFace (const Triangle< precision_t > & triangle, Vector< 3, precision_t > & normal, precision_t cosine) noexcept
+		{
+			Vector< 3, precision_t > face;
+
+			if ( !TriangleDetail::unitNormal(triangle, face) )
+			{
+				return false;
+			}
+
+			if ( Vector< 3, precision_t >::dotProduct(normal, face) >= cosine )
+			{
+				normal = face;
+
+				return true;
+			}
+
+			if ( Vector< 3, precision_t >::dotProduct(normal, -face) >= cosine )
+			{
+				normal = -face;
+
+				return true;
+			}
+
+			return false;
+		}
+
+		template< typename precision_t >
+		bool
+		snapToFace (const Sphere< precision_t > & /*sphere*/, Vector< 3, precision_t > & /*normal*/, precision_t /*cosine*/) noexcept
+		{
+			return false;
+		}
+
+		template< typename precision_t >
+		bool
+		snapToFace (const Capsule< precision_t > & /*capsule*/, Vector< 3, precision_t > & /*normal*/, precision_t /*cosine*/) noexcept
+		{
+			return false;
+		}
+
+		/**
+		 * @brief The conservative advancement of a translating box: as castCore(), the closest points from GJK.
+		 * @note A face against a face has no unique pair of closest points: the normal GJK gives leans by a few 1e-4 rad.
+		 * Within 0.01 rad of a face normal — the target's, or the box's own facing it — it becomes that normal exactly.
+		 */
+		template< typename precision_t, typename target_t >
+		[[nodiscard]]
+		bool
+		castBoxCore (const OrientedBox< precision_t > & box, const Vector< 3, precision_t > & motion, const target_t & target, CastHit< precision_t > & hit) noexcept
+		{
+			using Vec3 = Vector< 3, precision_t >;
+
+			/* A box's contact is declared within 1 mm and approached to 0.5 mm: the direction between two closest points
+			 * a few hundredths of a millimetre apart is noise in float (the normal of a wall leaned 0.0024 rad at x
+			 * -0.1, z -89, and a bounced box drifted over the wall). */
+			constexpr auto CastContactTolerance = static_cast< precision_t >(1.0e-3);
+			constexpr auto CastDirectionThreshold = static_cast< precision_t >(1.0e-7);
+			/* How far along its motion a box in exact contact is probed to tell leaving from pressing (m). */
+			constexpr auto CastLeaveProbe = static_cast< precision_t >(1.0e-3);
+			/* cos(0.01 rad): a normal this close to a face normal is that face's. */
+			constexpr auto CastSnapCosine = static_cast< precision_t >(0.99995);
+			constexpr size_t CastMaxIterations{64};
+
+			const auto targetCore = corePolytope(target);
+
+			if ( targetCore.empty() || !box.isValid() )
+			{
+				return false;
+			}
+
+			/* GJK runs about the box's start: coordinates of the order of the shapes, not of the world (precision). */
+			const Vec3 & origin = box.center();
+			const ConvexPolytope< precision_t > caster = ConvexPolytope< precision_t >{box}.translated(-origin);
+			const auto localTarget = targetCore.translated(-origin);
+			const precision_t reach = targetRadius(target);
+			precision_t fraction = 0;
+
+			for ( size_t iteration = 0; iteration < CastMaxIterations; ++iteration )
+			{
+				const auto closest = closestPoints(caster.translated(motion * fraction), localTarget);
+				const Vec3 between = closest.onB - closest.onA;
+				const precision_t coreDistance = closest.overlapping ? static_cast< precision_t >(0) : between.length();
+				const precision_t distance = coreDistance - reach;
+				Vec3 outward;
+
+				if ( coreDistance > CastDirectionThreshold )
+				{
+					outward = between * (static_cast< precision_t >(-1) / coreDistance);
+				}
+				else
+				{
+					/* Overlapping cores: back along the motion, or +Y without motion (deterministic). */
+					const precision_t motionLength = motion.length();
+
+					outward = motionLength > CastDirectionThreshold ? motion * (static_cast< precision_t >(-1) / motionLength) : Vec3{0, 1, 0};
+				}
+
+				if ( distance <= CastContactTolerance )
+				{
+					/* Touching at the start but moving away: not a contact. */
+					if ( iteration == 0 && distance >= 0 && coreDistance > CastDirectionThreshold && Vec3::dotProduct(motion, outward) > CastDirectionThreshold )
+					{
+						return false;
+					}
+
+					/* In exact contact at the start, GJK has no direction: a box that a millimetre along its motion is
+					 * apart is leaving (a box resting on the ground and lifted). */
+					if ( iteration == 0 && coreDistance <= CastDirectionThreshold )
+					{
+						const precision_t motionLength = motion.length();
+
+						if ( motionLength > CastDirectionThreshold )
+						{
+							const auto probe = closestPoints(caster.translated(motion * (std::min(static_cast< precision_t >(1), CastLeaveProbe / motionLength))), localTarget);
+
+							if ( !probe.overlapping && probe.distance > reach )
+							{
+								return false;
+							}
+						}
+					}
+
+					const bool startedInside = iteration == 0 && (distance < 0 || coreDistance <= CastDirectionThreshold);
+					const Vec3 contact = origin + (coreDistance > CastDirectionThreshold ? closest.onB + (outward * reach) : motion * fraction);
+
+					/* The target's face, else the box's own face turned to it (its outward normal is -outward). */
+					if ( !snapToFace(target, outward, CastSnapCosine) )
+					{
+						Vec3 inward = -outward;
+
+						if ( snapToFace(box, inward, CastSnapCosine) )
+						{
+							outward = -inward;
+						}
+					}
+
+					hit = {fraction, contact, outward, startedInside};
+
+					return true;
+				}
+
+				const precision_t approach = -Vec3::dotProduct(motion, outward);
+
+				if ( approach <= CastDirectionThreshold )
+				{
+					return false;
+				}
+
+				/* To half the tolerance short of the contact: GJK has no closest points at a distance of exactly 0. */
+				fraction += (distance - (CastContactTolerance * static_cast< precision_t >(0.5))) / approach;
+
+				if ( fraction > static_cast< precision_t >(1) )
+				{
+					return false;
+				}
+			}
+
+			return false;
+		}
 	}
 
 	/**
@@ -462,5 +690,26 @@ namespace EmEn::Base::Math::Space3D
 	castCapsule (const Capsule< precision_t > & capsule, const Vector< 3, precision_t > & motion, const target_t & target, CastHit< precision_t > & hit) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
 		return ShapeCastDetail::castCore(capsule.startPoint(), capsule.endPoint(), capsule.radius(), motion, target, hit);
+	}
+
+	/**
+	 * @brief Casts an oriented box (TRANSLATED, not turned) along a motion against a target (P5, decision 14).
+	 * @note Exact for the box's faces, edges and corners — before, a fast box swept its inscribed sphere and stopped
+	 * later than its faces. The same contract as castSphere(): the fraction of the motion at the first contact, the
+	 * contact point on the target's surface, the target's surface normal (towards the caster), `startedInside`.
+	 * @tparam precision_t The floating point type.
+	 * @tparam target_t An OrientedBox, a Triangle, a Sphere or a Capsule.
+	 * @param box A reference to the box at the start of the motion.
+	 * @param motion A reference to the displacement.
+	 * @param target A reference to the target.
+	 * @param hit A reference to the hit written on a contact.
+	 * @return bool
+	 */
+	template< typename precision_t, typename target_t >
+	[[nodiscard]]
+	bool
+	castBox (const OrientedBox< precision_t > & box, const Vector< 3, precision_t > & motion, const target_t & target, CastHit< precision_t > & hit) noexcept requires (std::is_floating_point_v< precision_t >)
+	{
+		return ShapeCastDetail::castBoxCore(box, motion, target, hit);
 	}
 }

@@ -37,3 +37,19 @@ citadel step (0.29 m) hitting the step's TOP EDGE at the analytic fraction with 
 vs capsule; a degenerate triangle. Randomised (local LCG, 1000 draws each): sphere casts vs boxes and capsule casts vs
 triangles are CONSERVATIVE (no contact sampled before the reported fraction) and EXACT (the gap at the fraction under
 1 mm). Release and ASan/UBSan green.
+
+### Box casts (physics overhaul P5, 2026-10-02, decision 14)
+- `castBox(box, motion, target, hit)`: an `OrientedBox` TRANSLATED (not turned) against a box, a triangle, a sphere or a
+  capsule — the same conservative advancement on the closest points `closestPoints()` gives (GJK,
+  `21-math-space3d-convex-distance.md`) between the moved box and the target's core; exact for its faces, edges and
+  corners. The same `CastHit` contract.
+- Within 1 mm of contact, approached to 0.5 mm: the direction between two closest points a few hundredths of a
+  millimetre apart is noise in float. GJK runs about the box's start (coordinates of the order of the shapes).
+- A normal within 0.01 rad of a face normal — the target's, else the box's own facing it — becomes that normal EXACTLY:
+  face against face has no unique pair of closest points, the GJK normal leaned 3e-4 rad (0.0024 before the recentring)
+  and a box bounced off a wall drifted over it.
+- In exact contact at the start GJK has no direction: a box that 1 mm along its motion is apart is leaving (no contact).
+- Tests in `test_MathSpace3DConvexDistance.cpp`: onto the ground (fraction 0.5), a box turned 45° meets with its edge
+  (fraction (2 − √2 / 2) / 3), onto a triangle, a sphere and a capsule, started inside, leaving, the face normal EXACT 89 m
+  from the origin, and 120 random turned boxes against a 1/2000 march (2e-3).
+
