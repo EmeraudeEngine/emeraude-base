@@ -297,6 +297,7 @@ elseif ( UNIX )
 		$<$<CONFIG:Debug>:DEBUG>													# Declares DEBUG macro
 		$<$<CONFIG:Release>:NDEBUG>													# Declares NDEBUG macro
 		$<$<CONFIG:Release>:_FORTIFY_SOURCE=2>										# Runtime buffer overflow detection
+		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:_GLIBCXX_ASSERTIONS>				# libstdc++ checks back() / front() / [] (ASan cannot see them on Linux)
 		CACHE STRING "Project-wide compile definitions (Linux)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS

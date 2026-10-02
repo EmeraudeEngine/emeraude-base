@@ -446,9 +446,10 @@ namespace EmEn::Base::String
 			}
 		}
 
-		if ( output.back() == ' ' )
+		/* No digit at all: the output stays empty (back() on it is undefined: libc++'s ASan caught it on macOS). */
+		if ( !output.empty() && output.back() == ' ' )
 		{
-			output.resize(output.size() - 1);
+			output.pop_back();
 		}
 
 		return output;

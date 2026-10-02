@@ -677,6 +677,14 @@ gave citadel three terrains: macOS off Linux by up to 1.05 m, Windows by up to 0
 `std::random_device` seed may keep std's distributions. ⚠️ A golden test that fails on one OS is the defect, never a
 value to re-record.
 
+### ⚠️ `back()` / `front()` on an empty container is UB that libstdc++ hides — `String::extractNumbers()` did it (2026-10-02, FIXED)
+
+`extractNumbers("No digits here!")` ended with `output.back() == ' '` on an EMPTY string. libstdc++ reads the byte
+before its inline buffer, still inside the string object (its length field, 0), so the test passed on Linux, under
+ASan too; libc++ (macOS) keeps the short buffer at the object's start, so its ASan reported a stack-buffer-overflow.
+Fixed (`!output.empty() &&`). The base sanitizer build now defines `_GLIBCXX_ASSERTIONS` on Linux, so libstdc++
+checks `back()` / `front()` / `[]` too: the same test aborts there without the fix.
+
 ## PixelFactory
 
 ### ⚠⚠⚠ `Processor::resize(Linear)` is NOT a mip filter — use `Processor::downsample()` (Sept 2026, FIXED)
