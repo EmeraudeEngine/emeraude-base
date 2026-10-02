@@ -47,3 +47,8 @@ engine's `IrradianceProbeVolume` (its ray rotation), projet-alpha's `forest` and
 Linux, must be the same on every OS: a failure is a portability defect, never a value to re-record), citadel's
 Perlin seed, bounds and uniformity (60000 dice draws within 5 %), real edges, `Randomizer` and the distribution
 objects on the same stream. Release and ASan / UBSan green.
+
+### Validated (2026-10-02)
+macOS M2 (arm64, libc++) and Windows (MSVC, RTX 3060 + AMD iGPU), base `b2ca695`: the 6 golden tests pass unchanged,
+0 warning; citadel's `getGroundLevel()` at six probe points equals Linux to 1e-4 on both (before: up to 1.05 m off on
+macOS, 0.45 m on Windows), the parked car at the same position; the bench bit-identical; 10 demos clean.

@@ -530,6 +530,16 @@ if ( EMERAUDE_ENABLE_TESTS )
 
 	FetchContent_MakeAvailable(googletest)
 
+	# gtest shares std::vector instances with the instrumented tests: libc++'s ASan container annotations need both
+	# sides instrumented, or its registry reads as a heap-buffer-overflow at static initialisation (macOS).
+	if ( EMERAUDE_ENABLE_SANITIZERS AND NOT MSVC )
+		foreach ( gtestTarget IN ITEMS gtest gtest_main gmock gmock_main )
+			if ( TARGET ${gtestTarget} )
+				target_compile_options(${gtestTarget} PRIVATE -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+			endif ()
+		endforeach ()
+	endif ()
+
 	add_executable(EmeraudeBaseUnitTests ${EMERAUDE_BASE_TEST_SOURCES})
 	emeraude_base_target_enable_pch(EmeraudeBaseUnitTests "${EMERAUDE_BASE_STL_PCH_HEADERS}")
 
