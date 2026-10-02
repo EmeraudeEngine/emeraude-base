@@ -133,6 +133,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathCartesianFrame.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathMatrix.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathOrientedCuboid.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathPiecewiseLinear.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathQuaternion.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathRigidBody.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace2D.cpp
