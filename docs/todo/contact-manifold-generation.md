@@ -39,8 +39,9 @@ sphere / capsule pairs (engine `docs/physics-overhaul.md` § 1.5).
 
 - [ ] Decide at the engine integration (P2, `physics-unified-contact-pipeline`): the AABB pairs become the special case
   of the oriented ones (an unrotated `OrientedBox`), or keep a fast path with the same output — measure first.
-- [ ] Owner decision pending: one-sided triangles for the meshes of P5. (The +Y fallback for coincident centres is
-  decided: kept, determinism first — owner 2026-10-01.)
+- (Decided: the meshes of P5 are one-sided by default with a two-sided option — owner 2026-10-02, engine
+  `docs/physics-overhaul.md` decision 13; the triangle pairs here stay two-sided, the engine filters. The +Y fallback for
+  coincident centres is decided too: kept, determinism first — owner 2026-10-01.)
 - [ ] Unit tests for each new pair (Release + ASan/UBSan), on the model of `test_MathSpace3DContacts.cpp`.
 
 ## ⚠️ Traps
