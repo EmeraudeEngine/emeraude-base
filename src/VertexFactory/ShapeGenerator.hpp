@@ -2984,7 +2984,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		 * Head:  Y=+shaftLength to Y=+totalLength. */
 
 		/* Volumetric vertex color. */
-		const auto volumetricColor = [half, one, invMaxR, invTotalLen] (const Math::Vector< 3, vertex_data_t > & position) {
+		const auto volumetricColor = [invMaxR, invTotalLen] (const Math::Vector< 3, vertex_data_t > & position) {
 			return Math::Vector< 4, vertex_data_t >{
 				((position[Math::X] * invMaxR) + one) * half,
 				((position[Math::Y] * invTotalLen) + one) * half,
