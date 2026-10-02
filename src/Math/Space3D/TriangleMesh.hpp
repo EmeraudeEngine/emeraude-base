@@ -651,9 +651,9 @@ namespace EmEn::Base::Math::Space3D
 						{
 							/* Concave: the far vertex of the other triangle stands in front of this one's plane. */
 							const auto & onEdge = vertexOf(edgeA.triangle, edgeA.slot);
-							const auto & far = vertexOf(edgeB.triangle, (edgeB.slot + 2) % 3);
+							const auto & farVertex = vertexOf(edgeB.triangle, (edgeB.slot + 2) % 3);
 
-							active = Vec3::dotProduct(normalA, far - onEdge) <= ConcaveDistance;
+							active = Vec3::dotProduct(normalA, farVertex - onEdge) <= ConcaveDistance;
 						}
 
 						if ( !active )

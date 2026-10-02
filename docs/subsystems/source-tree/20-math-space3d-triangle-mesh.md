@@ -39,3 +39,8 @@ Refusals; degenerate triangles skipped; `visit()` = brute force on 600 random tr
 invariants on 1000 triangles (every triangle in exactly one leaf, leaves ≤ 4, children inside their parent); 200
 identical triangles stay bounded; a flat quad's diagonal inactive and its borders active; split vertices welded;
 convex edge active, concave inactive; knife edge active; the three correction cases.
+
+### Trap
+- `far` / `near` are EMPTY macros of `windef.h`: a local named `far` broke every projet-alpha TU that includes
+  `<windows.h>` before this header (`error C3329`, Windows peer 2026-10-02; GCC and clang cannot see it). Renamed
+  `farVertex` (and `test_MathMatrix.cpp`'s `far` → `farOffset`, the same trap waiting).

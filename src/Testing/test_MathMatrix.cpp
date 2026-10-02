@@ -471,12 +471,12 @@ TYPED_TEST(MathMatrix, InverseOfAffineTransformFarFromOrigin)
 	{
 		/* A 1 % scale far from the origin (det 1e-6): the translation column must not enter the singularity bound. */
 		const auto scale = static_cast< TypeParam >(0.01);
-		const auto far = static_cast< TypeParam >(1e6);
+		const auto farOffset = static_cast< TypeParam >(1e6);
 		const Matrix< 4, TypeParam > matrix{std::array< TypeParam, 16 >{
 			scale, 0, 0, 0,
 			0, scale, 0, 0,
 			0, 0, scale, 0,
-			far, -far, far, 1}};
+			farOffset, -farOffset, farOffset, 1}};
 
 		const auto inverse = matrix.tryInverse();
 
