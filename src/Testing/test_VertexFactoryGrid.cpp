@@ -473,3 +473,20 @@ TEST(VertexFactoryGrid, TrianglesOutsideOrInvalidRegionsAreNone)
 
 	EXPECT_EQ(empty.forEachTriangleInRegion(-1.0F, -1.0F, 1.0F, 1.0F, [] (const auto &, const auto &, const auto &, auto, auto, uint8_t) {}), 0U);
 }
+
+TEST(VertexFactoryGrid, MemoryOccupiedCountsTheHeights)
+{
+	Grid< float > grid;
+
+	EXPECT_EQ(grid.memoryOccupied(), sizeof(grid));
+
+	ASSERT_TRUE(grid.initializeByCellSize(16U));
+	EXPECT_GE(grid.memoryOccupied(), sizeof(grid) + (grid.pointCount() * sizeof(float)));
+
+	/* clear() keeps the capacity: the heights' memory is still held. */
+	const auto before = grid.memoryOccupied();
+
+	grid.clear();
+
+	EXPECT_EQ(grid.memoryOccupied(), before);
+}

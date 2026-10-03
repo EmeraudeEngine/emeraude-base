@@ -1315,3 +1315,17 @@ TEST(VertexFactoryShapeGenerator, polesLieExactlyOnTheAxis)
 	expectExactPoles(ShapeGenerator::generateHemisphere< float, uint32_t >(1.0F, 16U, 8U), "hemisphere");
 	expectExactPoles(ShapeGenerator::generateCapsule< float, uint32_t >(1.0F, 1.0F, 16U, 8U), "capsule");
 }
+
+TEST(VertexFactoryShapeGenerator, memoryOccupiedCountsTheStorages)
+{
+	const Shape< float, uint32_t > empty;
+
+	EXPECT_GE(empty.memoryOccupied(), sizeof(empty));
+
+	const auto shape = ShapeGenerator::generateCuboid< float, uint32_t >(2.0F, 2.0F, 2.0F, uvOptions());
+	const auto storages = (shape.vertices().size() * sizeof(ShapeVertex< float >)) + (shape.triangles().size() * sizeof(ShapeTriangle< float, uint32_t >));
+
+	ASSERT_FALSE(shape.vertices().empty());
+	ASSERT_FALSE(shape.triangles().empty());
+	EXPECT_GE(shape.memoryOccupied(), sizeof(shape) + storages);
+}

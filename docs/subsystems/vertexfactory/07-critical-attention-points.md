@@ -28,3 +28,12 @@
   a render and to any exact-position weld. Set the extreme rings exactly (`generateSphere` -Y pole,
   `generateHemisphere` pole and equator, `generateCapsule` both poles, fixed 2026-09-28). Pinned by
   `VertexFactoryShapeGenerator.polesLieExactlyOnTheAxis`.
+- **`Shape::memoryOccupied()` / `Grid::memoryOccupied()` count CAPACITIES, and `clear()` keeps them.**
+  `clear()` empties the vectors and hash maps without giving their memory back: freeing a shape's
+  memory takes a swap with empty containers (the engine's CPU-copy release, phase 1). The shape's
+  hash indexes (`m_unpairedEdges`, `m_vertexIndex`, `m_vertexColorIndex`) are construction-time
+  only, yet they live as long as the shape: measured 2026-10-03 in the engine's citadel, the
+  unpaired-edge index alone weighed 360 MiB of the 1359 MiB of its 339 geometries (edges 109 MiB,
+  vertices 542, triangles 200, vertex colours 147). Their bytes are an estimate (one pointer per
+  bucket, one node per element). Pinned by `VertexFactoryGrid.MemoryOccupiedCountsTheHeights` and
+  `VertexFactoryShapeGenerator.memoryOccupiedCountsTheStorages`.

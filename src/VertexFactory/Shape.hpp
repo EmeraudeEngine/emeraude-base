@@ -427,6 +427,37 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Returns the bytes the shape holds in memory: the object itself, the capacity of every
+			 * storage and an estimate of its construction-time hash indexes.
+			 * @note The hash indexes are estimated (one pointer per bucket, one node per element: the value, a
+			 * link and a cached hash); their exact layout is the standard library's.
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			size_t
+			memoryOccupied () const noexcept
+			{
+				size_t bytes = sizeof(*this);
+
+				bytes += m_groups.capacity() * sizeof(typename decltype(m_groups)::value_type);
+				bytes += m_vertices.capacity() * sizeof(typename decltype(m_vertices)::value_type);
+				bytes += m_vertexColors.capacity() * sizeof(typename decltype(m_vertexColors)::value_type);
+				bytes += m_triangles.capacity() * sizeof(typename decltype(m_triangles)::value_type);
+				bytes += m_edges.capacity() * sizeof(typename decltype(m_edges)::value_type);
+				bytes += hashIndexBytes(m_unpairedEdges);
+				bytes += hashIndexBytes(m_vertexIndex);
+				bytes += hashIndexBytes(m_vertexColorIndex);
+				bytes += m_boundaryLoops.capacity() * sizeof(typename decltype(m_boundaryLoops)::value_type);
+
+				for ( const auto & loop : m_boundaryLoops )
+				{
+					bytes += loop.vertexIndices.capacity() * sizeof(index_data_t);
+				}
+
+				return bytes;
+			}
+
+			/**
 			 * @brief Returns whether the geometry is composed of groups.
 			 * @return bool
 			 */
@@ -2435,6 +2466,22 @@ namespace EmEn::Base::VertexFactory
 				index_data_t index{0};
 				bool paired{false};
 			};
+
+			/**
+			 * @brief Estimates the bytes of a node-based hash index: one pointer per bucket, one node per element
+			 * (the value, a link to the next node and a cached hash).
+			 * @tparam map_t The type of the unordered map.
+			 * @param map A reference to the map.
+			 * @return size_t
+			 */
+			template< typename map_t >
+			[[nodiscard]]
+			static
+			size_t
+			hashIndexBytes (const map_t & map) noexcept
+			{
+				return (map.bucket_count() * sizeof(void *)) + (map.size() * (sizeof(typename map_t::value_type) + sizeof(void *) + sizeof(size_t)));
+			}
 
 			/* Flag names. */
 			static constexpr auto TextureCoordinatesDeclared{0UL};

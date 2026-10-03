@@ -778,6 +778,17 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Returns the bytes the grid holds in memory: the object itself and the capacity of its heights.
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			size_t
+			memoryOccupied () const noexcept
+			{
+				return sizeof(*this) + (m_pointHeights.capacity() * sizeof(vertex_data_t));
+			}
+
+			/**
 			 * @brief Checks if the grid has been initialized and contains valid data.
 			 *
 			 * @return True if grid is initialized with data, false if uninitialized or cleared.
