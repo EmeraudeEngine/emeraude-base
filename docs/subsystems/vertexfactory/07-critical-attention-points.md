@@ -30,10 +30,22 @@
   `VertexFactoryShapeGenerator.polesLieExactlyOnTheAxis`.
 - **`Shape::memoryOccupied()` / `Grid::memoryOccupied()` count CAPACITIES, and `clear()` keeps them.**
   `clear()` empties the vectors and hash maps without giving their memory back: freeing a shape's
-  memory takes a swap with empty containers (the engine's CPU-copy release, phase 1). The shape's
-  hash indexes (`m_unpairedEdges`, `m_vertexIndex`, `m_vertexColorIndex`) are construction-time
-  only, yet they live as long as the shape: measured 2026-10-03 in the engine's citadel, the
-  unpaired-edge index alone weighed 360 MiB of the 1359 MiB of its 339 geometries (edges 109 MiB,
-  vertices 542, triangles 200, vertex colours 147). Their bytes are an estimate (one pointer per
-  bucket, one node per element). Pinned by `VertexFactoryGrid.MemoryOccupiedCountsTheHeights` and
+  memory takes a swap with empty containers (the engine's CPU-copy release, phase 1). Their bytes
+  are an estimate for the hash indexes (one pointer per bucket, one node per element; libc++ and
+  libstdc++ size them differently: macOS counted citadel's geometry 48 MiB lower). Pinned by
+  `VertexFactoryGrid.MemoryOccupiedCountsTheHeights` and
   `VertexFactoryShapeGenerator.memoryOccupiedCountsTheStorages`.
+- **The construction-time indexes are released once the shape is final:
+  `Shape::releaseConstructionIndexes()`** (the engine calls it after a geometry's GPU upload,
+  2026-10-03). `m_unpairedEdges`, `m_vertexIndex` and `m_vertexColorIndex` only serve
+  `addVertex()` / `addVertexColor()` / `addTriangle()` (its `addEdge()`) and `rebuildEdges()`, yet
+  they lived as long as the shape: in the engine's citadel the unpaired-edge index alone weighed
+  360 MiB of the 1359 MiB of its 339 geometries. Any of those calls after the release first
+  rebuilds all three from the stored data (`restoreConstructionIndexes()`: edges replayed in
+  insertion order, so each slot keeps its first half-edge and its paired flag). ⚠️ The rebuilt
+  vertex index holds EVERY stored vertex, those `saveVertex()` stored without merging included, and
+  uses the merge tolerance current at the rebuild: a later `addVertex()` may merge with a vertex the
+  never-released shape would not have. `clear()` / `resizeData()` reset the state. Pinned by
+  `VertexFactoryShapeBuilder.releasingTheConstructionIndexesFreesTheirMemory` and
+  `.anEditAfterTheReleaseRebuildsTheConstructionIndexes` (fails with the rebuild disabled: 28
+  vertices instead of 26).

@@ -228,3 +228,84 @@ TEST(VertexFactoryShapeBuilder, indexedVertexBufferWritesTheSecondarySetAfterThe
 		EXPECT_FLOAT_EQ(vertexBuffer[offset + 6], vertexBuffer[offset + 1] + 20.0F);
 	}
 }
+
+namespace
+{
+	/* A strip of quads along X: 2 triangles per quad, built through the merging calls (addVertex(),
+	 * addVertexColor(), addTriangle()), each quad sharing its left edge with the previous one and its
+	 * colour with all of them. */
+	void
+	appendQuads (Shape< float, uint32_t > & shape, uint32_t first, uint32_t count) noexcept
+	{
+		const EmEn::Base::Math::Vector< 3, float > up{0.0F, 1.0F, 0.0F};
+
+		for ( auto quad = first; quad < first + count; ++quad )
+		{
+			const auto x = static_cast< float >(quad);
+			const auto a = shape.addVertex({x, 0.0F, 0.0F}, up);
+			const auto b = shape.addVertex({x + 1.0F, 0.0F, 0.0F}, up);
+			const auto c = shape.addVertex({x + 1.0F, 0.0F, 1.0F}, up);
+			const auto d = shape.addVertex({x, 0.0F, 1.0F}, up);
+
+			static_cast< void >(shape.addVertexColor({0.75F, 0.5F, 0.25F, 1.0F}));
+
+			ShapeTriangle< float > lower{a, b, c};
+			ShapeTriangle< float > upper{a, c, d};
+
+			shape.addTriangle(lower);
+			shape.addTriangle(upper);
+		}
+	}
+}
+
+TEST(VertexFactoryShapeBuilder, releasingTheConstructionIndexesFreesTheirMemory)
+{
+	Shape< float, uint32_t > shape;
+
+	appendQuads(shape, 0, 64);
+
+	const auto before = shape.memoryOccupied();
+
+	shape.releaseConstructionIndexes();
+
+	ASSERT_TRUE(shape.constructionIndexesReleased());
+	EXPECT_LT(shape.memoryOccupied(), before);
+	EXPECT_EQ(shape.vertices().size(), 65U * 2U);
+	EXPECT_EQ(shape.triangles().size(), 128U);
+}
+
+/* An edit after the release must behave as if the indexes had never been released: the same merges, the
+ * same edge pairing (a new quad pairs with the last edge built before the release). */
+TEST(VertexFactoryShapeBuilder, anEditAfterTheReleaseRebuildsTheConstructionIndexes)
+{
+	Shape< float, uint32_t > kept;
+	Shape< float, uint32_t > released;
+
+	appendQuads(kept, 0, 8);
+	appendQuads(released, 0, 8);
+
+	released.releaseConstructionIndexes();
+
+	appendQuads(kept, 8, 4);
+	appendQuads(released, 8, 4);
+
+	EXPECT_FALSE(released.constructionIndexesReleased());
+	ASSERT_EQ(released.vertices().size(), kept.vertices().size());
+	ASSERT_EQ(released.vertexColors().size(), 1U);
+	ASSERT_EQ(kept.vertexColors().size(), 1U);
+	ASSERT_EQ(released.edges().size(), kept.edges().size());
+	ASSERT_EQ(released.triangles().size(), kept.triangles().size());
+
+	for ( size_t index = 0; index < kept.edges().size(); ++index )
+	{
+		EXPECT_EQ(released.edges()[index].sharedIndex(), kept.edges()[index].sharedIndex()) << "edge " << index;
+	}
+
+	for ( size_t index = 0; index < kept.triangles().size(); ++index )
+	{
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			EXPECT_EQ(released.triangles()[index].vertexIndex(corner), kept.triangles()[index].vertexIndex(corner)) << "triangle " << index;
+		}
+	}
+}

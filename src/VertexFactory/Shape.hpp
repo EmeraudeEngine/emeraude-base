@@ -193,6 +193,7 @@ namespace EmEn::Base::VertexFactory
 				m_unpairedEdges.clear();
 				m_vertexIndex.clear();
 				m_vertexColorIndex.clear();
+				m_constructionIndexesReleased = false;
 			}
 
 			/**
@@ -209,6 +210,7 @@ namespace EmEn::Base::VertexFactory
 				m_unpairedEdges.clear();
 				m_vertexIndex.clear();
 				m_vertexColorIndex.clear();
+				m_constructionIndexesReleased = false;
 				m_boundaryLoops.clear();
 				m_boundaryLoopsAnalyzed = false;
 				m_groups.clear();
@@ -455,6 +457,37 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				return bytes;
+			}
+
+			/**
+			 * @brief Frees the construction-time indexes (the vertex, vertex colour and edge merge tables).
+			 * @note Call it once the shape is final, typically before its GPU upload: those indexes only
+			 * serve addVertex(), addVertexColor() and addEdge(), yet they can outweigh the edges
+			 * themselves (citadel, 2026-10-03: 360 MiB of 1359). A later edit rebuilds them first, from
+			 * the stored data, before its lookup (restoreConstructionIndexes()).
+			 * @note ⚠️ The rebuilt vertex index holds EVERY stored vertex, those saved without merging
+			 * (saveVertex()) included, and uses the merge tolerance current at the rebuild.
+			 * @return void
+			 */
+			void
+			releaseConstructionIndexes () noexcept
+			{
+				decltype(m_unpairedEdges){}.swap(m_unpairedEdges);
+				decltype(m_vertexIndex){}.swap(m_vertexIndex);
+				decltype(m_vertexColorIndex){}.swap(m_vertexColorIndex);
+
+				m_constructionIndexesReleased = true;
+			}
+
+			/**
+			 * @brief Returns whether the construction-time indexes were released (releaseConstructionIndexes()).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			constructionIndexesReleased () const noexcept
+			{
+				return m_constructionIndexesReleased;
 			}
 
 			/**
@@ -1655,6 +1688,8 @@ namespace EmEn::Base::VertexFactory
 			index_data_t
 			addVertex (const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & normal, const Math::Vector< 3, vertex_data_t > & textureCoordinates) noexcept
 			{
+				this->restoreConstructionIndexes();
+
 				const VertexKey key{this->quantize(position), this->quantize(normal), this->quantize(textureCoordinates)};
 
 				const auto keyIt = m_vertexIndex.find(key);
@@ -1681,6 +1716,8 @@ namespace EmEn::Base::VertexFactory
 			index_data_t
 			addVertexColor (const Math::Vector< 4, vertex_data_t > & color) noexcept
 			{
+				this->restoreConstructionIndexes();
+
 				const ColorKey key{this->quantize(Math::Vector< 3, vertex_data_t >{color[Math::X], color[Math::Y], color[Math::Z]}), this->quantizeScalar(color[Math::W])};
 
 				const auto keyIt = m_vertexColorIndex.find(key);
@@ -1801,6 +1838,8 @@ namespace EmEn::Base::VertexFactory
 				{
 					return;
 				}
+
+				this->restoreConstructionIndexes();
 
 				m_edges.clear();
 				m_unpairedEdges.clear();
@@ -1979,6 +2018,8 @@ namespace EmEn::Base::VertexFactory
 				/* NOTE: The half-edge waiting for its mate is looked up by the unordered vertex index
 				 * pair. A linear scan of the edge list here makes the whole shape construction quadratic
 				 * in the triangle count, which no procedural generator can afford. */
+				this->restoreConstructionIndexes();
+
 				const EdgeKey key{std::min(vertexIndexA, vertexIndexB), std::max(vertexIndexA, vertexIndexB)};
 
 				const auto slotIt = m_unpairedEdges.find(key);
@@ -2468,6 +2509,52 @@ namespace EmEn::Base::VertexFactory
 			};
 
 			/**
+			 * @brief Rebuilds the construction-time indexes from the stored data when they were released.
+			 * @note The edge slots are replayed in insertion order: each key keeps its FIRST half-edge, and is
+			 * paired once a second one exists — the state addEdge() left.
+			 * @return void
+			 */
+			void
+			restoreConstructionIndexes () noexcept
+			{
+				if ( !m_constructionIndexesReleased )
+				{
+					return;
+				}
+
+				m_constructionIndexesReleased = false;
+
+				m_vertexIndex.reserve(m_vertices.size());
+
+				for ( size_t index = 0; index < m_vertices.size(); ++index )
+				{
+					const auto & vertex = m_vertices[index];
+
+					m_vertexIndex.try_emplace(VertexKey{this->quantize(vertex.position()), this->quantize(vertex.normal()), this->quantize(vertex.textureCoordinates())}, static_cast< index_data_t >(index));
+				}
+
+				m_vertexColorIndex.reserve(m_vertexColors.size());
+
+				for ( size_t index = 0; index < m_vertexColors.size(); ++index )
+				{
+					const auto & color = m_vertexColors[index];
+
+					m_vertexColorIndex.try_emplace(ColorKey{this->quantize(Math::Vector< 3, vertex_data_t >{color[Math::X], color[Math::Y], color[Math::Z]}), this->quantizeScalar(color[Math::W])}, static_cast< index_data_t >(index));
+				}
+
+				for ( size_t index = 0; index < m_edges.size(); ++index )
+				{
+					const auto & edge = m_edges[index];
+					const EdgeKey key{std::min(edge.vertexIndexA(), edge.vertexIndexB()), std::max(edge.vertexIndexA(), edge.vertexIndexB())};
+
+					if ( const auto [slotIt, inserted] = m_unpairedEdges.try_emplace(key, EdgeSlot{static_cast< index_data_t >(index), false}); !inserted )
+					{
+						slotIt->second.paired = true;
+					}
+				}
+			}
+
+			/**
 			 * @brief Estimates the bytes of a node-based hash index: one pointer per bucket, one node per element
 			 * (the value, a link to the next node and a cached hash).
 			 * @tparam map_t The type of the unordered map.
@@ -2512,5 +2599,6 @@ namespace EmEn::Base::VertexFactory
 			bool m_normalsDeclared{false};
 			bool m_computeEdges{false};
 			bool m_boundaryLoopsAnalyzed{false};
+			bool m_constructionIndexesReleased{false};
 	};
 }
