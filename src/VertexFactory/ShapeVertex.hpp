@@ -194,6 +194,18 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Sets the vertex's SECONDARY texture coordinates (glTF's TEXCOORD_1: a second unwrap, typically a baked
+			 * occlusion or a lightmap).
+			 * @param textureCoordinates A reference to a 2D vector for the coordinates.
+			 * @return void
+			 */
+			void
+			setSecondaryTextureCoordinates (const Math::Vector< 2, vertex_data_t > & textureCoordinates) noexcept
+			{
+				m_secondaryTextureCoordinates = textureCoordinates;
+			}
+
+			/**
 			 * @brief Sets vertex influences.
 			 * @param influenceA Index to first influence.
 			 * @param influenceB Index to second influence. Default none.
@@ -297,6 +309,17 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Returns the vertex's secondary texture coordinates ((0, 0) when the source has none).
+			 * @return const Math::Vector< 2, vertex_data_t > &
+			 */
+			[[nodiscard]]
+			const Math::Vector< 2, vertex_data_t > &
+			secondaryTextureCoordinates () const noexcept
+			{
+				return m_secondaryTextureCoordinates;
+			}
+
+			/**
 			 * @brief Returns the vertex influences.
 			 * @return const Math::Vector< 4, int32_t > &
 			 */
@@ -345,7 +368,7 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Negates the V texture coordinate.
+			 * @brief Negates the V texture coordinate, of both sets (a file format's convention applies to every set).
 			 * @warning This is `-v`, NOT `1 - v`: they agree only under REPEAT wrapping.
 			 * @return void
 			 */
@@ -353,6 +376,7 @@ namespace EmEn::Base::VertexFactory
 			flipTextureV () noexcept
 			{
 				m_textureCoordinates[Math::Y] = -m_textureCoordinates[Math::Y];
+				m_secondaryTextureCoordinates[Math::Y] = -m_secondaryTextureCoordinates[Math::Y];
 			}
 
 		private:
@@ -368,5 +392,10 @@ namespace EmEn::Base::VertexFactory
 			 * FileFormatNative writes vertices as a RAW BLOB of that size — hence the format
 			 * version bump to 2 in that file. */
 			vertex_data_t m_tangentHandedness{1};
+			/** @brief The secondary texture coordinates (2026-10-03, owner: a field, not a side array).
+			 * ⚠️ LAST on purpose: sizeof(ShapeVertex) went from 84 to 92 bytes (float), FileFormatNative's
+			 * version 3; a version-2 record is exactly the first 84 bytes of a version-3 one, so the reader
+			 * still loads it (the secondary set at (0, 0)). */
+			Math::Vector< 2, vertex_data_t > m_secondaryTextureCoordinates{0, 0};
 	};
 }

@@ -18,7 +18,10 @@ influences and weights for one vertex.
   over 107.7° and 102.9° of highlight angle, against 0.3° on the reference column).
   glTF's `TANGENT` accessor is a vec4 for exactly this reason. A caller that only knows a direction
   uses the `Vector<3>` overload, which deliberately leaves the handedness untouched.
-- ⚠️⚠️ **`sizeof(ShapeVertex<float>)` is 84 bytes and that is part of a PERSISTED FORMAT**:
+- **The secondary texture coordinates** (2026-10-03): `setSecondaryTextureCoordinates()` /
+  `secondaryTextureCoordinates()`, a `Vector<2>` (glTF's `TEXCOORD_1`), (0, 0) when the source has
+  none. Details and traps: `07-critical-attention-points.md`.
+- ⚠️⚠️ **`sizeof(ShapeVertex<float>)` is 92 bytes (84 before the secondary set) and that is part of a PERSISTED FORMAT**:
   `FileFormatNative` writes vertices as a raw blob of that size. Any change to this structure MUST
   bump the native format version in the same commit — a size change with an unchanged version
   number is silent data corruption, not a compatibility question. The size is pinned by

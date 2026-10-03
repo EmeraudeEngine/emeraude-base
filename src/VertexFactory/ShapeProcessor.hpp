@@ -99,7 +99,7 @@ namespace EmEn::Base::VertexFactory
 			 * @note By default, compares position, normal and texture coordinates (preserves
 			 * hard edges and UV seams). Set flags to false for more aggressive merging.
 			 * @param keepNormals If true, vertices with different normals are kept separate. Default true.
-			 * @param keepTextureCoordinates If true, vertices with different UVs are kept separate. Default true.
+			 * @param keepTextureCoordinates If true, vertices with different UVs (either set) are kept separate. Default true.
 			 * @return size_t The number of vertices removed.
 			 */
 			size_t
@@ -120,6 +120,8 @@ namespace EmEn::Base::VertexFactory
 					int64_t px, py, pz;
 					int64_t nx, ny, nz;
 					int64_t tx, ty, tz;
+					/* The secondary texture coordinates: two vertices differing only there are two vertices. */
+					int64_t sx, sy;
 
 					bool operator== (const VertexKey & other) const noexcept = default;
 				};
@@ -138,6 +140,8 @@ namespace EmEn::Base::VertexFactory
 						h ^= std::hash< int64_t >{}(k.tx) + 0x9e3779b9 + (h << 6) + (h >> 2);
 						h ^= std::hash< int64_t >{}(k.ty) + 0x9e3779b9 + (h << 6) + (h >> 2);
 						h ^= std::hash< int64_t >{}(k.tz) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						h ^= std::hash< int64_t >{}(k.sx) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						h ^= std::hash< int64_t >{}(k.sy) + 0x9e3779b9 + (h << 6) + (h >> 2);
 
 						return h;
 					}
@@ -169,8 +173,10 @@ namespace EmEn::Base::VertexFactory
 					const auto p = quantizeVec(vert.position());
 					const auto n = keepNormals ? quantizeVec(vert.normal()) : zero;
 					const auto t = keepTextureCoordinates ? quantizeVec(vert.textureCoordinates()) : zero;
+					const auto & secondary = vert.secondaryTextureCoordinates();
+					const auto s = keepTextureCoordinates ? quantizeVec(Math::Vector< 3, vertex_data_t >{secondary[Math::X], secondary[Math::Y], 0}) : zero;
 
-					const VertexKey key{p[0], p[1], p[2], n[0], n[1], n[2], t[0], t[1], t[2]};
+					const VertexKey key{p[0], p[1], p[2], n[0], n[1], n[2], t[0], t[1], t[2], s[0], s[1]};
 
 					auto [it, inserted] = uniqueMap.try_emplace(key, static_cast< index_data_t >(newVertices.size()));
 

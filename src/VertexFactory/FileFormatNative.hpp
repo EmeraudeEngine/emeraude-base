@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
@@ -52,6 +53,14 @@ namespace EmEn::Base::VertexFactory
 		public:
 
 			static constexpr auto Magic{"EE3D_V1"};
+
+			/** @brief The size of a version-2 vertex record: every ShapeVertex member before the secondary texture
+			 * coordinates (version 3 appended them last). */
+			static constexpr uint64_t VersionTwoVertexSize{
+				(4 * sizeof(Math::Vector< 3, vertex_data_t >)) + sizeof(Math::Vector< 4, int32_t >) + sizeof(Math::Vector< 4, vertex_data_t >) + sizeof(vertex_data_t)
+			};
+
+			static_assert(sizeof(ShapeVertex< vertex_data_t >) == VersionTwoVertexSize + sizeof(Math::Vector< 2, vertex_data_t >), "ShapeVertex's layout no longer matches the native format: a version-2 record must be its exact prefix (no padding, the secondary set last).");
 
 			FileFormatNative () noexcept = default;
 
@@ -92,18 +101,19 @@ namespace EmEn::Base::VertexFactory
 				uint16_t version = 0;
 				std::memcpy(&version, &header[8], sizeof(uint16_t));
 
-				/* ⚠️⚠️ VERSION 2 (2026-08-28). Vertices are written as a RAW BLOB of
+				/* ⚠️⚠️ VERSION 3 (2026-10-03). Vertices are written as a RAW BLOB of
 				 * sizeof(ShapeVertex<vertex_data_t>), so ANY change to that structure changes the
-				 * on-disk layout. Version 1 vertices were 80 bytes; the tangent handedness added
-				 * for mirrored-UV support makes them 84. There is deliberately NO version-1 read
-				 * path: the format was not in use yet (owner, 2026-08-28), and reading a v1 blob
-				 * with the v2 stride would misparse it SILENTLY — the count validation above can
-				 * pass on a wrong stride. Refusing it loudly is the only safe behaviour.
+				 * on-disk layout. Version 1 vertices were 80 bytes, version 2 (the tangent handedness)
+				 * 84, version 3 (the secondary texture coordinates, appended LAST) 92. A version-2
+				 * record is the exact first 84 bytes of a version-3 one, so version 2 is still read
+				 * (the secondary set at (0, 0)). There is deliberately NO version-1 read path: reading
+				 * a v1 blob with a later stride would misparse it SILENTLY — the count validation
+				 * below can pass on a wrong stride. Refusing it loudly is the only safe behaviour.
 				 * ⚠️ If ShapeVertex or ShapeTriangle ever changes again, BUMP THIS. A size change
 				 * with an unchanged version number is silent data corruption. */
-				if ( version != 2 )
+				if ( version != 2 && version != 3 )
 				{
-					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " — this build reads version 2 only; a version-1 file predates the tangent handedness and must be re-exported from its source asset !");
+					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " — this build reads versions 2 and 3; a version-1 file predates the tangent handedness and must be re-exported from its source asset !");
 
 					return false;
 				}
@@ -151,7 +161,7 @@ namespace EmEn::Base::VertexFactory
 
 				uint64_t remaining = streamSize - headerBytes;
 
-				constexpr uint64_t vertexSize = sizeof(ShapeVertex< vertex_data_t >);
+				const uint64_t vertexSize = version == 3 ? sizeof(ShapeVertex< vertex_data_t >) : VersionTwoVertexSize;
 				constexpr uint64_t triangleSize = sizeof(ShapeTriangle< vertex_data_t, index_data_t >);
 				constexpr uint64_t colorSize = sizeof(Math::Vector< 4, vertex_data_t >);
 
@@ -190,7 +200,25 @@ namespace EmEn::Base::VertexFactory
 				colors.resize(colorCount);
 
 				/* 5. Read Data Blobs */
-				if ( vertexCount > 0 )
+				if ( vertexCount > 0 && version == 2 )
+				{
+					/* A version-2 record is the first VersionTwoVertexSize bytes of a ShapeVertex: each is copied
+					 * over a default vertex, whose secondary texture coordinates stay (0, 0). */
+					std::vector< char > records(vertexCount * VersionTwoVertexSize);
+
+					if ( !stream.read(records.data(), records.size()) )
+					{
+						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertices !");
+
+						return false;
+					}
+
+					for ( uint64_t index = 0; index < vertexCount; ++index )
+					{
+						std::memcpy(static_cast< void * >(&vertices[index]), records.data() + (index * VersionTwoVertexSize), VersionTwoVertexSize);
+					}
+				}
+				else if ( vertexCount > 0 )
 				{
 					if ( !stream.read(vertices.data(), vertexCount * sizeof(ShapeVertex< vertex_data_t >)) )
 					{
@@ -249,7 +277,7 @@ namespace EmEn::Base::VertexFactory
 
 				/* ⚠️ Must match the accepted version in readStream(), and must be bumped whenever
 				 * ShapeVertex or ShapeTriangle changes size — the payload is a raw blob. */
-				uint16_t version = 2;
+				uint16_t version = 3;
 				std::memcpy(&header[8], &version, sizeof(uint16_t));
 
 				header[10] = static_cast< char >(sizeof(vertex_data_t));

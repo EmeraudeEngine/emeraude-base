@@ -127,6 +127,44 @@ TEST(VertexFactoryShapeVertex, handednessIsAppliedAsAPlainFactor)
  * unchanged version number is silent data corruption, not a compatibility question. */
 TEST(VertexFactoryShapeVertex, sizeIsPinnedBecauseTheNativeFormatIsARawBlob)
 {
-	EXPECT_EQ(sizeof(ShapeVertex< float >), 84U);
+	/* 84 until 2026-10-03; the secondary texture coordinates (appended last) made it 92: FileFormatNative version 3. */
+	EXPECT_EQ(sizeof(ShapeVertex< float >), 92U);
 	static_assert(NormalZ == 2UL, "frame convention");
+}
+
+/* The secondary texture coordinates (glTF TEXCOORD_1, 2026-10-03): absent from a source, they are (0, 0). */
+TEST(VertexFactoryShapeVertex, secondaryTextureCoordinatesDefaultToZero)
+{
+	const ShapeVertex< float > vertex{Vector< 3, float >{1.0F, 2.0F, 3.0F}};
+
+	EXPECT_EQ(vertex.secondaryTextureCoordinates()[X], 0.0F);
+	EXPECT_EQ(vertex.secondaryTextureCoordinates()[Y], 0.0F);
+}
+
+TEST(VertexFactoryShapeVertex, secondaryTextureCoordinatesAreIndependentOfThePrimaryOnes)
+{
+	ShapeVertex< float > vertex;
+
+	vertex.setTextureCoordinates(Vector< 2, float >{0.1F, 0.2F});
+	vertex.setSecondaryTextureCoordinates(Vector< 2, float >{0.7F, 0.9F});
+
+	EXPECT_EQ(vertex.textureCoordinates()[X], 0.1F);
+	EXPECT_EQ(vertex.textureCoordinates()[Y], 0.2F);
+	EXPECT_EQ(vertex.secondaryTextureCoordinates()[X], 0.7F);
+	EXPECT_EQ(vertex.secondaryTextureCoordinates()[Y], 0.9F);
+}
+
+/* A file format's V convention applies to every set: flipping only the primary one would mirror a baked occlusion
+ * against the albedo it darkens. */
+TEST(VertexFactoryShapeVertex, flipTextureVFlipsBothSets)
+{
+	ShapeVertex< float > vertex;
+
+	vertex.setTextureCoordinates(Vector< 2, float >{0.25F, 0.5F});
+	vertex.setSecondaryTextureCoordinates(Vector< 2, float >{0.75F, 0.125F});
+	vertex.flipTextureV();
+
+	EXPECT_EQ(vertex.textureCoordinates()[Y], -0.5F);
+	EXPECT_EQ(vertex.secondaryTextureCoordinates()[X], 0.75F);
+	EXPECT_EQ(vertex.secondaryTextureCoordinates()[Y], -0.125F);
 }

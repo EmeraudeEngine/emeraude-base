@@ -1260,12 +1260,13 @@ namespace EmEn::Base::VertexFactory
 			 * @param textureCoordinatesType Set the texture coordinates format. Default none.
 			 * @param vertexColorType Set the vertex color format. Default none.
 			 * @param skeletalAnimationType Set vertex attributes for skeletal animation. Default none.
+			 * @param secondaryTextureCoordinatesType Set the secondary texture coordinates format (after the primary ones). Default none.
 			 * @return index_data_t
 			 */
 			index_data_t
-			createVertexBuffer (std::vector< vertex_data_t > & vertexBuffer, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None) const noexcept
+			createVertexBuffer (std::vector< vertex_data_t > & vertexBuffer, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None) const noexcept
 			{
-				const auto vertexElementCount = getVertexElementCount(normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType);
+				const auto vertexElementCount = getVertexElementCount(normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
 
 				/* NOTE: Resize destination buffers. */
 				vertexBuffer.resize(m_triangles.size() * 3 * vertexElementCount);
@@ -1317,6 +1318,22 @@ namespace EmEn::Base::VertexFactory
 
 							case TextureCoordinatesType::UVW :
 								Shape::writeVector3ToBuffer(vertex.textureCoordinates(), vertexBuffer, vertexBufferOffset);
+								break;
+
+							default:
+								break;
+						}
+
+						/* Secondary texture coordinates, after the primary ones (the engine's vertex format order). The
+						 * source set is 2D; a 3D request gets W = 0. */
+						switch ( secondaryTextureCoordinatesType )
+						{
+							case TextureCoordinatesType::UV :
+								Shape::writeVector2ToBuffer(vertex.secondaryTextureCoordinates(), vertexBuffer, vertexBufferOffset);
+								break;
+
+							case TextureCoordinatesType::UVW :
+								Shape::writeVector3ToBuffer(Math::Vector< 3, vertex_data_t >{vertex.secondaryTextureCoordinates()[Math::X], vertex.secondaryTextureCoordinates()[Math::Y], 0}, vertexBuffer, vertexBufferOffset);
 								break;
 
 							default:
@@ -1387,15 +1404,16 @@ namespace EmEn::Base::VertexFactory
 			 * @param textureCoordinatesType Set the texture coordinates format. Default none.
 			 * @param vertexColorType Set the vertex color format. Default none.
 			 * @param skeletalAnimationType Set vertex attributes for skeletal animation. Default none.
+			 * @param secondaryTextureCoordinatesType Set the secondary texture coordinates format (after the primary ones). Default none.
 			 * @return index_data_t
 			 */
 			index_data_t
-			createIndexedVertexBuffer (std::vector< vertex_data_t > & vertexBuffer, std::vector< index_data_t > & indexBuffer, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None) const noexcept
+			createIndexedVertexBuffer (std::vector< vertex_data_t > & vertexBuffer, std::vector< index_data_t > & indexBuffer, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None) const noexcept
 			{
 				/* NOTE: Keep track of vertex already used. */
 				std::set< index_data_t > shapeVertexIndicesDone{};
 
-				const auto vertexElementCount = getVertexElementCount(normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType);
+				const auto vertexElementCount = getVertexElementCount(normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
 
 				/* NOTE: Resize destination buffers. */
 				vertexBuffer.resize(m_vertices.size() * vertexElementCount);
@@ -1455,6 +1473,22 @@ namespace EmEn::Base::VertexFactory
 
 							case TextureCoordinatesType::UVW :
 								Shape::writeVector3ToBuffer(vertex.textureCoordinates(), vertexBuffer, vertexBufferOffset);
+								break;
+
+							default:
+								break;
+						}
+
+						/* Secondary texture coordinates, after the primary ones (the engine's vertex format order). The
+						 * source set is 2D; a 3D request gets W = 0. */
+						switch ( secondaryTextureCoordinatesType )
+						{
+							case TextureCoordinatesType::UV :
+								Shape::writeVector2ToBuffer(vertex.secondaryTextureCoordinates(), vertexBuffer, vertexBufferOffset);
+								break;
+
+							case TextureCoordinatesType::UVW :
+								Shape::writeVector3ToBuffer(Math::Vector< 3, vertex_data_t >{vertex.secondaryTextureCoordinates()[Math::X], vertex.secondaryTextureCoordinates()[Math::Y], 0}, vertexBuffer, vertexBufferOffset);
 								break;
 
 							default:
@@ -1955,14 +1989,29 @@ namespace EmEn::Base::VertexFactory
 			 * @param textureCoordinatesType Set the texture coordinates format. Default none.
 			 * @param vertexColorType Set the vertex color format. Default none.
 			 * @param skeletalAnimationType Set vertex attributes for skeletal animation. Default none.
+			 * @param secondaryTextureCoordinatesType Set the secondary texture coordinates format. Default none.
 			 * @return index_data_t
 			 */
 			[[nodiscard]]
 			static
 			index_data_t
-			getVertexElementCount (NormalType normalType, TextureCoordinatesType textureCoordinatesType, VertexColorType vertexColorType, SkeletalAnimationType skeletalAnimationType)
+			getVertexElementCount (NormalType normalType, TextureCoordinatesType textureCoordinatesType, VertexColorType vertexColorType, SkeletalAnimationType skeletalAnimationType, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None)
 			{
 				auto vertexElementCount = 3;
+
+				switch ( secondaryTextureCoordinatesType )
+				{
+					case TextureCoordinatesType::UV :
+						vertexElementCount += 2;
+						break;
+
+					case TextureCoordinatesType::UVW :
+						vertexElementCount += 3;
+						break;
+
+					default:
+						break;
+				}
 
 				switch ( normalType )
 				{

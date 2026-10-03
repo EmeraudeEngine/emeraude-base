@@ -71,11 +71,11 @@ namespace EmEn::Base::VertexFactory
 
 		/* Builds a well-formed native header (float/uint32 precision) followed by `blobBytes`
 		 * of zeroed payload, with the three counts set as requested.
-		 * ⚠️ The magic string stayed "EE3D_V1" while the VERSION FIELD moved to 2 — the magic is
+		 * ⚠️ The magic string stayed "EE3D_V1" while the VERSION FIELD moved to 2, then 3 — the magic is
 		 * only checked for identity, the uint16 at offset 8 is what gates the layout. The payload
 		 * size is taken from sizeof(ShapeVertex) by the callers, so it follows the structure. */
 		std::vector< std::byte >
-		makeNative (uint64_t vertexCount, uint64_t triangleCount, uint64_t colorCount, size_t blobBytes, uint16_t version = 2) noexcept
+		makeNative (uint64_t vertexCount, uint64_t triangleCount, uint64_t colorCount, size_t blobBytes, uint16_t version = 3) noexcept
 		{
 			std::vector< std::byte > buffer(HeaderBytes + blobBytes, std::byte{0});
 
@@ -106,6 +106,61 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(result.shape.vertices().size(), 3U);
 		EXPECT_EQ(result.shape.triangles().size(), 1U);
 		EXPECT_EQ(result.shape.vertexColors().size(), 0U);
+	}
+
+	/* Version 3 (2026-10-03) carries the secondary texture coordinates, last in each vertex record. */
+	TEST(VertexFactoryNative, version3KeepsTheSecondaryTextureCoordinates)
+	{
+		ShapeVertex< float > vertex{Math::Vector< 3, float >{1.0F, 2.0F, 3.0F}};
+
+		vertex.setSecondaryTextureCoordinates(Math::Vector< 2, float >{0.25F, 0.75F});
+
+		auto buffer = makeNative(1, 0, 0, sizeof(ShapeVertex< float >), 3);
+
+		std::memcpy(buffer.data() + HeaderBytes, &vertex, sizeof(ShapeVertex< float >));
+
+		/* ⚠️ A CONST buffer: bound to a non-const vector, MemoryStream opens for WRITING. */
+		const auto input = buffer;
+		MemoryStream stream{input};
+		Native format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.vertices().size(), 1U);
+
+		EXPECT_EQ(result.shape.vertices()[0].position()[Math::Y], 2.0F);
+		EXPECT_EQ(result.shape.vertices()[0].secondaryTextureCoordinates()[Math::X], 0.25F);
+		EXPECT_EQ(result.shape.vertices()[0].secondaryTextureCoordinates()[Math::Y], 0.75F);
+	}
+
+	/* A version-2 record (84 bytes) is the exact prefix of a version-3 one: it still reads, its secondary set at
+	 * (0, 0), and its other attributes intact. Read at the version-3 stride it would misparse. */
+	TEST(VertexFactoryNative, version2StillReadsWithoutSecondaryTextureCoordinates)
+	{
+		constexpr size_t VersionTwoVertexBytes = 84;
+
+		ShapeVertex< float > first{Math::Vector< 3, float >{1.0F, 2.0F, 3.0F}};
+		ShapeVertex< float > second{Math::Vector< 3, float >{4.0F, 5.0F, 6.0F}};
+
+		first.setSecondaryTextureCoordinates(Math::Vector< 2, float >{0.5F, 0.5F});
+		second.setSecondaryTextureCoordinates(Math::Vector< 2, float >{0.5F, 0.5F});
+
+		auto buffer = makeNative(2, 0, 0, 2 * VersionTwoVertexBytes, 2);
+
+		std::memcpy(buffer.data() + HeaderBytes, &first, VersionTwoVertexBytes);
+		std::memcpy(buffer.data() + HeaderBytes + VersionTwoVertexBytes, &second, VersionTwoVertexBytes);
+
+		/* ⚠️ A CONST buffer: bound to a non-const vector, MemoryStream opens for WRITING. */
+		const auto input = buffer;
+		MemoryStream stream{input};
+		Native format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.vertices().size(), 2U);
+
+		EXPECT_EQ(result.shape.vertices()[1].position()[Math::X], 4.0F);
+		EXPECT_EQ(result.shape.vertices()[1].position()[Math::Z], 6.0F);
+		EXPECT_EQ(result.shape.vertices()[1].secondaryTextureCoordinates()[Math::X], 0.0F);
+		EXPECT_EQ(result.shape.vertices()[1].secondaryTextureCoordinates()[Math::Y], 0.0F);
 	}
 
 	/* A version-1 file predates the tangent handedness: its vertices are 80 bytes where this

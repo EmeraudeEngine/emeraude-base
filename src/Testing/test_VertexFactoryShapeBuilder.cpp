@@ -174,3 +174,57 @@ TEST(VertexFactoryShapeBuilder, deduplicatingVerticesKeepsTheEdgeListValid)
 		}
 	}
 }
+
+/* The secondary texture coordinates (2026-10-03): two vertices differing ONLY in their second set are two vertices
+ * (a baked occlusion unwrap has its own seams). Before, the dedupe keyed on position, normal and the primary set,
+ * and merged them. */
+TEST(VertexFactoryShapeBuilder, deduplicatingVerticesKeepsDistinctSecondaryTextureCoordinates)
+{
+	ShapeBuilderOptions< float > options;
+	options.enableDataEconomy(false);
+
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16U, 8U, options);
+	const auto vertexCount = shape.vertices().size();
+
+	ASSERT_GT(vertexCount, 0U);
+
+	float unique = 0.0F;
+
+	for ( auto & vertex : shape.vertices() )
+	{
+		vertex.setSecondaryTextureCoordinates(EmEn::Base::Math::Vector< 2, float >{unique, 1.0F - unique});
+		unique += 1.0F / static_cast< float >(vertexCount);
+	}
+
+	ShapeProcessor< float, uint32_t > processor{shape};
+
+	EXPECT_EQ(processor.deduplicateVertices(), 0U) << "vertices with distinct secondary texture coordinates were merged";
+	EXPECT_EQ(shape.vertices().size(), vertexCount);
+}
+
+/* The secondary set goes right after the primary one in a vertex buffer (the engine's vertex format order). */
+TEST(VertexFactoryShapeBuilder, indexedVertexBufferWritesTheSecondarySetAfterThePrimaryOne)
+{
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8U, 4U);
+
+	for ( auto & vertex : shape.vertices() )
+	{
+		vertex.setSecondaryTextureCoordinates(EmEn::Base::Math::Vector< 2, float >{vertex.position()[EmEn::Base::Math::X] + 10.0F, vertex.position()[EmEn::Base::Math::Y] + 20.0F});
+	}
+
+	std::vector< float > vertexBuffer;
+	std::vector< uint32_t > indexBuffer;
+
+	const auto elementCount = shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::None, TextureCoordinatesType::UV, VertexColorType::None, SkeletalAnimationType::None, TextureCoordinatesType::UV);
+
+	ASSERT_EQ(elementCount, 7U) << "position (3) + primary UV (2) + secondary UV (2)";
+	ASSERT_FALSE(vertexBuffer.empty());
+	ASSERT_EQ(vertexBuffer.size() % elementCount, 0U);
+
+	for ( size_t offset = 0; offset < vertexBuffer.size(); offset += elementCount )
+	{
+		/* Each written vertex carries the secondary set its own position was given. */
+		EXPECT_FLOAT_EQ(vertexBuffer[offset + 5], vertexBuffer[offset + 0] + 10.0F);
+		EXPECT_FLOAT_EQ(vertexBuffer[offset + 6], vertexBuffer[offset + 1] + 20.0F);
+	}
+}
