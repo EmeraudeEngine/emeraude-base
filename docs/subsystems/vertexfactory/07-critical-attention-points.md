@@ -32,7 +32,8 @@
   `clear()` empties the vectors and hash maps without giving their memory back: freeing a shape's
   memory takes a swap with empty containers (the engine's CPU-copy release, phase 1). Their bytes
   are an estimate for the hash indexes (one pointer per bucket, one node per element; libc++ and
-  libstdc++ size them differently: macOS counted citadel's geometry 48 MiB lower). Pinned by
+  libstdc++ size them differently: macOS counted citadel's geometry 48 MiB lower while the indexes
+  were kept, and exactly the same 998 MiB once they are released). Pinned by
   `VertexFactoryGrid.MemoryOccupiedCountsTheHeights` and
   `VertexFactoryShapeGenerator.memoryOccupiedCountsTheStorages`.
 - **The construction-time indexes are released once the shape is final:
