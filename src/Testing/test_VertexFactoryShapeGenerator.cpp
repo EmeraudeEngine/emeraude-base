@@ -31,6 +31,8 @@
 #include <cstdint>
 #include <map>
 #include <numbers>
+#include <span>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
@@ -1328,4 +1330,177 @@ TEST(VertexFactoryShapeGenerator, memoryOccupiedCountsTheStorages)
 	ASSERT_FALSE(shape.vertices().empty());
 	ASSERT_FALSE(shape.triangles().empty());
 	EXPECT_GE(shape.memoryOccupied(), sizeof(shape) + storages);
+}
+
+namespace
+{
+	/* A sphere with normals, UVs and a vertex colour, its tangent space computed, a few vertices given a mirrored
+	 * handedness and skinning attributes, and two groups. */
+	Shape< float, uint32_t >
+	readbackSource () noexcept
+	{
+		auto options = uvOptions();
+		options.enableGlobalVertexColor(EmEn::Base::Math::Vector< 4, float >{0.25F, 0.5F, 0.75F, 1.0F});
+
+		auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16, 8, options);
+
+		shape.computeTriangleTBNSpace();
+
+		uint32_t index = 0;
+
+		for ( auto & vertex : shape.vertices() )
+		{
+			vertex.setSecondaryTextureCoordinates(EmEn::Base::Math::Vector< 2, float >{0.5F * vertex.textureCoordinates()[0], 0.25F});
+			vertex.setInfluences(static_cast< int32_t >(index % 7), static_cast< int32_t >(index % 5), 2, -1);
+			vertex.setWeights(0.5F, 0.25F, 0.125F, 0.125F);
+
+			if ( index % 3 == 0 )
+			{
+				vertex.setTangentHandedness(-1.0F);
+			}
+
+			++index;
+		}
+
+		return shape;
+	}
+}
+
+/* The readback contract: a buffer read back then written again with the same formats is the same buffer, for every
+ * format the engine uploads. */
+TEST(VertexFactoryShapeGenerator, readIndexedVertexBufferRoundTripsEveryFormat)
+{
+	const auto source = readbackSource();
+
+	for ( const auto normalType : {NormalType::None, NormalType::Normal, NormalType::TangentNormal, NormalType::TBNSpace} )
+	{
+		for ( const auto uvType : {TextureCoordinatesType::None, TextureCoordinatesType::UV, TextureCoordinatesType::UVW} )
+		{
+			for ( const auto colorType : {VertexColorType::None, VertexColorType::Gray, VertexColorType::RGB, VertexColorType::RGBA} )
+			{
+				for ( const auto skinType : {SkeletalAnimationType::None, SkeletalAnimationType::Average3, SkeletalAnimationType::Weighted4} )
+				{
+					for ( const auto secondaryType : {TextureCoordinatesType::None, TextureCoordinatesType::UV, TextureCoordinatesType::UVW} )
+					{
+						std::vector< float > vertices;
+						std::vector< uint32_t > indices;
+
+						ASSERT_GT(source.createIndexedVertexBuffer(vertices, indices, normalType, uvType, colorType, skinType, secondaryType), 0U);
+
+						Shape< float, uint32_t > readBack;
+
+						ASSERT_TRUE(readBack.readIndexedVertexBuffer(vertices, indices, {}, normalType, uvType, colorType, skinType, secondaryType));
+						ASSERT_EQ(readBack.triangles().size(), source.triangles().size());
+
+						std::vector< float > verticesAgain;
+						std::vector< uint32_t > indicesAgain;
+
+						static_cast< void >(readBack.createIndexedVertexBuffer(verticesAgain, indicesAgain, normalType, uvType, colorType, skinType, secondaryType));
+
+						ASSERT_EQ(indicesAgain, indices);
+						ASSERT_EQ(verticesAgain, vertices) << "formats " << static_cast< int >(normalType) << ' ' << static_cast< int >(uvType) << ' ' << static_cast< int >(colorType) << ' ' << static_cast< int >(skinType) << ' ' << static_cast< int >(secondaryType);
+					}
+				}
+			}
+		}
+	}
+}
+
+TEST(VertexFactoryShapeGenerator, readVertexBufferRoundTripsTheTriangleSoup)
+{
+	const auto source = readbackSource();
+
+	std::vector< float > vertices;
+
+	ASSERT_GT(source.createVertexBuffer(vertices, NormalType::TBNSpace, TextureCoordinatesType::UV, VertexColorType::RGBA, SkeletalAnimationType::Weighted4, TextureCoordinatesType::UV), 0U);
+
+	Shape< float, uint32_t > readBack;
+
+	ASSERT_TRUE(readBack.readVertexBuffer(vertices, {}, NormalType::TBNSpace, TextureCoordinatesType::UV, VertexColorType::RGBA, SkeletalAnimationType::Weighted4, TextureCoordinatesType::UV));
+	ASSERT_EQ(readBack.triangles().size(), source.triangles().size());
+	ASSERT_EQ(readBack.vertices().size(), source.triangles().size() * 3);
+
+	std::vector< float > verticesAgain;
+
+	static_cast< void >(readBack.createVertexBuffer(verticesAgain, NormalType::TBNSpace, TextureCoordinatesType::UV, VertexColorType::RGBA, SkeletalAnimationType::Weighted4, TextureCoordinatesType::UV));
+
+	EXPECT_EQ(verticesAgain, vertices);
+}
+
+TEST(VertexFactoryShapeGenerator, readIndexedVertexBufferKeepsHandednessGroupsAndBounds)
+{
+	const auto source = readbackSource();
+
+	std::vector< float > vertices;
+	std::vector< uint32_t > indices;
+
+	static_cast< void >(source.createIndexedVertexBuffer(vertices, indices, NormalType::TBNSpace, TextureCoordinatesType::UV));
+
+	const auto triangleCount = static_cast< uint32_t >(source.triangles().size());
+	const std::vector< std::pair< uint32_t, uint32_t > > groups{{0, 10}, {10, triangleCount - 10}};
+
+	Shape< float, uint32_t > readBack;
+
+	ASSERT_TRUE(readBack.readIndexedVertexBuffer(vertices, indices, groups, NormalType::TBNSpace, TextureCoordinatesType::UV));
+
+	ASSERT_EQ(readBack.vertices().size(), source.vertices().size());
+
+	size_t compared = 0;
+
+	for ( size_t index = 0; index < source.vertices().size(); ++index )
+	{
+		const auto & vertex = source.vertices()[index];
+
+		/* NOTE: A degenerate tangent frame (a pole: cross(normal, tangent) = 0) stores a null bitangent, which has no
+		 * sign to read back; the buffer is the same either way (the round-trip test). */
+		if ( EmEn::Base::Math::Vector< 3, float >::crossProduct(vertex.normal(), vertex.tangent()).length() < 1e-3F )
+		{
+			continue;
+		}
+
+		EXPECT_EQ(readBack.vertices()[index].tangentHandedness(), vertex.tangentHandedness()) << "vertex " << index;
+
+		++compared;
+	}
+
+	EXPECT_GT(compared, source.vertices().size() / 2);
+
+	EXPECT_TRUE(readBack.hasGroups());
+	EXPECT_EQ(readBack.groups(), groups);
+	EXPECT_EQ(readBack.boundingBox().maximum(), source.boundingBox().maximum());
+	EXPECT_EQ(readBack.boundingBox().minimum(), source.boundingBox().minimum());
+	EXPECT_TRUE(readBack.isValid());
+}
+
+TEST(VertexFactoryShapeGenerator, readIndexedVertexBufferRefusesInconsistentSizes)
+{
+	const auto source = readbackSource();
+
+	std::vector< float > vertices;
+	std::vector< uint32_t > indices;
+
+	static_cast< void >(source.createIndexedVertexBuffer(vertices, indices, NormalType::Normal, TextureCoordinatesType::UV));
+
+	Shape< float, uint32_t > readBack;
+
+	/* A partial vertex. */
+	const std::span< const float > partial{vertices.data(), vertices.size() - 1};
+
+	EXPECT_FALSE(readBack.readIndexedVertexBuffer(partial, indices, {}, NormalType::Normal, TextureCoordinatesType::UV));
+	EXPECT_TRUE(readBack.vertices().empty());
+
+	/* An index count not multiple of 3. */
+	const std::span< const uint32_t > partialIndices{indices.data(), indices.size() - 1};
+
+	EXPECT_FALSE(readBack.readIndexedVertexBuffer(vertices, partialIndices, {}, NormalType::Normal, TextureCoordinatesType::UV));
+
+	/* An index beyond the vertices. */
+	auto badIndices = indices;
+	badIndices[4] = static_cast< uint32_t >(vertices.size());
+
+	EXPECT_FALSE(readBack.readIndexedVertexBuffer(vertices, badIndices, {}, NormalType::Normal, TextureCoordinatesType::UV));
+
+	/* A group beyond the triangles. */
+	EXPECT_FALSE(readBack.readIndexedVertexBuffer(vertices, indices, {{0, static_cast< uint32_t >(indices.size())}}, NormalType::Normal, TextureCoordinatesType::UV));
+	EXPECT_TRUE(readBack.triangles().empty());
 }

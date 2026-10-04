@@ -38,6 +38,7 @@
 #include <iostream>
 #include <limits>
 #include <set>
+#include <span>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -1617,6 +1618,138 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Rebuilds the shape from an indexed vertex buffer written by createIndexedVertexBuffer() with the
+			 * same formats: its inverse, for a GPU copy read back.
+			 * @note The result is what the buffer holds, not necessarily the shape that wrote it: one colour per
+			 * vertex (the buffer keeps the first triangle's), no attribute the formats left out (a TangentNormal
+			 * buffer carries no handedness, an Average skinning no weight), no edge. Re-encoding it with the same
+			 * formats gives the same buffer back.
+			 * @param vertexBuffer The vertex attributes, vertexElementCount floats per vertex.
+			 * @param indexBuffer The triangle list indices.
+			 * @param groups The groups, (first triangle, triangle count); empty for one group of every triangle.
+			 * @param normalType The normal format the buffer was written with.
+			 * @param textureCoordinatesType The texture coordinates format.
+			 * @param vertexColorType The vertex colour format.
+			 * @param skeletalAnimationType The skeletal attributes.
+			 * @param secondaryTextureCoordinatesType The secondary texture coordinates format.
+			 * @return bool False on inconsistent sizes (a partial vertex, an index count not multiple of 3, an index
+			 * out of range, a group beyond the triangles); the shape is then left empty.
+			 */
+			[[nodiscard]]
+			bool
+			readIndexedVertexBuffer (std::span< const vertex_data_t > vertexBuffer, std::span< const index_data_t > indexBuffer, const std::vector< std::pair< index_data_t, index_data_t > > & groups, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None) noexcept
+			{
+				this->clear();
+
+				const size_t vertexElementCount = getVertexElementCount(normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
+
+				if ( vertexElementCount == 0 || vertexBuffer.size() % vertexElementCount != 0 || indexBuffer.size() % 3 != 0 )
+				{
+					return false;
+				}
+
+				const auto vertexCount = vertexBuffer.size() / vertexElementCount;
+				const auto triangleCount = indexBuffer.size() / 3;
+
+				if ( vertexCount > std::numeric_limits< index_data_t >::max() || std::ranges::any_of(indexBuffer, [vertexCount] (index_data_t index) { return index >= vertexCount; }) )
+				{
+					return false;
+				}
+
+				m_vertices.resize(vertexCount);
+
+				if ( vertexColorType != VertexColorType::None )
+				{
+					m_vertexColors.resize(vertexCount);
+				}
+
+				for ( size_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex )
+				{
+					auto offset = vertexIndex * vertexElementCount;
+
+					Shape::readVertex(vertexBuffer, offset, m_vertices[vertexIndex], vertexColorType != VertexColorType::None ? &m_vertexColors[vertexIndex] : nullptr, normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
+				}
+
+				m_triangles.resize(triangleCount);
+
+				for ( size_t triangleIndex = 0; triangleIndex < triangleCount; ++triangleIndex )
+				{
+					auto & triangle = m_triangles[triangleIndex];
+
+					for ( index_data_t corner = 0; corner < 3; ++corner )
+					{
+						const auto vertexIndex = indexBuffer[(triangleIndex * 3) + corner];
+
+						triangle.setVertexIndex(corner, vertexIndex);
+						/* NOTE: The buffer holds one colour per vertex. */
+						triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? vertexIndex : 0);
+					}
+				}
+
+				return this->finishReading(groups, triangleCount, textureCoordinatesType != TextureCoordinatesType::None, normalType != NormalType::None);
+			}
+
+			/**
+			 * @brief Rebuilds the shape from a vertex buffer written by createVertexBuffer() with the same formats (three
+			 * vertices per triangle, no index): its inverse, for a GPU copy read back.
+			 * @note As readIndexedVertexBuffer(): what the buffer holds; every triangle gets its own three vertices.
+			 * @param vertexBuffer The vertex attributes, vertexElementCount floats per vertex.
+			 * @param groups The groups, (first triangle, triangle count); empty for one group of every triangle.
+			 * @param normalType The normal format the buffer was written with.
+			 * @param textureCoordinatesType The texture coordinates format.
+			 * @param vertexColorType The vertex colour format.
+			 * @param skeletalAnimationType The skeletal attributes.
+			 * @param secondaryTextureCoordinatesType The secondary texture coordinates format.
+			 * @return bool False on inconsistent sizes (a partial triangle, a group beyond the triangles); the shape is
+			 * then left empty.
+			 */
+			[[nodiscard]]
+			bool
+			readVertexBuffer (std::span< const vertex_data_t > vertexBuffer, const std::vector< std::pair< index_data_t, index_data_t > > & groups, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None) noexcept
+			{
+				this->clear();
+
+				const size_t vertexElementCount = getVertexElementCount(normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
+
+				if ( vertexElementCount == 0 || vertexBuffer.size() % (vertexElementCount * 3) != 0 )
+				{
+					return false;
+				}
+
+				const auto vertexCount = vertexBuffer.size() / vertexElementCount;
+				const auto triangleCount = vertexCount / 3;
+
+				if ( vertexCount > std::numeric_limits< index_data_t >::max() )
+				{
+					return false;
+				}
+
+				m_vertices.resize(vertexCount);
+
+				if ( vertexColorType != VertexColorType::None )
+				{
+					m_vertexColors.resize(vertexCount);
+				}
+
+				m_triangles.resize(triangleCount);
+
+				for ( size_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex )
+				{
+					auto offset = vertexIndex * vertexElementCount;
+
+					Shape::readVertex(vertexBuffer, offset, m_vertices[vertexIndex], vertexColorType != VertexColorType::None ? &m_vertexColors[vertexIndex] : nullptr, normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
+
+					const auto corner = static_cast< index_data_t >(vertexIndex % 3);
+					auto & triangle = m_triangles[vertexIndex / 3];
+
+					triangle.setVertexIndex(corner, static_cast< index_data_t >(vertexIndex));
+					triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? static_cast< index_data_t >(vertexIndex) : 0);
+				}
+
+				return this->finishReading(groups, triangleCount, textureCoordinatesType != TextureCoordinatesType::None, normalType != NormalType::None);
+			}
+
+			/**
 			 * @brief Declares a new group.
 			 * @note This function is for building the shape manually.
 			 * @return void
@@ -2552,6 +2685,237 @@ namespace EmEn::Base::VertexFactory
 						slotIt->second.paired = true;
 					}
 				}
+			}
+
+			/**
+			 * @brief Reads one vertex written by createIndexedVertexBuffer() / createVertexBuffer(), in their order.
+			 * @param vertexBuffer The vertex attributes.
+			 * @param offset The vertex's first element, advanced past it.
+			 * @param vertex A reference to the vertex to fill.
+			 * @param vertexColor A pointer to the colour to fill, or nullptr without colours.
+			 * @param normalType The normal format.
+			 * @param textureCoordinatesType The texture coordinates format.
+			 * @param vertexColorType The vertex colour format.
+			 * @param skeletalAnimationType The skeletal attributes.
+			 * @param secondaryTextureCoordinatesType The secondary texture coordinates format.
+			 * @return void
+			 */
+			static
+			void
+			readVertex (std::span< const vertex_data_t > vertexBuffer, size_t & offset, ShapeVertex< vertex_data_t > & vertex, Math::Vector< 4, vertex_data_t > * vertexColor, NormalType normalType, TextureCoordinatesType textureCoordinatesType, VertexColorType vertexColorType, SkeletalAnimationType skeletalAnimationType, TextureCoordinatesType secondaryTextureCoordinatesType) noexcept
+			{
+				const auto next = [&vertexBuffer, &offset] () {
+					return vertexBuffer[offset++];
+				};
+				const auto next3 = [&next] () {
+					const auto x = next();
+					const auto y = next();
+					const auto z = next();
+
+					return Math::Vector< 3, vertex_data_t >{x, y, z};
+				};
+
+				vertex.setPosition(next3());
+
+				switch ( normalType )
+				{
+					case NormalType::Normal :
+						vertex.setNormal(next3());
+						break;
+
+					case NormalType::TangentNormal :
+						vertex.setTangent(next3());
+						vertex.setNormal(next3());
+						break;
+
+					case NormalType::TBNSpace :
+					{
+						const auto tangent = next3();
+						const auto biNormal = next3();
+						const auto normal = next3();
+
+						vertex.setTangent(tangent);
+						vertex.setNormal(normal);
+						/* NOTE: The buffer holds the SIGNED bitangent: its handedness comes back from the sign. */
+						vertex.setTangentHandedness(Math::Vector< 3, vertex_data_t >::dotProduct(Math::Vector< 3, vertex_data_t >::crossProduct(normal, tangent), biNormal) < 0 ? -1 : 1);
+						break;
+					}
+
+					case NormalType::None :
+						break;
+				}
+
+				switch ( textureCoordinatesType )
+				{
+					case TextureCoordinatesType::UV :
+					{
+						const auto u = next();
+						const auto v = next();
+
+						vertex.setTextureCoordinates(Math::Vector< 2, vertex_data_t >{u, v});
+						break;
+					}
+
+					case TextureCoordinatesType::UVW :
+						vertex.setTextureCoordinates(next3());
+						break;
+
+					case TextureCoordinatesType::None :
+						break;
+				}
+
+				switch ( secondaryTextureCoordinatesType )
+				{
+					case TextureCoordinatesType::UV :
+					case TextureCoordinatesType::UVW :
+					{
+						const auto u = next();
+						const auto v = next();
+
+						vertex.setSecondaryTextureCoordinates(Math::Vector< 2, vertex_data_t >{u, v});
+
+						/* NOTE: The writer pads a 3D request with W = 0. */
+						if ( secondaryTextureCoordinatesType == TextureCoordinatesType::UVW )
+						{
+							++offset;
+						}
+						break;
+					}
+
+					case TextureCoordinatesType::None :
+						break;
+				}
+
+				switch ( vertexColorType )
+				{
+					case VertexColorType::Gray :
+					{
+						const auto gray = next();
+
+						*vertexColor = {gray, gray, gray, 1};
+						break;
+					}
+
+					case VertexColorType::RGB :
+					{
+						const auto rgb = next3();
+
+						*vertexColor = {rgb[Math::X], rgb[Math::Y], rgb[Math::Z], 1};
+						break;
+					}
+
+					case VertexColorType::RGBA :
+					{
+						const auto rgb = next3();
+						const auto alpha = next();
+
+						*vertexColor = {rgb[Math::X], rgb[Math::Y], rgb[Math::Z], alpha};
+						break;
+					}
+
+					case VertexColorType::None :
+						break;
+				}
+
+				const auto influence = [&next] () {
+					return static_cast< int32_t >(std::lround(next()));
+				};
+
+				switch ( skeletalAnimationType )
+				{
+					case SkeletalAnimationType::Average3 :
+					{
+						const auto a = influence();
+						const auto b = influence();
+						const auto c = influence();
+
+						vertex.setInfluences(a, b, c);
+						break;
+					}
+
+					case SkeletalAnimationType::Average4 :
+					{
+						const auto a = influence();
+						const auto b = influence();
+						const auto c = influence();
+						const auto d = influence();
+
+						vertex.setInfluences(a, b, c, d);
+						break;
+					}
+
+					case SkeletalAnimationType::Weighted3 :
+					{
+						const auto a = influence();
+						const auto b = influence();
+						const auto c = influence();
+						const auto weights = next3();
+
+						vertex.setInfluences(a, b, c);
+						vertex.setWeights(weights[Math::X], weights[Math::Y], weights[Math::Z]);
+						break;
+					}
+
+					case SkeletalAnimationType::Weighted4 :
+					{
+						const auto a = influence();
+						const auto b = influence();
+						const auto c = influence();
+						const auto d = influence();
+						const auto wa = next();
+						const auto wb = next();
+						const auto wc = next();
+						const auto wd = next();
+
+						vertex.setInfluences(a, b, c, d);
+						vertex.setWeights(wa, wb, wc, wd);
+						break;
+					}
+
+					case SkeletalAnimationType::None :
+						break;
+				}
+			}
+
+			/**
+			 * @brief Ends a read*VertexBuffer(): the groups, the declared attributes, the bounds.
+			 * @param groups The groups read, (first triangle, triangle count); empty for one group.
+			 * @param triangleCount The number of triangles read.
+			 * @param textureCoordinatesDeclared Whether the buffer held texture coordinates.
+			 * @param normalsDeclared Whether the buffer held normals.
+			 * @return bool False (the shape emptied) when a group lies beyond the triangles.
+			 */
+			[[nodiscard]]
+			bool
+			finishReading (const std::vector< std::pair< index_data_t, index_data_t > > & groups, size_t triangleCount, bool textureCoordinatesDeclared, bool normalsDeclared) noexcept
+			{
+				m_groups.clear();
+
+				if ( groups.empty() )
+				{
+					m_groups.emplace_back(0, static_cast< index_data_t >(triangleCount));
+				}
+				else
+				{
+					for ( const auto & [first, count] : groups )
+					{
+						if ( static_cast< size_t >(first) + count > triangleCount )
+						{
+							this->clear();
+
+							return false;
+						}
+
+						m_groups.emplace_back(first, count);
+					}
+				}
+
+				m_textureCoordinatesDeclared = textureCoordinatesDeclared;
+				m_normalsDeclared = normalsDeclared;
+
+				this->updateProperties();
+
+				return true;
 			}
 
 			/**

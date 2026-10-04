@@ -50,3 +50,13 @@
   `VertexFactoryShapeBuilder.releasingTheConstructionIndexesFreesTheirMemory` and
   `.anEditAfterTheReleaseRebuildsTheConstructionIndexes` (fails with the rebuild disabled: 28
   vertices instead of 26).
+- **`Shape::readIndexedVertexBuffer()` / `readVertexBuffer()` are the inverses of `createIndexedVertexBuffer()` /
+  `createVertexBuffer()`** (2026-10-04, the engine's GPU readback of a released geometry). The contract is the
+  BUFFER: read back then written again with the same formats, it is byte-identical (pinned for every format
+  combination by `VertexFactoryShapeGenerator.readIndexedVertexBufferRoundTripsEveryFormat`, and checked at runtime
+  on citadel's trees, up to 9.2 M floats). The shape is what the buffer holds, NOT the shape that wrote it: one colour
+  per vertex (the buffer keeps the first triangle's), no attribute the formats left out (a `TangentNormal` buffer has
+  no handedness, an `Average` skinning no weight, a UV buffer no W), no edge (`rebuildEdges()` on demand). The
+  bitangent handedness comes back from the sign of the stored bitangent — except on a degenerate frame (a pole,
+  `cross(normal, tangent)` = 0), where there is no sign to read. Inconsistent sizes (a partial vertex, an index count
+  not a multiple of 3, an index or a group out of range) are refused and leave the shape empty.
