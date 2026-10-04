@@ -1682,7 +1682,7 @@ namespace EmEn::Base::VertexFactory
 
 						triangle.setVertexIndex(corner, vertexIndex);
 						/* NOTE: The buffer holds one colour per vertex. */
-						triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? vertexIndex : 0);
+						triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? vertexIndex : index_data_t{0});
 					}
 				}
 
@@ -1743,7 +1743,7 @@ namespace EmEn::Base::VertexFactory
 					auto & triangle = m_triangles[vertexIndex / 3];
 
 					triangle.setVertexIndex(corner, static_cast< index_data_t >(vertexIndex));
-					triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? static_cast< index_data_t >(vertexIndex) : 0);
+					triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? static_cast< index_data_t >(vertexIndex) : index_data_t{0});
 				}
 
 				return this->finishReading(groups, triangleCount, textureCoordinatesType != TextureCoordinatesType::None, normalType != NormalType::None);
@@ -2737,7 +2737,7 @@ namespace EmEn::Base::VertexFactory
 						vertex.setTangent(tangent);
 						vertex.setNormal(normal);
 						/* NOTE: The buffer holds the SIGNED bitangent: its handedness comes back from the sign. */
-						vertex.setTangentHandedness(Math::Vector< 3, vertex_data_t >::dotProduct(Math::Vector< 3, vertex_data_t >::crossProduct(normal, tangent), biNormal) < 0 ? -1 : 1);
+						vertex.setTangentHandedness(Math::Vector< 3, vertex_data_t >::dotProduct(Math::Vector< 3, vertex_data_t >::crossProduct(normal, tangent), biNormal) < 0 ? static_cast< vertex_data_t >(-1) : static_cast< vertex_data_t >(1));
 						break;
 					}
 
@@ -2792,7 +2792,7 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto gray = next();
 
-						*vertexColor = {gray, gray, gray, 1};
+						*vertexColor = {gray, gray, gray, static_cast< vertex_data_t >(1)};
 						break;
 					}
 
@@ -2800,7 +2800,7 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto rgb = next3();
 
-						*vertexColor = {rgb[Math::X], rgb[Math::Y], rgb[Math::Z], 1};
+						*vertexColor = {rgb[Math::X], rgb[Math::Y], rgb[Math::Z], static_cast< vertex_data_t >(1)};
 						break;
 					}
 
@@ -2893,7 +2893,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( groups.empty() )
 				{
-					m_groups.emplace_back(0, static_cast< index_data_t >(triangleCount));
+					m_groups.emplace_back(index_data_t{0}, static_cast< index_data_t >(triangleCount));
 				}
 				else
 				{
