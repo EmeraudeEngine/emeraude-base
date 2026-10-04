@@ -1,0 +1,131 @@
+/*
+ * src/Testing/test_VertexFactoryShapeSimplifier.cpp
+ * This file is part of Emeraude-Base
+ *
+ * Copyright (C) 2010-2026 - Sébastien Léon Claude Christian Bémelmans "LondNoir" <londnoir@gmail.com>
+ *
+ * Emeraude-Base is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 3 of the License, or (at your option) any later version.
+ *
+ * Emeraude-Base is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public License
+ * along with Emeraude-Base; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ *
+ * Complete project and additional information can be found at :
+ * https://github.com/EmeraudeEngine/emeraude-base
+ *
+ * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
+ */
+
+#include <gtest/gtest.h>
+
+/* STL inclusions. */
+#include <cmath>
+
+/* Local inclusions. */
+#include "VertexFactory/ShapeGenerator.hpp"
+#include "VertexFactory/ShapeSimplifier.hpp"
+
+using namespace EmEn::Base;
+using namespace EmEn::Base::VertexFactory;
+
+TEST(VertexFactoryShapeSimplifier, RefusesBadInput)
+{
+	const Shape< float > empty;
+
+	EXPECT_FALSE(simplifyShape(empty).has_value());
+
+	const auto plane = ShapeGenerator::generatePlane< float, uint32_t >(10.0F, 10.0F, 8U, 8U);
+
+	EXPECT_FALSE(simplifyShape(plane, {.targetRatio = 0.0F}).has_value());
+	EXPECT_FALSE(simplifyShape(plane, {.targetRatio = 1.5F}).has_value());
+	EXPECT_FALSE(simplifyShape(plane, {.targetRatio = std::nanf("")}).has_value());
+	EXPECT_FALSE(simplifyShape(plane, {.targetRatio = 0.5F, .targetError = -1.0F}).has_value());
+}
+
+TEST(VertexFactoryShapeSimplifier, FlatPlaneCollapsesToFewTriangles)
+{
+	/* A flat grid carries no information beyond its outline: the quadric pass may remove almost everything. */
+	const auto plane = ShapeGenerator::generatePlane< float, uint32_t >(10.0F, 10.0F, 32U, 32U);
+	const auto simplified = simplifyShape(plane, {.targetRatio = 0.1F, .targetError = 0.01F});
+
+	ASSERT_TRUE(simplified.has_value());
+	EXPECT_LE(simplified->triangles().size(), plane.triangles().size() / 10 + 2);
+	EXPECT_GE(simplified->triangles().size(), 2U);
+
+	/* The outline is kept: the same bounding box. */
+	EXPECT_NEAR(simplified->boundingBox().width(), plane.boundingBox().width(), 1e-4F);
+	EXPECT_NEAR(simplified->boundingBox().depth(), plane.boundingBox().depth(), 1e-4F);
+}
+
+TEST(VertexFactoryShapeSimplifier, SphereKeepsItsShape)
+{
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 64U, 32U);
+	const auto simplified = simplifyShape(sphere, {.targetRatio = 0.25F, .targetError = 0.05F});
+
+	ASSERT_TRUE(simplified.has_value());
+	EXPECT_LT(simplified->triangles().size(), sphere.triangles().size() / 2);
+
+	/* Every kept vertex is a source vertex: still on the unit sphere. */
+	for ( const auto & vertex : simplified->vertices() )
+	{
+		EXPECT_NEAR(vertex.position().length(), 1.0F, 1e-4F);
+	}
+
+	/* No index out of range. */
+	for ( const auto & triangle : simplified->triangles() )
+	{
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			EXPECT_LT(triangle.vertexIndex(corner), simplified->vertices().size());
+		}
+	}
+}
+
+TEST(VertexFactoryShapeSimplifier, GroupsAreKeptOneByOne)
+{
+	/* Two groups: a multi-material mesh must keep both sub-geometries on every level. */
+	auto shape = ShapeGenerator::generatePlane< float, uint32_t >(10.0F, 10.0F, 16U, 16U);
+	const auto triangleCount = static_cast< uint32_t >(shape.triangles().size());
+	const auto half = triangleCount / 2;
+
+	shape.groups().clear();
+	shape.groups().emplace_back(0U, half);
+	shape.groups().emplace_back(half, triangleCount - half);
+
+	const auto simplified = simplifyShape(shape, {.targetRatio = 0.2F, .targetError = 0.01F});
+
+	ASSERT_TRUE(simplified.has_value());
+	ASSERT_EQ(simplified->groups().size(), 2U);
+	EXPECT_EQ(simplified->groups()[0].first, 0U);
+	EXPECT_GT(simplified->groups()[0].second, 0U);
+	EXPECT_EQ(simplified->groups()[1].first, simplified->groups()[0].second);
+	EXPECT_EQ(simplified->groups()[0].second + simplified->groups()[1].second, simplified->triangles().size());
+}
+
+TEST(VertexFactoryShapeSimplifier, EmptyGroupStaysEmpty)
+{
+	/* JungleRuins' trees carry an empty group: it must survive as an empty group, never refuse the level. */
+	auto shape = ShapeGenerator::generatePlane< float, uint32_t >(10.0F, 10.0F, 16U, 16U);
+	const auto triangleCount = static_cast< uint32_t >(shape.triangles().size());
+
+	shape.groups().clear();
+	shape.groups().emplace_back(0U, 0U);
+	shape.groups().emplace_back(0U, triangleCount);
+
+	const auto simplified = simplifyShape(shape, {.targetRatio = 0.2F, .targetError = 0.01F});
+
+	ASSERT_TRUE(simplified.has_value());
+	ASSERT_EQ(simplified->groups().size(), 2U);
+	EXPECT_EQ(simplified->groups()[0].second, 0U);
+	EXPECT_EQ(simplified->groups()[1].first, 0U);
+	EXPECT_EQ(simplified->groups()[1].second, simplified->triangles().size());
+	EXPECT_LT(simplified->triangles().size(), triangleCount);
+}

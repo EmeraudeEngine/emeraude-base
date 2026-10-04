@@ -463,6 +463,7 @@ include(SetupSampleRate)
 include(SetupASIO)
 include(SetupLibreSSL)
 include(SetupThreads)
+include(SetupMeshOptimizer) # Mesh simplification (VertexFactory::simplifyShape); the engine also decodes EXT_meshopt_compression with it
 if ( EMERAUDE_ENABLE_OPENMP AND NOT APPLE )
 	include(SetupOpenMP)
 endif ()

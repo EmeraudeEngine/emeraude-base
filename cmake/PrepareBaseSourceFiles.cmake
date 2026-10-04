@@ -99,6 +99,7 @@ set(EMERAUDE_BASE_PIXEL_SOURCES
 
 # vertex module — VertexFactory (mostly header-only; one compiled generator).
 set(EMERAUDE_BASE_VERTEX_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/ShapeSimplifier.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/TreeGenerator.cpp
 )
 
@@ -175,6 +176,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryShapeVertex.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactorySilhouette.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryShapeGenerator.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryShapeSimplifier.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryShapeSplitter.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathCurveTessellation.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryTreeGrowers.cpp
