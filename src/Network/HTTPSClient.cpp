@@ -48,6 +48,7 @@ namespace EmEn::Base::Network
 	{
 		constexpr auto Tag{"Network::HTTPSClient"};
 		constexpr uint16_t HTTPSDefaultPort{443};
+		constexpr uint16_t HTTPDefaultPort{80};
 		constexpr size_t TransportReadBufferSize{16384};
 
 		/* Fits the fixed header skeleton (~90 B) plus a typical host, target
@@ -56,16 +57,28 @@ namespace EmEn::Base::Network
 		constexpr size_t RequestReserveBytes{256};
 
 		/**
-		 * @brief Extracts the HTTPS host and port from a URI, validating the scheme.
+		 * @brief Extracts the host and port from a URI, validating the scheme.
 		 * @param uri The URI.
+		 * @param allowCleartext Whether an http:// URI is accepted (HTTPSClientOptions::allowPrivateCleartext).
 		 * @param host The host [out].
 		 * @param port The port [out].
-		 * @return bool False when the scheme is not https or the host is empty.
+		 * @param cleartext Set to true for an http:// URI [out].
+		 * @return bool False when the scheme is not accepted or the host is empty.
 		 */
 		bool
-		extractHTTPSTarget (const URI & uri, std::string & host, uint16_t & port) noexcept
+		extractTarget (const URI & uri, bool allowCleartext, std::string & host, uint16_t & port, bool & cleartext) noexcept
 		{
-			if ( String::toLower(uri.scheme()) != "https" )
+			const auto scheme = String::toLower(uri.scheme());
+
+			if ( scheme == "https" )
+			{
+				cleartext = false;
+			}
+			else if ( scheme == "http" && allowCleartext )
+			{
+				cleartext = true;
+			}
+			else
 			{
 				return false;
 			}
@@ -88,7 +101,7 @@ namespace EmEn::Base::Network
 
 			if ( declaredPort == 0 )
 			{
-				port = HTTPSDefaultPort;
+				port = cleartext ? HTTPDefaultPort : HTTPSDefaultPort;
 			}
 			else if ( declaredPort > 65535 )
 			{
@@ -279,9 +292,9 @@ namespace EmEn::Base::Network
 		}
 
 		/**
-		 * @brief Returns whether two URIs share an origin (host and effective port).
-		 * @note The scheme is not compared: every hop this client speaks is https by construction
-		 * — a downgrade Location is refused and an http one is upgraded.
+		 * @brief Returns whether two URIs share an origin (scheme, host and effective port).
+		 * @note The scheme counts since the private cleartext path exists (2026-10-04): an http:// and an
+		 * https:// URI on one host are two origins (RFC 6454).
 		 * @param lhs The first URI.
 		 * @param rhs The second URI.
 		 * @return bool False when either target cannot be extracted.
@@ -294,13 +307,15 @@ namespace EmEn::Base::Network
 			std::string rightHost;
 			uint16_t leftPort = 0;
 			uint16_t rightPort = 0;
+			bool leftCleartext = false;
+			bool rightCleartext = false;
 
-			if ( !extractHTTPSTarget(lhs, leftHost, leftPort) || !extractHTTPSTarget(rhs, rightHost, rightPort) )
+			if ( !extractTarget(lhs, true, leftHost, leftPort, leftCleartext) || !extractTarget(rhs, true, rightHost, rightPort, rightCleartext) )
 			{
 				return false;
 			}
 
-			return leftPort == rightPort && headerNameEquals(leftHost, rightHost);
+			return leftCleartext == rightCleartext && leftPort == rightPort && headerNameEquals(leftHost, rightHost);
 		}
 	}
 
@@ -314,9 +329,27 @@ namespace EmEn::Base::Network
 	bool
 	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress, DownloadReport * report) const noexcept
 	{
+		return this->download(uri, filepath, HTTPRequestOptions{}, progress, report);
+	}
+
+	bool
+	HTTPSClient::download (const URI & uri, const std::filesystem::path & filepath, HTTPRequestOptions options, const DownloadProgress & progress, DownloadReport * report) const noexcept
+	{
 		if ( report != nullptr )
 		{
 			*report = {};
+		}
+
+		if ( !options.body.empty() )
+		{
+			Logging::error(Tag, "download(), a download is a GET: it carries no body.");
+
+			if ( report != nullptr )
+			{
+				report->outcome = DownloadOutcome::BadRequest;
+			}
+
+			return false;
 		}
 
 		/* The transport records its own coarse reason; anything it did not classify is a protocol
@@ -325,7 +358,7 @@ namespace EmEn::Base::Network
 		 * and the member this used to be was a data race between them. */
 		DownloadOutcome outcome{DownloadOutcome::Protocol};
 
-		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath, {}, outcome, progress ? &progress : nullptr);
+		const auto result = this->run(HTTPRequest::Method::GET, uri, BodySink::File, filepath, std::move(options), outcome, progress ? &progress : nullptr);
 
 		if ( !result.has_value() )
 		{
@@ -632,12 +665,13 @@ namespace EmEn::Base::Network
 	{
 		std::string host;
 		uint16_t port = 0;
+		bool cleartext = false;
 
 		outcome = DownloadOutcome::BadScheme;
 
-		if ( !extractHTTPSTarget(uri, host, port) )
+		if ( !extractTarget(uri, m_options.allowPrivateCleartext, host, port, cleartext) )
 		{
-			Logging::error(Tag, "performHop(), only https URIs with a host are supported (got '" + uri.scheme() + "').");
+			Logging::error(Tag, "performHop(), only https URIs with a host are supported (got '" + uri.scheme() + "'; http needs allowPrivateCleartext).");
 
 			return std::nullopt;
 		}
@@ -661,6 +695,15 @@ namespace EmEn::Base::Network
 		request += HTTPRequest::Host;
 		request += ": ";
 		request += host;
+
+		/* RFC 9110 § 7.2: the port is part of the Host field when it is not the scheme's default. A loopback
+		 * server checking its own name (the engine's MCP and sharing servers) refuses a bare "127.0.0.1". */
+		if ( port != ( cleartext ? HTTPDefaultPort : HTTPSDefaultPort ) )
+		{
+			request += ':';
+			request += std::to_string(port);
+		}
+
 		request += "\r\n";
 
 		/* An API that keys on a named client needs its own User-Agent; the caller's wins. */
@@ -710,9 +753,22 @@ namespace EmEn::Base::Network
 		std::string proxyHost;
 		uint16_t proxyPort = 0;
 
-		const auto connected = this->resolveProxy(host, proxyHost, proxyPort)
-			? connection.connectViaProxy(proxyHost, proxyPort, host, port)
-			: connection.connect(host, port);
+		/* NOTE: the cleartext path goes straight to a private address — never through a proxy, which would
+		 * carry it off the private network. */
+		bool connected = false;
+
+		if ( cleartext )
+		{
+			connected = connection.connectCleartextPrivate(host, port);
+		}
+		else if ( this->resolveProxy(host, proxyHost, proxyPort) )
+		{
+			connected = connection.connectViaProxy(proxyHost, proxyPort, host, port);
+		}
+		else
+		{
+			connected = connection.connect(host, port);
+		}
 
 		if ( !connected )
 		{
@@ -792,6 +848,17 @@ namespace EmEn::Base::Network
 
 		while ( result == HTTPResponseParser::Result::NeedMoreData )
 		{
+			if ( options.cancel != nullptr && options.cancel->load() )
+			{
+				outcome = DownloadOutcome::Cancelled;
+
+				Logging::info(Tag, "performHop(), cancelled by the caller.");
+
+				discardPartialFile();
+
+				return std::nullopt;
+			}
+
 			if ( std::chrono::steady_clock::now() >= deadline )
 			{
 				outcome = DownloadOutcome::Timeout;

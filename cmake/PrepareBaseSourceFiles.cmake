@@ -77,6 +77,7 @@ set(EMERAUDE_BASE_NETWORK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponse.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPResponseParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPServer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPSClient.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/PercentEncoding.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Query.cpp
@@ -146,6 +147,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathTransformConversions.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPResponseParser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPServer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClient.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClientLive.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClientRequest.cpp

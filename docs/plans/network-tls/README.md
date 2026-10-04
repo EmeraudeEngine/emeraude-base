@@ -414,3 +414,12 @@ passed or failed by timing. It now reads out what `Content-Length` announced
 - `Method::DELETE` is untested on purpose: `DELETE` is a `winnt.h` macro and the test TU pulls in
   gtest. ⚠️ The enumerator itself (`HTTPRequest::Method::DELETE`) is a latent MSVC hazard for any
   TU that sees `windows.h` before `HTTPRequest.hpp` — it has not bitten yet because none does.
+
+## Post-freeze increment — a server, and cleartext to private addresses (2026-10-04)
+
+For engine resource sharing (owner decisions 2026-10-04): `Network::HTTPServer` (the engine MCP server's HTTP code,
+extracted), `HTTPSClientOptions::allowPrivateCleartext` (http:// only to a host that resolves ONLY to private
+addresses, never through a proxy), `HTTPRequestOptions::cancel` (`DownloadOutcome::Cancelled`), a `download()`
+overload with headers, and the `Host` field now carries a non-default port (RFC 9110 § 7.2). Detail and tests:
+`docs/subsystems/source-tree/24-network-http-server.md`. TLS for the LAN case stays open (engine item
+`resource-sharing-tls`).

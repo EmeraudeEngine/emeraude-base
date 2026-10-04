@@ -280,6 +280,17 @@ The large relief is kept (correlation 0.96 between the two, same seed: the rando
 3.3× at 1.0). ⚠️ Every diamond-square terrain changed shape slightly with the fix (same seed, other interpolation).
 Regression test `AlgorithmsDiamondSquare.TheCoarsePointsAreNoConeTips` (bound 3.5×).
 
+## Hash
+
+### ⚠️⚠️ SHA-1 / SHA-256 / SHA-512 were WRONG for every input of 512 MiB or more (2026-10-04, FIXED)
+
+The final block carries the message length in bits, a 64-bit big-endian field (FIPS 180-4 § 5.1; SHA-512's is
+128-bit). The inherited code (zedwood) wrote only its LOW 32 bits: from 2^32 bits (512 MiB) on, the digest was
+silently wrong. Found by engine resource sharing: the server's SHA-256 of a 1.6 GB archive disagreed with
+`sha256sum`. Every small input was right, so the known-answer tests never saw it. Fixed in the three `final()`;
+`Hash.lengthFieldPastFourGigabits` hashes 512 MiB + 3 bytes against Python's `hashlib` (failed before, passes now).
+MD5 keeps its RFC 1321 two-word counter and was correct.
+
 ## Network
 
 ### ⚠️⚠️ A `mutable` member is NOT a per-call output — it was a data race for a year (fixed Aug 2026)

@@ -87,6 +87,40 @@ namespace EmEn::Base::Network
 		}
 	}
 
+	bool
+	isPrivateNetworkAddress (const asio::ip::address & address) noexcept
+	{
+		asio::ip::address_v4 version4;
+
+		if ( address.is_v6() )
+		{
+			const auto version6 = address.to_v6();
+
+			if ( !version6.is_v4_mapped() )
+			{
+				const auto bytes = version6.to_bytes();
+
+				/* ::1, fe80::/10, fc00::/7. */
+				return version6.is_loopback() || ( bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80 ) || (bytes[0] & 0xFE) == 0xFC;
+			}
+
+			version4 = asio::ip::make_address_v4(asio::ip::v4_mapped, version6);
+		}
+		else
+		{
+			version4 = address.to_v4();
+		}
+
+		const auto bytes = version4.to_bytes();
+
+		/* 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16. */
+		return bytes[0] == 127 ||
+			bytes[0] == 10 ||
+			( bytes[0] == 172 && (bytes[1] & 0xF0) == 16 ) ||
+			( bytes[0] == 192 && bytes[1] == 168 ) ||
+			( bytes[0] == 169 && bytes[1] == 254 );
+	}
+
 	TLSConnection::~TLSConnection ()
 	{
 		this->disconnect();
@@ -111,7 +145,7 @@ namespace EmEn::Base::Network
 	}
 
 	bool
-	TLSConnection::establishTcp (const std::string & host, uint16_t port) noexcept
+	TLSConnection::establishTcp (const std::string & host, uint16_t port, bool privateOnly) noexcept
 	{
 		/* Name resolution (async, under the connect timeout). */
 		asio::ip::tcp::resolver resolver{m_ioContext};
@@ -133,6 +167,21 @@ namespace EmEn::Base::Network
 			Logging::error(Tag, "establishTcp(), unable to resolve '" + host + "' : " + resolveError.message());
 
 			return false;
+		}
+
+		/* ⚠️ EVERY address must be private, not just one: async_connect tries them in order, and a DNS answer
+		 * mixing a public address in would send the cleartext request to it. */
+		if ( privateOnly )
+		{
+			for ( const auto & entry : endpoints )
+			{
+				if ( !isPrivateNetworkAddress(entry.endpoint().address()) )
+				{
+					Logging::error(Tag, "establishTcp(), '" + host + "' resolves to the non-private address " + entry.endpoint().address().to_string() + ": refused without TLS.");
+
+					return false;
+				}
+			}
 		}
 
 		/* TCP connection (async, under the connect timeout). */
@@ -375,6 +424,27 @@ namespace EmEn::Base::Network
 	}
 
 	bool
+	TLSConnection::connectCleartextPrivate (const std::string & hostname, uint16_t port) noexcept
+	{
+		if ( m_connected )
+		{
+			Logging::error(Tag, "connectCleartextPrivate(), the connection is already established (single-use object) !");
+
+			return false;
+		}
+
+		if ( !this->establishTcp(hostname, port, true) )
+		{
+			return false;
+		}
+
+		m_cleartext = true;
+		m_connected = true;
+
+		return true;
+	}
+
+	bool
 	TLSConnection::write (const char * data, size_t size) noexcept
 	{
 		if ( !m_connected )
@@ -387,10 +457,19 @@ namespace EmEn::Base::Network
 		asio::error_code writeError{asio::error::would_block};
 		size_t bytesWritten = 0;
 
-		asio::async_write(m_stream, asio::buffer(data, size), [&writeError, &bytesWritten] (const asio::error_code & error, size_t transferred) {
+		const auto onWritten = [&writeError, &bytesWritten] (const asio::error_code & error, size_t transferred) {
 			writeError = error;
 			bytesWritten = transferred;
-		});
+		};
+
+		if ( m_cleartext )
+		{
+			asio::async_write(m_stream.next_layer(), asio::buffer(data, size), onWritten);
+		}
+		else
+		{
+			asio::async_write(m_stream, asio::buffer(data, size), onWritten);
+		}
 
 		this->runWithTimeout(m_options.writeTimeout);
 
@@ -419,10 +498,19 @@ namespace EmEn::Base::Network
 		asio::error_code readError{asio::error::would_block};
 		size_t bytesRead = 0;
 
-		m_stream.async_read_some(asio::buffer(buffer, capacity), [&readError, &bytesRead] (const asio::error_code & error, size_t transferred) {
+		const auto onRead = [&readError, &bytesRead] (const asio::error_code & error, size_t transferred) {
 			readError = error;
 			bytesRead = transferred;
-		});
+		};
+
+		if ( m_cleartext )
+		{
+			m_stream.next_layer().async_read_some(asio::buffer(buffer, capacity), onRead);
+		}
+		else
+		{
+			m_stream.async_read_some(asio::buffer(buffer, capacity), onRead);
+		}
 
 		this->runWithTimeout(m_options.readTimeout);
 
@@ -461,7 +549,7 @@ namespace EmEn::Base::Network
 	void
 	TLSConnection::disconnect () noexcept
 	{
-		if ( m_connected )
+		if ( m_connected && !m_cleartext )
 		{
 			/* Best-effort TLS close_notify, bounded by the write timeout. */
 			asio::error_code shutdownError{asio::error::would_block};
@@ -481,5 +569,7 @@ namespace EmEn::Base::Network
 
 			m_stream.lowest_layer().close(closeError);
 		}
+
+		m_connected = false;
 	}
 }

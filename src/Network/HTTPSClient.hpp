@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -75,7 +76,8 @@ namespace EmEn::Base::Network
 		Protocol,       /* Malformed, truncated, too large, or a redirect that could not be followed. */
 		HTTPStatus,     /* The exchange completed, the status was not 2xx (see downloadStatusCode). */
 		LocalIO,        /* The destination file could not be opened, written or flushed. */
-		BadRequest      /* The CALLER's request was refused before a byte was sent (bad header, bad body). */
+		BadRequest,     /* The CALLER's request was refused before a byte was sent (bad header, bad body). */
+		Cancelled       /* The caller's cancel flag was raised (HTTPRequestOptions::cancel). */
 	};
 
 	/**
@@ -99,6 +101,7 @@ namespace EmEn::Base::Network
 			case DownloadOutcome::HTTPStatus : return "HTTPStatus";
 			case DownloadOutcome::LocalIO : return "LocalIO";
 			case DownloadOutcome::BadRequest : return "BadRequest";
+			case DownloadOutcome::Cancelled : return "Cancelled";
 		}
 
 		return "Unknown";
@@ -171,6 +174,15 @@ namespace EmEn::Base::Network
 		uint8_t maxRedirects{5};
 
 		/**
+		 * @brief Accept http:// URIs whose host resolves ONLY to private addresses (loopback, RFC 1918,
+		 * link-local, unique local — see isPrivateNetworkAddress()), spoken without TLS, never through a proxy.
+		 * @note For an engine peer on the LAN (resource sharing), where no trusted certificate exists. Nothing
+		 * is encrypted: a bearer token sent this way is readable on the network. Off by default; https:// is
+		 * unaffected, and a redirect from https:// to http:// stays refused.
+		 */
+		bool allowPrivateCleartext{false};
+
+		/**
 		 * @brief When 'proxy' is empty, consult the https_proxy / no_proxy environment.
 		 * @note Honors https_proxy/HTTPS_PROXY and the no_proxy/NO_PROXY bypass list
 		 * (comma-separated host or domain suffixes, '*' meaning bypass everything).
@@ -204,6 +216,12 @@ namespace EmEn::Base::Network
 		 * @note Ignored when the body is empty.
 		 */
 		std::string contentType;
+
+		/**
+		 * @brief Optional: raised by another thread, it stops the exchange at the next transport read
+		 * (DownloadOutcome::Cancelled, a partial file removed). Must outlive the call.
+		 */
+		const std::atomic< bool > * cancel{nullptr};
 	};
 
 	/**
@@ -213,7 +231,8 @@ namespace EmEn::Base::Network
 	 * facade decided 2026-07-04 (see docs/plans/network-tls/README.md). The public API is
 	 * protocol-agnostic (h2-ready): HTTP/1.1, chunked and keep-alive are internal.
 	 * @note HTTPS only: a http:// target is refused (plaintext HTTP is a separate concern; the
-	 * legacy Network::download() that once covered it was removed 2026-08-27). Redirects: https→https always,
+	 * legacy Network::download() that once covered it was removed 2026-08-27) — except to a private
+	 * address when HTTPSClientOptions::allowPrivateCleartext opts in (2026-10-04). Redirects: https→https always,
 	 * http→https upgrade honored on a Location, https→http downgrade refused. Proxy
 	 * support is the next increment (needs a two-phase TLSConnection connect).
 	 * @note One connection per hop (no keep-alive reuse yet — a later optimization).
@@ -300,6 +319,21 @@ namespace EmEn::Base::Network
 			 */
 			[[nodiscard]]
 			bool download (const URI & uri, const std::filesystem::path & filepath, const DownloadProgress & progress = {}, DownloadReport * report = nullptr) const noexcept;
+
+			/**
+			 * @brief Downloads a resource to a file with extra request headers (an `Authorization` for an engine
+			 * peer), streaming the body.
+			 * @note The headers follow the same rules as request(): validated, and dropped on a redirect to
+			 * another origin. A body in 'options' is refused (a download is a GET).
+			 * @param uri The target URI.
+			 * @param filepath The destination file path.
+			 * @param options The extra headers [std::move].
+			 * @param progress An optional progress hook, see DownloadProgress. Default none.
+			 * @param report An optional report of the outcome.
+			 * @return bool True on a 2xx response fully written to the file.
+			 */
+			[[nodiscard]]
+			bool download (const URI & uri, const std::filesystem::path & filepath, HTTPRequestOptions options, const DownloadProgress & progress = {}, DownloadReport * report = nullptr) const noexcept;
 
 		private:
 

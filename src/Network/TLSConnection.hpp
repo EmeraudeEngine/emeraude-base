@@ -55,6 +55,17 @@ namespace EmEn::Base::Network
 	};
 
 	/**
+	 * @brief Returns whether an address belongs to a private network: loopback (127/8, ::1), RFC 1918 (10/8,
+	 * 172.16/12, 192.168/16), link-local (169.254/16, fe80::/10) or unique local (fc00::/7). An IPv4-mapped IPv6
+	 * address is judged by its IPv4 part.
+	 * @note The only addresses the cleartext path (TLSConnection::connectCleartextPrivate()) may reach.
+	 * @param address The address.
+	 * @return bool
+	 */
+	[[nodiscard]]
+	bool isPrivateNetworkAddress (const asio::ip::address & address) noexcept;
+
+	/**
 	 * @brief A blocking, single-use TLS client connection over LibreSSL (asio::ssl).
 	 * @note This is the transport layer of the HTTPS client (sync facade decided
 	 * 2026-07-04, see docs/plans/network-tls/README.md). Every operation blocks the
@@ -112,6 +123,30 @@ namespace EmEn::Base::Network
 			 */
 			[[nodiscard]]
 			bool connectViaProxy (const std::string & proxyHost, uint16_t proxyPort, const std::string & targetHost, uint16_t targetPort) noexcept;
+
+			/**
+			 * @brief Resolves and connects WITHOUT TLS, only when every address the host resolves to is private
+			 * (isPrivateNetworkAddress()): the cleartext path for an engine peer on the LAN.
+			 * @note Nothing is encrypted nor authenticated: whatever crosses this connection (a bearer token
+			 * included) is readable on the network. A name resolving to ANY public address is refused, even when
+			 * private ones come with it: the connection must not depend on which address answers first.
+			 * @param hostname The server hostname or IP literal.
+			 * @param port The TCP port.
+			 * @return bool True when the connection is established.
+			 */
+			[[nodiscard]]
+			bool connectCleartextPrivate (const std::string & hostname, uint16_t port) noexcept;
+
+			/**
+			 * @brief Returns whether this connection is a cleartext one (connectCleartextPrivate()).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			isCleartext () const noexcept
+			{
+				return m_cleartext;
+			}
 
 			/**
 			 * @brief Writes a whole buffer to the peer.
@@ -181,10 +216,11 @@ namespace EmEn::Base::Network
 			 * @brief Resolves and establishes the raw TCP connection (async, under the connect timeout).
 			 * @param host The host to reach (target for a direct connect, proxy for a tunneled one).
 			 * @param port The TCP port.
+			 * @param privateOnly Refuse unless every resolved address is private (the cleartext path).
 			 * @return bool
 			 */
 			[[nodiscard]]
-			bool establishTcp (const std::string & host, uint16_t port) noexcept;
+			bool establishTcp (const std::string & host, uint16_t port, bool privateOnly = false) noexcept;
 
 			/**
 			 * @brief Performs the plaintext HTTP CONNECT exchange with the proxy over the raw socket.
@@ -208,5 +244,6 @@ namespace EmEn::Base::Network
 			TLSConnectionOptions m_options;
 			bool m_connected{false};
 			bool m_handshakeRefused{false};
+			bool m_cleartext{false};
 	};
 }
