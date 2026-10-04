@@ -41,6 +41,14 @@ Both delegate to `FileFormatInterface::readStream(ByteStream &, ...)` / `writeSt
 | **istringstream adapter** | OBJ, STL, MDx, JSON, MIDI | Read full stream to memory, wrap in `std::istringstream` for text-based parsing |
 | **ostringstream adapter** | OBJ write | Build text output in `std::ostringstream`, write string to ByteStream |
 
+### Whole files and byte ranges (`IO/IO.hpp`)
+
+`IO::fileGetContents()` reads a whole file; **`IO::fileGetRange(path, offset, length, bytes)`** (2026-10-04) reads
+`length` bytes from `offset` — the engine re-reads an image embedded in a model file (a `.glb`'s BIN chunk, an
+external `.bin`, an uncompressed USDZ entry) without reading the model. A range reaching past the end of the file
+(the file changed, or a wrong range), an empty range or a 64-bit overflow is REFUSED, never shortened. Pinned by
+`IOFileUtils.getRangeReadsExactlyTheRange` and `.getRangeRefusesEveryRangeOutOfTheFile`.
+
 ### Code References
 
 | File | Description |

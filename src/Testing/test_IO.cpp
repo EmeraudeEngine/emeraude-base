@@ -274,6 +274,61 @@ namespace EmEn::Base::IO
 		removeQuietly(path);
 	}
 
+	TEST(IOFileUtils, getRangeReadsExactlyTheRange)
+	{
+		const auto path = tempFile("emeraude_base_io_range.bin");
+		removeQuietly(path);
+
+		std::vector< uint8_t > source(64);
+
+		for ( size_t index = 0; index < source.size(); ++index )
+		{
+			source[index] = static_cast< uint8_t >(index);
+		}
+
+		EXPECT_TRUE(filePutContents(path, source));
+
+		std::vector< std::byte > range;
+
+		ASSERT_TRUE(fileGetRange(path, 10, 20, range));
+		ASSERT_EQ(range.size(), 20U);
+
+		for ( size_t index = 0; index < range.size(); ++index )
+		{
+			EXPECT_EQ(std::to_integer< uint8_t >(range[index]), 10 + index) << "byte " << index;
+		}
+
+		/* The whole file, and the last byte alone. */
+		EXPECT_TRUE(fileGetRange(path, 0, 64, range));
+		EXPECT_EQ(range.size(), 64U);
+		EXPECT_TRUE(fileGetRange(path, 63, 1, range));
+		EXPECT_EQ(std::to_integer< uint8_t >(range[0]), 63);
+
+		removeQuietly(path);
+	}
+
+	TEST(IOFileUtils, getRangeRefusesEveryRangeOutOfTheFile)
+	{
+		const auto path = tempFile("emeraude_base_io_range_bad.bin");
+		removeQuietly(path);
+
+		const std::vector< uint8_t > source(16, 0x5A);
+		EXPECT_TRUE(filePutContents(path, source));
+
+		std::vector< std::byte > range;
+
+		/* Past the end, an empty range, an offset beyond the file, an offset + length that overflows 64 bits. */
+		EXPECT_FALSE(fileGetRange(path, 10, 7, range));
+		EXPECT_TRUE(range.empty());
+		EXPECT_FALSE(fileGetRange(path, 0, 0, range));
+		EXPECT_FALSE(fileGetRange(path, 17, 1, range));
+		EXPECT_FALSE(fileGetRange(path, 8, UINT64_MAX, range));
+		EXPECT_FALSE(fileGetRange(tempFile("emeraude_base_io_range_missing.bin"), 0, 1, range));
+		EXPECT_FALSE(fileGetRange({}, 0, 1, range));
+
+		removeQuietly(path);
+	}
+
 	TEST(IOFileUtils, getContentsMissingFileFails)
 	{
 		const auto path = tempFile("emeraude_base_io_missing.bin");

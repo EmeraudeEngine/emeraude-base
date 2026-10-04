@@ -30,6 +30,8 @@
 #include "emeraude_platform.hpp"
 
 /* STL inclusions. */
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
@@ -420,6 +422,79 @@ namespace EmEn::Base::IO
 		if ( !file ) [[unlikely]]
 		{
 			Logging::error("IO", "fileGetContents: read error on " + filepath.string());
+
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * @brief Reads a byte range of a file: `length` bytes from `offset`.
+	 * @note For data stored inside a container file (an image in a .glb's BIN chunk, an uncompressed archive entry):
+	 * only the range is read. A range reaching past the end of the file is refused (the file changed, or the range is
+	 * wrong), never shortened.
+	 * @param filepath Path to the file to read.
+	 * @param offset The first byte of the range.
+	 * @param length The number of bytes. 0 is refused.
+	 * @param[out] content The bytes, exactly `length` of them.
+	 * @return bool False when the path is empty, the file cannot be opened, the range is empty or out of the file, or
+	 * the read fails; the content is then left empty.
+	 */
+	inline
+	bool
+	fileGetRange (const std::filesystem::path & filepath, uint64_t offset, uint64_t length, std::vector< std::byte > & content) noexcept
+	{
+		content.clear();
+
+		if ( filepath.empty() || length == 0 ) [[unlikely]]
+		{
+			return false;
+		}
+
+		std::ifstream file{filepath, std::ios::binary | std::ios::ate};
+
+		if ( !file.is_open() ) [[unlikely]]
+		{
+			Logging::error("IO", "fileGetRange: cannot open " + filepath.string());
+
+			return false;
+		}
+
+		const std::streamoff fileSize = file.tellg();
+
+		if ( fileSize < 0 ) [[unlikely]]
+		{
+			Logging::error("IO", "fileGetRange: cannot read the size of " + filepath.string());
+
+			return false;
+		}
+
+		const auto fileBytes = static_cast< uint64_t >(fileSize);
+
+		/* NOTE: Overflow-safe: offset <= size and length <= size - offset. */
+		if ( offset > fileBytes || length > fileBytes - offset ) [[unlikely]]
+		{
+			Logging::error("IO", "fileGetRange: the range [" + std::to_string(offset) + ", +" + std::to_string(length) + ") is out of " + filepath.string());
+
+			return false;
+		}
+
+		if ( length > content.max_size() ) [[unlikely]]
+		{
+			return false;
+		}
+
+		content.resize(static_cast< size_t >(length));
+
+		file.seekg(static_cast< std::streamoff >(offset), std::ifstream::beg);
+		file.read(reinterpret_cast< char * >(content.data()), static_cast< std::streamsize >(length));
+
+		if ( !file ) [[unlikely]]
+		{
+			Logging::error("IO", "fileGetRange: read error on " + filepath.string());
+
+			content.clear();
 
 			return false;
 		}
