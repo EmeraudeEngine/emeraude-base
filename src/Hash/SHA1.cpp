@@ -170,7 +170,12 @@ namespace EmEn::Base::Hash
 
 		m_block[m_length] = 0x80;
 
-		SHA1_UNPACK32(len_b, m_block.data() + pm_length - 4);
+		/* The message length in bits is a 64-bit big-endian field (FIPS 180-4 § 5.1; its upper half for SHA-512's
+		 * 128-bit one stays zero): writing only its LOW 32 bits made every input of 512 MiB or more hash wrong
+		 * (found 2026-10-04, a 1.6 GB archive's SHA-256 disagreed with sha256sum). */
+		const auto bitLength = static_cast< uint64_t >(len_b);
+		SHA1_UNPACK32(static_cast< uint32_t >(bitLength >> 32U), m_block.data() + pm_length - 8);
+		SHA1_UNPACK32(static_cast< uint32_t >(bitLength), m_block.data() + pm_length - 4);
 
 		this->transform(m_block.data(), blockSize);
 
