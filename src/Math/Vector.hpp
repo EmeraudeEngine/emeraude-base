@@ -667,7 +667,7 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Divides vector components by a scalar.
-			 * @warning Division by zero does not throw exception!
+			 * @note Floating-point: IEEE 754 division, a zero divisor yields infinities or NaN. Integer: a zero divisor returns a zero vector.
 			 * @param operand A scalar.
 			 * @return Vector
 			 */
@@ -676,21 +676,20 @@ namespace EmEn::Base::Math
 			Vector
 			operator/ (precision_t operand) const noexcept
 			{
-				Vector vector;
-
-				if ( Utility::isZero(operand) )
+				if constexpr ( std::is_integral_v< precision_t > )
 				{
-					for ( size_t index = 0; index < dim_t; index++ )
+					if ( operand == 0 )
 					{
-						vector.m_data[index] = std::numeric_limits< precision_t >::quiet_NaN();
+						/* NOTE: A zero vector. */
+						return {};
 					}
 				}
-				else
+
+				Vector vector;
+
+				for ( size_t index = 0; index < dim_t; index++ )
 				{
-					for ( size_t index = 0; index < dim_t; index++ )
-					{
-						vector.m_data[index] = m_data[index] / operand;
-					}
+					vector.m_data[index] = m_data[index] / operand;
 				}
 
 				return vector;
@@ -698,22 +697,26 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Divides vector components by a scalar.
-			 * @warning A division by zero is quietly ignored.
+			 * @note Floating-point: IEEE 754 division, a zero divisor yields infinities or NaN. Integer: a zero divisor leaves the vector unchanged.
 			 * @param operand A scalar.
 			 * @return Vector &
 			 */
 			Vector &
 			operator/= (precision_t operand) noexcept
 			{
-				if (Utility::isZero(operand)) {
-					return *this;
+				if constexpr ( std::is_integral_v< precision_t > )
+				{
+					if ( operand == 0 )
+					{
+						return *this;
+					}
 				}
 
 				for ( size_t index = 0; index < dim_t; index++ )
 				{
 					m_data[index] /= operand;
 				}
-				
+
 				return *this;
 			}
 

@@ -610,12 +610,15 @@ computed in the unsigned type of the same width now (a wrapping difference, `ran
 (failing before). Found from the engine triad 12 (`Animations::RandomValue`, whose Windows build had replaced the 8-bit
 draws by a constant `Variant{0}`).
 
-### ⚠️⚠️ `Vector / s` returns NaN once `|s| <= epsilon` — not infinity (2026-10-01)
+### ⚠️ `Vector / s`: IEEE 754 for floating-point types, exact-zero guard for integers
 
-`Vector::operator/(scalar)` returns an ALL-NaN vector when `Utility::isZero(s)`, i.e. `|s| <= 1.19e-7` for a float.
-A `normal = mtv / depth` guarded by `depth > 0` therefore still makes a NaN normal for a 1-ulp overlap, and that NaN
-reached the velocities and positions of the engine physics (fixed in engine triad 11). To normalize by a value that can
-be tiny, test `s > std::numeric_limits< float >::min()` and write `v * (1 / s)`: `1 / s` stays finite above FLT_MIN.
+- Floating-point: `Vector::operator/(scalar)` and `operator/=` divide plainly. A divisor below epsilon gives a finite
+  result; an exact zero gives ±inf or NaN. Guard `s > 0` where the divisor can be zero (a depth, a length).
+- Integer: an exact zero is guarded (an integer division by zero is undefined behaviour). `/` returns a zero vector,
+  `/=` leaves the vector unchanged.
+- Never gate a floating-point divisor with `Utility::isZero()`: its tolerance is absolute (`|s| <= epsilon`, 1.19e-7
+  for a float) and rejects valid divisors.
+- Proof: `MathVector.ScalarDivisionBySubEpsilonDivisor`, `MathVector.ScalarDivisionByZero`.
 
 ### ⚠️⚠️ `Matrix` singularity is RELATIVE since 2026-10-01; `inverse()` still returns the matrix ITSELF when singular
 

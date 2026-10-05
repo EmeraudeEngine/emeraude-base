@@ -46,8 +46,8 @@ sphere / capsule pairs (engine `docs/physics-overhaul.md` § 1.5).
 
 ## ⚠️ Traps
 
-- Never `Vector / s` on a depth or a length: `operator/` is NaN for `|s| <= epsilon`. Guard `> FLT_MIN`, multiply by
-  `1 / s` (triad 11).
+- A `Vector / s` on a depth or a length gives ±inf or NaN when `s` is exactly 0 (IEEE 754 since 2026-10-05): guard
+  `s > 0` (triad 11).
 - The engine negates the base normal before the solver (engine `docs/subsystems/physics/05-…`). Choose the manifold's
   convention once and document it; do not add a third convention.
 - Correctness must not depend on bit-exact floats: the owner may enable `-ffast-math` one day.

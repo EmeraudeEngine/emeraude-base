@@ -28,6 +28,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
+#include <type_traits>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
@@ -325,6 +327,49 @@ TYPED_TEST(MathVector, CompoundDivision)
 	ASSERT_EQ(vec[X], TypeParam{5});
 	ASSERT_EQ(vec[Y], TypeParam{10});
 	ASSERT_EQ(vec[Z], TypeParam{15});
+}
+
+TYPED_TEST(MathVector, ScalarDivisionByZero)
+{
+	/* volatile: a constant zero divisor is folded at compile time and rejected by MSVC (C4723). */
+	volatile TypeParam zero = 0;
+	const auto vec = Vector< 3, TypeParam >{TypeParam{10}, TypeParam{0}, TypeParam{-30}};
+	const auto result = vec / zero;
+	auto compound = vec;
+	compound /= zero;
+
+	if constexpr ( std::is_integral_v< TypeParam > )
+	{
+		ASSERT_EQ(result, (Vector< 3, TypeParam >{}));
+		ASSERT_EQ(compound, vec);
+	}
+	else
+	{
+		ASSERT_TRUE(std::isinf(result[X]) && result[X] > 0);
+		ASSERT_TRUE(std::isnan(result[Y]));
+		ASSERT_TRUE(std::isinf(result[Z]) && result[Z] < 0);
+		ASSERT_TRUE(std::isinf(compound[X]) && compound[X] > 0);
+		ASSERT_TRUE(std::isnan(compound[Y]));
+		ASSERT_TRUE(std::isinf(compound[Z]) && compound[Z] < 0);
+	}
+}
+
+TYPED_TEST(MathVector, ScalarDivisionBySubEpsilonDivisor)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		/* Half the type epsilon: a power of two, so a valid and exactly representable divisor. */
+		const auto divisor = std::numeric_limits< TypeParam >::epsilon() / 2;
+		const auto vec = Vector< 3, TypeParam >{divisor, divisor * 2, divisor * -4};
+		const auto result = vec / divisor;
+		auto compound = vec;
+		compound /= divisor;
+
+		ASSERT_EQ(result[X], TypeParam{1});
+		ASSERT_EQ(result[Y], TypeParam{2});
+		ASSERT_EQ(result[Z], TypeParam{-4});
+		ASSERT_EQ(compound, result);
+	}
 }
 
 // ============================================================================
