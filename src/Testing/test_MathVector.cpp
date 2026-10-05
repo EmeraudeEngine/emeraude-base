@@ -332,7 +332,7 @@ TYPED_TEST(MathVector, CompoundDivision)
 TYPED_TEST(MathVector, ScalarDivisionByZero)
 {
 	/* volatile: a constant zero divisor is folded at compile time and rejected by MSVC (C4723). */
-	volatile TypeParam zero = 0;
+	const volatile TypeParam zero = 0;
 	const auto vec = Vector< 3, TypeParam >{TypeParam{10}, TypeParam{0}, TypeParam{-30}};
 	const auto result = vec / zero;
 	auto compound = vec;

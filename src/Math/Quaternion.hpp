@@ -464,7 +464,7 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Quaternion scalar division operator.
-			 * @warning Will return an identity quaternion on division by 0.
+			 * @note IEEE 754 division: a zero divisor yields infinities or NaN.
 			 * @param operand A scalar.
 			 * @return Quaternion
 			 */
@@ -477,11 +477,6 @@ namespace EmEn::Base::Math
 			Quaternion
 			operator/ (precision_t operand) const noexcept
 			{
-				if ( Utility::isZero(operand) )
-				{
-					return {};
-				}
-
 				return {
 					m_data[X] / operand,
 					m_data[Y] / operand,
@@ -494,7 +489,7 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Quaternion scalar division operator.
-			 * @warning The quaternion will remain unchanged on division by zero.
+			 * @note IEEE 754 division: a zero divisor yields infinities or NaN.
 			 * @param operand A scalar.
 			 * @return Quaternion
 			 */
@@ -506,13 +501,10 @@ namespace EmEn::Base::Math
 			Quaternion &
 			operator/= (precision_t operand) noexcept
 			{
-				if ( !Utility::isZero(operand) )
-				{
-					m_data[X] /= operand;
-					m_data[Y] /= operand;
-					m_data[Z] /= operand;
-					m_data[W] /= operand;
-				}
+				m_data[X] /= operand;
+				m_data[Y] /= operand;
+				m_data[Z] /= operand;
+				m_data[W] /= operand;
 
 				return *this;
 			}

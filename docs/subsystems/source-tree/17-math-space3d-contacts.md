@@ -111,7 +111,8 @@ barycentric brute force (500 draws); capsules vs triangles; capsule pairs agains
 Release and ASan/UBSan green.
 
 ### ⚠️ Traps
-- Never `Vector / s` on a length that can be tiny (NaN under epsilon): multiply by `1 / s` after a `> threshold` test.
+- A `Vector / s` on a length gives ±inf or NaN when `s` is exactly 0 (IEEE 754 since 2026-10-05; a tiny non-zero `s`
+  divides normally): guard `s > 0` (or `> FLT_MIN` to keep `1 / s` finite) where the length can vanish.
 - A constexpr local used in a lambda is declared INSIDE the lambda (MSVC C3493 on an uncaptured one).
 - ⚠️ MSVC C4459 (an error under /WX): a function-template LOCAL hides a namespace-scope name of the TU that
   instantiates it (`constexpr auto Tolerance` in `ShapeCast.hpp` vs a test's anonymous-namespace `Tolerance`,

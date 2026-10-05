@@ -24,6 +24,10 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+/* STL inclusions. */
+#include <cmath>
+#include <limits>
+
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
@@ -225,6 +229,44 @@ TYPED_TEST(MathQuaternion, ScalarDivisionAssignment)
 
 	quat /= TypeParam{5};
 	assertQuaternionNear(quat, expected);
+}
+
+TYPED_TEST(MathQuaternion, ScalarDivisionByZero)
+{
+	/* volatile: a constant zero divisor is folded at compile time and rejected by MSVC (C4723). */
+	const volatile TypeParam zero = 0;
+	const Quaternion< TypeParam > quat{10, 0, -30, 40};
+	const auto result = quat / zero;
+	auto compound = quat;
+	compound /= zero;
+
+	ASSERT_TRUE(std::isinf(result[X]) && result[X] > 0);
+	ASSERT_TRUE(std::isnan(result[Y]));
+	ASSERT_TRUE(std::isinf(result[Z]) && result[Z] < 0);
+	ASSERT_TRUE(std::isinf(result[W]) && result[W] > 0);
+	ASSERT_TRUE(std::isinf(compound[X]) && compound[X] > 0);
+	ASSERT_TRUE(std::isnan(compound[Y]));
+	ASSERT_TRUE(std::isinf(compound[Z]) && compound[Z] < 0);
+	ASSERT_TRUE(std::isinf(compound[W]) && compound[W] > 0);
+}
+
+TYPED_TEST(MathQuaternion, ScalarDivisionBySubEpsilonDivisor)
+{
+	/* Half the type epsilon: a power of two, so a valid and exactly representable divisor. */
+	const auto divisor = std::numeric_limits< TypeParam >::epsilon() / 2;
+	const Quaternion< TypeParam > quat{divisor, divisor * 2, divisor * -4, divisor * 8};
+	const auto result = quat / divisor;
+	auto compound = quat;
+	compound /= divisor;
+
+	ASSERT_EQ(result[X], TypeParam{1});
+	ASSERT_EQ(result[Y], TypeParam{2});
+	ASSERT_EQ(result[Z], TypeParam{-4});
+	ASSERT_EQ(result[W], TypeParam{8});
+	ASSERT_EQ(compound[X], result[X]);
+	ASSERT_EQ(compound[Y], result[Y]);
+	ASSERT_EQ(compound[Z], result[Z]);
+	ASSERT_EQ(compound[W], result[W]);
 }
 
 TYPED_TEST(MathQuaternion, UnaryPlus)
@@ -831,29 +873,6 @@ TYPED_TEST(MathQuaternion, GetAsVector4)
 // ============================================================================
 // EDGE CASES AND ROBUSTNESS
 // ============================================================================
-
-TYPED_TEST(MathQuaternion, DivisionByZero)
-{
-	const Quaternion< TypeParam > quat{1, 2, 3, 4};
-	const auto result = quat / TypeParam{0};
-
-	// Should return identity quaternion
-	ASSERT_EQ(result[X], TypeParam{0});
-	ASSERT_EQ(result[Y], TypeParam{0});
-	ASSERT_EQ(result[Z], TypeParam{0});
-	ASSERT_EQ(result[W], TypeParam{1});
-}
-
-TYPED_TEST(MathQuaternion, DivisionByZeroAssignment)
-{
-	Quaternion< TypeParam > quat{1, 2, 3, 4};
-	const Quaternion< TypeParam > original = quat;
-
-	quat /= TypeParam{0};
-
-	// Should remain unchanged
-	assertQuaternionNear(quat, original);
-}
 
 TYPED_TEST(MathQuaternion, NormalizeZeroQuaternion)
 {

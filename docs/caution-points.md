@@ -610,15 +610,19 @@ computed in the unsigned type of the same width now (a wrapping difference, `ran
 (failing before). Found from the engine triad 12 (`Animations::RandomValue`, whose Windows build had replaced the 8-bit
 draws by a constant `Variant{0}`).
 
-### ⚠️ `Vector / s`: IEEE 754 for floating-point types, exact-zero guard for integers
+### ⚠️ `Vector / s` and `Quaternion / s`: IEEE 754 for floating-point types, exact-zero guard for integers
 
-- Floating-point: `Vector::operator/(scalar)` and `operator/=` divide plainly. A divisor below epsilon gives a finite
+- Floating-point: `Vector::operator/(scalar)` and `operator/=` divide plainly, and so do `Quaternion`'s (aligned the
+  same day; it returned an identity quaternion, `/=` left it unchanged, for `|s| <= epsilon`). A divisor below epsilon gives a finite
   result; an exact zero gives ±inf or NaN. Guard `s > 0` where the divisor can be zero (a depth, a length).
 - Integer: an exact zero is guarded (an integer division by zero is undefined behaviour). `/` returns a zero vector,
   `/=` leaves the vector unchanged.
 - Never gate a floating-point divisor with `Utility::isZero()`: its tolerance is absolute (`|s| <= epsilon`, 1.19e-7
   for a float) and rejects valid divisors.
-- Proof: `MathVector.ScalarDivisionBySubEpsilonDivisor`, `MathVector.ScalarDivisionByZero`.
+- `Quaternion::inverse()` / `inversed()` and the other `Quaternion` helpers still gate on `Utility::isZero()` of a
+  squared length: unchanged, an absolute test of the same kind (left for an owner decision).
+- Proof: `MathVector.ScalarDivisionBySubEpsilonDivisor`, `MathVector.ScalarDivisionByZero`,
+  `MathQuaternion.ScalarDivisionBySubEpsilonDivisor`, `MathQuaternion.ScalarDivisionByZero` (all failing before).
 
 ### ⚠️⚠️ `Matrix` singularity is RELATIVE since 2026-10-01; `inverse()` still returns the matrix ITSELF when singular
 
