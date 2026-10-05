@@ -37,10 +37,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <istream>
-#include <set>
+#include <limits>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -462,15 +464,70 @@ namespace EmEn::Base::VertexFactory
 				V_VT_VN
 			};
 
-			/**
-			 * @brief Tells what kind of attributes are predominant in the OBJ file.
-			 */
-			enum PredominantAttributes : std::uint8_t
+			/** @brief The index standing for an attribute a face corner does not give, in a vertex key. */
+			static constexpr auto NoAttribute{std::numeric_limits< index_data_t >::max()};
+
+			/** @brief An OBJ vertex is the whole (v, vt, vn) triple, 0-based: the key of one shape vertex. */
+			using VertexKey = std::array< index_data_t, 3 >;
+
+			/** @brief Hashes a vertex key (multiplicative mixing of the three indices). */
+			struct VertexKeyHash final
 			{
-				V,
-				VN,
-				VT
+				[[nodiscard]]
+				size_t
+				operator() (const VertexKey & key) const noexcept
+				{
+					constexpr std::uint64_t Multiplier{0x9E3779B97F4A7C15ULL};
+
+					auto hash = static_cast< std::uint64_t >(key[0]);
+					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[1]);
+					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[2]);
+
+					return static_cast< size_t >(hash ^ (hash >> 32U));
+				}
 			};
+
+			/** @brief The shape vertex of every (v, vt, vn) triple already met. */
+			using VertexIndexMap = std::unordered_map< VertexKey, index_data_t, VertexKeyHash >;
+
+			/**
+			 * @brief Returns the shape vertex of a face corner, appending it the first time its (v, vt, vn) triple is met.
+			 * @note ⚠️ The whole triple is the key (2026-10-05): the loader used to key a vertex by ONE index (the most
+			 * numerous attribute) and to append a vertex only when the POSITION differed, so a face sharing a position
+			 * with another normal or texture coordinates (a hard edge, a UV seam) inherited the first face's — on
+			 * basic-scenery's temple, 381 triangles a ZERO normal (black) and 4880 corners a foreign one.
+			 * @pre The indices are in range of m_v, m_vt, m_vn, or NoAttribute for vt and vn.
+			 * @param key The 0-based (v, vt, vn) triple.
+			 * @param vertexIndexes A reference to the triples already met.
+			 * @param vertices A reference to the shape vertices.
+			 * @return std::optional< index_data_t > The shape vertex index, or nothing past the index type's capacity.
+			 */
+			[[nodiscard]]
+			std::optional< index_data_t >
+			vertexIndexOf (const VertexKey & key, VertexIndexMap & vertexIndexes, std::vector< ShapeVertex< vertex_data_t > > & vertices) const noexcept
+			{
+				if ( const auto known = vertexIndexes.find(key); known != vertexIndexes.end() )
+				{
+					return known->second;
+				}
+
+				/* NOTE: The maximum is NoAttribute, never a vertex index. */
+				if ( vertices.size() >= static_cast< size_t >(NoAttribute) )
+				{
+					Logging::error("VertexFactory::FileFormatOBJ", "too many vertices for the index type !");
+
+					return std::nullopt;
+				}
+
+				const auto vertexIndex = static_cast< index_data_t >(vertices.size());
+				const auto normal = key[2] != NoAttribute ? m_vn[key[2]] : Math::Vector< 3, vertex_data_t >{};
+				const auto textureCoordinates = key[1] != NoAttribute ? m_vt[key[1]] : Math::Vector< 3, vertex_data_t >{};
+
+				vertices.emplace_back(m_v[key[0]], normal, textureCoordinates);
+				vertexIndexes.emplace(key, vertexIndex);
+
+				return vertexIndex;
+			}
 
 			/**
 			 * @brief Determines how the OBJ format describe a face.
@@ -584,19 +641,6 @@ namespace EmEn::Base::VertexFactory
 
 				m_vertexCount = static_cast< index_data_t >(std::max(m_v.size(), std::max(m_vt.size(), m_vn.size())));
 
-				if ( m_vertexCount == static_cast< index_data_t >(m_v.size()) )
-				{
-					m_predominantAttribute = PredominantAttributes::V;
-				}
-				else if ( m_vertexCount == static_cast< index_data_t >(m_vn.size()) )
-				{
-					m_predominantAttribute = PredominantAttributes::VN;
-				}
-				else
-				{
-					m_predominantAttribute = PredominantAttributes::VT;
-				}
-
 				return true;
 			}
 
@@ -705,12 +749,13 @@ namespace EmEn::Base::VertexFactory
 			bool
 			parseFaceAssemblyV_VN (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
-				/* NOTE: Resize/reserving memory space to the geometry shape. */
-				vertices.resize(m_vertexCount);
+				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
+				vertices.reserve(m_vertexCount);
 				triangles.reserve(m_faceCount);
 
-				/* Keep track of generated shape vertex index. */
-				std::set< index_data_t > writtenIndexes{};
+				/* Keep track of the generated shape vertices. */
+				VertexIndexMap vertexIndexes{};
+				vertexIndexes.reserve(m_vertexCount);
 
 				/* Keep count on attributes and triangles. */
 				index_data_t positionCount = 0;
@@ -771,62 +816,24 @@ namespace EmEn::Base::VertexFactory
 								const bool hasNormal = OBJVertex.vnIndex() > 0;
 								const auto vnIndex = hasNormal ? OBJVertex.vnIndex() - 1 : 0;
 
-								/* NOTE: Get the real shape vertex index in the final shape. */
-								index_data_t geometryVertexIndex = 0;
-
-								switch ( m_predominantAttribute )
-								{
-									case PredominantAttributes::V :
-										geometryVertexIndex = vIndex;
-										break;
-
-									case PredominantAttributes::VN :
-										geometryVertexIndex = hasNormal ? vnIndex : vIndex;
-										break;
-
-									default:
-										return false;
-								}
-
-								if ( vIndex >= m_v.size() || geometryVertexIndex >= vertices.size() || ( hasNormal && vnIndex >= m_vn.size() ) )
+								if ( vIndex >= m_v.size() || ( hasNormal && vnIndex >= m_vn.size() ) )
 								{
 									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
 
 									return false;
 								}
 
-								if ( writtenIndexes.contains(geometryVertexIndex) )
+								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
+								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
+								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, NoAttribute, hasNormal ? vnIndex : NoAttribute}, vertexIndexes, vertices);
+
+								if ( !geometryVertexIndex.has_value() )
 								{
-									const auto & vertex = vertices.at(geometryVertexIndex);
-
-									const auto & position = m_v.at(vIndex);
-
-									/* NOTE: If the position is different, we create a new shape vertex. */
-									if ( vertex.position() != position )
-									{
-										const auto normal = hasNormal ? m_vn.at(vnIndex) : Math::Vector< 3, vertex_data_t >{};
-
-										vertices.emplace_back(position, normal);
-
-										geometryVertexIndex = static_cast< index_data_t >(vertices.size() - 1);
-									}
-								}
-								else
-								{
-									/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
-									auto & vertex = vertices.at(geometryVertexIndex);
-									vertex.setPosition(m_v.at(vIndex));
-
-									if ( hasNormal )
-									{
-										vertex.setNormal(m_vn.at(vnIndex));
-									}
-
-									writtenIndexes.emplace(geometryVertexIndex);
+									return false;
 								}
 
 								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex);
+								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex.value());
 							}
 
 							triangles.emplace_back(triangle);
@@ -855,12 +862,13 @@ namespace EmEn::Base::VertexFactory
 			bool
 			parseFaceAssemblyV_VT (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
-				/* NOTE: Resize/reserving memory space to the geometry shape. */
-				vertices.resize(m_vertexCount);
+				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
+				vertices.reserve(m_vertexCount);
 				triangles.reserve(m_faceCount);
 
-				/* Keep track of generated shape vertex index. */
-				std::set< index_data_t > writtenIndexes{};
+				/* Keep track of the generated shape vertices. */
+				VertexIndexMap vertexIndexes{};
+				vertexIndexes.reserve(m_vertexCount);
 
 				/* Keep count on attributes and triangles. */
 				index_data_t positionCount = 0;
@@ -921,62 +929,24 @@ namespace EmEn::Base::VertexFactory
 								const bool hasTexCoord = OBJVertex.vtIndex() > 0;
 								const auto vtIndex = hasTexCoord ? OBJVertex.vtIndex() - 1 : 0;
 
-								/* NOTE: Get the real shape vertex index in the final shape. */
-								index_data_t geometryVertexIndex = 0;
-
-								switch ( m_predominantAttribute )
-								{
-									case PredominantAttributes::V :
-										geometryVertexIndex = vIndex;
-										break;
-
-									case PredominantAttributes::VT :
-										geometryVertexIndex = hasTexCoord ? vtIndex : vIndex;
-										break;
-
-									default:
-										return false;
-								}
-
-								if ( vIndex >= m_v.size() || geometryVertexIndex >= vertices.size() || ( hasTexCoord && vtIndex >= m_vt.size() ) )
+								if ( vIndex >= m_v.size() || ( hasTexCoord && vtIndex >= m_vt.size() ) )
 								{
 									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
 
 									return false;
 								}
 
-								if ( writtenIndexes.contains(geometryVertexIndex) )
+								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
+								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
+								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, NoAttribute}, vertexIndexes, vertices);
+
+								if ( !geometryVertexIndex.has_value() )
 								{
-									const auto & vertex = vertices.at(geometryVertexIndex);
-
-									const auto & position = m_v.at(vIndex);
-
-									/* NOTE: If the position is different, we create a new shape vertex. */
-									if ( vertex.position() != position )
-									{
-										const auto texCoord = hasTexCoord ? m_vt.at(vtIndex) : Math::Vector< 3, vertex_data_t >{};
-
-										vertices.emplace_back(position, Math::Vector< 3, vertex_data_t >{}, texCoord);
-
-										geometryVertexIndex = static_cast< index_data_t >(vertices.size() - 1);
-									}
-								}
-								else
-								{
-									/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
-									auto & vertex = vertices.at(geometryVertexIndex);
-									vertex.setPosition(m_v.at(vIndex));
-
-									if ( hasTexCoord )
-									{
-										vertex.setTextureCoordinates(m_vt.at(vtIndex));
-									}
-
-									writtenIndexes.emplace(geometryVertexIndex);
+									return false;
 								}
 
 								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex);
+								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex.value());
 							}
 
 							triangles.emplace_back(triangle);
@@ -1005,12 +975,13 @@ namespace EmEn::Base::VertexFactory
 			bool
 			parseFaceAssemblyV_VT_VN (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
-				/* NOTE: Resize/reserving memory space to the geometry shape. */
-				vertices.resize(m_vertexCount);
+				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
+				vertices.reserve(m_vertexCount);
 				triangles.reserve(m_faceCount);
 
-				/* Keep track of generated shape vertex index. */
-				std::set< index_data_t > writtenIndexes{};
+				/* Keep track of the generated shape vertices. */
+				VertexIndexMap vertexIndexes{};
+				vertexIndexes.reserve(m_vertexCount);
 
 				/* Keep count on attributes and triangles. */
 				index_data_t positionCount = 0;
@@ -1078,69 +1049,24 @@ namespace EmEn::Base::VertexFactory
 								const auto vnIndex = hasNormal ? OBJVertex.vnIndex() - 1 : 0;
 								const auto vtIndex = hasTexCoord ? OBJVertex.vtIndex() - 1 : 0;
 
-								/* NOTE: Get the real shape vertex index in the final shape. */
-								index_data_t geometryVertexIndex = 0;
-
-								switch ( m_predominantAttribute )
-								{
-									case PredominantAttributes::V :
-										geometryVertexIndex = vIndex;
-										break;
-
-									case PredominantAttributes::VN :
-										geometryVertexIndex = hasNormal ? vnIndex : vIndex;
-										break;
-
-									case PredominantAttributes::VT :
-										geometryVertexIndex = hasTexCoord ? vtIndex : vIndex;
-										break;
-								}
-
-								if ( vIndex >= m_v.size() || geometryVertexIndex >= vertices.size() || ( hasNormal && vnIndex >= m_vn.size() ) || ( hasTexCoord && vtIndex >= m_vt.size() ) )
+								if ( vIndex >= m_v.size() || ( hasNormal && vnIndex >= m_vn.size() ) || ( hasTexCoord && vtIndex >= m_vt.size() ) )
 								{
 									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
 
 									return false;
 								}
 
-								if ( writtenIndexes.contains(geometryVertexIndex) )
+								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
+								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
+								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, hasNormal ? vnIndex : NoAttribute}, vertexIndexes, vertices);
+
+								if ( !geometryVertexIndex.has_value() )
 								{
-									const auto & vertex = vertices.at(geometryVertexIndex);
-
-									const auto & position = m_v.at(vIndex);
-
-									/* NOTE: If the position is different, we create a new shape vertex. */
-									if ( vertex.position() != position )
-									{
-										const auto normal = hasNormal ? m_vn.at(vnIndex) : Math::Vector< 3, vertex_data_t >{};
-										const auto texCoord = hasTexCoord ? m_vt.at(vtIndex) : Math::Vector< 3, vertex_data_t >{};
-
-										vertices.emplace_back(position, normal, texCoord);
-
-										geometryVertexIndex = static_cast< uint32_t >(vertices.size() - 1);
-									}
-								}
-								else
-								{
-									/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
-									auto & vertex = vertices.at(geometryVertexIndex);
-									vertex.setPosition(m_v.at(vIndex));
-
-									if ( hasNormal )
-									{
-										vertex.setNormal(m_vn.at(vnIndex));
-									}
-
-									if ( hasTexCoord )
-									{
-										vertex.setTextureCoordinates(m_vt.at(vtIndex));
-									}
-
-									writtenIndexes.emplace(geometryVertexIndex);
+									return false;
 								}
 
 								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex);
+								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex.value());
 							}
 
 							triangles.emplace_back(triangle);
@@ -1501,10 +1427,9 @@ namespace EmEn::Base::VertexFactory
 			std::vector< Math::Vector< 3, vertex_data_t > > m_v;
 			std::vector< Math::Vector< 3, vertex_data_t > > m_vt;
 			std::vector< Math::Vector< 3, vertex_data_t > > m_vn;
-			index_data_t m_vertexCount{0}; /* Combined attributes vertex count. */
+			index_data_t m_vertexCount{0}; /* The largest attribute count: a lower bound of the vertex count, for the reserve. */
 			index_data_t m_faceCount{0};
 			FaceMode m_faceMode{FaceMode::Undetermined};
-			PredominantAttributes m_predominantAttribute{PredominantAttributes::V};
 			ReadOptions m_readOptions{};
 	};
 }

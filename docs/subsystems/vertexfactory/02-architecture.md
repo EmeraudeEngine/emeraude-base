@@ -308,6 +308,10 @@ WaveFactory and PixelFactory.
 
 **FileFormatOBJ** - Wavefront OBJ (ASCII), read + write
 - Negative (relative) face indices supported via `resolveIndex()` (1-based, end-relative).
+- One shape vertex per unique `(v, vt, vn)` triple (`vertexIndexOf()`, a hash map of the triples met), like
+  tinyobjloader / Assimp. ⚠️ Until 2026-10-05 a vertex was keyed by ONE index (the most numerous attribute) and
+  re-created only when the POSITION differed: a hard edge or a UV seam inherited the first face's normal / UV
+  (Critical Attention Points).
 - See: `FileFormatOBJ.hpp`
 
 **FileFormatSTL** - Stereolithography (binary + ASCII), read + write

@@ -60,3 +60,13 @@
   bitangent handedness comes back from the sign of the stored bitangent — except on a degenerate frame (a pole,
   `cross(normal, tangent)` = 0), where there is no sign to read. Inconsistent sizes (a partial vertex, an index count
   not a multiple of 3, an index or a group out of range) are refused and leave the shape empty.
+- **An OBJ vertex is the whole `(v, vt, vn)` triple** (2026-10-05). `FileFormatOBJ` used to key its vertices by
+  the most numerous attribute alone and to append a vertex only when the POSITION differed, so a face sharing a
+  position with another normal or texture coordinates inherited the first face's. On projet-alpha's
+  basic-scenery temple (`Structures/Temple.obj`: 4706 v, 2983 vt, 667 vn, keyed by position) that gave 381
+  triangles a ZERO normal — the file's single `vn 0 0 0`, used only by 228 zero-area triangles — rendered as large
+  pure-black triangles, 4880 corners a foreign normal and 3976 a foreign UV. Tests
+  `VertexFactoryOBJ.sharedPositionKeeps*` (the three face formats) and `repeatedTripleSharesOneVertex` (sharing
+  is kept). Measured: the temple's black pixels 16.7 % → 7.0 % of its box (the rest is the night through the
+  arches). Every OBJ of the data stores with hard edges or seams now loads its own normals and UVs: a look change
+  for the better, and slightly more vertices (the seams are duplicated, as the GPU needs them).

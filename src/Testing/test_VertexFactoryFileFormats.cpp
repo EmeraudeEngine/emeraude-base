@@ -666,6 +666,120 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_FALSE(format.readStream(stream, result, {}));
 	}
 
+	namespace
+	{
+		/* The attribute a triangle corner ends up with, read back from the loaded shape. */
+		Math::Vector< 3, float >
+		cornerNormal (const Result & result, size_t triangle, uint32_t corner) noexcept
+		{
+			return result.shape.vertices()[result.shape.triangles()[triangle].vertexIndex(corner)].normal();
+		}
+
+		Math::Vector< 3, float >
+		cornerTextureCoordinates (const Result & result, size_t triangle, uint32_t corner) noexcept
+		{
+			return result.shape.vertices()[result.shape.triangles()[triangle].vertexIndex(corner)].textureCoordinates();
+		}
+	}
+
+	TEST(VertexFactoryOBJ, sharedPositionKeepsEachCornerNormalAndTextureCoordinates)
+	{
+		/* A position shared by two faces with DIFFERENT normals and texture coordinates (a hard
+		 * edge, a UV seam) is two vertices: an OBJ vertex is the whole (v, vt, vn) triple. The
+		 * loader keyed its vertices by ONE index (the most numerous attribute) and duplicated a
+		 * vertex only when the POSITION differed, so the second face inherited the first face's
+		 * normal and UV — on basic-scenery's temple, 381 triangles inherited a ZERO normal (black)
+		 * and 4880 corners a foreign one (2026-10-05). Positions (4) outnumber normals (2) and
+		 * texture coordinates (2) here, the case that keyed by position. */
+		const auto buffer = toBytes(
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\n"
+			"vt 0 0\nvt 1 1\n"
+			"vn 0 0 1\nvn 1 0 0\n"
+			"f 1/1/1 2/1/1 3/1/1\n"
+			"f 1/2/2 3/2/2 4/2/2\n");
+
+		MemoryStream stream{buffer};
+		OBJ format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.triangles().size(), 2U);
+
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			EXPECT_EQ(cornerNormal(result, 0, corner), (Math::Vector< 3, float >{0.0F, 0.0F, 1.0F})) << "triangle 0, corner " << corner;
+			EXPECT_EQ(cornerNormal(result, 1, corner), (Math::Vector< 3, float >{1.0F, 0.0F, 0.0F})) << "triangle 1, corner " << corner;
+			EXPECT_EQ(cornerTextureCoordinates(result, 0, corner)[0], 0.0F) << "triangle 0, corner " << corner;
+			EXPECT_EQ(cornerTextureCoordinates(result, 1, corner)[0], 1.0F) << "triangle 1, corner " << corner;
+		}
+
+		/* Position 1 opens both faces with two different triples: two vertices. */
+		EXPECT_NE(result.shape.triangles()[0].vertexIndex(0), result.shape.triangles()[1].vertexIndex(0));
+	}
+
+	TEST(VertexFactoryOBJ, sharedPositionKeepsEachCornerNormalWithoutTextureCoordinates)
+	{
+		/* The same defect on the "v//vn" path. */
+		const auto buffer = toBytes(
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\n"
+			"vn 0 0 1\nvn 1 0 0\n"
+			"f 1//1 2//1 3//1\n"
+			"f 1//2 3//2 4//2\n");
+
+		MemoryStream stream{buffer};
+		OBJ format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.triangles().size(), 2U);
+
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			EXPECT_EQ(cornerNormal(result, 0, corner), (Math::Vector< 3, float >{0.0F, 0.0F, 1.0F})) << "triangle 0, corner " << corner;
+			EXPECT_EQ(cornerNormal(result, 1, corner), (Math::Vector< 3, float >{1.0F, 0.0F, 0.0F})) << "triangle 1, corner " << corner;
+		}
+	}
+
+	TEST(VertexFactoryOBJ, sharedPositionKeepsEachCornerTextureCoordinatesWithoutNormals)
+	{
+		/* The same defect on the "v/vt" path (a UV seam). */
+		const auto buffer = toBytes(
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nv 0 0 1\n"
+			"vt 0 0\nvt 1 1\n"
+			"f 1/1 2/1 3/1\n"
+			"f 1/2 3/2 4/2\n");
+
+		MemoryStream stream{buffer};
+		OBJ format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.triangles().size(), 2U);
+
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			EXPECT_EQ(cornerTextureCoordinates(result, 0, corner)[0], 0.0F) << "triangle 0, corner " << corner;
+			EXPECT_EQ(cornerTextureCoordinates(result, 1, corner)[0], 1.0F) << "triangle 1, corner " << corner;
+		}
+	}
+
+	TEST(VertexFactoryOBJ, repeatedTripleSharesOneVertex)
+	{
+		/* The fix must not stop sharing: a quad's diagonal corners repeat the whole triple and stay
+		 * ONE vertex (4 vertices for 2 triangles, not 6). */
+		const auto buffer = toBytes(
+			"v 0 0 0\nv 1 0 0\nv 1 1 0\nv 0 1 0\n"
+			"vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n"
+			"vn 0 0 1\n"
+			"f 1/1/1 2/2/1 3/3/1 4/4/1\n");
+
+		MemoryStream stream{buffer};
+		OBJ format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.triangles().size(), 2U);
+		EXPECT_EQ(result.shape.triangles()[0].vertexIndex(0), result.shape.triangles()[1].vertexIndex(0));
+		EXPECT_EQ(result.shape.triangles()[0].vertexIndex(2), result.shape.triangles()[1].vertexIndex(1));
+		EXPECT_EQ(result.shape.vertices().size(), 4U);
+	}
+
 	TEST(VertexFactoryOBJ, negativeRelativeIndicesResolveLikePositive)
 	{
 		/* Ave robustus! (A.4): OBJ negative indices are relative to the current list size.
