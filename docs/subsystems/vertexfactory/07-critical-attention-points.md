@@ -23,6 +23,32 @@
   vertex format order). `Shape::addVertex()` (manual building) does not take them: (0, 0).
 - **`setTangent(Vector<4>)`'s W is the handedness, not a homogeneous coordinate.** Dropping it
   compiles, renders, and is wrong only on mirrored UVs — the worst kind of silent defect.
+  ⚠️⚠️ The reverse is as silent: a matrix × `Vector<4>(t, 0)` product IS a `Vector<4>`, so it picks this
+  overload and writes a handedness of **0** → `biNormal()` is the zero vector and the normal map falls flat
+  onto the tangent axis. `Shape::transform()` did exactly that from 2026-08-28 (base `f2d4ba7`) to 2026-10-06:
+  every TRANSFORMED shape lost its bitangent — the geodesic sphere (its generator ends on
+  `transform(scaling(radius))`) rendered black under any normal-mapped material, 8.8 / 255 against 183 for the
+  UV sphere. Pass a `Vector<3>{…}` built from the product. `transform()` also flips the handedness under a
+  mirror (negative determinant): `cross(M·N, M·T) = det(M)·M·(N×T)` for an orthogonal M. Pinned by
+  `VertexFactoryShapeGenerator.transformKeepsTheTangentHandedness` and
+  `geodesicSphereKeepsItsBitangentUnderEngineOptions`.
+- **`Shape::transform()` carries normals by the COFACTOR matrix of the 3×3 part** (`det(A)·A⁻ᵀ`, sign of
+  `det(A)` put back), never by `A` itself: a normal is a covector, and `A` leans it toward a stretched axis
+  (448 of 561 normals wrong on a sphere scaled (2, 1, 1) until 2026-10-06). The cofactor stays defined for a
+  singular `A` (a flattened shape gets its plane's normal). The tangent goes through `A`, then Gram-Schmidt
+  against the new normal. Pinned by `VertexFactoryShapeGenerator.transformCarriesNormalsByTheInverseTranspose`.
+- **A vertex rebuilt with `saveVertex()` starts at handedness +1**: a processor that copies a source vertex must
+  copy `tangentHandedness()` with the tangent (`ShapeDecimator`, `ShapeSplitter` — the interpolated cut vertex
+  takes the nearer endpoint's, like the influences — fixed 2026-10-06, tests
+  `VertexFactoryShapeDecimator.decimatedVerticesKeepTheTangentHandedness`,
+  `VertexFactoryShapeSplitter.partsKeepTheTangentHandedness`). `ShapeProcessor`'s UV unwraps
+  (`generateLightmapUV()`, `generateUVUnwrap()`) do NOT copy it on purpose: they rewrite the UVs and recompute
+  the tangent frame — see the open item `computed-tangent-space-never-derives-the-handedness`.
+- **`Math::Vector::tangent()` reads only the V component of the UV deltas**, and the computed path never sets a
+  handedness, so `det[T B N] = +1` structurally: swapping U and V ROTATES the (T, B) pair a quarter turn about N,
+  it does not reflect it, and reversing U is invisible to it.
+- **The geodesic sphere is NON-indexed** (one vertex triple per triangle): that is what lets its seam fix lift a
+  U past 1.0 on one side of the +Z seam only. A change that welds its vertices breaks the seam.
 - **`sin(π)` and `cos(π/2)` are not 0 in float** (-8.74e-8 and -4.37e-8). A generator that computes
   its pole or equator ring by trigonometry puts the pole vertices on a ~1e-7 ring: a hole invisible in
   a render and to any exact-position weld. Set the extreme rings exactly (`generateSphere` -Y pole,

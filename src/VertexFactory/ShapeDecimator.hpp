@@ -956,6 +956,7 @@ namespace EmEn::Base::VertexFactory
 
 						const auto dstIdx = output.saveVertex(newPos, srcVertex.normal(), srcVertex.textureCoordinates());
 						output.vertices()[dstIdx].setTangent(srcVertex.tangent());
+						output.vertices()[dstIdx].setTangentHandedness(srcVertex.tangentHandedness());
 
 						vertexMap[srcIdx] = dstIdx;
 					}

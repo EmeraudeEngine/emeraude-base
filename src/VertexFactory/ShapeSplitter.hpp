@@ -258,6 +258,8 @@ namespace EmEn::Base::VertexFactory
 				Math::Vector< 4, int32_t > influences;
 				Math::Vector< 4, vertex_data_t > weights;
 				Math::Vector< 4, vertex_data_t > color;
+				/* A sign, not a direction: it is taken from the nearer endpoint, like the influences. */
+				vertex_data_t tangentHandedness{1};
 			};
 
 			struct OutputContext
@@ -320,6 +322,7 @@ namespace EmEn::Base::VertexFactory
 				auto dstIdx = ctx.shape->saveVertex(srcVertex.position(), srcVertex.normal(), srcVertex.textureCoordinates());
 
 				ctx.shape->vertices()[dstIdx].setTangent(srcVertex.tangent());
+				ctx.shape->vertices()[dstIdx].setTangentHandedness(srcVertex.tangentHandedness());
 				ctx.shape->vertices()[dstIdx].setInfluences(
 					srcVertex.influences()[Math::X], srcVertex.influences()[Math::Y],
 					srcVertex.influences()[Math::Z], srcVertex.influences()[Math::W]
@@ -375,6 +378,7 @@ namespace EmEn::Base::VertexFactory
 				auto dstIdx = ctx.shape->saveVertex(attrs.position, attrs.normal, attrs.textureCoordinates);
 
 				ctx.shape->vertices()[dstIdx].setTangent(attrs.tangent);
+				ctx.shape->vertices()[dstIdx].setTangentHandedness(attrs.tangentHandedness);
 				ctx.shape->vertices()[dstIdx].setInfluences(
 					attrs.influences[Math::X], attrs.influences[Math::Y],
 					attrs.influences[Math::Z], attrs.influences[Math::W]
@@ -485,6 +489,7 @@ namespace EmEn::Base::VertexFactory
 				result.tangent = (vertA.tangent() + ((vertB.tangent() - vertA.tangent()) * t)).normalized();
 				result.weights = vertA.weights() + (vertB.weights() - vertA.weights()) * t;
 				result.influences = (t < static_cast< vertex_data_t >(0.5)) ? vertA.influences() : vertB.influences();
+				result.tangentHandedness = (t < static_cast< vertex_data_t >(0.5)) ? vertA.tangentHandedness() : vertB.tangentHandedness();
 
 				if ( !m_source.vertexColors().empty() )
 				{

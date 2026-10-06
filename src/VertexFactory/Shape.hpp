@@ -1100,11 +1100,58 @@ namespace EmEn::Base::VertexFactory
 				auto noTranslate(transform);
 				noTranslate.clearTranslation();
 
+				/* NOTE: A mirror (negative determinant) reverses cross(N, T) relative to the
+				 * transformed bitangent, so the handedness flips with it. */
+				const auto mirrored = noTranslate.fastDeterminant() < static_cast< vertex_data_t >(0);
+
+				/* NOTE: A normal is a covector: it goes through the inverse transpose of the 3x3 part, not
+				 * through the part itself, or a non-uniform scale leans it toward the stretched axis. The
+				 * cofactor matrix is det(A) * A^-T: the same direction once normalised, and still defined
+				 * for a singular A (a shape flattened onto a plane gets that plane's normal). The sign of
+				 * det(A) is put back so a mirror does not turn the normals inward. Cyclic form of the 3x3
+				 * cofactors: C(r, c) = a(r+1, c+1) a(r+2, c+2) - a(r+1, c+2) a(r+2, c+1), indices mod 3. */
+				const auto sign = mirrored ? static_cast< vertex_data_t >(-1) : static_cast< vertex_data_t >(1);
+				const auto cofactor = [&noTranslate, sign] (size_t row, size_t col) {
+					const auto row1 = (row + 1) % 3;
+					const auto row2 = (row + 2) % 3;
+					const auto col1 = (col + 1) % 3;
+					const auto col2 = (col + 2) % 3;
+
+					return sign * ((noTranslate(row1, col1) * noTranslate(row2, col2)) - (noTranslate(row1, col2) * noTranslate(row2, col1)));
+				};
+				const Math::Vector< 3, vertex_data_t > normalRow0{cofactor(0, 0), cofactor(0, 1), cofactor(0, 2)};
+				const Math::Vector< 3, vertex_data_t > normalRow1{cofactor(1, 0), cofactor(1, 1), cofactor(1, 2)};
+				const Math::Vector< 3, vertex_data_t > normalRow2{cofactor(2, 0), cofactor(2, 1), cofactor(2, 2)};
+
+				const auto transformNormal = [&normalRow0, &normalRow1, &normalRow2] (const Math::Vector< 3, vertex_data_t > & normal) {
+					return Math::Vector< 3, vertex_data_t >{
+						Math::Vector< 3, vertex_data_t >::dotProduct(normalRow0, normal),
+						Math::Vector< 3, vertex_data_t >::dotProduct(normalRow1, normal),
+						Math::Vector< 3, vertex_data_t >::dotProduct(normalRow2, normal)
+					};
+				};
+
 				for ( auto & vertexRef : m_vertices )
 				{
 					vertexRef.setPosition(transform * Math::Vector< 4, vertex_data_t >(vertexRef.position(), 1));
-					vertexRef.setTangent((noTranslate * Math::Vector< 4, vertex_data_t >(vertexRef.tangent(), 0)).normalize());
-					vertexRef.setNormal((noTranslate * Math::Vector< 4, vertex_data_t >(vertexRef.normal(), 0)).normalize());
+
+					const auto normal = transformNormal(vertexRef.normal()).normalize();
+					/* ⚠️⚠️ Through a Vector< 3 >, never the raw Vector< 4 > product: setTangent(Vector< 4 >)
+					 * reads W as the bitangent HANDEDNESS, and W is 0 here — that zeroed biNormal() on every
+					 * transformed shape and flattened its normal map (the black geodesic sphere, 2026-10-06). */
+					Math::Vector< 3, vertex_data_t > tangent{noTranslate * Math::Vector< 4, vertex_data_t >(vertexRef.tangent(), 0)};
+
+					/* A sheared or non-uniformly scaled tangent is no longer perpendicular to the new normal:
+					 * Gram-Schmidt puts it back in the tangent plane. */
+					tangent -= normal * Math::Vector< 3, vertex_data_t >::dotProduct(normal, tangent);
+
+					vertexRef.setTangent(tangent.normalize());
+					vertexRef.setNormal(normal);
+
+					if ( mirrored )
+					{
+						vertexRef.setTangentHandedness(-vertexRef.tangentHandedness());
+					}
 				}
 
 				/* Updates the invalided bounding box. */

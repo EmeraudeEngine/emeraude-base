@@ -30,6 +30,7 @@
 #include <cmath>
 
 /* Local inclusions. */
+#include "VertexFactory/ShapeDecimator.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "VertexFactory/ShapeSimplifier.hpp"
 
@@ -128,4 +129,36 @@ TEST(VertexFactoryShapeSimplifier, EmptyGroupStaysEmpty)
 	EXPECT_EQ(simplified->groups()[1].first, 0U);
 	EXPECT_EQ(simplified->groups()[1].second, simplified->triangles().size());
 	EXPECT_LT(simplified->triangles().size(), triangleCount);
+}
+
+/*
+ * The decimator rebuilds its output vertices with saveVertex() (handedness +1): until 2026-10-06 it copied only the
+ * 3D tangent, so every LOD level of a mirrored UV island (handedness -1) lit its normal map backwards.
+ */
+TEST(VertexFactoryShapeDecimator, decimatedVerticesKeepTheTangentHandedness)
+{
+	auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16, ShapeBuilderOptions< float >{true, true, false, false, false});
+
+	for ( auto & vertex : sphere.vertices() )
+	{
+		vertex.setTangentHandedness(-1.0F);
+	}
+
+	const ShapeDecimator< float, uint32_t > decimator{sphere, 0.5F};
+	const auto decimated = decimator.decimate();
+
+	ASSERT_GT(decimated.vertices().size(), 0U);
+	ASSERT_LT(decimated.triangles().size(), sphere.triangles().size());
+
+	size_t lost = 0;
+
+	for ( const auto & vertex : decimated.vertices() )
+	{
+		if ( vertex.tangentHandedness() != -1.0F )
+		{
+			++lost;
+		}
+	}
+
+	EXPECT_EQ(lost, 0U) << lost << " of " << decimated.vertices().size() << " vertices lost their handedness in the decimation.";
 }

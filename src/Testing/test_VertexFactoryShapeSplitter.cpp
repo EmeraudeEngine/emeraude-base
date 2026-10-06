@@ -155,3 +155,52 @@ TEST(VertexFactoryShapeSplitter, sealedCapsWindCCWAndFaceOutOfTheirPart)
 		check(part, normal, normal * -0.5F, "back part");
 	}
 }
+
+/*
+ * A split copies the source vertices and interpolates new ones on the cut edges: both must keep the bitangent
+ * HANDEDNESS. Until 2026-10-06 they were created with saveVertex() (handedness +1) and given only the 3D tangent,
+ * so a mirrored UV island (handedness -1) came out of a split with its bitangent flipped.
+ */
+TEST(VertexFactoryShapeSplitter, partsKeepTheTangentHandedness)
+{
+	auto sphere = weldedSphere();
+
+	for ( auto & vertex : sphere.vertices() )
+	{
+		vertex.setTangentHandedness(-1.0F);
+	}
+
+	const Math::Plane< float > plane{V3{1.0F, 0.0F, 1.0F}.normalized(), V3{}};
+	const ShapeSplitter< float, uint32_t > splitter{sphere, plane, 1.0E-5F, false};
+	const auto result = splitter.split();
+
+	ASSERT_TRUE(result.wasSplit);
+
+	size_t checked = 0;
+	size_t lost = 0;
+
+	const auto count = [&checked, &lost] (const Shape< float, uint32_t > & part) {
+		for ( const auto & vertex : part.vertices() )
+		{
+			++checked;
+
+			if ( vertex.tangentHandedness() != -1.0F )
+			{
+				++lost;
+			}
+		}
+	};
+
+	for ( const auto & part : result.frontParts )
+	{
+		count(part);
+	}
+
+	for ( const auto & part : result.backParts )
+	{
+		count(part);
+	}
+
+	EXPECT_GT(checked, 0U);
+	EXPECT_EQ(lost, 0U) << lost << " of " << checked << " vertices lost their handedness in the split.";
+}

@@ -1087,6 +1087,139 @@ TEST(VertexFactoryShapeGenerator, geodesicSphereKeepsItsAttributesUnderEngineBui
 	EXPECT_EQ(notPerpendicular, 0U) << "a tangent that is not perpendicular to its normal is not a tangent";
 }
 
+/* The geodesic sphere rendered flat black under any normal-mapped material (2026-09-08 → 10-06):
+ * its generator ends on shape.transform(scaling(radius)), and transform() used to write the
+ * tangent through the Vector< 4 > overload of setTangent() with a W of 0, i.e. a HANDEDNESS of 0,
+ * so biNormal() = cross(N, T) * 0 was the zero vector on every vertex. These are the engine's
+ * exact options (ResourceGenerator under EnableTangentSpace | EnablePrimaryTextureCoordinates:
+ * no normal generation, texture coordinates requested), which the test above does not use. */
+TEST(VertexFactoryShapeGenerator, geodesicSphereKeepsItsBitangentUnderEngineOptions)
+{
+	const ShapeBuilderOptions< float > engineOptions{false, true, false, false, false};
+
+	const auto shape = ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.5F, 4, engineOptions);
+
+	size_t zeroBitangents = 0;
+	size_t notUnitHandedness = 0;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		if ( vertex.biNormal().length() < 1.0E-6F )
+		{
+			++zeroBitangents;
+		}
+
+		if ( std::abs(vertex.tangentHandedness()) != 1.0F )
+		{
+			++notUnitHandedness;
+		}
+	}
+
+	EXPECT_GT(shape.vertices().size(), 2000U);
+	EXPECT_EQ(zeroBitangents, 0U) << "a zero bitangent flattens the normal map onto the tangent axis";
+	EXPECT_EQ(notUnitHandedness, 0U) << "the handedness is a sign, +1 or -1";
+}
+
+/* Shape::transform() carries the tangent frame: a rotation or a uniform scale keeps the
+ * handedness, a mirror (negative determinant) flips it, because cross(M·N, M·T) = det(M)·M·(N×T)
+ * for an orthogonal M while the bitangent itself must become M·B. */
+TEST(VertexFactoryShapeGenerator, transformKeepsTheTangentHandedness)
+{
+	using EmEn::Base::Math::Matrix;
+	using EmEn::Base::Math::Vector;
+
+	auto makeShape = [] () {
+		auto shape = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F, ShapeBuilderOptions< float >{true, true, false, false, false});
+
+		for ( size_t index = 0; index < shape.vertices().size(); ++index )
+		{
+			shape.vertices()[index].setTangentHandedness((index % 2) == 0 ? 1.0F : -1.0F);
+		}
+
+		return shape;
+	};
+
+	{
+		auto shape = makeShape();
+		const auto original = shape.vertices();
+
+		shape.transform(Matrix< 4, float >::scaling(2.5F));
+
+		for ( size_t index = 0; index < original.size(); ++index )
+		{
+			EXPECT_EQ(shape.vertices()[index].tangentHandedness(), original[index].tangentHandedness()) << "vertex " << index;
+		}
+	}
+
+	{
+		auto shape = makeShape();
+		const auto original = shape.vertices();
+		const auto mirror = Matrix< 4, float >::scaling(-1.0F, 1.0F, 1.0F);
+
+		shape.transform(mirror);
+
+		for ( size_t index = 0; index < original.size(); ++index )
+		{
+			EXPECT_EQ(shape.vertices()[index].tangentHandedness(), -original[index].tangentHandedness()) << "vertex " << index;
+
+			/* The rebuilt bitangent is the mirrored original one. */
+			const Vector< 3, float > expected{mirror * Vector< 4, float >(original[index].biNormal(), 0.0F)};
+			const auto actual = shape.vertices()[index].biNormal();
+
+			EXPECT_NEAR(actual[EmEn::Base::Math::X], expected[EmEn::Base::Math::X], 1.0E-5F) << "vertex " << index;
+			EXPECT_NEAR(actual[EmEn::Base::Math::Y], expected[EmEn::Base::Math::Y], 1.0E-5F) << "vertex " << index;
+			EXPECT_NEAR(actual[EmEn::Base::Math::Z], expected[EmEn::Base::Math::Z], 1.0E-5F) << "vertex " << index;
+		}
+	}
+}
+
+/* A normal is a covector: under a NON-UNIFORM scale it goes through the inverse transpose of the 3x3 part, not
+ * the matrix itself. Until 2026-10-06 Shape::transform() used the matrix: a unit sphere stretched to (2, 1, 1)
+ * kept normals leaning TOWARD the long axis instead of away from it. The tangent, a surface direction, does go
+ * through the matrix, and must stay perpendicular to the new normal. */
+TEST(VertexFactoryShapeGenerator, transformCarriesNormalsByTheInverseTranspose)
+{
+	using EmEn::Base::Math::Matrix;
+	using EmEn::Base::Math::Vector;
+	using EmEn::Base::Math::X;
+	using EmEn::Base::Math::Y;
+	using EmEn::Base::Math::Z;
+
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16, ShapeBuilderOptions< float >{true, true, false, false, false});
+
+	shape.transform(Matrix< 4, float >::scaling(2.0F, 1.0F, 1.0F));
+
+	size_t checked = 0;
+	size_t wrongNormals = 0;
+	size_t notPerpendicular = 0;
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & position = vertex.position();
+		const auto & normal = vertex.normal();
+		const auto & tangent = vertex.tangent();
+
+		/* The poles carry no tangent (generateSphere leaves them zero): judge the normal only. */
+		const auto expected = Vector< 3, float >{position[X] / 4.0F, position[Y], position[Z]}.normalized();
+
+		++checked;
+
+		if ( Vector< 3, float >::dotProduct(normal, expected) < 0.9999F )
+		{
+			++wrongNormals;
+		}
+
+		if ( tangent.length() > 0.5F && std::abs(Vector< 3, float >::dotProduct(normal, tangent)) > 1.0E-4F )
+		{
+			++notPerpendicular;
+		}
+	}
+
+	EXPECT_GT(checked, 400U);
+	EXPECT_EQ(wrongNormals, 0U) << wrongNormals << " of " << checked << " normals are not the ellipsoid's.";
+	EXPECT_EQ(notPerpendicular, 0U) << notPerpendicular << " tangents are not perpendicular to their normal.";
+}
+
 /*
  * ⚠️⚠️ GOLDEN GEOMETRY for the twelve gem cuts, captured 2026-08-25 from the code as it stood BEFORE
  * their facet math was re-authored from the retired Y-down frame to Y-up.

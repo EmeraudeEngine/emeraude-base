@@ -346,6 +346,23 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 
 ## VertexFactory
 
+### ⚠️⚠️ `Shape::transform()` zeroed every bitangent — a `Vector< 4 >` product picked the HANDEDNESS overload (2026-10-06, FIXED)
+
+> [!CAUTION]
+> `setTangent((M * Vector< 4 >(tangent, 0)).normalize())` resolves to `setTangent(Vector< 4 >)`, whose W is the
+> bitangent handedness since `f2d4ba7` (2026-08-28): W = 0 → `biNormal() = cross(N, T) * 0`. Every transformed shape
+> (a generator ending on `transform()`, `setCenterAtBottom`, the engine's `ResourceGenerator` transform matrix) lost
+> its bitangent. Seen as the engine's "textured geodesic sphere renders black" (opened 2026-09-08): four attributions
+> fell (POM, the UV transposition, the baked vertex colour, the winding) before a one-variable material A/B — albedo
+> only lit, albedo + normal map black — pointed at the TBN, and a dump of the shape found B = 0 on 2619/2619
+> vertices. Fix: the product goes through a `Vector< 3 >`, and the handedness flips under a negative determinant.
+> Runtime proof (`light-and-shadow-debug`, pose (-4, 2, 8) → (-4, 2, 1), f/16 · 1/125 · ISO 100): sphere crop
+> 8.8 → 183.2 / 255 (UV sphere 182.4), 0 VUID. **When a material renders black on ONE geometry: A/B the material's
+> components one at a time first, then dump the shape's T, B, N — before any hypothesis.**
+> The same review fixed two neighbours (same day): `transform()` now carries normals by the inverse transpose
+> (cofactor form), and `ShapeDecimator` / `ShapeSplitter` copy the handedness of the vertices they rebuild — a
+> mirrored glTF island lost its -1 in every automatic LOD level and every split part.
+
 ### ⚠️ `Grid`'s point count is computed in its INDEX type — a large division wrapped it (2026-10-01, FIXED)
 
 > [!CAUTION]
