@@ -28,7 +28,11 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
   closes, then `close()` — bounded by 1 s, 64 KiB and 64 sockets lingering at once (beyond: an immediate close, a
   RST accepted under a flood; owner decisions). ⚠️ The cap was first `maxConnections` and a socket counted until its
   last handler ran: two refusals in a row then fell back to a RST (`RefusalAtTheCapEndsWithAFin` 19/50 on Windows, 4 %
-  on macOS, never on Linux's epoll order). Fixed the same day: a fixed cap, and a socket stops counting when closed. `stop()` aborts the lingering ones. The public
+  on macOS, never on Linux's epoll order). Fixed the same day: a fixed cap, and a socket stops counting when closed.
+  **Accepted on the three OS (2026-10-06, base 42c8b85)**: Windows `BoundsConnections` 200/200 (6/200 failed before),
+  `RefusalAtTheCapEndsWithAFin` 50/50 (19/50 before the accounting fix), the 18 network tests 900/900; macOS the same
+  test 100/100 (96/100 before), ASan clean; full suite 2364 everywhere (Windows' only failure: the known
+  `DebugStatistics.timerMeasuresBusyWork`, item `process-cpu-time-resolution-contract`). `stop()` aborts the lingering ones. The public
   `HTTPServerConnection::close()` stays immediate (errors, timeouts, shutdown); only `closeGracefully()` (after a
   flushed final answer) lingers. Why: docs/caution-points.md § Network, *closing over unread bytes is a RST*.
 - `parseByteRange()` is public and tested on its own (RFC 9110 § 14.1.2: several ranges, another unit or a
