@@ -362,6 +362,9 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 > The same review fixed two neighbours (same day): `transform()` now carries normals by the inverse transpose
 > (cofactor form), and `ShapeDecimator` / `ShapeSplitter` copy the handedness of the vertices they rebuild — a
 > mirrored glTF island lost its -1 in every automatic LOD level and every split part.
+> **ACCEPTED on the three OS (base 44911ae, 2026-10-07):** Windows (MSVC /W4 /WX, 0 warning) 2369 = 2366 + 3 skipped,
+> sphere crop (179.4, 152.8, 121.3) on an RTX 3060 and (178.3, 151.7, 120.3) on the AMD iGPU, 0 VUID; macOS M2
+> (MoltenVK) 2366 + 3 skipped, ASan/UBSan clean, crop (177.5, 153.5, 119.8), 0 VUID, 0 SYNC-HAZARD.
 
 ### ⚠️ `Grid`'s point count is computed in its INDEX type — a large division wrapped it (2026-10-01, FIXED)
 
