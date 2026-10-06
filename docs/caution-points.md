@@ -293,6 +293,19 @@ MD5 keeps its RFC 1321 two-word counter and was correct.
 
 ## Network
 
+### ⚠️⚠️ Closing a socket over unread bytes is a RST — and a RST loses the last answer on Windows (fixed Oct 2026)
+
+`HTTPServer` wrote its 503 at the connection cap, then `close()`d the socket while the client's request was still
+unread in the receive buffer. A TCP close over unread bytes sends a RST instead of a FIN (RFC 1122 § 4.2.2.13), and
+on Windows a RST discards what the client had received but not yet read: `NetworkHTTPServer.BoundsConnections`
+read NO byte 6 times in 200 there (Windows-PA, 2026-10-06; its Python model: close-unread is a RST 300/300, the 503
+lost 300/300 when the client reads after the RST arrived, 0 RST once the server reads first). Linux keeps the bytes
+it received, which is why the test only failed on Windows; on Linux the RST shows as a read ending on
+`connection_reset` instead of EOF — the tests now assert THAT. `shutdown(both)` before `close()` does not help: the
+FIN goes first, then the RST, and Windows may still drop the answer. **Rule**: after a final answer, never close a
+socket the peer may still be writing to — `Network::GracefulCloser` (shutdown(send), bounded drain, close). Same
+defect in the engine's console (`RemoteListener::disconnect()`), fixed with the same closer.
+
 ### ⚠️⚠️ A `mutable` member is NOT a per-call output — it was a data race for a year (fixed Aug 2026)
 
 `HTTPSClient` recorded why a transfer failed in `mutable DownloadOutcome m_lastOutcome`, written by

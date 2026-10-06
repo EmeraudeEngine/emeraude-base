@@ -22,6 +22,13 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
   `Transfer-Encoding` / `Range` → 400 (request smuggling, RFC 9112 § 6.3), `Transfer-Encoding` → 501, a POST
   without a length → 411, a length over `maxBodyBytes` → 413, a head over `maxHeaderBytes` → 431, too many
   connections → 503 at accept. Idle and request timeouts (slowloris).
+- **Every final answer ends with a FIN, never a RST (2026-10-06)**: the 503 at accept and every "Connection: close"
+  answer (the 400 / 411 / 413 / 431 / 501 refusals included) hand their socket to `Network::GracefulCloser`
+  (`src/Network/GracefulCloser.hpp`): `shutdown(send)`, then the client's late bytes are read and discarded until it
+  closes, then `close()` — bounded by 1 s, 64 KiB and `maxConnections` sockets lingering at once (beyond: an
+  immediate close, a RST accepted under a flood; owner decision). `stop()` aborts the lingering ones. The public
+  `HTTPServerConnection::close()` stays immediate (errors, timeouts, shutdown); only `closeGracefully()` (after a
+  flushed final answer) lingers. Why: docs/caution-points.md § Network, *closing over unread bytes is a RST*.
 - `parseByteRange()` is public and tested on its own (RFC 9110 § 14.1.2: several ranges, another unit or a
   malformed value are IGNORED — the whole representation is served).
 
@@ -47,9 +54,11 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
   transport read, `DownloadOutcome::Cancelled`, a partial file removed. And a `download()` overload with
   `HTTPRequestOptions` (headers, cancel; a body is refused: `BadRequest`).
 
-## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 14)
+## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 16)
 
 Ranges, loopback answer, foreign Host / Origin, bearer, non-loopback without token, smuggling and framing, oversized
 head, pipelined keep-alive, files with ranges / HEAD / 404, an answer posted from another thread, stream last words
-at shutdown, the connection bound, the private-address classifier (every range edge), a cleartext download from a
+at shutdown, the connection bound, the graceful close (`RefusalAtTheCapEndsWithAFin`: 20 refusals end on EOF, not
+on a reset; `RefusedBodyEndsWithAFin`: a client refused at its head keeps writing its body after the 413 — both
+FAILED before the GracefulCloser, 2026-10-06), the private-address classifier (every range edge), a cleartext download from a
 private peer (refused without the opt-in, 401 without the token, byte-exact with it, a public address refused).

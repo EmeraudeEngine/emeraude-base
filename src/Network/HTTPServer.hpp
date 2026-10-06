@@ -47,6 +47,9 @@
 #include "asio.hpp"
 #include "Network/asio_throw_exception.hpp"
 
+/* Local inclusions for usages. */
+#include "Network/GracefulCloser.hpp"
+
 namespace EmEn::Base::Network
 {
 	class HTTPServer;
@@ -288,6 +291,12 @@ namespace EmEn::Base::Network
 			void readBody (size_t contentLength) noexcept;
 			void handleRequest () noexcept;
 			void watchForClose () noexcept;
+			/**
+			 * @brief Closes after a final answer: the socket goes to the server's GracefulCloser (FIN, bounded drain), so a
+			 * client still sending (a refused body, a late request) does not get a RST that would discard the answer.
+			 * @return void
+			 */
+			void closeGracefully () noexcept;
 			void finishWith (std::string response) noexcept;
 			void write (std::string bytes) noexcept;
 			void writeNext () noexcept;
@@ -443,6 +452,8 @@ namespace EmEn::Base::Network
 			asio::io_context m_ioContext;
 			std::optional< asio::executor_work_guard< asio::io_context::executor_type > > m_workGuard;
 			std::unique_ptr< asio::ip::tcp::acceptor > m_acceptor;
+			/** @brief The refusals and "Connection: close" answers end with a FIN, not a RST (network thread only). */
+			GracefulCloser m_gracefulCloser;
 			std::thread m_networkThread;
 			/** @brief The open connections, touched on the network thread only. */
 			std::set< std::shared_ptr< HTTPServerConnection > > m_connections;

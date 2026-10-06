@@ -72,6 +72,7 @@ set(EMERAUDE_BASE_IO_SOURCES
 
 # network module — ASIO (header-only) + LibreSSL (TLS).
 set(EMERAUDE_BASE_NETWORK_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/GracefulCloser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp

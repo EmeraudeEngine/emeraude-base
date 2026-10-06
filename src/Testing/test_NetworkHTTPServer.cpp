@@ -97,6 +97,72 @@ namespace
 		return received;
 	}
 
+	/** @brief What a client read until the end of the stream, and HOW the stream ended. */
+	struct RawEnding
+	{
+		std::string received;
+		/** @brief asio::error::eof for a graceful close (FIN); connection_reset / broken_pipe for a RST. */
+		asio::error_code end;
+		/** @brief The second of two writes sent after the end, 50 ms apart: fails once the server has reset. */
+		asio::error_code lateWrite;
+	};
+
+	/**
+	 * @brief Connects, sends raw bytes at once, waits, then reads until the server closes, and says HOW the stream
+	 * ended. A server that closes while some of those bytes are still unread sends a RST instead of a FIN (RFC 1122
+	 * § 4.2.2.13): Linux then ends the read on connection_reset, and Windows may even discard what it had received.
+	 * @param port The port.
+	 * @param request The bytes sent at once.
+	 * @param delay The wait before reading (the server answers and closes meanwhile).
+	 * @param afterEnd Bytes written twice after the end, 50 ms apart (a client still sending its body): a server
+	 * draining them keeps both writes alive; a server that reset makes the second one fail. Default none.
+	 * @return RawEnding
+	 */
+	RawEnding
+	rawExchangeEnding (uint16_t port, std::string_view request, std::chrono::milliseconds delay, std::string_view afterEnd = {})
+	{
+		asio::io_context ioContext;
+		asio::ip::tcp::socket socket{ioContext};
+		asio::error_code ec;
+
+		socket.connect(asio::ip::tcp::endpoint{asio::ip::make_address("127.0.0.1"), port}, ec);
+
+		if ( ec )
+		{
+			return {.received = {}, .end = ec, .lateWrite = {}};
+		}
+
+		static_cast< void >(asio::write(socket, asio::buffer(request.data(), request.size()), ec));
+
+		std::this_thread::sleep_for(delay);
+
+		RawEnding ending;
+		std::array< char, 65536 > buffer{};
+
+		while ( true )
+		{
+			const auto bytes = socket.read_some(asio::buffer(buffer), ec);
+
+			ending.received.append(buffer.data(), bytes);
+
+			if ( ec )
+			{
+				ending.end = ec;
+
+				break;
+			}
+		}
+
+		if ( !afterEnd.empty() )
+		{
+			static_cast< void >(asio::write(socket, asio::buffer(afterEnd.data(), afterEnd.size()), ending.lateWrite));
+			std::this_thread::sleep_for(std::chrono::milliseconds{50});
+			static_cast< void >(asio::write(socket, asio::buffer(afterEnd.data(), afterEnd.size()), ending.lateWrite));
+		}
+
+		return ending;
+	}
+
 	/**
 	 * @brief Splits the first response of a raw stream.
 	 * @param raw The raw bytes.
@@ -518,6 +584,62 @@ TEST(NetworkHTTPServer, BoundsConnections)
 	EXPECT_EQ(firstResponse(rawExchange(port, get(port, "/"))).status, 503);
 
 	holder.close(ec);
+}
+
+TEST(NetworkHTTPServer, RefusalAtTheCapEndsWithAFin)
+{
+	auto options = testOptions();
+	options.maxConnections = 1;
+
+	HTTPServer server{options};
+
+	ASSERT_TRUE(server.start(helloHandler));
+
+	const auto port = server.port();
+
+	asio::io_context ioContext;
+	asio::ip::tcp::socket holder{ioContext};
+	asio::error_code ec;
+	holder.connect(asio::ip::tcp::endpoint{asio::ip::make_address("127.0.0.1"), port}, ec);
+	ASSERT_FALSE(ec);
+
+	std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+	/* The 503 path never reads the request: closing with it unread is a RST, and on Windows a RST discards the 503 the
+	 * client has not read yet (BoundsConnections failed 3 % there, 2026-10-06). The stream must end with a FIN. The
+	 * request may still be in flight when the server refuses: repeated, so that at least some runs have it unread. */
+	for ( int attempt = 0; attempt < 20; ++attempt )
+	{
+		const auto ending = rawExchangeEnding(port, get(port, "/"), std::chrono::milliseconds{20});
+
+		EXPECT_EQ(firstResponse(ending.received).status, 503);
+		EXPECT_EQ(ending.end, asio::error::eof) << "attempt " << attempt << ": " << ending.end.message();
+	}
+
+	holder.close(ec);
+}
+
+TEST(NetworkHTTPServer, RefusedBodyEndsWithAFin)
+{
+	auto options = testOptions();
+	options.maxBodyBytes = 1024;
+
+	HTTPServer server{options};
+
+	ASSERT_TRUE(server.start(helloHandler));
+
+	const auto port = server.port();
+	/* The client refused at its head keeps sending its body, as a real one does. A server closing at once resets the
+	 * connection (the FIN of its shutdown comes first, so Linux still reads the 413 then EOF, but Windows may discard
+	 * the 413 on that RST); a graceful close keeps reading — under the drain bound (64 KiB) — so the client's writes
+	 * after the 413 succeed. */
+	const auto request = "POST /upload HTTP/1.1\r\nHost: 127.0.0.1:" + std::to_string(port) + "\r\nContent-Length: 1000000\r\n\r\n" + std::string(4096, 'x');
+
+	const auto ending = rawExchangeEnding(port, request, std::chrono::milliseconds{100}, std::string(4096, 'y'));
+
+	EXPECT_EQ(firstResponse(ending.received).status, 413);
+	EXPECT_EQ(ending.end, asio::error::eof) << ending.end.message();
+	EXPECT_FALSE(ending.lateWrite) << ending.lateWrite.message();
 }
 
 TEST(NetworkHTTPServer, PrivateNetworkAddresses)

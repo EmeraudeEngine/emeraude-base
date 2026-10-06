@@ -333,6 +333,28 @@ namespace EmEn::Base::Network
 		m_server.removeConnection(this->shared_from_this());
 	}
 
+	void
+	HTTPServerConnection::closeGracefully () noexcept
+	{
+		if ( m_closed )
+		{
+			return;
+		}
+
+		m_closed = true;
+		m_fileBody.reset();
+
+		asio::error_code ec;
+		m_timer.cancel();
+		/* The closer takes the socket: no operation of this connection may stay pending on it (watchForClose()'s read
+		 * completes aborted, and m_closed makes it return). */
+		m_socket.cancel(ec);
+
+		m_server.m_gracefulCloser.close(std::move(m_socket));
+
+		m_server.removeConnection(this->shared_from_this());
+	}
+
 	std::string
 	HTTPServerConnection::statusLine (int status) noexcept
 	{
@@ -804,7 +826,7 @@ namespace EmEn::Base::Network
 
 			if ( m_closeAfterFlush )
 			{
-				this->close();
+				this->closeGracefully();
 			}
 			else if ( m_readAfterFlush )
 			{
@@ -839,7 +861,8 @@ namespace EmEn::Base::Network
 	}
 
 	HTTPServer::HTTPServer (HTTPServerOptions options) noexcept
-		: m_options{std::move(options)}
+		: m_options{std::move(options)},
+		m_gracefulCloser{m_options.maxConnections}
 	{
 
 	}
@@ -976,6 +999,9 @@ namespace EmEn::Base::Network
 				connection->close();
 			}
 
+			/* The sockets still lingering after a refusal or a final answer close now. */
+			m_gracefulCloser.abortAll();
+
 			{
 				const std::scoped_lock lock{doneMutex};
 
@@ -1081,7 +1107,10 @@ namespace EmEn::Base::Network
 
 				asio::error_code writeError;
 				static_cast< void >(asio::write(socket, asio::buffer(Refusal), writeError));
-				socket.close(writeError);
+
+				/* NOT socket.close(): the client's request is unread, and closing over unread bytes is a RST, which on
+				 * Windows discards the 503 the client has not read yet (BoundsConnections, 3 % there, 2026-10-06). */
+				m_gracefulCloser.close(std::move(socket));
 			}
 			else
 			{
