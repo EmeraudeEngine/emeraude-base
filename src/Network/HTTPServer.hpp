@@ -452,7 +452,8 @@ namespace EmEn::Base::Network
 			asio::io_context m_ioContext;
 			std::optional< asio::executor_work_guard< asio::io_context::executor_type > > m_workGuard;
 			std::unique_ptr< asio::ip::tcp::acceptor > m_acceptor;
-			/** @brief The refusals and "Connection: close" answers end with a FIN, not a RST (network thread only). */
+			/** @brief The refusals and "Connection: close" answers end with a FIN, not a RST (network thread only; the
+			 * default fixed cap of GracefulCloser::DefaultMaxLingering sockets, NOT maxConnections). */
 			GracefulCloser m_gracefulCloser;
 			std::thread m_networkThread;
 			/** @brief The open connections, touched on the network thread only. */

@@ -47,7 +47,9 @@ namespace EmEn::Base::Network
 	 * connection cap was lost 3 % of the time there (2026-10-06). So: shutdown(send) — the FIN follows what was written —
 	 * then read and discard what the client still sends until it closes, then close(). BOUNDED, a hostile client must not
 	 * hold the socket: a timeout, a byte budget, and a cap on the sockets lingering at once (beyond it, an immediate close:
-	 * a RST accepted under a flood). Owner decision 2026-10-06: 1 s, 64 KiB, the server's connection cap.
+	 * a RST accepted under a flood). Owner decisions 2026-10-06: 1 s, 64 KiB, at most 64 sockets lingering — a fixed cap:
+	 * tied to the server's connection cap (1 in a test), two refusals in a row fell back to a RST (Windows 19/50, macOS 4 %).
+	 * A socket stops counting the moment it is closed, not when the last handler holding it has run.
 	 * Threading: every call on the io_context thread that runs the sockets; the drains run there.
 	 */
 	class GracefulCloser final
@@ -60,13 +62,16 @@ namespace EmEn::Base::Network
 			/** @brief The most bytes read and discarded before giving up (then an immediate close). */
 			static constexpr size_t DefaultMaxDrainBytes{65536};
 
+			/** @brief The most sockets lingering at once (each one a descriptor for at most DefaultTimeout). */
+			static constexpr size_t DefaultMaxLingering{64};
+
 			/**
 			 * @brief Constructs a closer.
-			 * @param maxLingering The most sockets lingering at once (0 = every close is immediate).
+			 * @param maxLingering The most sockets lingering at once (0 = every close is immediate). Default DefaultMaxLingering.
 			 * @param timeout The longest a socket lingers. Default DefaultTimeout.
 			 * @param maxDrainBytes The most bytes discarded per socket. Default DefaultMaxDrainBytes.
 			 */
-			explicit GracefulCloser (size_t maxLingering, std::chrono::milliseconds timeout = DefaultTimeout, size_t maxDrainBytes = DefaultMaxDrainBytes) noexcept;
+			explicit GracefulCloser (size_t maxLingering = DefaultMaxLingering, std::chrono::milliseconds timeout = DefaultTimeout, size_t maxDrainBytes = DefaultMaxDrainBytes) noexcept;
 
 			/**
 			 * @brief Closes a socket gracefully (or at once, beyond the lingering cap).
@@ -104,7 +109,8 @@ namespace EmEn::Base::Network
 			class Lingering;
 
 			/**
-			 * @brief Forgets the finished lingering sockets.
+			 * @brief Forgets the finished lingering sockets: closed ones count no more, even while a handler (the cancelled
+			 * deadline's, the aborted read's) still holds them.
 			 * @return void
 			 */
 			void prune () noexcept;

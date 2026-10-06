@@ -41,6 +41,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "Network/GracefulCloser.hpp"
 #include "Network/HTTPServer.hpp"
 #include "Network/HTTPSClient.hpp"
 #include "Network/TLSConnection.hpp"
@@ -640,6 +641,89 @@ TEST(NetworkHTTPServer, RefusedBodyEndsWithAFin)
 	EXPECT_EQ(firstResponse(ending.received).status, 413);
 	EXPECT_EQ(ending.end, asio::error::eof) << ending.end.message();
 	EXPECT_FALSE(ending.lateWrite) << ending.lateWrite.message();
+}
+
+namespace
+{
+	/**
+	 * @brief A connected loopback pair on one io_context: the server side and the client side.
+	 * @param ioContext A reference to the io_context.
+	 * @param server A reference to the server-side socket to fill.
+	 * @param client A reference to the client-side socket to fill.
+	 * @return bool
+	 */
+	bool
+	loopbackPair (asio::io_context & ioContext, asio::ip::tcp::socket & server, asio::ip::tcp::socket & client)
+	{
+		asio::error_code ec;
+		asio::ip::tcp::acceptor acceptor{ioContext};
+		const asio::ip::tcp::endpoint endpoint{asio::ip::make_address("127.0.0.1"), 0};
+
+		acceptor.open(endpoint.protocol(), ec);
+		acceptor.bind(endpoint, ec);
+		acceptor.listen(1, ec);
+		client.connect(acceptor.local_endpoint(ec), ec);
+		acceptor.accept(server, ec);
+
+		return !ec && server.is_open() && client.is_open();
+	}
+}
+
+TEST(NetworkGracefulCloser, AFinishedSocketStopsCountingAtOnce)
+{
+	asio::io_context ioContext;
+	asio::ip::tcp::socket server{ioContext};
+	asio::ip::tcp::socket client{ioContext};
+
+	ASSERT_TRUE(loopbackPair(ioContext, server, client));
+
+	GracefulCloser closer{1};
+
+	closer.close(std::move(server));
+
+	EXPECT_EQ(closer.lingering(), 1U);
+
+	/* The client closes: the closer's drain reads EOF and finishes. ONE handler only — the cancelled deadline's handler,
+	 * which still holds the lingering socket, has not run yet. A finished socket must not count against the cap any more:
+	 * it did until 2026-10-06, and a refusal right behind it fell back to an immediate close, a RST (Windows 19/50, macOS
+	 * 4 %, BoundsConnections' follow-up test). */
+	asio::error_code ec;
+	client.close(ec);
+
+	ASSERT_EQ(ioContext.run_one(), 1U);
+
+	EXPECT_EQ(closer.lingering(), 0U);
+
+	ioContext.run();
+}
+
+TEST(NetworkGracefulCloser, BeyondTheCapClosesAtOnce)
+{
+	asio::io_context ioContext;
+	asio::ip::tcp::socket serverA{ioContext};
+	asio::ip::tcp::socket clientA{ioContext};
+	asio::ip::tcp::socket serverB{ioContext};
+	asio::ip::tcp::socket clientB{ioContext};
+
+	ASSERT_TRUE(loopbackPair(ioContext, serverA, clientA));
+	ASSERT_TRUE(loopbackPair(ioContext, serverB, clientB));
+
+	GracefulCloser closer{1, std::chrono::milliseconds{200}};
+
+	closer.close(std::move(serverA));
+	closer.close(std::move(serverB));
+
+	/* A lingers (its client is still open); B, beyond the cap of 1, was closed at once. */
+	EXPECT_EQ(closer.lingering(), 1U);
+
+	/* A's deadline closes it, without its client ever closing. */
+	ioContext.run_for(std::chrono::milliseconds{1000});
+
+	EXPECT_EQ(closer.lingering(), 0U);
+
+	asio::error_code ec;
+	clientA.close(ec);
+	clientB.close(ec);
 }
 
 TEST(NetworkHTTPServer, PrivateNetworkAddresses)

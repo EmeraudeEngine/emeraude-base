@@ -861,8 +861,7 @@ namespace EmEn::Base::Network
 	}
 
 	HTTPServer::HTTPServer (HTTPServerOptions options) noexcept
-		: m_options{std::move(options)},
-		m_gracefulCloser{m_options.maxConnections}
+		: m_options{std::move(options)}
 	{
 
 	}

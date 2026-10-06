@@ -73,6 +73,17 @@ namespace EmEn::Base::Network
 			}
 
 			/**
+			 * @brief Returns whether the socket was closed (it no longer counts against the cap).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			isFinished () const noexcept
+			{
+				return m_finished;
+			}
+
+			/**
 			 * @brief Closes the socket now.
 			 * @return void
 			 */
@@ -191,7 +202,9 @@ namespace EmEn::Base::Network
 	GracefulCloser::prune () noexcept
 	{
 		std::erase_if(m_lingering, [] (const std::weak_ptr< Lingering > & weak) {
-			return weak.expired();
+			const auto lingering = weak.lock();
+
+			return lingering == nullptr || lingering->isFinished();
 		});
 	}
 }
