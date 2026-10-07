@@ -546,8 +546,9 @@ TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
 	/* A recursive walk and a recursive removal from the SHORT root reach the long descendants (Windows: the root takes
 	 * the extended form whatever its own length — eraseDirectory() failed with "145: The directory is not empty"). */
 	size_t files = 0;
+	size_t foreignEntries = 0;
 
-	ASSERT_TRUE(EmEn::Base::IO::forEachDirectoryEntry(base, true, [&files] (const std::filesystem::directory_entry & entry) {
+	ASSERT_TRUE(EmEn::Base::IO::forEachDirectoryEntry(base, true, [&files, &foreignEntries, &base] (const std::filesystem::directory_entry & entry) {
 		std::error_code entryError;
 
 		if ( entry.is_regular_file(entryError) )
@@ -555,9 +556,18 @@ TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
 			++files;
 		}
 
+		/* The entries come back in the CALLER's form: relative to the root it gave, never across "\\?\" (the
+		 * resource scan computes exactly this, and found nothing on Windows when it was empty). A long entry may stay
+		 * extended: only the short ones are checked. */
+		if ( entry.path().native().size() < EmEn::Base::IO::WindowsLongPathThreshold && entry.path().lexically_relative(base).empty() )
+		{
+			++foreignEntries;
+		}
+
 		return true;
 	}));
 	EXPECT_EQ(files, 1U);
+	EXPECT_EQ(foreignEntries, 0U);
 
 	EXPECT_TRUE(EmEn::Base::IO::eraseDirectory(base, true));
 	EXPECT_FALSE(EmEn::Base::IO::directoryExists(base));

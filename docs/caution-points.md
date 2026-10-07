@@ -334,6 +334,13 @@ descendants' length decides, and MS-STL's `remove_all()` from a short root stopp
 ("145: The directory is not empty", Windows peer 2026-10-07, proven by an MSVC probe). The engine's `TextureCache` used
 raw `std::filesystem` / fstreams and lost its cache under a long `--cache-directory` without `longPathAware`: now
 through `IO::` (engine commit of the same day).
+⚠️⚠️ **A walk hands its entries back in the CALLER's form.** The first `systemTreePath()` walk (base `1852e65`) gave
+the visitor `\\?\C:\…` paths: every caller computing `entry.path().lexically_relative(itsRoot)` got an EMPTY path
+across the two root names — on Windows the engine's dynamic resource scan registered 0 of 9854 resources, and the
+sharing server was hit the same way (Windows peer, same day). `forEachDirectoryEntry()` now rebuilds each entry as
+the caller's root plus its relative part; only an entry whose caller-form path reaches the threshold stays extended
+(its only usable form). Off Windows nothing is rebuilt. **Rule:** a wrapper that changes a path's form for the system
+gives it back in the caller's form.
 
 ### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
 

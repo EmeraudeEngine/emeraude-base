@@ -291,6 +291,46 @@ namespace EmEn::Base::IO
 	{
 		std::error_code errorCode;
 
+		/* A recursive walk reaches descendants longer than its root: the root takes the extended form whatever its own
+		 * length (systemTreePath()); a single level takes it only when the root is long itself. */
+		const auto walkRoot = recursive ? systemTreePath(path) : systemPath(path);
+
+		/* ⚠️ The visitor gets its entries in the CALLER's form — its root, then the relative part — not in the walk's
+		 * extended form: callers compute entry.path().lexically_relative(theirRoot), and across "\\?\C:" and "C:" that
+		 * is EMPTY (Windows peer 2026-10-07: the resource scan registered 0 of 9854 resources). An entry whose caller-form
+		 * path reaches the long-path threshold stays extended: that is its only usable form there. Off Windows the walk
+		 * root IS the caller's path, and nothing is rebuilt. */
+		const auto visit = [&] (const std::filesystem::directory_entry & entry) -> bool {
+			if ( walkRoot == path )
+			{
+				return visitor(entry);
+			}
+
+			const auto relative = entry.path().lexically_relative(walkRoot);
+
+			if ( relative.empty() )
+			{
+				return visitor(entry);
+			}
+
+			const auto callerForm = path / relative;
+
+			if ( callerForm.native().size() >= WindowsLongPathThreshold )
+			{
+				return visitor(entry);
+			}
+
+			std::error_code entryError;
+			const std::filesystem::directory_entry rebased{callerForm, entryError};
+
+			if ( entryError )
+			{
+				return visitor(entry);
+			}
+
+			return visitor(rebased);
+		};
+
 		const auto walk = [&] (auto iterator) -> bool {
 			if ( errorCode ) [[unlikely]]
 			{
@@ -303,7 +343,7 @@ namespace EmEn::Base::IO
 
 			while ( iterator != end )
 			{
-				if ( !visitor(*iterator) )
+				if ( !visit(*iterator) )
 				{
 					return true;
 				}
@@ -321,14 +361,12 @@ namespace EmEn::Base::IO
 			return true;
 		};
 
-		/* A recursive walk reaches descendants longer than its root: the root takes the extended form whatever its own
-		 * length (systemTreePath()). */
 		if ( recursive )
 		{
-			return walk(std::filesystem::recursive_directory_iterator{systemTreePath(path), std::filesystem::directory_options::skip_permission_denied, errorCode});
+			return walk(std::filesystem::recursive_directory_iterator{walkRoot, std::filesystem::directory_options::skip_permission_denied, errorCode});
 		}
 
-		return walk(std::filesystem::directory_iterator{systemPath(path), errorCode});
+		return walk(std::filesystem::directory_iterator{walkRoot, errorCode});
 	}
 
 	/**
