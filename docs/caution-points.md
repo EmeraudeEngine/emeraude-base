@@ -342,6 +342,15 @@ the caller's root plus its relative part; only an entry whose caller-form path r
 (its only usable form). Off Windows nothing is rebuilt. **Rule:** a wrapper that changes a path's form for the system
 gives it back in the caller's form.
 
+**Accepted on three OS (2026-10-07, base `094127a`).**
+- Windows (NVIDIA): IO* 22/22. The no-`longPathAware` copy, run with a 301-character `--cache-directory`, wrote:
+  - 35 shader binaries;
+  - 15 texture-cache files;
+  - the pipeline cache;
+  with the longest path at 404 characters and 0 IO error.
+- The resource scan found 9854 resources on Linux, macOS and Windows.
+- The sharing server serves the same 9854 entries, with no empty, absolute or `\\?\` path, and byte-identical files.
+
 ### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
 
 `base / "/etc/passwd"` is `/etc/passwd`; `base / "../../x"` leaves `base`. Every path written in data (a resource
