@@ -337,6 +337,9 @@ namespace EmEn::Base::PixelFactory
 
 		private:
 
+			/** @brief The largest shift of a legacy RLE repeat count (three consecutive repeat records: a count < 2^32). */
+			static constexpr size_t LegacyRLEMaximumShift{24};
+
 			/**
 			 * @brief Reads a text line (up to '\n', not included) from the stream.
 			 * @param stream A reference to the input byte stream.
@@ -470,14 +473,22 @@ namespace EmEn::Base::PixelFactory
 					/* Legacy RLE: (1, 1, 1, count) repeats the previous pixel count << shift times. */
 					if ( pixel[0] == 1 && pixel[1] == 1 && pixel[2] == 1 )
 					{
-						const auto count = static_cast< dimension_t >(pixel[3]) << repeatShift;
-
-						if ( x == 0 || x + count > width )
+						/* Each consecutive repeat record shifts 8 bits further. Past a shift of 24 no scanline needs it,
+						 * and a shift of 32 on a 32-bit count was undefined behaviour (x86 masks it: a forged stream read
+						 * as valid — fuzz_hdr, 2026-10-07). The count and its bound are 64-bit: x + count cannot wrap. */
+						if ( repeatShift > LegacyRLEMaximumShift )
 						{
 							return false;
 						}
 
-						for ( dimension_t i = 0; i < count; ++i )
+						const auto count = static_cast< uint64_t >(pixel[3]) << repeatShift;
+
+						if ( x == 0 || static_cast< uint64_t >(x) + count > static_cast< uint64_t >(width) )
+						{
+							return false;
+						}
+
+						for ( uint64_t i = 0; i < count; ++i )
 						{
 							scanline[static_cast< size_t >(x + i) * 4 + 0] = scanline[static_cast< size_t >(x - 1) * 4 + 0];
 							scanline[static_cast< size_t >(x + i) * 4 + 1] = scanline[static_cast< size_t >(x - 1) * 4 + 1];
@@ -485,7 +496,7 @@ namespace EmEn::Base::PixelFactory
 							scanline[static_cast< size_t >(x + i) * 4 + 3] = scanline[static_cast< size_t >(x - 1) * 4 + 3];
 						}
 
-						x += count;
+						x += static_cast< dimension_t >(count);
 						repeatShift += 8;
 					}
 					else

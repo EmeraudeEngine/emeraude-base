@@ -920,6 +920,14 @@ branches into an endless `data[0]` read.
 
 No caller in the cascade uses these pointer overloads today (every engine site calls
 `fill(const Color &)`), so the semantic correction carries no regression risk.
+### ⚠️ A shift by a count of RECORDS is a shift by an unbounded amount — HDR legacy RLE (2026-10-07, FIXED)
+
+Radiance's legacy RLE shifts a repeat count 8 bits further for each CONSECUTIVE repeat record, so the shift is driven
+by the input. The fifth record shifted a 32-bit `dimension_t` by 32: undefined behaviour, which x86 executes as a shift
+by 0 — a forged stream then read as a valid scanline (found by the new `fuzz_hdr`, 26 M executions). Refused past a
+shift of 24 (`LegacyRLEMaximumShift`), and the count and `x + count` computed in 64 bits. **Rule:** a shift amount
+that comes from data is bounded below the operand's width BEFORE the shift.
+
 ### An OOM-guard test proves nothing on a big-RAM host — the HDR reader allocated 51 GB from a 40-byte file (Aug 2026, FIXED)
 
 > [!WARNING]

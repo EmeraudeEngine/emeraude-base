@@ -50,6 +50,7 @@ Targets:
 | `fuzz_png`        | `PixelFactory::FileFormatPNG` (libpng + our ByteStream) |
 | `fuzz_jpeg`       | `PixelFactory::FileFormatJpeg` (libjpeg-turbo + our ByteStream) |
 | `fuzz_targa`      | `PixelFactory::FileFormatTarga` (hand-rolled RLE/raw) |
+| `fuzz_hdr`        | `PixelFactory::FileFormatHDR` (hand-rolled Radiance RGBE: adaptive RLE, flat, legacy RLE) |
 | `fuzz_native`     | `VertexFactory::FileFormatNative` (ee3d binary)     |
 | `fuzz_stl`        | `VertexFactory::FileFormatSTL` (binary + ASCII)     |
 | `fuzz_mdx`        | `VertexFactory::FileFormatMDx` (MDL/MD2/MD3/MD5)    |
@@ -67,6 +68,16 @@ directory and accumulated corpora are git-ignored (see `.gitignore`).
   reached `FastJSON::getValue`/`getArray`/`getObject` with a top-level JSON array; jsoncpp's
   `isMember()`/`operator[]` throw on a non-object value. Guarded with an `isObject()` short-circuit;
   regression in `test_FastJSON.cpp::nonObjectNodeAccessorsAreSafe`.
+
+- **HDR legacy-RLE shift of 32 → undefined behaviour** (fixed, `fuzz_hdr`, 2026-10-07): each consecutive
+  legacy repeat record shifts its count 8 bits further; the fifth shifted a 32-bit count by 32 (UBSan, after
+  26 million executions). x86 masks the shift to 0, so a forged stream read as a VALID scanline. Refused past a shift
+  of 24, the count and its bound computed in 64 bits; regression
+  `test_PixelFactoryFileFormats.cpp::hdrLegacyRLEShiftPastTheCountWidthIsRejected`. Then 285.7 million executions
+  (8 workers × 600 s, ASan + UBSan `halt_on_error=1`) found nothing more. Seeds (the corpus is git-ignored): RGBE
+  streams written by hand on the model of the unit tests — adaptive RLE (runs and literals), flat, legacy RLE (single
+  and consecutive repeats), a `+Y … -X` orientation, and the hostile headers (65535², truncated, garbage); no real
+  `.hdr` file exists in the repositories.
 
 ### Extended campaign (PixelFactory, VertexFactory, Compression)
 

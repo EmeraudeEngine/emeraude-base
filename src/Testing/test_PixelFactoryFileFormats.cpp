@@ -299,6 +299,27 @@ TEST(PixelFactoryFileFormats, hdrLegacyRLEScanlineDecoded)
 	}
 }
 
+TEST(PixelFactoryFileFormats, hdrLegacyRLEShiftPastTheCountWidthIsRejected)
+{
+	/* Found by fuzz_hdr (2026-10-07, 26 million executions): each consecutive legacy repeat record shifts its count 8
+	 * bits further, and the fifth shifted a 32-bit count by 32 — undefined behaviour. x86 masks the shift to 0, so this
+	 * stream read as a valid 2-pixel scanline. A real file never needs a count past 2^32: refused. */
+	auto buffer = makeHDRHeader(2, 1);
+
+	const auto b = [] (int value) noexcept { return static_cast< std::byte >(static_cast< uint8_t >(value)); };
+
+	for ( const auto byte : {128, 64, 32, 130, /* repeats of 0 (shifts 0, 8, 16, 24): */ 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, /* shift 32: */ 1, 1, 1, 1} )
+	{
+		buffer.push_back(b(byte));
+	}
+
+	IO::MemoryStream stream{std::as_const(buffer)};
+	PixelFactory::FileFormatHDR< float, uint32_t > format;
+	PixelFactory::Pixmap< float, uint32_t > pixmap;
+
+	ASSERT_FALSE(format.readStream(stream, pixmap));
+}
+
 TEST(PixelFactoryFileFormats, hdrGarbageRejected)
 {
 	const std::vector< std::byte > buffer(16, std::byte{0xAB});

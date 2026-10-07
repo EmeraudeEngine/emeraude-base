@@ -36,6 +36,22 @@ raised: **`HTTPSClient` is used concurrently by several workers on one instance*
 own synchronisation — or the pool moves up a level and the client takes a connection as a
 parameter.
 
+## Measured (2026-10-07, Linux, owner: "measure first")
+
+20 sequential `HEAD` of `https://raw.githubusercontent.com/EmeraudeEngine/emeraude-base/main/README.md` (a throwaway
+program on `HTTPSClient::head()`, 3 runs), against curl as the reference:
+
+| Case | 20 calls | Per call |
+|---|---|---|
+| `HTTPSClient` today (one TLS connection per call) | 1.60 – 1.85 s | median 77 – 82 ms |
+| curl, 20 processes (no reuse) | 1.49 – 1.52 s | ~75 ms |
+| curl, one process (connection reused) | 0.28 – 0.31 s | ~15 ms |
+
+One curl request: TCP connect 36 ms, TLS done at 52 ms, total 63 ms — the connection setup is ~80 % of a small call. A
+pool would make a burst of small calls to one host about **5× faster** here (more on a farther host). The gain is
+real: the design question below goes to the owner with both designs (pool inside the client with its own lock, or
+the pool above the client), costed.
+
 ## ⚠️ Traps
 
 - A pooled connection carries the previous exchange's TLS session. Reusing one **across origins**

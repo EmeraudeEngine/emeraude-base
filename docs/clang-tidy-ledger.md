@@ -26,6 +26,7 @@ those whose file is inside the module (the header filter also reports every incl
 | Module | Date | Findings by check | Notes |
 |---|---|---|---|
 | — | — | no full run recorded yet under this ledger | |
+| `src/PixelFactory/FileFormatHDR.hpp` (legacy RLE shift bound), `src/Fuzzing/fuzz_hdr.cpp` (new), test `test_PixelFactoryFileFormats.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines (the fuzz target is not in the compile database; read by hand). | base fuzz-hdr-target |
 | `src/Math/Space3D/SAT.hpp`, `Collisions/SamePrimitive.hpp`, `Collisions/CapsuleTriangle.hpp`, `Collisions/CapsuleCuboid.hpp` (overlaps on the exact manifolds), test `test_MathSpace3D.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines. | base collision-pair-test-defects |
 | `src/Network/HTTPServer.cpp` / `.hpp` (network thread on `Base::Thread`) | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines. | base non-throwing-thread-start |
 | `src/ThreadPool.cpp` / `.hpp` (workers on `Base::Thread`, the calling thread runs the tasks without a worker), `src/Time/TimedEvent.hpp`, `EventTrait.hpp` (`start()` returns bool), tests `test_ThreadPool.cpp`, `test_Time.cpp` | 2026-10-07 | clang-tidy 21.1.6: 1 on the changed lines, fixed (performance-inefficient-vector-operation in a test). 0 left. | base non-throwing-thread-start |

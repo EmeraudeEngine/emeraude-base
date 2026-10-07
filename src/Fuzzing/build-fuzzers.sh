@@ -52,7 +52,7 @@ FLAGS=(-std=c++20 -fno-exceptions -g -O1 -fsanitize=fuzzer,address,undefined)
 
 TARGETS=(
 	fuzz_midi fuzz_obj fuzz_wav fuzz_json_sfx
-	fuzz_png fuzz_jpeg fuzz_targa
+	fuzz_png fuzz_jpeg fuzz_targa fuzz_hdr
 	fuzz_native fuzz_stl fuzz_mdx
 	fuzz_compression fuzz_ini
 	fuzz_http_response
