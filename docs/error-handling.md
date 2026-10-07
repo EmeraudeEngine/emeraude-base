@@ -55,6 +55,23 @@ consolidation epoch):
 [[nodiscard]] std::optional< Pixmap > readImage (const ByteStream &);     // value or nothing
 ```
 
+### 2.1 What `noexcept` means here — allocating functions keep it (owner decision 2026-10-07)
+
+`noexcept` on a cascade function means **"reports its failures by value (§2), never by an exception"** — not "cannot
+fail". It stays on a function that allocates or grows a container:
+
+- Under `-fno-exceptions` (the default, and the whole cascade), a failed allocation **aborts whatever the keyword
+  says**: `operator new` cannot throw into our frames, so removing `noexcept` would change nothing at run time and
+  cost the optimiser the knowledge that no unwind path exists.
+- A consumer built **with** exceptions gets `std::terminate()` on `std::bad_alloc` crossing such a function: the
+  same outcome, by design. Exhausting memory with a TRUSTED size is not a recoverable error in a real-time engine; an
+  UNTRUSTED size is bounded before it is used (§5), which is what turns "out of memory" into a refused input.
+- A `noexcept` IS wrong on a function that lets a non-allocation failure escape as an exception — a throwing std call
+  (`.at()`, `std::stoi`, the `std::filesystem` overloads without `error_code`, `std::any_cast` value form, jsoncpp's
+  `as*()`): that call is forbidden anyway (§3), and the function is fixed, not un-`noexcept`ed.
+
+(Former item `remove-invalid-noexcept`, closed by this decision.)
+
 ## 3. Forbidden constructs
 
 These either throw (→ `terminate` under `-fno-exceptions`) or hide failures:

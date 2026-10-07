@@ -76,8 +76,7 @@ use `typeid` and the standalone build fails under `-fno-rtti`.
 - **A hash collision aliases two payload types in silence.** FNV-1a 64-bit on full type names is
   the accepted risk; add a debug-only assertion helper if a collision is ever suspected.
 - The Observer contract in force does not change: never notify while iterating or holding a
-  mutex the handler may take; `onNotification` returning `true` stops propagation. See the
-  unrelated item `observable-static-shared-rewrite` before touching the same headers.
+  mutex the handler may take; `onNotification` returning `true` stops propagation.
 
 ## References
 
