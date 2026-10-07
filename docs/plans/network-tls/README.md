@@ -423,3 +423,8 @@ addresses, never through a proxy), `HTTPRequestOptions::cancel` (`DownloadOutcom
 overload with headers, and the `Host` field now carries a non-default port (RFC 9110 § 7.2). Detail and tests:
 `docs/subsystems/source-tree/24-network-http-server.md`. TLS for the LAN case stays open (engine item
 `resource-sharing-tls`).
+
+## Cross-platform validation
+
+The three-OS record (handover procedure, per-OS results, traps), closed 2026-10-07:
+[`cross-platform-validation.md`](cross-platform-validation.md).

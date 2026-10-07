@@ -1,12 +1,11 @@
----
-id: tls-stack-windows-macos-validation
-title: Run the network stack on Windows and macOS — down to the ExternalData chain
-status: open
-priority: medium
-scope: src/Network
-opened: 2026-07-04
-tags: [tls, cross-platform, handover]
----
+> **Closed 2026-10-07** — the record of the network stack's cross-platform validation, moved here from the base todo
+> item `tls-stack-windows-macos-validation` when its last open point closed. Linux, macOS and Windows have run the
+> whole chain down to `ExternalData` (Windows W8 on 2026-10-07, all rows pass). **M4** (`SerialPort` at 250000 bauds
+> through `IOSSIOSPEED` on macOS) was accepted as functional WITHOUT a hardware run: no serial adapter or printer
+> exists to test it (owner decision, 2026-10-07) — a first real-hardware run is still welcome (a USB-serial adapter with
+> TX and RX bridged is enough: open at 250000, write, read the same bytes back).
+> The handover procedure and the traps below stay the reference for any re-test.
+
 
 # Run the network stack on Windows and macOS — down to the `ExternalData` chain
 
@@ -130,7 +129,8 @@ the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
   1000 ms** — the macOS half of a measurement that existed only for Windows.
   ⚠️ No CDP tooling and no WebSocket library exist on this machine; the run used a ~110-line pure
   Python CDP client. Worth keeping in mind before assuming the Windows recipe is portable.
-- [ ] **M4** `SerialPort` at **250000 bauds against a real printer**. The `IOSSIOSPEED` path is new
+- [x] **M4 — accepted untested (owner, 2026-10-07)**: no serial hardware exists to run it; the design is accepted as functional. Kept below as written.
+- **M4 (former entry)** `SerialPort` at **250000 bauds against a real printer**. The `IOSSIOSPEED` path is new
   and was only ever exercised against a pty, which refuses the rate — so only the *failure* branch
   has run, never the success one.
 

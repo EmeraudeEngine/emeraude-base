@@ -496,6 +496,7 @@ boundary loops). Tests: `computedTangentFrameOfTheReferenceQuad` / `…OfAMirror
 ⚠️ **Rendering changes on generated shapes** whose UVs run mirrored (census 2026-10-07): torus and capsule entirely,
 the hollowed cube on half its triangles, one cap of the cylinder and the cone. Quad, cuboid, sphere and geodesic
 sphere are unchanged. **Rule:** a tangent from UVs needs the sign of their determinant; never normalise it away.
+Runtime proof (2026-10-07, projet-alpha `normal-map-debug --demo-options 4,0,3`, the torus, under the right / left omnis): its joints read exactly like the unmirrored reference quad's — the wall facing the lamp lit (~230), the other dark (0-20); 0 VUID.
 Also measured: `ShapeDecimator` folds a few UVs over (27 of 448 triangles on a 50 % sphere), whose frames then side
 with the fold-over.
 
