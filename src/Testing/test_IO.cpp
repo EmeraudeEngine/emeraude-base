@@ -35,6 +35,7 @@
 #include <fstream>
 #include <limits>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <vector>
 
@@ -481,4 +482,78 @@ TEST(IOConfinedPath, refusesEveryPathThatLeavesTheBase)
 	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "\\\\server\\share\\x").has_value());
 	EXPECT_FALSE(EmEn::Base::IO::confinedPath(base, "..\\secret").has_value());
 #endif
+}
+
+/* Windows paths of MAX_PATH (260) characters or more failed in every IO:: call (the Windows peer, 2026-10-01: 118
+ * shader binaries under a ~142-character cache directory). Owner decision (2026-10-07): the IO:: wrappers use the
+ * Win32 extended-length form ("\\?\") on Windows. The form itself is pure string work, checked on every platform. */
+TEST(IOWindowsExtendedLengthPath, prefixesDriveAndUNCPathsAndLeavesTheRestAlone)
+{
+	using EmEn::Base::IO::windowsExtendedLengthPath;
+
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"C:\\cache\\shader.bin"}), "\\\\?\\C:\\cache\\shader.bin");
+	/* The prefix turns off every other normalisation: forward slashes must become backslashes. */
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"d:/cache/shader.bin"}), "\\\\?\\d:\\cache\\shader.bin");
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"\\\\server\\share\\a.bin"}), "\\\\?\\UNC\\server\\share\\a.bin");
+	EXPECT_EQ(windowsExtendedLengthPath(std::wstring_view{L"C:\\x"}), L"\\\\?\\C:\\x");
+
+	/* Already extended, or a device path: unchanged. */
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"\\\\?\\C:\\x"}), "\\\\?\\C:\\x");
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"\\\\.\\COM1"}), "\\\\.\\COM1");
+
+	/* No extended form: relative, drive-relative, rooted without a drive, empty. */
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"cache\\shader.bin"}), "cache\\shader.bin");
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"C:cache"}), "C:cache");
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{"\\cache"}), "\\cache");
+	EXPECT_EQ(windowsExtendedLengthPath(std::string_view{""}), "");
+}
+
+TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
+{
+	std::error_code errorCode;
+	const auto base = std::filesystem::temp_directory_path(errorCode) / "emeraude-io-long-path-test";
+	std::filesystem::remove_all(base, errorCode);
+
+	/* A short path is handed to the system as it is, on every platform. */
+	EXPECT_EQ(EmEn::Base::IO::systemPath(base), base);
+
+	/* A path well past MAX_PATH: every wrapper must work through it (Windows: through "\\?\"). */
+	auto deep = base;
+
+	for ( int level = 0; level < 6; ++level )
+	{
+		deep /= std::string(48, static_cast< char >('a' + level));
+	}
+
+	const auto file = deep / "shader-binary.bin";
+	ASSERT_GT(file.native().size(), 300U);
+
+	const std::string content{"long path content"};
+
+	ASSERT_TRUE(EmEn::Base::IO::filePutContents(file, content, false, true));
+	EXPECT_TRUE(EmEn::Base::IO::fileExists(file));
+	EXPECT_EQ(EmEn::Base::IO::filesize(file), content.size());
+
+	std::string readBack;
+	ASSERT_TRUE(EmEn::Base::IO::fileGetContents(file, readBack));
+	EXPECT_EQ(readBack, content);
+
+	const auto renamed = deep / "shader-binary-committed.bin";
+	ASSERT_TRUE(EmEn::Base::IO::renameFile(file, renamed));
+	EXPECT_FALSE(EmEn::Base::IO::fileExists(file));
+	EXPECT_TRUE(EmEn::Base::IO::fileExists(renamed));
+
+	EXPECT_TRUE(EmEn::Base::IO::eraseFile(renamed));
+	EXPECT_TRUE(EmEn::Base::IO::eraseDirectory(base, true));
+	EXPECT_FALSE(EmEn::Base::IO::directoryExists(base));
+}
+
+TEST(IORenameFile, refusesEmptyAndMissingPaths)
+{
+	EXPECT_FALSE(EmEn::Base::IO::renameFile({}, "x"));
+	EXPECT_FALSE(EmEn::Base::IO::renameFile("x", {}));
+	std::error_code errorCode;
+	const auto directory = std::filesystem::temp_directory_path(errorCode);
+
+	EXPECT_FALSE(EmEn::Base::IO::renameFile(directory / "emeraude-io-no-such-file", directory / "emeraude-io-target"));
 }

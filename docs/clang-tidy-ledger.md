@@ -26,6 +26,7 @@ those whose file is inside the module (the header filter also reports every incl
 | Module | Date | Findings by check | Notes |
 |---|---|---|---|
 | — | — | no full run recorded yet under this ledger | |
+| `src/IO/IO.cpp` / `.hpp` (`systemPath()`, `windowsExtendedLengthPath()`, `renameFile()`, every wrapper through `systemPath()`), test `test_IO.cpp` | 2026-10-07 | clang-tidy 21.1.6: 2 on the changed lines, fixed (modernize-raw-string-literal ×2: the `\\?\` prefixes). 0 left. | base todo items (high) |
 | `src/Time/Time.cpp` / `.hpp` (`processCPUTimeResolutionNanoseconds()`), test `test_Debug.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines (Linux branch; the Windows branch is a constant). | base todo items (high) |
 | `src/Time/EventTrait.hpp`, `TimedEvent.hpp` (timers destroyed outside the lock, self-destroy retired), `src/Math/CartesianFrame.hpp`, `Quaternion.hpp` (Tait-Bryan getters, clamped asin), through tests `test_Time.cpp`, `test_MathCartesianFrame.cpp`, `test_MathQuaternion.cpp` | 2026-10-07 | clang-tidy 21.1.6: 4 on the changed lines, fixed (modernize-use-scoped-lock ×4 on the new locks). 0 left. | base todo items (high) |
 | `src/Network/GracefulCloser.*` (new), `HTTPServer.*` (graceful close), tests `test_NetworkHTTPServer.cpp` | 2026-10-06 | clang-tidy 21.1.6: 0 on the new files and on the changed lines; then the accounting / fixed-cap fix and the `NetworkGracefulCloser` tests: 5 fixed (readability-redundant-casting on asio's void error_code overloads). 0 left. | Graceful close |

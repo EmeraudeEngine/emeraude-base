@@ -276,6 +276,22 @@ loop iterations. Do not "fix" it with `QueryPerformanceCounter`: that is elapsed
   `IO::directoryEntries()`). `file_size(ec)` answers `static_cast< uintmax_t >(-1)` on error: never add it blindly.
 - 2026-09-30: 38 calls + 9 walks + 9 ADL calls moved, cascade-wide (base, engine, projet-alpha).
 
+### ⚠️⚠️ Windows: a path of MAX_PATH (260) characters or more fails in any IO — unless it takes the `\\?\` form (2026-10-07)
+
+Found by the Windows peer (2026-10-01): under a ~142-character `--cache-directory`, 118 shader binaries (273-282
+characters) could not be written. Owner decision: both supports.
+- Every `IO::` wrapper hands the system `IO::systemPath(path)`: on Windows, a path whose absolute form reaches
+  `WindowsLongPathThreshold` (248 = MAX_PATH − 12, the CreateDirectory() limit) becomes absolute, lexically normal,
+  backslashed and prefixed — `\\?\C:\…` or `\\?\UNC\server\share\…` (`IO::windowsExtendedLengthPath()`, pure and
+  tested on every OS). It needs no system setting. Elsewhere, and below the threshold, the path is unchanged.
+- `IO::renameFile()` is the `std::filesystem::rename` wrapper (the "write aside, then rename" commit); the engine's
+  shader-binary and pipeline caches use it.
+- projet-alpha's executable declares `longPathAware` (its `cef-integration.md`): it covers the code OUTSIDE `IO::`
+  (the engine's other direct `std::filesystem` calls, the 17 base files opening their own streams, third-party
+  libraries) — only when the system's `LongPathsEnabled` is 1.
+**Rule:** a file access goes through `IO::` (or `IO::systemPath()`), not through a bare `std::filesystem` / fstream
+call, or a long Windows path fails there. The `\\?\` form turns off every normalisation: never build one by hand.
+
 ### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
 
 `base / "/etc/passwd"` is `/etc/passwd`; `base / "../../x"` leaves `base`. Every path written in data (a resource

@@ -122,6 +122,54 @@ namespace
 
 namespace EmEn::Base::IO
 {
+	std::filesystem::path
+	systemPath (const std::filesystem::path & path) noexcept
+	{
+#if IS_WINDOWS
+		if ( path.empty() || (path.is_absolute() && path.native().size() < WindowsLongPathThreshold) )
+		{
+			return path;
+		}
+
+		std::error_code errorCode;
+		const auto absolute = std::filesystem::absolute(path, errorCode);
+
+		if ( errorCode || absolute.native().size() < WindowsLongPathThreshold )
+		{
+			return path;
+		}
+
+		auto normal = absolute.lexically_normal();
+		normal.make_preferred();
+
+		return std::filesystem::path{windowsExtendedLengthPath(std::wstring_view{normal.native()})};
+#else
+		return path;
+#endif
+	}
+
+	bool
+	renameFile (const std::filesystem::path & from, const std::filesystem::path & to) noexcept
+	{
+		if ( from.empty() || to.empty() ) [[unlikely]]
+		{
+			return false;
+		}
+
+		std::error_code errorCode;
+
+		std::filesystem::rename(systemPath(from), systemPath(to), errorCode);
+
+		if ( errorCode ) [[unlikely]]
+		{
+			Logging::error("IO", std::string{"IO::renameFile(), unable to rename "} + from.string() + " to " + to.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+
+			return false;
+		}
+
+		return true;
+	}
+
 	bool
 	fileExists (const std::filesystem::path & filepath) noexcept
 	{
@@ -131,13 +179,14 @@ namespace EmEn::Base::IO
 		}
 
 		std::error_code errorCode;
+		const auto systemFilepath = systemPath(filepath);
 
-		if ( !std::filesystem::exists(filepath, errorCode) ) [[unlikely]]
+		if ( !std::filesystem::exists(systemFilepath, errorCode) ) [[unlikely]]
 		{
 			return false;
 		}
 
-		const auto result = std::filesystem::is_regular_file(filepath, errorCode);
+		const auto result = std::filesystem::is_regular_file(systemFilepath, errorCode);
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
@@ -154,7 +203,7 @@ namespace EmEn::Base::IO
 	{
 		std::error_code errorCode;
 
-		const auto size = std::filesystem::file_size(filepath, errorCode);
+		const auto size = std::filesystem::file_size(systemPath(filepath), errorCode);
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
@@ -172,7 +221,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ofstream file{filepath};
+		std::ofstream file{systemPath(filepath)};
 
 		return file.is_open();
 	}
@@ -186,8 +235,9 @@ namespace EmEn::Base::IO
 		}
 
 		std::error_code errorCode;
+		const auto systemFilepath = systemPath(filepath);
 
-		if ( !std::filesystem::is_regular_file(filepath, errorCode) ) [[unlikely]]
+		if ( !std::filesystem::is_regular_file(systemFilepath, errorCode) ) [[unlikely]]
 		{
 			if ( errorCode.value() > 0 ) [[unlikely]]
 			{
@@ -201,7 +251,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::filesystem::remove(filepath, errorCode);
+		std::filesystem::remove(systemFilepath, errorCode);
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
@@ -223,7 +273,7 @@ namespace EmEn::Base::IO
 
 		std::error_code errorCode;
 
-		const auto result = std::filesystem::is_directory(path, errorCode);
+		const auto result = std::filesystem::is_directory(systemPath(path), errorCode);
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
@@ -249,7 +299,7 @@ namespace EmEn::Base::IO
 
 		std::error_code errorCode;
 
-		const auto result = std::filesystem::is_empty(path, errorCode);
+		const auto result = std::filesystem::is_empty(systemPath(path), errorCode);
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
@@ -312,11 +362,11 @@ namespace EmEn::Base::IO
 		{
 			const auto parentPath = path.parent_path();
 
-			std::filesystem::create_directories(parentPath, errorCode);
+			std::filesystem::create_directories(systemPath(parentPath), errorCode);
 		}
 		else
 		{
-			std::filesystem::create_directories(path, errorCode);
+			std::filesystem::create_directories(systemPath(path), errorCode);
 		}
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
@@ -338,8 +388,9 @@ namespace EmEn::Base::IO
 		}
 
 		std::error_code errorCode;
+		const auto systemDirectory = systemPath(path);
 
-		if ( !std::filesystem::is_directory(path, errorCode) ) [[unlikely]]
+		if ( !std::filesystem::is_directory(systemDirectory, errorCode) ) [[unlikely]]
 		{
 			if ( errorCode.value() > 0 ) [[unlikely]]
 			{
@@ -355,11 +406,11 @@ namespace EmEn::Base::IO
 
 		if ( recursive )
 		{
-			std::filesystem::remove_all(path, errorCode);
+			std::filesystem::remove_all(systemDirectory, errorCode);
 		}
 		else
 		{
-			std::filesystem::remove(path, errorCode);
+			std::filesystem::remove(systemDirectory, errorCode);
 		}
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
@@ -399,7 +450,7 @@ namespace EmEn::Base::IO
 
 		std::error_code errorCode;
 
-		const auto result = std::filesystem::exists(path, errorCode);
+		const auto result = std::filesystem::exists(systemPath(path), errorCode);
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
@@ -422,7 +473,7 @@ namespace EmEn::Base::IO
 #if IS_LINUX || IS_MACOS
 		return access(path.c_str(), R_OK) == 0;
 #elif IS_WINDOWS
-		return checkWindowsAccess(path, GENERIC_READ);
+		return checkWindowsAccess(systemPath(path), GENERIC_READ);
 #else
 		Logging::error("IO", "IO::readable(), unable to check permission !");
 
@@ -441,7 +492,7 @@ namespace EmEn::Base::IO
 #if IS_LINUX || IS_MACOS
 		return access(path.c_str(), W_OK) == 0;
 #elif IS_WINDOWS
-		return checkWindowsAccess(path, GENERIC_WRITE);
+		return checkWindowsAccess(systemPath(path), GENERIC_WRITE);
 #else
 		Logging::error("IO", "IO::writable(), unable to check permission !");
 
@@ -460,7 +511,7 @@ namespace EmEn::Base::IO
 #if IS_LINUX || IS_MACOS
 		return access(path.c_str(), X_OK) == 0;
 #elif IS_WINDOWS
-		return checkWindowsAccess(path, GENERIC_EXECUTE);
+		return checkWindowsAccess(systemPath(path), GENERIC_EXECUTE);
 #else
 		Logging::error("IO", "IO::executable(), unable to check permission !");
 
@@ -499,7 +550,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ifstream file{filepath, std::ios::binary | std::ios::ate};
+		std::ifstream file{systemPath(filepath), std::ios::binary | std::ios::ate};
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
@@ -547,7 +598,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ofstream file{filepath, std::ios::binary | (append ? std::ios::app : std::ios::trunc)};
+		std::ofstream file{systemPath(filepath), std::ios::binary | (append ? std::ios::app : std::ios::trunc)};
 
 		if ( !file.is_open() ) [[unlikely]]
 		{

@@ -55,6 +55,100 @@ namespace EmEn::Base::IO
 #endif
 
 	/**
+	 * @brief From this length (native characters), systemPath() gives a path the Win32 extended-length form on Windows:
+	 * 248 = MAX_PATH − 12, the CreateDirectory() limit (room for an 8.3 file name).
+	 */
+	constexpr size_t WindowsLongPathThreshold{248};
+
+	/**
+	 * @brief Returns the Win32 extended-length form of an ABSOLUTE Windows path: C:\a → \\?\C:\a,
+	 * \\server\share\a → \\?\UNC\server\share\a. Forward slashes become backslashes: the prefix turns
+	 * off every other normalisation, so the path must also be lexically normal (no "." / "..").
+	 * @note Pure string work, compiled on every platform for its tests; systemPath() applies it on Windows only. A path
+	 * already extended (or a \\.\ device path) comes back unchanged; so does a relative, drive-relative or
+	 * drive-less rooted one, which has no extended form.
+	 * @tparam char_t The character type (wchar_t for a Windows native path).
+	 * @param absolutePath An absolute, lexically normal path.
+	 * @return std::basic_string< char_t >
+	 */
+	template< typename char_t >
+	[[nodiscard]]
+	std::basic_string< char_t >
+	windowsExtendedLengthPath (std::basic_string_view< char_t > absolutePath) noexcept
+	{
+		const auto at = [absolutePath] (size_t index) noexcept -> char_t {
+			return index < absolutePath.size() ? absolutePath[index] : char_t{0};
+		};
+		const auto isSeparator = [] (char_t character) noexcept {
+			return character == static_cast< char_t >('\\') || character == static_cast< char_t >('/');
+		};
+		const auto isDriveLetter = [] (char_t character) noexcept {
+			return (character >= static_cast< char_t >('A') && character <= static_cast< char_t >('Z')) || (character >= static_cast< char_t >('a') && character <= static_cast< char_t >('z'));
+		};
+
+		/* Already extended ("\\?\"), or a device path ("\\.\"). */
+		if ( isSeparator(at(0)) && isSeparator(at(1)) && (at(2) == static_cast< char_t >('?') || at(2) == static_cast< char_t >('.')) && isSeparator(at(3)) )
+		{
+			return std::basic_string< char_t >{absolutePath};
+		}
+
+		std::string_view prefix;
+		size_t skipped = 0;
+
+		if ( isSeparator(at(0)) && isSeparator(at(1)) )
+		{
+			/* UNC: "\\server\share" → "\\?\UNC\server\share". */
+			prefix = R"(\\?\UNC\)";
+			skipped = 2;
+		}
+		else if ( isDriveLetter(at(0)) && at(1) == static_cast< char_t >(':') && isSeparator(at(2)) )
+		{
+			prefix = R"(\\?\)";
+		}
+		else
+		{
+			return std::basic_string< char_t >{absolutePath};
+		}
+
+		std::basic_string< char_t > result;
+		result.reserve(prefix.size() + absolutePath.size() - skipped);
+
+		for ( const auto character : prefix )
+		{
+			result.push_back(static_cast< char_t >(character));
+		}
+
+		for ( const auto character : absolutePath.substr(skipped) )
+		{
+			result.push_back(isSeparator(character) ? static_cast< char_t >('\\') : character);
+		}
+
+		return result;
+	}
+
+	/**
+	 * @brief Returns the form of a path every IO:: wrapper hands to the system.
+	 * @note Windows: a path whose absolute form reaches WindowsLongPathThreshold characters is made absolute, lexically
+	 * normal, and given the extended-length form (\\?\), so it works past MAX_PATH (260) without the system's
+	 * LongPathsEnabled. Any other path, and every path elsewhere, comes back unchanged. A walk of an extended directory
+	 * (forEachDirectoryEntry()) yields extended entry paths.
+	 * @param path A path.
+	 * @return std::filesystem::path
+	 */
+	[[nodiscard]]
+	std::filesystem::path systemPath (const std::filesystem::path & path) noexcept;
+
+	/**
+	 * @brief Renames (moves) a file or a directory, replacing an existing target file — the commit of a "write aside,
+	 * then rename" save. Never throws (std::error_code overload), works past MAX_PATH on Windows (systemPath()).
+	 * @param from The current path.
+	 * @param to The new path.
+	 * @return bool False when a path is empty or the system refuses (logged).
+	 */
+	[[nodiscard]]
+	bool renameFile (const std::filesystem::path & from, const std::filesystem::path & to) noexcept;
+
+	/**
 	 * @brief Checks if a file exists on disk.
 	 *
 	 * Verifies that the specified path exists and is a regular file (not a directory,
@@ -216,12 +310,14 @@ namespace EmEn::Base::IO
 			return true;
 		};
 
+		const auto directory = systemPath(path);
+
 		if ( recursive )
 		{
-			return walk(std::filesystem::recursive_directory_iterator{path, std::filesystem::directory_options::skip_permission_denied, errorCode});
+			return walk(std::filesystem::recursive_directory_iterator{directory, std::filesystem::directory_options::skip_permission_denied, errorCode});
 		}
 
-		return walk(std::filesystem::directory_iterator{path, errorCode});
+		return walk(std::filesystem::directory_iterator{directory, errorCode});
 	}
 
 	/**
@@ -394,7 +490,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ifstream file{filepath, std::ios::binary | std::ios::ate};
+		std::ifstream file{systemPath(filepath), std::ios::binary | std::ios::ate};
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
@@ -452,7 +548,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ifstream file{filepath, std::ios::binary | std::ios::ate};
+		std::ifstream file{systemPath(filepath), std::ios::binary | std::ios::ate};
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
@@ -534,7 +630,7 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ofstream file{filepath, std::ios::binary | (append ? std::ios::app : std::ios::trunc)};
+		std::ofstream file{systemPath(filepath), std::ios::binary | (append ? std::ios::app : std::ios::trunc)};
 
 		if ( !file.is_open() ) [[unlikely]]
 		{

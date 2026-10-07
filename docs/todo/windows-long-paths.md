@@ -31,12 +31,16 @@ BOTH: `\\?\`-prefixed absolute normalized paths inside the base `IO::` wrappers 
 
 ## What remains
 
-- [ ] Choose the support (an owner decision):
-  - a `longPathAware` manifest in the applications (projet-alpha), which also needs the system's `LongPathsEnabled`;
-  - or `\\?\`-prefixed absolute paths inside the base `IO::` wrappers on Windows (works without the system setting,
-    but needs an absolute, normalized path);
-  - or both.
-- [ ] Re-test with a 300-character cache path on Windows: the binaries are written.
+Done on Linux (2026-10-07): `IO::systemPath()` in every `IO::` wrapper (the `\\?\` form from 248 characters),
+`IO::windowsExtendedLengthPath()` (pure, tested on every OS), `IO::renameFile()` (used by the engine's shader-binary
+and pipeline caches), projet-alpha's `long-path-aware.manifest`. Linux: the cascade builds, 2379 / 2379 Release and
+ASan + UBSan; `IOSystemPath.shortPathsAreUnchangedAndLongOnesStayUsable` writes, reads, renames and erases a
+300+-character path (proves nothing about Windows: Linux has no MAX_PATH).
+
+- [ ] **Windows proof**, without `LongPathsEnabled` first: `EmeraudeBaseUnitTests --gtest_filter=IO*` green (the
+      long-path test goes through `\\?\` there), then projet-alpha with a 300-character `--cache-directory`: the shader
+      binaries and the pipeline cache are written (0 "Unable to write the shader binary"). Check the manifest is in the
+      executable (`mt.exe -inputresource:projet-alpha.exe;#1 -out:con`). Then delete this item.
 
 ## References
 
