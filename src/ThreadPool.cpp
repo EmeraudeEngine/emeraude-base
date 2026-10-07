@@ -47,14 +47,26 @@ namespace EmEn::Base
 
 		m_workers.reserve(threadCount);
 
+		/* A worker the system refuses to start is left out (Base::Thread::start() traces it): the pool runs with the
+		 * workers it got, and with none it runs every task on the calling thread (enqueueTask(), enqueueBatch()). */
 		for ( size_t index = 0; index < threadCount; ++index )
 		{
-			m_workers.emplace_back(&ThreadPool::worker, this);
+			Thread worker;
+
+			if ( worker.start([this] { this->worker(); }) )
+			{
+				m_workers.emplace_back(std::move(worker));
+			}
+		}
+
+		if ( m_workers.size() < threadCount )
+		{
+			std::cerr << "[ThreadPool] Only " << m_workers.size() << " of " << threadCount << " worker threads could start" << (m_workers.empty() ? ": the tasks run on the calling thread." : ".") << "\n";
 		}
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] " << threadCount << " threads spawned in the pool." "\n";
+			std::cout << "[ThreadPool-debug] " << m_workers.size() << " threads spawned in the pool." "\n";
 		}
 	}
 
@@ -82,10 +94,7 @@ namespace EmEn::Base
 
 		for ( auto & worker : m_workers )
 		{
-			if ( worker.joinable() )
-			{
-				worker.join();
-			}
+			worker.join();
 		}
 
 		if constexpr ( ThreadPoolDebugEnabled )
@@ -97,6 +106,19 @@ namespace EmEn::Base
 	bool
 	ThreadPool::enqueueTask (Task && task)
 	{
+		/* No worker could start (Base::Thread::start() refused them all): the calling thread runs the task. */
+		if ( m_workers.empty() )
+		{
+			if ( m_stop.load(std::memory_order_acquire) )
+			{
+				return false;
+			}
+
+			task();
+
+			return true;
+		}
+
 		{
 			const std::scoped_lock lock{m_mutex};
 

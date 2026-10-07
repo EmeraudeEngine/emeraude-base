@@ -43,6 +43,9 @@
 #include <utility>
 #include <vector>
 
+/* Local inclusions. */
+#include "Thread.hpp"
+
 namespace EmEn::Base
 {
 	/**
@@ -513,7 +516,8 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Returns the number of worker threads in the pool.
-			 * @return The total number of worker threads created at construction.
+			 * @return The worker threads the system agreed to start at construction — 0 when it started none, the pool
+			 * then running every task on the calling thread.
 			 * @note Thread-safe: Does not change after construction.
 			 */
 			[[nodiscard]]
@@ -657,6 +661,21 @@ namespace EmEn::Base
 				}
 
 				size_t count = 0;
+
+				/* No worker could start (Base::Thread::start() refused them all): the calling thread runs the tasks. */
+				if ( m_workers.empty() )
+				{
+					for ( auto it = begin; it != end; ++it )
+					{
+						Task task{std::move(*it)};
+
+						task();
+
+						++count;
+					}
+
+					return count;
+				}
 
 				{
 					const std::scoped_lock lock{m_mutex};
@@ -1140,7 +1159,7 @@ namespace EmEn::Base
 			 */
 			void worker ();
 
-			std::vector< std::thread > m_workers;
+			std::vector< Thread > m_workers;
 			std::deque< Task > m_tasks;
 			std::mutex m_mutex;
 			std::condition_variable m_condition;

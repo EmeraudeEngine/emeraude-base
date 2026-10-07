@@ -1546,3 +1546,61 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 		std::cout << "[		  ] Speedup not asserted: only " << pool.threadCount() << " worker thread(s).\n";
 	}
 }
+
+/* A worker the system refuses to start (Base::Thread, owner policy 2026-10-07) is left out; with none, the pool runs
+ * every task on the calling thread instead of queueing it for nobody. */
+TEST(ThreadPool, runsOnTheCallingThreadWhenNoWorkerCouldStart)
+{
+	EmEn::Base::Thread::failNextStartsForTesting(64);
+
+	EmEn::Base::ThreadPool pool{4};
+
+	EmEn::Base::Thread::failNextStartsForTesting(0);
+
+	EXPECT_EQ(pool.threadCount(), 0U);
+
+	const auto caller = std::this_thread::get_id();
+	std::atomic_bool ranHere{false};
+
+	ASSERT_TRUE(pool.enqueue([&ranHere, caller] { ranHere = (std::this_thread::get_id() == caller); }));
+
+	/* Already done when enqueue() returns. */
+	EXPECT_TRUE(ranHere.load());
+
+	std::vector< std::function< void () > > batch;
+	std::atomic_int batchRuns{0};
+
+	batch.reserve(3);
+
+	for ( int index = 0; index < 3; ++index )
+	{
+		batch.emplace_back([&batchRuns] { ++batchRuns; });
+	}
+
+	EXPECT_EQ(pool.enqueueBatch(batch.begin(), batch.end()), 3U);
+	EXPECT_EQ(batchRuns.load(), 3);
+
+	pool.wait();
+}
+
+TEST(ThreadPool, keepsTheWorkersThatStarted)
+{
+	EmEn::Base::Thread::failNextStartsForTesting(1);
+
+	EmEn::Base::ThreadPool pool{3};
+
+	EmEn::Base::Thread::failNextStartsForTesting(0);
+
+	EXPECT_EQ(pool.threadCount(), 2U);
+
+	std::atomic_int runs{0};
+
+	for ( int index = 0; index < 16; ++index )
+	{
+		ASSERT_TRUE(pool.enqueue([&runs] { ++runs; }));
+	}
+
+	pool.wait();
+
+	EXPECT_EQ(runs.load(), 16);
+}

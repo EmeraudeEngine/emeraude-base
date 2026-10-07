@@ -37,6 +37,7 @@
 #include <type_traits>
 
 /* Local inclusions for usages. */
+#include "Thread.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::Time
@@ -222,17 +223,19 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Starts the timer of the event.
-			 * @return void
+			 * @return bool False when the system refused to start the timer thread (Base::Thread, traced): the timer
+			 * stays stopped.
 			 */
-			void
+			[[nodiscard]]
+			bool
 			start () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_mutex};
+				const std::scoped_lock lock{m_mutex};
 
 				/* If the process is already active, we do nothing. */
 				if ( m_isProcessActive )
 				{
-					return;
+					return true;
 				}
 
 				m_isProcessActive = true;
@@ -246,12 +249,20 @@ namespace EmEn::Base::Time
 					/* NOTE: Wake up the thread. */
 					m_condition.notify_one();
 
-					return;
+					return true;
 				}
 
 				m_isProcessCreated = true;
 
-				m_thread = std::thread{&TimedEvent::process, this};
+				if ( !m_thread.start([this] { this->process(); }) )
+				{
+					m_isProcessCreated = false;
+					m_isProcessActive = false;
+
+					return false;
+				}
+
+				return true;
 			}
 
 			/**
@@ -346,7 +357,7 @@ namespace EmEn::Base::Time
 			{
 				const std::scoped_lock lock{m_mutex};
 
-				return m_thread.get_id() == std::this_thread::get_id();
+				return m_thread.isCurrentThread();
 			}
 
 			/**
@@ -453,7 +464,7 @@ namespace EmEn::Base::Time
 			std::chrono::duration< rep_t, period_t > m_granularity{std::chrono::seconds{1}};
 			std::chrono::time_point< std::chrono::steady_clock > m_previousTime{std::chrono::steady_clock::now()};
 			std::function< bool (TimerID) > m_function;
-			std::thread m_thread;
+			Thread m_thread;
 			mutable std::mutex m_mutex;
 			std::condition_variable m_condition;
 			TimerID m_timerId{0};

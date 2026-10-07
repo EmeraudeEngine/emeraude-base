@@ -39,6 +39,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "Thread.hpp"
 #include "Time/Time.hpp"
 #include "Time/EventTrait.hpp"
 #include "Time/Elapsed/CPUTime.hpp"
@@ -216,6 +217,29 @@ namespace EmEn::Base::Time
 		EXPECT_FALSE(events.startTimer(timerID));
 
 		/* Joins the retired thread (and nothing is left for the destructor). */
+		events.destroyTimers();
+	}
+
+	/* A timer whose thread the system refuses (Base::Thread, owner policy 2026-10-07) is refused: createTimer() answers
+	 * 0 and keeps nothing, startTimer() answers false. TimedEvent used to start a std::thread — an abort there. */
+	TEST(TimeEventTrait, aTimerWhoseThreadCannotStartIsRefused)
+	{
+		TestableEventTrait events;
+
+		Thread::failNextStartsForTesting(1);
+		EXPECT_EQ(events.createTimer([] (TimerID) { return true; }, 1U, true, true), 0U);
+
+		const auto timerID = events.createTimer([] (TimerID) { return false; }, 3'600'000U, false, false);
+		ASSERT_NE(timerID, 0U);
+
+		Thread::failNextStartsForTesting(1);
+		EXPECT_FALSE(events.startTimer(timerID));
+		EXPECT_FALSE(events.isTimerStarted(timerID));
+
+		/* The next start works. */
+		EXPECT_TRUE(events.startTimer(timerID));
+		EXPECT_TRUE(events.isTimerStarted(timerID));
+
 		events.destroyTimers();
 	}
 

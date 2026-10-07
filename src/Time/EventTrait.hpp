@@ -123,9 +123,13 @@ namespace EmEn::Base::Time
 				auto & timer = result.first->second;
 				timer.setTimerID(timerID);
 
-				if ( autostart )
+				/* A timer whose thread the system refuses is no timer: refused (Base::Thread traced why). It never ran,
+				 * so erasing it here, under the lock, joins nothing. */
+				if ( autostart && !timer.start() )
 				{
-					timer.start();
+					m_events.erase(result.first);
+
+					return 0;
 				}
 
 				return timerID;
@@ -168,9 +172,7 @@ namespace EmEn::Base::Time
 			startTimer (TimerID timerID) noexcept
 			{
 				return this->withTimer(timerID, [] (auto * timer) {
-					timer->start();
-
-					return true;
+					return timer->start();
 				});
 			}
 
@@ -243,7 +245,8 @@ namespace EmEn::Base::Time
 
 				for ( auto & event : std::ranges::views::values(m_events) )
 				{
-					event.start();
+					/* A refused start leaves that timer stopped (Base::Thread traced it); the others still start. */
+					static_cast< void >(event.start());
 				}
 			}
 
