@@ -181,3 +181,28 @@ TEST(BaseThread, aThreadJoiningItselfIsDetachedInsteadOfAborting)
 	ASSERT_TRUE(waitFor(joined));
 	EXPECT_FALSE(thread->joinable());
 }
+
+TEST(BaseThread, aNewThreadSeesItsObjectAlreadyRecorded)
+{
+	/* macOS peer, 2026-10-07: under load the new thread could run before start() recorded it (m_joinable, the
+	 * handle), so its self-join saw an idle object, and start() then marked it joinable. The seam holds start()
+	 * inside that window. */
+	std::atomic_bool joined{false};
+	std::atomic_bool sawItsObject{false};
+	auto thread = std::make_unique< Thread >();
+	auto * self = thread.get();
+
+	Thread::delayNextPublicationForTesting(100);
+
+	ASSERT_TRUE(thread->start([self, &joined, &sawItsObject] {
+		sawItsObject = self->joinable() && self->isCurrentThread();
+
+		self->join();
+
+		joined = true;
+	}));
+
+	ASSERT_TRUE(waitFor(joined));
+	EXPECT_TRUE(sawItsObject.load());
+	EXPECT_FALSE(thread->joinable());
+}

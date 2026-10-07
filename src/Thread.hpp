@@ -31,6 +31,7 @@
 #include "emeraude_platform.hpp"
 
 /* STL inclusions. */
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -146,6 +147,14 @@ namespace EmEn::Base
 			 */
 			static void failNextStartsForTesting (uint32_t count) noexcept;
 
+			/**
+			 * @brief TEST SEAM: makes the next start() of the process wait after the system started the thread and
+			 * before it records it — the window in which the new thread must not observe this object yet.
+			 * @param milliseconds The delay.
+			 * @return void
+			 */
+			static void delayNextPublicationForTesting (uint32_t milliseconds) noexcept;
+
 		private:
 
 			/** @brief The type-erased callable a new thread runs (move-only callables included). */
@@ -159,6 +168,10 @@ namespace EmEn::Base
 				virtual ~TaskBase () = default;
 
 				virtual void run () noexcept = 0;
+
+				/** @brief Set by start() once it recorded the thread in its object: the new thread waits for it before
+				 * running the callable, so whatever start() wrote happens-before the callable (a self-join included). */
+				std::atomic_bool m_published{false};
 			};
 
 			/** @brief The callable of one start(). */

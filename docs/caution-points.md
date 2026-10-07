@@ -299,6 +299,22 @@ Accepted 2026-10-07 on the three OS (build clean, `BaseThread.*` / `ThreadPool.*
 fallback (the engine has no failure seam), and `Desktop::Notification::show()` on Windows (thread-free since that day,
 compiled clean) — it has NO caller in the engine or projet-alpha.
 
+### ⚠️⚠️ A new thread must not run before start() has recorded it — the start handshake (FIXED 2026-10-07)
+
+Found by the macOS peer under load (16 parallel processes), on base `4aa29ae`: `start()` wrote `m_handle` and
+`m_joinable` AFTER `pthread_create()` returned, so the new thread could run first. Its self-join saw an idle object
+and returned silently (no "cannot join itself" trace), then `start()` marked the object joinable: test
+`BaseThread.aThreadJoiningItselfIsDetachedInsteadOfAborting` failed 17 times in 8000 runs in Release, 223 in 4800
+under ASan — and it was a C++ data race besides (the child read what the parent was writing). Every thread body
+touching its own `Thread` at once had the window. **Fix:** the task carries `m_published`; `start()` sets it
+(release) as its LAST access to the task, after recording the thread, and `Thread::entryPoint()` yields until it sees
+it (acquire) before running the callable — whatever `start()` writes happens-before the callable. ⚠️ Not
+`atomic::wait()`/`notify`: the notify would come after the store, when the new thread may already have deleted the
+task. Proof: `BaseThread.aNewThreadSeesItsObjectAlreadyRecorded` holds `start()` in the window with the test seam
+`Thread::delayNextPublicationForTesting(ms)` — failed every time before the fix, passes after; the macOS load
+(16 × 500 Release, 16 × 300 ASan) gives 0 failure and every trace on Linux. **Rule:** an object handing work to
+another thread publishes its own state BEFORE the other thread can observe it, never after the hand-over call.
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate

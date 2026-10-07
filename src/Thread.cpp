@@ -30,7 +30,9 @@
 /* STL inclusions. */
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <string>
+#include <thread>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
@@ -57,6 +59,36 @@ namespace
 		static std::atomic< uint32_t > counter{0};
 
 		return counter;
+	}
+
+	/**
+	 * @brief Returns the delay of the next publication, in milliseconds (Thread::delayNextPublicationForTesting()).
+	 * @return std::atomic< uint32_t > &
+	 */
+	[[nodiscard]]
+	std::atomic< uint32_t > &
+	publicationDelay () noexcept
+	{
+		static std::atomic< uint32_t > milliseconds{0};
+
+		return milliseconds;
+	}
+
+	/**
+	 * @brief Holds a new thread until start() has recorded it in its Thread object.
+	 * @note A yield loop, not atomic::wait(): wait() needs a notify after the store, and the notifying thread would
+	 * then touch the task the waiter may already have deleted. The wait lasts the few instructions start() runs after
+	 * the system call.
+	 * @param published The task's publication flag.
+	 * @return void
+	 */
+	void
+	waitUntilSet (const std::atomic_bool & published) noexcept
+	{
+		while ( !published.load(std::memory_order_acquire) )
+		{
+			std::this_thread::yield();
+		}
 	}
 
 	/**
@@ -130,6 +162,12 @@ namespace EmEn::Base
 		failingStarts().store(count);
 	}
 
+	void
+	Thread::delayNextPublicationForTesting (uint32_t milliseconds) noexcept
+	{
+		publicationDelay().store(milliseconds);
+	}
+
 	bool
 	Thread::startTask (std::unique_ptr< TaskBase > task) noexcept
 	{
@@ -180,11 +218,16 @@ namespace EmEn::Base
 		}
 #endif
 
-		/* The new thread owns the task now (Thread::entryPoint() deletes it). */
-		const auto * const handedOver = task.release();
-		static_cast< void >(handedOver);
+		if ( const auto delay = publicationDelay().exchange(0); delay > 0 )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{delay});
+		}
 
 		m_joinable = true;
+
+		/* The new thread owns the task now (Thread::entryPoint() deletes it). ⚠️ Publishing is the LAST access to the
+		 * task: once the flag is seen, the new thread may run and delete it (hence no notify after the store). */
+		task.release()->m_published.store(true, std::memory_order_release);
 
 		return true;
 	}
@@ -264,6 +307,8 @@ namespace EmEn::Base
 	{
 		const std::unique_ptr< TaskBase > task{static_cast< TaskBase * >(argument)};
 
+		waitUntilSet(task->m_published);
+
 		task->run();
 
 		return 0;
@@ -273,6 +318,8 @@ namespace EmEn::Base
 	Thread::entryPoint (void * argument) noexcept
 	{
 		const std::unique_ptr< TaskBase > task{static_cast< TaskBase * >(argument)};
+
+		waitUntilSet(task->m_published);
 
 		task->run();
 
