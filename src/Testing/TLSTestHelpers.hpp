@@ -297,10 +297,49 @@ namespace EmEn::Base::Testing
 
 				m_port = m_acceptor.local_endpoint(error).port();
 
+				/* Dual stack: the same port on ::1 too. A client resolving "localhost" tries ::1 first on Windows, and a
+				 * refused connect costs ~2 s there (the SYN is retried after the RST) — every hermetic HTTPS test paid it
+				 * (Windows peer, 2026-10-07). Best effort: without IPv6 the server stays IPv4-only, as before. */
+				{
+					asio::error_code ipv6Error;
+					const auto loopback6 = asio::ip::make_address("::1", ipv6Error);
+
+					if ( !ipv6Error )
+					{
+						m_acceptor6.open(asio::ip::tcp::v6(), ipv6Error);
+					}
+
+					if ( !ipv6Error )
+					{
+						m_acceptor6.set_option(asio::ip::v6_only{true}, ipv6Error);
+					}
+
+					if ( !ipv6Error )
+					{
+						m_acceptor6.bind(asio::ip::tcp::endpoint{loopback6, m_port}, ipv6Error);
+					}
+
+					if ( !ipv6Error )
+					{
+						m_acceptor6.listen(4, ipv6Error);
+					}
+
+					if ( ipv6Error && m_acceptor6.is_open() )
+					{
+						asio::error_code ignored;
+						m_acceptor6.close(ignored);
+					}
+				}
+
 				/* Async accept chain so the destructor can cancel cleanly: a
 				 * blocking synchronous accept() on a worker thread cannot be woken
 				 * reliably by closing the acceptor (the thread would never join). */
-				this->scheduleAccept();
+				this->scheduleAccept(m_acceptor);
+
+				if ( m_acceptor6.is_open() )
+				{
+					this->scheduleAccept(m_acceptor6);
+				}
 
 				m_thread = std::thread{[this] () {
 					m_ioContext.run();
@@ -416,9 +455,9 @@ namespace EmEn::Base::Testing
 			 * @return void
 			 */
 			void
-			scheduleAccept () noexcept
+			scheduleAccept (asio::ip::tcp::acceptor & acceptor) noexcept
 			{
-				m_acceptor.async_accept([this] (const asio::error_code & acceptError, asio::ip::tcp::socket socket) {
+				acceptor.async_accept([this, &acceptor] (const asio::error_code & acceptError, asio::ip::tcp::socket socket) {
 					if ( acceptError )
 					{
 						/* Acceptor closed / io_context stopped: end the chain. */
@@ -441,7 +480,7 @@ namespace EmEn::Base::Testing
 						this->serveConnection(std::move(socket));
 					}
 
-					this->scheduleAccept();
+					this->scheduleAccept(acceptor);
 				});
 			}
 
@@ -679,6 +718,7 @@ namespace EmEn::Base::Testing
 			asio::io_context m_ioContext;
 			asio::ssl::context m_serverContext{asio::ssl::context::tls_server};
 			asio::ip::tcp::acceptor m_acceptor{m_ioContext};
+			asio::ip::tcp::acceptor m_acceptor6{m_ioContext};
 			RequestHandler m_handler;
 			std::thread m_thread;
 			std::atomic< size_t > m_requestCount{0};

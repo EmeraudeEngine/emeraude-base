@@ -484,6 +484,15 @@ appeared only if it happened to share the last TLS record with the headers — s
 it passed or failed **by timing**, which is worse than not testing it. It now reads out what
 `Content-Length` announced (`Testing::declaredContentLength()`).
 
+### ⚠️ "localhost" is `::1` first: a test server on 127.0.0.1 alone costs ~2 s per connection on Windows (2026-10-07)
+
+`getaddrinfo("localhost")` answers `::1` before `127.0.0.1` (Linux and Windows alike), and `TLSConnection` tries the
+endpoints in order. Linux refuses `::1` at once; Windows retries the SYN after the RST, so a refused connect there
+costs ~2 s (Windows peer: 2021 ms on `::1` vs 0 ms on `127.0.0.1`) — every hermetic HTTPS test paid it, and a timing
+assertion (the silent-peer test) failed on it. `HTTPSTestServer` therefore listens on `::1` too, same port, `v6_only`
+(best effort: without IPv6 it stays IPv4-only). The CLIENT side of the defect (no Happy Eyeballs, RFC 8305) is base
+item `httpsclient-happy-eyeballs`. A new test server or timing test: listen on both families, or connect by literal.
+
 ## VertexFactory
 
 ### ⚠️⚠️ The computed tangent frame was backwards on every MIRRORED UV island — tangent AND handedness (2026-10-07, FIXED)
