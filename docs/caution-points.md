@@ -254,6 +254,14 @@ destructor) joins it from another thread. **Rule:** never destroy an object owni
 thread may take; never destroy it from that thread. Still forbidden: destroying the OWNER of the trait from one of its
 timers' callbacks (the destructor joins every timer thread).
 
+### ⚠️ Process CPU time is in nanoseconds everywhere, but moves by 15.625 ms on Windows (2026-10-07)
+
+`GetProcessTimes()` accounts CPU time per scheduler quantum: every Windows reading of `processCPUTimeNanoseconds()` is
+a whole multiple of 15.625 ms, so an interval shorter than that reads 0 (`DebugStatistics.timerMeasuresBusyWork`
+failed 2 runs in 6 there with a fixed busy loop). **Rule:** compare a CPU-time interval against
+`Time::processCPUTimeResolutionNanoseconds()`, never against 0, and size a CPU-time measurement in resolutions, not in
+loop iterations. Do not "fix" it with `QueryPerformanceCounter`: that is elapsed time, not CPU time.
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate

@@ -73,4 +73,25 @@ namespace EmEn::Base::Time
 		return (static_cast< uint64_t >(timeSpec.tv_sec) * 1'000'000'000ULL) + static_cast< uint64_t >(timeSpec.tv_nsec);
 #endif
 	}
+
+	uint64_t
+	processCPUTimeResolutionNanoseconds () noexcept
+	{
+#if IS_WINDOWS
+		/* GetProcessTimes() advances by whole scheduler quanta: 15.625 ms, measured on 2026-09-15 (app_system Socratus
+		 * evidence, windows/control-2026-09-15: 15 readings over 400 ms of busy work, all multiples of 156250 ticks). */
+		return 15'625'000ULL;
+#else
+		struct timespec resolution{};
+
+		if ( clock_getres(CLOCK_PROCESS_CPUTIME_ID, &resolution) != 0 )
+		{
+			return 1;
+		}
+
+		const auto nanoseconds = (static_cast< uint64_t >(resolution.tv_sec) * 1'000'000'000ULL) + static_cast< uint64_t >(resolution.tv_nsec);
+
+		return nanoseconds > 0 ? nanoseconds : 1;
+#endif
+	}
 }

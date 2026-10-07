@@ -41,19 +41,13 @@ Options 1 + 2: document the Windows floor and EXPOSE the resolution next to the 
 
 ## What remains
 
-Decide what the API promises, then make the test assert against that:
+Done on Linux (2026-10-07): `Time::processCPUTimeResolutionNanoseconds()` (POSIX `clock_getres`, Windows the
+15.625 ms floor), the warning on `processCPUTimeNanoseconds()`, `timerMeasuresBusyWork` rewritten to work for at
+least TWO resolutions of CPU time (no fixed loop length), the false comment fixed, a test pinning the resolution in
+(0, 15.625 ms]. Linux: 20 × repeated green.
 
-1. **Document the floor and assert against it** — the only option that stays honest with a single
-   code path, and the floor is now a measured number (15.625 ms, the standard Windows scheduler
-   quantum) rather than a guess.
-2. **Expose the resolution** next to the getter, so callers can reason about it instead of
-   assuming.
-3. **Back the Windows branch with `QueryPerformanceCounter`** — ⚠️ flagged as risky by the Windows
-   measurement: process CPU time and elapsed time are **different quantities** (the second includes
-   time the process was not scheduled), and the test's own name, `timerMeasuresBusyWork`, says it
-   wants CPU time. Swapping the clock would make the test pass while measuring something else.
-
-Fix the comment at `test_Debug.cpp:38` in the same change, whichever option is taken.
+- [ ] **Windows proof**: `EmeraudeBaseUnitTests --gtest_filter=DebugStatistics.* --gtest_repeat=30` green (it was
+      4 pass / 2 fail in 6 before). Then delete this item.
 
 ## ⚠️ Traps
 

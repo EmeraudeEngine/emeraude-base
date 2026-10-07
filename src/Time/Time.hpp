@@ -97,8 +97,20 @@ namespace EmEn::Base::Time
 	 * @note Sums user + kernel CPU time of the whole process. Platform-specific
 	 * (POSIX clock_gettime(CLOCK_PROCESS_CPUTIME_ID) / Windows GetProcessTimes);
 	 * returns 0 if the platform clock query fails.
+	 * @warning The UNIT is the nanosecond everywhere, the RESOLUTION is not: Windows accounts CPU time per scheduler
+	 * quantum, 15.625 ms (measured: every reading a whole multiple of it). An interval shorter than
+	 * processCPUTimeResolutionNanoseconds() may read 0 — a caller compares against it, never against 0.
 	 * @return uint64_t
 	 */
 	[[nodiscard]]
 	uint64_t processCPUTimeNanoseconds () noexcept;
+
+	/**
+	 * @brief Returns the resolution of processCPUTimeNanoseconds(), in nanoseconds: the smallest step its readings move by.
+	 * @note POSIX: clock_getres(CLOCK_PROCESS_CPUTIME_ID) (1 ns on Linux). Windows: the default scheduler quantum,
+	 * 15'625'000 ns — a conservative floor (a process that raised the timer resolution may see finer steps). Never 0.
+	 * @return uint64_t
+	 */
+	[[nodiscard]]
+	uint64_t processCPUTimeResolutionNanoseconds () noexcept;
 }

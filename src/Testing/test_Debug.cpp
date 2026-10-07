@@ -26,29 +26,50 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <chrono>
 #include <cstdint>
 
 /* Local inclusions. */
 #include "Debug/Statistics.hpp"
+#include "Time/Time.hpp"
 
 using namespace EmEn::Base;
 
 /* Ave robustus! (Axis B): the Debug ns timer was Linux-only (link errors elsewhere) and subtracted
- * tv_nsec only (wrong across a 1s boundary). It now delegates to Time::processCPUTimeNanoseconds()
- * — cross-platform and full-nanosecond. A measurable amount of CPU work must yield a non-zero delta. */
+ * tv_nsec only (wrong across a 1s boundary). It now delegates to Time::processCPUTimeNanoseconds(),
+ * cross-platform, in nanoseconds — but NOT nanosecond-RESOLUTION everywhere: Windows advances it by
+ * 15.625 ms quanta (Time::processCPUTimeResolutionNanoseconds()). A fixed 50-million-iteration loop
+ * landed near one quantum there and failed 2 runs in 6 (2026-09-15). The work now lasts at least two
+ * resolutions of CPU time, whatever the platform; no fixed loop length decides the verdict. */
 TEST(DebugStatistics, timerMeasuresBusyWork)
 {
+	const auto resolution = Time::processCPUTimeResolutionNanoseconds();
 	const auto start = Debug::begin_timer();
+	const auto wallDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{10};
 
 	/* Busy work (volatile sink so it is not optimised away) to accrue real process CPU time. */
 	volatile uint64_t sink = 0;
 
-	for ( uint64_t i = 0; i < 50000000ULL; ++i )
+	while ( Time::processCPUTimeNanoseconds() - start < 2 * resolution )
 	{
-		sink = sink + (i * 2654435761ULL);
+		ASSERT_LT(std::chrono::steady_clock::now(), wallDeadline) << "No CPU time accrued in 10 s of busy work.";
+
+		for ( uint64_t i = 0; i < 100000ULL; ++i )
+		{
+			sink = sink + (i * 2654435761ULL);
+		}
 	}
 
 	const auto elapsed = Debug::terminate_timer(start);
 
-	EXPECT_GT(elapsed, 0U);
+	EXPECT_GE(elapsed, 2 * resolution);
+}
+
+TEST(DebugStatistics, processCPUTimeResolutionIsKnown)
+{
+	const auto resolution = Time::processCPUTimeResolutionNanoseconds();
+
+	EXPECT_GT(resolution, 0U);
+	/* No platform is coarser than its scheduler quantum (Windows: 15.625 ms). */
+	EXPECT_LE(resolution, 15'625'000ULL);
 }
