@@ -27,9 +27,11 @@
 #pragma once
 
 /* STL inclusions. */
-#include <any>
 #include <mutex>
 #include <set>
+
+/* Local inclusions. */
+#include "Any.hpp"
 
 /* Forward declarations. */
 
@@ -133,11 +135,11 @@ namespace EmEn::Base
 			 * @note Returning false will detach the observable.
 			 * @param observable The observable pointer responsible for the notification.
 			 * @param notificationCode Code of notification.
-			 * @param data Pointer to possible data.
+			 * @param data The payload (a Base::Any, read back with anyValue()).
 			 * @return bool
 			 */
 			[[nodiscard]]
-			virtual bool onNotification (const ObservableTrait * observable, int notificationCode, const std::any & data) noexcept = 0;
+			virtual bool onNotification (const ObservableTrait * observable, int notificationCode, const Any & data) noexcept = 0;
 
 			std::set< ObservableTrait * > m_observables;
 			mutable std::mutex m_observationMutex;

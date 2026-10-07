@@ -59,7 +59,7 @@ namespace EmEn::Base
 	}
 
 	void
-	ObservableTrait::notify (int notificationCode, const std::any & data) noexcept
+	ObservableTrait::notify (int notificationCode, const Any & data) noexcept
 	{
 		/* Phase 1: snapshot the observer set under our own lock. We deliberately
 		 * release the lock before invoking onNotification() so that callbacks

@@ -25,7 +25,6 @@
  */
 
 /* STL inclusions. */
-#include <any>
 #include <cstddef>
 #include <string>
 
@@ -142,7 +141,7 @@ class Watcher final : public ObserverTrait
 	private:
 
 		bool
-		onNotification (const ObservableTrait * observable, int /*notificationCode*/, const std::any & /*data*/) noexcept override
+		onNotification (const ObservableTrait * observable, int /*notificationCode*/, const Any & /*data*/) noexcept override
 		{
 			if ( observable->is(Noise::getClassUID()) )
 			{
@@ -205,11 +204,11 @@ TEST(Observer, watch)
 
 TEST(Observer, anyValueNeverThrowsOnAMismatchedPayload)
 {
-	/* A notification payload read with the value form std::any_cast< T >(data) throws on a mismatch — under
-	 * -fno-exceptions that aborts. anyValue() answers the value, or nullptr (and logs) without throwing. */
-	const std::any integer{42};
-	const std::any text{std::string{"payload"}};
-	const std::any empty{};
+	/* anyValue() answers the value, or nullptr (and logs) on a mismatch or an empty payload — never a throw (the value
+	 * form of std::any_cast aborted under -fno-exceptions; the payload is a Base::Any since 2026-10-07). */
+	const Any integer{42};
+	const Any text{std::string{"payload"}};
+	const Any empty{};
 
 	const auto * value = EmEn::Base::anyValue< int >(integer, "test");
 	ASSERT_NE(value, nullptr);

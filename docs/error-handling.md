@@ -228,6 +228,26 @@ caller skips the notification (owner decision, plan Ave Robustus). The 40 value-
 projet-alpha 12, all in `onNotification()` handlers) were converted at once. Test
 `Observer.anyValueNeverThrowsOnAMismatchedPayload`.
 
+## The Observer payload is a `Base::Any`, not a `std::any` — RTTI-free (owner decision A, 2026-10-07)
+
+`std::any` needs RTTI on MSVC: under `/GR-` the STL sets `_HAS_STATIC_RTTI` to 0 and `<any>` refuses to compile (STL1003)
+— libstdc++ and libc++ compile it without RTTI, so a Linux build would hide it. `ObservableTrait::notify()` and
+`ObserverTrait::onNotification()` therefore carry a `Base::Any` (`src/Any.hpp`): the same value semantics (implicit
+construction from any copyable value, copy, move, `hasValue()`, `reset()`), read back with `Base::anyCast< T >(&any)` /
+`Base::anyValue< T >(data, context)` (nullptr on a mismatch, never a throw). Its type identity is `typeHashOf< T >()`: the
+compile-time FNV-1a hash of the compiler's function signature naming `std::remove_cvref_t< T >` (`__PRETTY_FUNCTION__`
+/ `__FUNCSIG__`, EnTT's `type_hash` technique, MIT, cited at the point of use).
+- **The same in the shared engine and in the executables**: a STRING hash, not an address — each binary carries its
+  own copy of emeraude-base, so a function-address identity (libstdc++'s trick for `std::any`) would differ.
+- **Exact type only**: no conversion, no base class (`anyCast< Base >` of a `Derived` is nullptr), cv and references
+  ignored (`const std::shared_ptr< T >` reads a `std::shared_ptr< T >`).
+- **Never persist or transmit a typeHashOf()**: the signature text differs between compiler families. A collision of two
+  type names (FNV-1a 64-bit) is the accepted risk.
+- A value of at most 32 bytes, nothrow-movable, is stored inline (a `std::shared_ptr` payload allocates nothing,
+  unlike libstdc++'s `std::any`); a larger one on the heap.
+- asio is built with `ASIO_NO_TYPEID` (it only detects Boost's `BOOST_NO_TYPEID`, never `-fno-rtti`).
+Tests: `BaseAny.*`, `Observer.*`.
+
 ## JSON: the checked FastJSON reads, never jsoncpp's as*() (2026-09-30)
 
 jsoncpp's LIBRARY is built with exceptions: `asUInt()` on `-1`, `asInt()` on `1e20`, `asFloat()` on a string,

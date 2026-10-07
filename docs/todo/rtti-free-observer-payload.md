@@ -1,7 +1,7 @@
 ---
 id: rtti-free-observer-payload
 title: RTTI-free foundation — replace the std::any Observer payload, arm ASIO_NO_TYPEID
-status: open
+status: in-progress
 priority: low
 scope: src/Observer*, cmake/SetupASIO.cmake, compile policy (EMERAUDE_DISABLE_RTTI)
 opened: 2026-09-08
@@ -34,23 +34,22 @@ use `typeid` and the standalone build fails under `-fno-rtti`.
 
 ## What remains
 
-- [ ] **Owner decision A/B** (see below) — nothing else in this item starts before it.
-- [ ] Add `ASIO_NO_TYPEID` to the PUBLIC definitions of `cmake/SetupASIO.cmake:10`, next to
-      `ASIO_STANDALONE ASIO_NO_EXCEPTIONS ASIO_DISABLE_CO_AWAIT`.
-- [ ] Implement the chosen payload type and migrate the two trait headers, the `.cpp`, and
-      `test_ObserverPattern.cpp` (a test proving cross-type `anyCast` returns null is mandatory,
-      the "no fix without test" rule survives the *Ave robustus!* closure).
-- [ ] Build emeraude-base alone with `-DEMERAUDE_DISABLE_RTTI=On`, `EmeraudeBaseUnitTests`
-      green in Release, from the dedicated git-ignored build dir.
-- [ ] Flip the default of `EMERAUDE_DISABLE_RTTI` to `On` **only after** the engine and
-      projet-alpha items are closed (`rtti-removal` in emeraude-engine,
-      `actor-trait-queries-without-rtti` in projet-alpha); document the flip in
-      `docs/integration.md:64` and `docs/error-handling.md`.
-- [ ] Docs before deletion: `docs/error-handling.md` gets the RTTI counterpart of its
-      exceptions section (what is forbidden: `dynamic_cast`, `typeid`, `std::any`,
-      `std::type_index`, `std::function::target()`; what replaces each).
+**Owner decision (2026-10-07): option A.** Done the same day on Linux: `src/Any.hpp` (`Base::Any`, `typeHashOf< T >()`,
+`anyCast< T >()`), `AnyValue.hpp` / `ObservableTrait` / `ObserverTrait` / `test_ObserverPattern.cpp` migrated, new
+`test_Any.cpp`, `ASIO_NO_TYPEID` in `cmake/SetupASIO.cmake`; the engine (~38 files) and projet-alpha (11) migrated in
+the same change (signatures only: every read already went through `anyValue< T >()`). Doctrine:
+`docs/error-handling.md` § The Observer payload is a `Base::Any`.
 
-## Owner decision pending — the payload type
+- [ ] emeraude-base ALONE with `-DEMERAUDE_DISABLE_RTTI=On` (dedicated git-ignored build dir), `EmeraudeBaseUnitTests`
+      green in Release — on Linux, then on Windows (`/GR-`: the build that refused `<any>`) and macOS by the peers.
+- [ ] Flip the default of `EMERAUDE_DISABLE_RTTI` to `On` **only after** the engine and projet-alpha items are closed
+      (`rtti-removal` in emeraude-engine, `actor-trait-queries-without-rtti` in projet-alpha); document the flip in
+      `docs/integration.md` and `docs/error-handling.md`.
+- [ ] Docs before deletion: `docs/error-handling.md` gets the RTTI counterpart of its exceptions section (what is
+      forbidden: `dynamic_cast`, `typeid`, `std::any`, `std::type_index`, `std::function::target()`; what replaces
+      each).
+
+## Owner decision — the payload type (A chosen 2026-10-07)
 
 - **Option A (recommended):** an RTTI-free `EmEn::Base::Any`, same value semantics as
   `std::any`, whose type identity is a **compile-time hash of the type name** (`__PRETTY_FUNCTION__`

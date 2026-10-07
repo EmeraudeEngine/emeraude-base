@@ -27,12 +27,12 @@
 #pragma once
 
 /* STL inclusions. */
-#include <any>
 #include <cstddef>
 #include <mutex>
 #include <set>
 
 /* Local inclusions. */
+#include "Any.hpp"
 #include "Hash/FNV1a.hpp"
 
 /* Forward declarations. */
@@ -135,10 +135,10 @@ namespace EmEn::Base
 			/**
 			 * @brief Sends a notification to every observer.
 			 * @param notificationCode Code of notification.
-			 * @param data A reference to any. Default no data.
+			 * @param data The payload (a Base::Any, read back with anyValue()). Default no data.
 			 * @return void
 			 */
-			void notify (int notificationCode, const std::any & data = {}) noexcept;
+			void notify (int notificationCode, const Any & data = {}) noexcept;
 
 		private:
 
