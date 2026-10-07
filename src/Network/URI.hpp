@@ -202,6 +202,16 @@ namespace EmEn::Base::Network
 			std::string resource () const noexcept;
 
 			/**
+			 * @brief Returns the URI for a trace: scheme, host, port and path only.
+			 * @note The userinfo (a password), the query (a presigned URL carries its credentials there, e.g. an S3
+			 * X-Amz-Security-Token) and the fragment are left out; a query is replaced by "?<redacted>" so the trace
+			 * still says there was one. Use it in every log line; keep operator<< for what goes on the wire.
+			 * @return std::string
+			 */
+			[[nodiscard]]
+			std::string redacted () const noexcept;
+
+			/**
 			 * @brief Returns whether the URI is empty.
 			 * @return bool
 			 */

@@ -111,6 +111,19 @@ TEST(NetworkURI, queryValueDelimitersSurviveARoundTrip)
 	EXPECT_EQ(reparsed.query().variables(), uri.query().variables());
 }
 
+TEST(NetworkURI, redactedLeavesCredentialsOut)
+{
+	/* A presigned URL carries its credentials in the query, a userinfo its password: neither may reach a trace. */
+	const URI presigned{"https://bucket.s3.us-east-1.amazonaws.com/reports/8.0.1/a-b.zip?X-Amz-Security-Token=IQoJ%2Bsecret&X-Amz-Signature=c74b#frag"};
+
+	EXPECT_EQ(presigned.redacted(), "https://bucket.s3.us-east-1.amazonaws.com/reports/8.0.1/a-b.zip?<redacted>");
+
+	const URI withPassword{"https://user:p%40ss@example.com:8443/a%20b"};
+
+	EXPECT_EQ(withPassword.redacted(), "https://example.com:8443/a%20b");
+	EXPECT_EQ(URI{"https://example.com/plain"}.redacted(), "https://example.com/plain");
+}
+
 TEST(NetworkURI, reEncodesOnOutput)
 {
 	URI uri{"https://example.com/base"};

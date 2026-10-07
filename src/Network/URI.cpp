@@ -379,6 +379,31 @@ namespace EmEn::Base::Network
 		return string.str();
 	}
 
+	std::string
+	URI::redacted () const noexcept
+	{
+		std::stringstream string;
+
+		if ( !m_scheme.empty() )
+		{
+			string << m_scheme << ':';
+		}
+
+		if ( !m_uriDomain.empty() )
+		{
+			string << "//" << m_uriDomain.host();
+		}
+
+		string << PercentEncoding::encode(m_path.generic_string(), PercentEncoding::Component::Path);
+
+		if ( !m_query.empty() )
+		{
+			string << "?<redacted>";
+		}
+
+		return string.str();
+	}
+
 	std::ostream &
 	operator<< (std::ostream & out, const URI & obj)
 	{
