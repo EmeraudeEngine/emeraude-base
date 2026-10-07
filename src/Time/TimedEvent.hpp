@@ -337,6 +337,36 @@ namespace EmEn::Base::Time
 			}
 
 			/**
+			 * @brief Returns whether the calling thread is this event's timer thread, i.e. the call comes from its callback.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			isRunningOnThisThread () const noexcept
+			{
+				const std::scoped_lock lock{m_mutex};
+
+				return m_thread.get_id() == std::this_thread::get_id();
+			}
+
+			/**
+			 * @brief Asks the timer thread to end once its current callback returns, without joining it (the destructor
+			 * does, from another thread). Used when a callback destroys its own timer (EventTrait::destroyTimer()).
+			 * @return void
+			 */
+			void
+			requestExit () noexcept
+			{
+				{
+					const std::scoped_lock lock{m_mutex};
+
+					m_isProcessCreated = false;
+				}
+
+				m_condition.notify_one();
+			}
+
+			/**
 			 * @brief Returns whether the event is fired only once.
 			 * @return bool.
 			 */

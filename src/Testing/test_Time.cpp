@@ -29,8 +29,12 @@
 
 /* STL inclusions. */
 #include <atomic>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -101,6 +105,118 @@ namespace EmEn::Base::Time
 
 		/* Huge granularity → the callback must never have fired. */
 		EXPECT_EQ(fired.load(std::memory_order_relaxed), 0);
+	}
+
+	namespace
+	{
+		/**
+		 * @brief Waits for a flag, at most a few seconds.
+		 * @param flag The flag.
+		 * @return bool Whether it was raised in time.
+		 */
+		bool
+		waitFor (const std::atomic_bool & flag) noexcept
+		{
+			const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+
+			while ( !flag.load() )
+			{
+				if ( std::chrono::steady_clock::now() > deadline )
+				{
+					return false;
+				}
+
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+			}
+
+			return true;
+		}
+	}
+
+	/*
+	 * A callback that uses the trait while another thread destroys the timers. destroyTimers() used to erase the timers
+	 * under m_eventsAccess, and erasing joins each timer thread: the destroyer held the mutex waiting for the callback,
+	 * the callback waited for the mutex — a deadlock (2026-09-30, found by reading). The timers are now destroyed
+	 * outside the lock. A deadlock cannot be asserted from inside: past 5 s the test reports it and leaves the process.
+	 */
+	TEST(TimeEventTrait, aCallbackMayUseTheTraitWhileItsTimersAreDestroyed)
+	{
+		TestableEventTrait events;
+
+		std::atomic_bool inCallback{false};
+		std::atomic_bool callbackReturned{false};
+
+		static_cast< void >(events.createTimer([&events, &inCallback, &callbackReturned] (TimerID self) {
+			inCallback = true;
+
+			/* Long enough for the destroyer to take the lock first. */
+			std::this_thread::sleep_for(std::chrono::milliseconds{100});
+
+			static_cast< void >(events.isTimerPaused(self));
+
+			callbackReturned = true;
+
+			return true;
+		}, 1U, true, true));
+
+		ASSERT_TRUE(waitFor(inCallback));
+
+		std::atomic_bool destroyed{false};
+		std::thread destroyer{[&events, &destroyed] {
+			events.destroyTimers();
+
+			destroyed = true;
+		}};
+
+		if ( !waitFor(destroyed) )
+		{
+			ADD_FAILURE() << "destroyTimers() deadlocked with a callback that uses the trait.";
+
+			std::fflush(stdout);
+			std::_Exit(EXIT_FAILURE);
+		}
+
+		destroyer.join();
+
+		EXPECT_TRUE(callbackReturned.load());
+	}
+
+	/*
+	 * A callback that destroys its OWN timer. Erasing it there destroyed the TimedEvent on its own thread, whose
+	 * destructor joined that thread — std::thread::join() on the current thread throws, an abort under
+	 * -fno-exceptions. Owner decision (2026-10-07): DEFERRED — the timer is taken out at once (it never fires again)
+	 * and its thread ends when the callback returns; the trait joins it later, from another thread.
+	 */
+	TEST(TimeEventTrait, aCallbackMayDestroyItsOwnTimer)
+	{
+		TestableEventTrait events;
+
+		std::atomic_int fired{0};
+		std::atomic_bool callbackReturned{false};
+
+		const auto timerID = events.createTimer([&events, &fired, &callbackReturned] (TimerID self) {
+			fired.fetch_add(1);
+
+			events.destroyTimer(self);
+
+			callbackReturned = true;
+
+			/* A REPEATING timer: only the destruction may stop it. */
+			return false;
+		}, 1U, false, true);
+
+		ASSERT_NE(timerID, 0U);
+		ASSERT_TRUE(waitFor(callbackReturned));
+
+		/* Fifty periods later it fired once, and it is gone. */
+		std::this_thread::sleep_for(std::chrono::milliseconds{50});
+
+		EXPECT_EQ(fired.load(), 1);
+		EXPECT_FALSE(events.isTimerStarted(timerID));
+		EXPECT_FALSE(events.startTimer(timerID));
+
+		/* Joins the retired thread (and nothing is left for the destructor). */
+		events.destroyTimers();
 	}
 
 	namespace

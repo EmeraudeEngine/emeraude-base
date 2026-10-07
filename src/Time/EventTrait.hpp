@@ -35,6 +35,7 @@
 #include <ratio>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 /* Local inclusions for usages. */
 #include "TimedEvent.hpp"
@@ -81,6 +82,7 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Destructs the timed events interface.
+			 * @warning It joins every timer thread: never destroy the owner from one of its own timers' callbacks.
 			 */
 			virtual ~EventTrait () = default;
 
@@ -96,7 +98,12 @@ namespace EmEn::Base::Time
 			TimerID
 			createTimer (const std::function< bool (TimerID) > & callable, rep_t granularity, bool once = false, bool autostart = false) noexcept
 			{
+				/* Declared before the lock, destroyed after it: the retired events' destructors join their threads. */
+				std::vector< EventNode > reaped;
+
 				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+
+				this->takeRetiredEvents(reaped);
 
 				const auto timerID = m_lastTimerID.fetch_add(1, std::memory_order_relaxed);
 
@@ -300,27 +307,67 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief This function is used to kill a cyclic timer, or a timeout before it fire.
+			 * @note The timer is destroyed OUTSIDE the trait's lock: its destructor joins the timer thread, and a callback
+			 * running meanwhile may call the trait (it found the lock held and deadlocked, until 2026-10-07).
+			 * @note Called from the timer's OWN callback, the destruction is deferred: the timer is taken out at once (it
+			 * never fires again), its thread ends when the callback returns, and the trait joins it later from another
+			 * thread (the next create / destroy, or its destructor). A self-join used to abort.
 			 * @param timerID The ID of your timer.
 			 * @return void
 			 */
 			void
 			destroyTimer (TimerID timerID) noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				/* Declared before the lock, destroyed after it: their destructors join the timer threads. */
+				EventNode doomed;
+				std::vector< EventNode > reaped;
 
-				m_events.erase(timerID);
+				{
+					const std::scoped_lock lock{m_eventsAccess};
+
+					this->takeRetiredEvents(reaped);
+
+					doomed = m_events.extract(timerID);
+
+					if ( !doomed.empty() && doomed.mapped().isRunningOnThisThread() )
+					{
+						this->retire(std::move(doomed));
+					}
+				}
 			}
 
 			/**
 			 * @brief This function kill every timer.
+			 * @note Same contract as destroyTimer(): the timers are joined outside the lock, and the caller's own timer
+			 * (a callback calling it) is retired instead of self-joined.
 			 * @return void
 			 */
 			void
 			destroyTimers () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				/* Declared before the lock, destroyed after it: their destructors join the timer threads. */
+				std::map< TimerID, TimedEvent< rep_t, period_t > > doomed;
+				std::vector< EventNode > reaped;
 
-				m_events.clear();
+				{
+					const std::scoped_lock lock{m_eventsAccess};
+
+					this->takeRetiredEvents(reaped);
+
+					for ( auto eventIt = m_events.begin(); eventIt != m_events.end(); )
+					{
+						const auto current = eventIt;
+
+						++eventIt;
+
+						if ( current->second.isRunningOnThisThread() )
+						{
+							this->retire(m_events.extract(current));
+						}
+					}
+
+					doomed.swap(m_events);
+				}
 			}
 
 		protected:
@@ -378,8 +425,49 @@ namespace EmEn::Base::Time
 
 		private:
 
+			using EventNode = typename std::map< TimerID, TimedEvent< rep_t, period_t > >::node_type;
+
+			/**
+			 * @brief Retires an event destroyed from its own callback: its thread is asked to end, and it is kept until
+			 * another thread joins it. Call it under m_eventsAccess.
+			 * @param event The event's node, not empty.
+			 * @return void
+			 */
+			void
+			retire (EventNode event) noexcept
+			{
+				event.mapped().requestExit();
+
+				m_retiredEvents.push_back(std::move(event));
+			}
+
+			/**
+			 * @brief Moves out the retired events the calling thread may join (not its own). Call it under m_eventsAccess,
+			 * and let the output die after releasing it.
+			 * @param reaped The output.
+			 * @return void
+			 */
+			void
+			takeRetiredEvents (std::vector< EventNode > & reaped) noexcept
+			{
+				for ( auto & event : m_retiredEvents )
+				{
+					if ( !event.mapped().isRunningOnThisThread() )
+					{
+						reaped.push_back(std::move(event));
+					}
+				}
+
+				/* A moved-from node handle is empty. */
+				std::erase_if(m_retiredEvents, [] (const EventNode & event) {
+					return event.empty();
+				});
+			}
+
 			std::atomic< TimerID > m_lastTimerID{1};
 			std::map< TimerID, TimedEvent< rep_t, period_t > > m_events;
+			/** @brief The events destroyed from their own callback, waiting for another thread to join them. */
+			std::vector< EventNode > m_retiredEvents;
 			mutable std::mutex m_eventsAccess;
 	};
 }

@@ -239,6 +239,21 @@ quaternion is a few ulps too long (accumulated rotations) gave NaN for all three
 `MathQuaternion.EulerAnglesOfANearlyUnitQuaternionAtTheGimbalLockAreFinite`, failing before). Same family as the
 `acos` above: an inverse trigonometric function of a computed sine or cosine takes a clamp.
 
+## Time
+
+### ⚠️⚠️ `EventTrait` joined its timers UNDER its lock, and a callback destroying its own timer self-joined (2026-10-07, FIXED)
+
+`destroyTimer()` / `destroyTimers()` erased the `TimedEvent`s under `m_eventsAccess`, and `~TimedEvent()` joins the
+timer thread. A callback calling ANY trait method (`isTimerPaused()`, `createTimer()`…) while another thread destroyed
+the timers deadlocked (test `TimeEventTrait.aCallbackMayUseTheTraitWhileItsTimersAreDestroyed`: stuck past 5 s
+before); a callback destroying its own timer joined its own thread — `std::system_error` "Resource deadlock avoided",
+an abort (`aCallbackMayDestroyItsOwnTimer`). Now the doomed events are EXTRACTED under the lock and destroyed after it;
+an event destroyed from its own callback is RETIRED (owner decision: deferred) — `TimedEvent::requestExit()` ends its
+thread when the callback returns, and the next `createTimer()` / `destroyTimer()` / `destroyTimers()` (or the trait's
+destructor) joins it from another thread. **Rule:** never destroy an object owning a thread while holding a lock its
+thread may take; never destroy it from that thread. Still forbidden: destroying the OWNER of the trait from one of its
+timers' callbacks (the destructor joins every timer thread).
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate
