@@ -30,6 +30,10 @@
 #include "Math/Space3D/AACuboid.hpp"
 #include "Math/Space3D/Line.hpp"
 
+/* NOTE: A Space3D::Line is INFINITE in both directions: these tests may answer an intersection BEHIND the line's
+ * origin, which is right for a line. A caller that means a ray (forward only, with the hit fraction and the surface
+ * normal) uses Casts/ShapeCast.hpp castRay() (owner decision, 2026-10-07). */
+
 namespace EmEn::Base::Math::Space3D
 {
 	/**

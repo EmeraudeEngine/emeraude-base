@@ -118,3 +118,9 @@ Release and ASan/UBSan green.
   instantiates it (`constexpr auto Tolerance` in `ShapeCast.hpp` vs a test's anonymous-namespace `Tolerance`,
   2026-10-01). GCC and clang do NOT reproduce it for a template in a nested namespace. Rule: every local constant of
   these headers carries a per-file prefix (`BoxBoxFaceBias`, `CapsuleBoxHalf`, `CastContactTolerance`, …).
+- ONE normal convention: from A to B (the engine negates it once, before its solver — engine
+  `docs/subsystems/physics/05-…`). Never add a third convention. The overlap MTVs of `Collisions/` follow from it:
+  `−normal × maximumDepth()` pushes A out of B (capsule ↔ triangle / AABB answer exactly that since 2026-10-07).
+- Correctness must not depend on bit-exact floats: the owner may enable `-ffast-math` one day.
+- Left for when a consumer needs it (owner, 2026-10-07): a fast AABB path with the same output, measured against the
+  unrotated `OrientedBox` (item `physics-p1-leftovers`).

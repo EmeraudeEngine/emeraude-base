@@ -52,4 +52,8 @@ triangles are CONSERVATIVE (no contact sampled before the reported fraction) and
 - Tests in `test_MathSpace3DConvexDistance.cpp`: onto the ground (fraction 0.5), a box turned 45° meets with its edge
   (fraction (2 − √2 / 2) / 3), onto a triangle, a sphere and a capsule, started inside, leaving, the face normal EXACT 89 m
   from the origin, and 120 random turned boxes against a 1/2000 march (2e-3).
-
+- A cast that STARTS touching (fraction 0) is the normal case of a character standing on the ground: it must answer a
+  usable normal, never a degenerate one; and no float division by a possibly-zero length.
+- `Space3D/Intersections/` `Line*` tests take an INFINITE line: they may answer a hit behind its origin, which is right
+  for a line. A caller that means a RAY (forward only) uses `castRay` (owner, 2026-10-07).
+- Left for when a consumer needs it: casting a moving `OrientedBox` (item `physics-p1-leftovers`).

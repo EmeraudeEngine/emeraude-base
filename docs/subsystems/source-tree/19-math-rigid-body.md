@@ -32,3 +32,7 @@ The closed forms (box, the collision-debug cube 6.667, sphere, cylinder), the ca
 a thin one = a rod m h²/12), refused inputs, the parallel-axis theorem (a point mass, a product of inertia), the skew
 matrix vs the cross product, 10 000 world-axis steps keeping the axis and the angle, ω = 0 leaving the orientation,
 a 1e-5 rad rotation keeping its angle through `toAngleAxis()`.
+
+Left for when a consumer needs it (owner, 2026-10-07; item `physics-p1-leftovers`): the sum of several tensors for a
+compound body (each moved by `parallelAxis()` first — P3 derives an entity's tensor from its ONE collision shape and
+its total mass, engine `docs/subsystems/physics/16-rigid-body-rotation.md`), and a `Quaternion` from a `Matrix< 3 >`.
