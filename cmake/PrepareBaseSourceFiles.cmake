@@ -74,6 +74,7 @@ set(EMERAUDE_BASE_IO_SOURCES
 # network module — ASIO (header-only) + LibreSSL (TLS).
 set(EMERAUDE_BASE_NETWORK_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/GracefulCloser.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HappyEyeballs.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/Hostname.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPHeaders.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Network/HTTPRequest.cpp
@@ -149,6 +150,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSpace3DTriangleMesh.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathTransformConversions.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHappyEyeballs.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPResponseParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPServer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClient.cpp

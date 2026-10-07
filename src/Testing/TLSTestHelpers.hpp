@@ -242,11 +242,6 @@ namespace EmEn::Base::Testing
 			using RequestHandler = std::function< std::string (const std::string & rawRequest) >;
 
 			/**
-			 * @brief Constructs and starts the server.
-			 * @param credentials The PEM credentials (see generateServerCredentials()).
-			 * @param handler Builds the raw response bytes for a raw request [std::move].
-			 */
-			/**
 			 * @brief Makes every session end by dropping the TCP connection WITHOUT a TLS
 			 * close_notify — the truncation-attack signature a client must not accept as a
 			 * clean end of stream.
@@ -258,7 +253,14 @@ namespace EmEn::Base::Testing
 				m_abortWithoutCloseNotify = state;
 			}
 
-			HTTPSTestServer (const ServerCredentials & credentials, RequestHandler handler, bool proxyMode = false) noexcept
+			/**
+			 * @brief Constructs and starts the server.
+			 * @param credentials The PEM credentials (see generateServerCredentials()).
+			 * @param handler Builds the raw response bytes for a raw request [std::move].
+			 * @param proxyMode Answer an HTTP CONNECT first (plaintext), then act as the tunnelled target. Default false.
+			 * @param listenOnIPv6 Listen on ::1 too, same port. Default true.
+			 */
+			HTTPSTestServer (const ServerCredentials & credentials, RequestHandler handler, bool proxyMode = false, bool listenOnIPv6 = true) noexcept
 				: m_handler(std::move(handler)),
 				m_proxyMode(proxyMode)
 			{
@@ -299,7 +301,9 @@ namespace EmEn::Base::Testing
 
 				/* Dual stack: the same port on ::1 too. A client resolving "localhost" tries ::1 first on Windows, and a
 				 * refused connect costs ~2 s there (the SYN is retried after the RST) — every hermetic HTTPS test paid it
-				 * (Windows peer, 2026-10-07). Best effort: without IPv6 the server stays IPv4-only, as before. */
+				 * (Windows peer, 2026-10-07). Best effort: without IPv6 the server stays IPv4-only, as before.
+				 * `listenOnIPv6 = false` keeps it IPv4-only on purpose (the client's Happy Eyeballs test). */
+				if ( listenOnIPv6 )
 				{
 					asio::error_code ipv6Error;
 					const auto loopback6 = asio::ip::make_address("::1", ipv6Error);

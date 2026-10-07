@@ -32,11 +32,13 @@
 #include <chrono>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 /* Third-party inclusions. LibreSSL, through its OpenSSL-compatible API. */
 #include <openssl/ssl.h>
 
 /* Local inclusions. */
+#include "HappyEyeballs.hpp"
 #include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Network
@@ -174,29 +176,27 @@ namespace EmEn::Base::Network
 			return false;
 		}
 
-		/* ⚠️ EVERY address must be private, not just one: async_connect tries them in order, and a DNS answer
+		/* ⚠️ EVERY address must be private, not just one: the race below may connect to any of them, and a DNS answer
 		 * mixing a public address in would send the cleartext request to it. */
-		if ( privateOnly )
-		{
-			for ( const auto & entry : endpoints )
-			{
-				if ( !isPrivateNetworkAddress(entry.endpoint().address()) )
-				{
-					Logging::error(Tag, "establishTcp(), '" + host + "' resolves to the non-private address " + entry.endpoint().address().to_string() + ": refused without TLS.");
+		std::vector< asio::ip::tcp::endpoint > resolved;
+		resolved.reserve(endpoints.size());
 
-					return false;
-				}
+		for ( const auto & entry : endpoints )
+		{
+			if ( privateOnly && !isPrivateNetworkAddress(entry.endpoint().address()) )
+			{
+				Logging::error(Tag, "establishTcp(), '" + host + "' resolves to the non-private address " + entry.endpoint().address().to_string() + ": refused without TLS.");
+
+				return false;
 			}
+
+			resolved.push_back(entry.endpoint());
 		}
 
-		/* TCP connection (async, under the connect timeout). */
-		asio::error_code connectError{asio::error::would_block};
-
-		asio::async_connect(m_stream.lowest_layer(), endpoints, [&connectError] (const asio::error_code & error, const asio::ip::tcp::endpoint & /*endpoint*/) {
-			connectError = error;
-		});
-
-		this->runWithTimeout(m_options.connectTimeout);
+		/* TCP connection (Happy Eyeballs, RFC 8305, under the connect timeout): a name answering IPv6 and IPv4 must
+		 * not pay the whole failure of the first family — a refused ::1 costs ~2 s on Windows. */
+		const auto ordered = interleaveAddressFamilies(resolved);
+		const auto connectError = connectFirstReachable(m_ioContext, ordered, m_stream.next_layer(), m_options.connectTimeout);
 
 		if ( connectError )
 		{

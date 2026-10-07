@@ -173,6 +173,36 @@ TEST(NetworkHTTPSClient, getReturnsBody)
 	EXPECT_EQ(result->body, "Hello from the engine!");
 }
 
+TEST(NetworkHTTPSClient, aNameResolvingToBothFamiliesReachesAnIPv4OnlyServerWithoutWaiting)
+{
+	/* "localhost" answers ::1 first; nothing listens there. A sequential connect paid the refused ::1 before
+	 * 127.0.0.1 — ~2 s on Windows. Happy Eyeballs starts 127.0.0.1 at once on a refusal, after 250 ms at most. */
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	const HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return plainResponse("IPv4 only");
+	}, false, false};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	const Network::HTTPSClient client{tlsContext};
+
+	const auto start = std::chrono::steady_clock::now();
+	const auto result = client.get(serverURI(server, "/family"));
+	const auto elapsed = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::steady_clock::now() - start);
+
+	ASSERT_TRUE(result.has_value());
+
+	if ( result.has_value() )
+	{
+		EXPECT_EQ(result->body, "IPv4 only");
+	}
+
+	EXPECT_LT(elapsed.count(), 1500);
+}
+
 TEST(NetworkHTTPSClient, getDecodesChunkedBody)
 {
 	const auto credentials = generateServerCredentials("DNS:localhost");

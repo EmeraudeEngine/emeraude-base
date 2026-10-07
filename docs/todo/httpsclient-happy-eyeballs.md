@@ -1,7 +1,7 @@
 ---
 id: httpsclient-happy-eyeballs
 title: A name resolving to IPv6 and IPv4 costs ~2 s per connection on Windows when the server listens on IPv4 only
-status: open
+status: in-progress
 priority: high
 scope: emeraude-base Network (TLSConnection::establishTcp)
 opened: 2026-10-07
@@ -21,15 +21,21 @@ reached as "localhost", a misconfigured AAAA record). Public dual-stack hosts ar
 
 ## What remains
 
-- [ ] A failing test: a client to "localhost" against an IPv4-ONLY test server (the dual-stack test server gets an
-      option to stay IPv4-only) must connect well under 2 s on Windows (Linux refuses at once: the test only proves
-      something on Windows — or simulate an unanswered first endpoint).
-- [ ] Happy Eyeballs v2 (RFC 8305) in `TLSConnection::establishTcp()`: start the first address, then the next one of
-      the other family after a short delay (RFC 8305 § 5: 250 ms recommended) if the first has not connected; keep the
-      first that succeeds, cancel the others. The connect timeout keeps bounding the whole attempt.
-- [ ] Keep the private-address rule of `connectCleartextPrivate()` (every candidate address checked) and the proxy path.
+Done on Linux (2026-10-07): base `Network/HappyEyeballs.hpp` (`interleaveAddressFamilies()`,
+`connectFirstReachable()`, 250 ms attempt delay), used by `TLSConnection::establishTcp()` and the engine's
+`Net::TCPClient::connect()`; private-only check kept on every address, before the race. Tests `NetworkHappyEyeballs.*`
+(8, among them an unanswered endpoint giving way after 250 ms: 450 ms with the 200 ms probe) and
+`NetworkHTTPSClient.aNameResolvingToBothFamiliesReachesAnIPv4OnlyServerWithoutWaiting`; suites 2427 run, 2424 passed,
+3 skipped, Release and ASan/UBSan. Engine `TCPClient` proved by a scratch program (IPv4-only listener reached through
+"localhost", a closed port still refused). Knowledge in `docs/caution-points.md` § Network.
+
+- [ ] **Windows proof**: `NetworkHappyEyeballs.*` pass, none skipped (the full-queue listener must leave the connect
+      unanswered or slowly refused there); the IPv4-only HTTPS test well under 1500 ms; the `NetworkTLSConnection`
+      tests that took ~2 s (its own server is IPv4-only behind "localhost": handshakeAndEchoWithTrustedServer 2020 ms,
+      handshakeFailsWithUntrustedServer 2028 ms) back near 250 ms. macOS: the same suites. Then delete this item.
 
 ## References
 
 - RFC 8305, *Happy Eyeballs Version 2*; RFC 6555.
-- `src/Network/TLSConnection.cpp` (`establishTcp()`), `src/Testing/TLSTestHelpers.hpp` (`HTTPSTestServer`, dual stack).
+- `src/Network/HappyEyeballs.cpp`, `src/Network/TLSConnection.cpp` (`establishTcp()`), engine `src/Net/TCPClient.cpp`,
+  `src/Testing/TLSTestHelpers.hpp` (`HTTPSTestServer`, dual stack / `listenOnIPv6`).

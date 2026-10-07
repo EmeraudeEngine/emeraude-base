@@ -495,12 +495,26 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 
 ### ⚠️ "localhost" is `::1` first: a test server on 127.0.0.1 alone costs ~2 s per connection on Windows (2026-10-07)
 
-`getaddrinfo("localhost")` answers `::1` before `127.0.0.1` (Linux and Windows alike), and `TLSConnection` tries the
+`getaddrinfo("localhost")` answers `::1` before `127.0.0.1` (Linux and Windows alike), and `TLSConnection` tried the
 endpoints in order. Linux refuses `::1` at once; Windows retries the SYN after the RST, so a refused connect there
 costs ~2 s (Windows peer: 2021 ms on `::1` vs 0 ms on `127.0.0.1`) — every hermetic HTTPS test paid it, and a timing
 assertion (the silent-peer test) failed on it. `HTTPSTestServer` therefore listens on `::1` too, same port, `v6_only`
-(best effort: without IPv6 it stays IPv4-only). The CLIENT side of the defect (no Happy Eyeballs, RFC 8305) is base
-item `httpsclient-happy-eyeballs`. A new test server or timing test: listen on both families, or connect by literal.
+(best effort: without IPv6 it stays IPv4-only; `listenOnIPv6 = false` keeps it IPv4-only on purpose). A new test
+server or timing test: listen on both families, or connect by literal. Port 1 (nothing listening) still costs ~2 s
+on Windows: a refusal there is slow by nature.
+
+### ⚠️ A TCP connect to a resolved name goes through Network::connectFirstReachable() — Happy Eyeballs (2026-10-07)
+
+The client side of the same defect: a sequential connect (`asio::async_connect` over the resolver's results) pays
+the WHOLE failure of each address before the next — ~2 s per refused address on Windows, the system's SYN timeout
+(minutes) per unanswered one. `Network/HappyEyeballs.hpp` (RFC 8305 § 4-5): `interleaveAddressFamilies()` alternates
+the families from the first one (getaddrinfo already applied RFC 6724), `connectFirstReachable()` starts the next
+attempt after `ConnectionAttemptDelay` (250 ms, § 8) or at once on a failure, keeps the first connected socket and
+closes the others; the timeout bounds the whole race. Used by `TLSConnection::establishTcp()` and the engine's
+`Net::TCPClient::connect()`. **Rules:** a new client connect uses it, never `async_connect` over a list; the
+private-only check of the cleartext path judges EVERY resolved address before the race (any may win).
+Tests: `NetworkHappyEyeballs.*` — the "unanswered" endpoint is a listener whose accept queue is full (SYN dropped on
+Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToBothFamiliesReachesAnIPv4OnlyServerWithoutWaiting`.
 
 ## VertexFactory
 

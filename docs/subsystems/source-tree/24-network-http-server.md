@@ -46,8 +46,8 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
 - Off by default. With it, an `http://` URI is spoken without TLS through `TLSConnection::connectCleartextPrivate()`,
   which refuses unless EVERY address the host resolves to is private (`isPrivateNetworkAddress()`: 127/8, 10/8,
   172.16/12, 192.168/16, 169.254/16, ::1, fe80::/10, fc00::/7, an IPv4-mapped address by its IPv4 part). Every
-  address, not one: `async_connect` tries them in order, and a mixed DNS answer would carry the request to a
-  public one. Never through a proxy.
+  address, not one: the connection race (`connectFirstReachable()`, Happy Eyeballs) may reach any of them, and a
+  mixed DNS answer would carry the request to a public one. Never through a proxy.
 - `https://` is unaffected; a redirect from `https://` to `http://` stays refused; the caller's headers are dropped
   on a redirect to another origin, and the scheme is now part of the origin (`sameOrigin()`).
 - Nothing is encrypted: a bearer token sent this way is readable on the network.
