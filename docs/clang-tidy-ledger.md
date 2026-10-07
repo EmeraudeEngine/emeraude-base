@@ -21,11 +21,17 @@ python3 -m venv <scratch>/ctvenv && <scratch>/ctvenv/bin/pip install "clang-tidy
 Redirect, never pipe. Count the findings by check (`[check-name]` at the end of each warning line), keeping only
 those whose file is inside the module (the header filter also reports every included header).
 
+⚠️ **Never `--fix` a header from several TUs at once.** Each TU applies the header's fix-it again: a
+`readability-math-missing-parentheses` fix stacked up to ~90 levels of parentheses around `a * e - b * b` and 21 other
+lines (found by the engine triad 11, rewritten 2026-10-07, base item runaway-nested-parentheses). Fix a header from ONE
+TU, or review the diff of every header after a mass fix; `/usr/bin/grep -rn "((((((" src` must stay empty.
+
 ## Last full run per module
 
 | Module | Date | Findings by check | Notes |
 |---|---|---|---|
 | — | — | no full run recorded yet under this ledger | |
+| `src/Algorithms/PerlinNoise.hpp`, `Math/Matrix.hpp`, `Math/Space3D/SAT.hpp`, `PixelFactory/Color.hpp`, `PixelFactory/Processor.hpp`, `VertexFactory/Shape.hpp`, `VertexFactory/TextureCoordinates.hpp` (21 runaway-parenthesis lines rewritten), through tests `test_AlgorithmsPerlinNoise.cpp`, `test_MathMatrix.cpp`, `test_MathSpace3D.cpp`, `test_PixelFactoryColor.cpp`, `test_PixelFactoryProcessor.cpp`, `test_VertexFactoryShapeGenerator.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 from the rewrite; 7 older findings on those lines: 5 fixed (misc-const-correctness ×4 on `SAT.hpp` `closest`, readability-redundant-casting in `Color::convertFloatToInteger()`), 2 ON PURPOSE (`Matrix::operator()`, below). | base runaway-nested-parentheses |
 | `src/Network/HappyEyeballs.cpp` / `.hpp` (new: `interleaveAddressFamilies()`, `connectFirstReachable()`), `TLSConnection.cpp` (`establishTcp()` through the race), tests `test_NetworkHappyEyeballs.cpp` (new), `test_NetworkHTTPSClient.cpp`, `TLSTestHelpers.hpp` (`listenOnIPv6`) | 2026-10-07 | clang-tidy 21.1.6: 4 on the changed lines, fixed (2 misc-const-correctness and 2 bugprone-unchecked-optional-access in the new HTTPS test). 0 left. | base httpsclient-happy-eyeballs |
 | `src/Testing/TLSTestHelpers.hpp` (`HTTPSTestServer` also listens on `::1`, `scheduleAccept(acceptor)`), through `test_NetworkHTTPSClient.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines (the 3 older findings of the file are unchanged). | base httpsclient-happy-eyeballs |
 | `src/VertexFactory/ShapeDecimator.hpp` (`CornerUVTable`, `checkUVFoldOver()`, per-corner output UVs), test `test_VertexFactoryShapeSimplifier.cpp` | 2026-10-07 | clang-tidy 21.1.6: 10 on the changed lines, fixed (5 pro-bounds-constant-array-index and 1 array-to-pointer-decay: corner loops over the triangle's array and iterators, a flat corner vector; 4 avoid-const-or-ref-data-members: the table holds non-owning pointers). 0 left. | base decimator-uv-fold-overs |
@@ -58,6 +64,7 @@ Each with its file:line, its check and the reason (an owner decision).
 |---|---|---|
 | `src/Math/Space3D/TriangleMesh.hpp` `visit()` stack, `splitPosition()` bins | `cppcoreguidelines-pro-bounds-constant-array-index` | Bounded by construction: the query stack holds at most the depth (`MaxDepth + 2` slots, one push per inner level); a bin index is `min(bin, Bins - 1)`, a boundary loop runs in `[0, Bins - 1)`. A checked container would add a test per node of a per-query walk. 2026-10-02, as the engine keeps this check's bounded indices. |
 | `src/Math/Space3D/TriangleMesh.hpp` its `static constexpr` members | `bugprone-dynamic-static-initializers` | A false positive on a class template: the members are `constexpr` (constant-initialized); the check cannot evaluate a dependent initializer and reports every templated constant of the cascade the same way (`Math/Base.hpp`, the engine's `Constants.hpp`). 2026-10-02. |
+| `src/Math/Matrix.hpp` `operator()(row, col)` (both) | `cppcoreguidelines-pro-bounds-constant-array-index` | The element accessor of every matrix product: a hot path, `assert(row < dim_t && col < dim_t)` in Debug (Ave Robustus: a hot path documents and checks in Debug only). 2026-10-07. |
 | `src/IO/IO.hpp` `fileGetRange()` `file.read()` | `cppcoreguidelines-pro-type-reinterpret-cast` | `std::istream::read()` takes a `char *`: the destination is the caller's `std::byte` vector, sized to the range. 2026-10-04. |
 | `src/Testing/test_PortableRandom.cpp` its generators | `cert-msc51-cpp` | A constant seed is the POINT of a golden test (the same numbers on every platform). 2026-10-02. |
 | `src/Testing/test_PortableRandom.cpp` `IntegerBoundsAndUniformity` counts | `cppcoreguidelines-pro-bounds-constant-array-index` | The index is `face - 1`, asserted in [1, 6] on the line above. 2026-10-02. |
