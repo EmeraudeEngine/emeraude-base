@@ -48,6 +48,7 @@
 #include "Network/asio_throw_exception.hpp"
 
 /* Local inclusions for usages. */
+#include "Thread.hpp"
 #include "Network/GracefulCloser.hpp"
 
 namespace EmEn::Base::Network
@@ -455,7 +456,7 @@ namespace EmEn::Base::Network
 			/** @brief The refusals and "Connection: close" answers end with a FIN, not a RST (network thread only; the
 			 * default fixed cap of GracefulCloser::DefaultMaxLingering sockets, NOT maxConnections). */
 			GracefulCloser m_gracefulCloser;
-			std::thread m_networkThread;
+			Thread m_networkThread;
 			/** @brief The open connections, touched on the network thread only. */
 			std::set< std::shared_ptr< HTTPServerConnection > > m_connections;
 			uint64_t m_nextConnectionId{1};

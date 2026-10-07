@@ -955,9 +955,25 @@ namespace EmEn::Base::Network
 
 		this->accept();
 
-		m_networkThread = std::thread([this] () {
-			m_ioContext.run();
-		});
+		if ( !m_networkThread.start([this] () { static_cast< void >(m_ioContext.run()); }) )
+		{
+			/* The system refused the thread (Base::Thread traced why): the server is refused (owner policy, 2026-10-07)
+			 * and stays closed. No context runs, so the pending accept never fires; closing the acceptor aborts it. */
+			Logging::error("HTTPServer", name + ": unable to start the network thread. It stays closed.");
+
+			m_running = false;
+			m_workGuard.reset();
+
+			/* NOTE: best effort — the acceptor is going away, a failure leaves nothing to do. */
+			m_acceptor->close(ec);
+			m_acceptor.reset();
+
+			m_onRequest = nullptr;
+			m_onStreamShutdown = nullptr;
+			m_onClosed = nullptr;
+
+			return false;
+		}
 
 		return true;
 	}
@@ -1021,10 +1037,7 @@ namespace EmEn::Base::Network
 		m_workGuard.reset();
 		m_ioContext.stop();
 
-		if ( m_networkThread.joinable() )
-		{
-			m_networkThread.join();
-		}
+		m_networkThread.join();
 
 		/* Handlers that never ran hold connections; drop them now, on this (the last) thread. */
 		m_connections.clear();

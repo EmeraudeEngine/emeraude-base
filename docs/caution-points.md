@@ -262,6 +262,20 @@ failed 2 runs in 6 there with a fixed busy loop). **Rule:** compare a CPU-time i
 `Time::processCPUTimeResolutionNanoseconds()`, never against 0, and size a CPU-time measurement in resolutions, not in
 loop iterations. Do not "fix" it with `QueryPerformanceCounter`: that is elapsed time, not CPU time.
 
+## Threads
+
+### ⚠️⚠️ A thread is started through `Base::Thread`, never `std::thread` (2026-10-07)
+
+`std::thread`'s constructor throws `std::system_error` when the system cannot start a thread (resource exhaustion, a
+thread limit): under `-fno-exceptions`, an abort — and `std::thread::join()` from the thread itself throws too.
+`Base::Thread` (`src/Thread.hpp`) starts on `pthread_create()` / `_beginthreadex()` and answers `false`; it joins on
+destruction and refuses a self-join (traced, detached). **Rule:** no `std::thread` in the cascade (none is left,
+2026-10-07: `/usr/bin/grep -rn "std::thread"` finds only `std::thread::id` / `hardware_concurrency()` and tests); a
+caller of `start()` decides what a refusal means. Owner policy: a feature thread refuses its feature (`false` +
+trace); the Tracer writes synchronously; `executeCommandPumpingEvents()` blocks; `ThreadPool` keeps the workers that
+started and, with none, runs the tasks on the calling thread; `Core`'s logic / rendering threads end the start-up
+with a non-zero exit code. `Thread::failNextStartsForTesting(n)` makes the next n starts fail (tests only).
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate

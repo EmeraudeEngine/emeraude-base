@@ -43,14 +43,21 @@ site category:
 
 ## What remains
 
-- [x] ~~Design~~ `src/Thread.hpp` / `.cpp` (2026-10-07), tests `BaseThread.*` (a refused start through the
-  `failNextStartsForTesting()` seam; a self-join detached instead of aborting).
-- [ ] Migrate every site, with the policy above. The census of 2026-10-07 found more than the list above: also
-  `Core.cpp` (logic and rendering threads), `Tracer.cpp`, `Graphics/Recorder.cpp` (×2), and in the base
-  `Network/HTTPServer.cpp`, `Time/TimedEvent.hpp`, `ThreadPool.cpp` (its workers).
-- [ ] Fix `Notification.windows.cpp` with it: remove the icon from a timer on the window's own thread, and use a
-  distinct `uID` per notification.
-- [ ] Re-test on the three OS; `std::thread{` / `std::thread(` absent from the cascade (`/usr/bin/grep -rn`).
+Done (2026-10-07, Linux): `Base::Thread` and every site migrated with the policy above — base `ThreadPool`,
+`TimedEvent` / `EventTrait`, `HTTPServer`; engine `Core` (logic, rendering), `Tracer` (synchronous fallback),
+`Audio::ExternalInput` (×2, `start()` now bool), `Audio::Recorder`, `TrackMixer`, `RemoteListener`,
+`Graphics::Recorder` (×2), `Helpers.linux.cpp`, `ParticlesEmitter` (a timed emission whose timer cannot start is
+refused); projet-alpha `Application.cpp` (Ctrl+O reports a refused recording). `Notification.windows.cpp` no longer
+has a thread: its icon is removed by a `SetTimer()` on the window's own thread, with one id per notification.
+Proven on Linux: base 2394 / 2394 Release and ASan + UBSan (tests `BaseThread.*`, `ThreadPool.*NoWorker*`,
+`…keepsTheWorkersThatStarted`, `TimeEventTrait.aTimerWhoseThreadCannotStartIsRefused`), `animation-debug` started
+and shut down cleanly, MCP conformance 1881 / 0, the log file complete (header, 341 entries, footer).
+
+- [ ] **Windows**: build (`Notification.windows.cpp` was written blind: `SetTimer()` with a `TIMERPROC`, `noexcept`
+      conversion), then two notifications within 6 s both show and both icons go away; base suite green.
+- [ ] **macOS**: build and base suite green.
+- [ ] Not exercised at run time anywhere: the Tracer's synchronous fallback and the engine sites' refusals (the engine
+      has no failure seam; the base tests cover the mechanism). Then delete this item.
 
 ## References
 
