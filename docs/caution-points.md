@@ -531,6 +531,16 @@ closes the others; the timeout bounds the whole race. Used by `TLSConnection::es
 private-only check of the cleartext path judges EVERY resolved address before the race (any may win).
 Tests: `NetworkHappyEyeballs.*` — the "unanswered" endpoint is a listener whose accept queue is full (SYN dropped on
 Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToBothFamiliesReachesAnIPv4OnlyServerWithoutWaiting`.
+**Accepted on three OS (2026-10-07, base `441a3ce`, engine `0b112e32`).**
+- No `NetworkHappyEyeballs` test is skipped on any of the three: a full accept queue leaves the connect unanswered.
+- The unanswered endpoint gives way after 450 ms on Linux, 468 ms on macOS and 469 ms on Windows.
+- Windows:
+  - the IPv4-only "localhost" HTTPS test takes 276 ms;
+  - `NetworkTLSConnection` handshake tests: 2020 → 267 ms;
+  - `readTimesOutOnMuteServer`: 2291 → 536 ms;
+  - the `NetworkTLSConnection` suite: 8382 → 3105 ms.
+- `Network*` × 20 green on Windows and macOS.
+- MCP conformance: 1881 checks passed, 0 failed, on both.
 
 ## VertexFactory
 
