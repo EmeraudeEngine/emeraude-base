@@ -544,6 +544,15 @@ Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToB
 
 ## VertexFactory
 
+### `ShapeDecimator` can be interrupted — `setCancellationFlag()` (2026-10-08)
+
+A decimation of a large mesh lasts SECONDS, and the engine runs it on a worker (automatic LODs): a shutdown waited for
+every running one. `setCancellationFlag(const std::atomic_bool *)` (non-owning, nullptr = none) is read between the
+stages and every `CancellationCheckInterval` (4096) collapses; a raised flag makes `decimate()` return an EMPTY shape
+(`isCancelled()` tells it from a failure). A lowered flag changes nothing (same triangles, same vertices — test
+`VertexFactoryShapeDecimator.aLoweredCancellationFlagChangesNothing`). Not interruptible INSIDE a stage: the vertex
+deduplication and the collapse-queue build of a huge mesh still run to their end.
+
 ### ⚠️⚠️ The computed tangent frame was backwards on every MIRRORED UV island — tangent AND handedness (2026-10-07, FIXED)
 
 `Math::Vector::tangent()` normalises without dividing by the UV determinant r = Δu1·Δv2 − Δu2·Δv1: it answers

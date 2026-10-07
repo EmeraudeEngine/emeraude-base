@@ -25,6 +25,7 @@ those whose file is inside the module (the header filter also reports every incl
 `readability-math-missing-parentheses` fix stacked up to ~90 levels of parentheses around `a * e - b * b` and 21 other
 lines (found by the engine triad 11, rewritten 2026-10-07, base item runaway-nested-parentheses). Fix a header from ONE
 TU, or review the diff of every header after a mass fix; `/usr/bin/grep -rn "((((((" src` must stay empty.
+| `src/VertexFactory/ShapeDecimator.hpp` (`setCancellationFlag()`, `isCancelled()`), test `test_VertexFactoryShapeSimplifier.cpp` | 2026-10-08 | clang-tidy 21.1.6: 2 on the changed lines, fixed (misc-const-correctness on the test flags). 0 left. | engine lod-job shutdown |
 
 ## Last full run per module
 

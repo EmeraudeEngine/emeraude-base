@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -98,8 +99,35 @@ namespace EmEn::Base::VertexFactory
 			~ShapeDecimator () = default;
 
 			/**
+			 * @brief Lets the caller interrupt decimate(): the flag is read between the stages and every
+			 * CancellationCheckInterval collapses, and a raised flag makes decimate() return an EMPTY shape.
+			 * @note Non-owning: the flag must outlive decimate(). The engine passes its shutdown flag
+			 * (Resources::AbstractServiceProvider::cancelBackgroundWork()): a decimation of a large mesh lasts seconds,
+			 * and a shutdown waited for every running one (2026-10-08).
+			 * @param flag A pointer to the flag, nullptr for none (the default).
+			 * @return void
+			 */
+			void
+			setCancellationFlag (const std::atomic_bool * flag) noexcept
+			{
+				m_cancellationFlag = flag;
+			}
+
+			/**
+			 * @brief Returns whether the cancellation flag is raised.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			isCancelled () const noexcept
+			{
+				return m_cancellationFlag != nullptr && m_cancellationFlag->load(std::memory_order_relaxed);
+			}
+
+			/**
 			 * @brief Performs the decimation and returns a new reduced shape.
-			 * @return Shape< vertex_data_t, index_data_t > The decimated shape.
+			 * @return Shape< vertex_data_t, index_data_t > The decimated shape, or an EMPTY shape when cancelled
+			 * (setCancellationFlag()).
 			 */
 			[[nodiscard]]
 			Shape< vertex_data_t, index_data_t >
@@ -115,6 +143,11 @@ namespace EmEn::Base::VertexFactory
 				auto workShape = m_source;
 				ShapeProcessor< vertex_data_t, index_data_t > connProcessor{workShape};
 				connProcessor.deduplicateVertices(false, false);
+
+				if ( this->isCancelled() )
+				{
+					return {};
+				}
 
 				const auto srcTriCount = workShape.triangles().size();
 				const auto targetTriCount = std::max(size_t{4}, static_cast< size_t >(std::round(static_cast< vertex_data_t >(srcTriCount) * m_ratio)));
@@ -135,14 +168,25 @@ namespace EmEn::Base::VertexFactory
 				/* Detect and penalize boundaries and UV seams. */
 				applyBoundaryAndSeamPenalties(vertices, triangles);
 
+				if ( this->isCancelled() )
+				{
+					return {};
+				}
+
 				/* Build initial collapse candidates. */
 				auto queue = buildCollapseQueue(vertices, triangles);
 
 				/* Iterative edge collapse. */
 				size_t liveTriCount = triangles.size();
+				size_t iteration = 0;
 
 				while ( liveTriCount > targetTriCount && !queue.empty() )
 				{
+					if ( ++iteration % CancellationCheckInterval == 0 && this->isCancelled() )
+					{
+						return {};
+					}
+
 					auto candidate = queue.top();
 					queue.pop();
 
@@ -270,10 +314,15 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
+				if ( this->isCancelled() )
+				{
+					return {};
+				}
+
 				auto output = buildOutputShape(vertices, triangles, workShape, cornerUVs);
 
 				/* Normal map baking: generate lightmap UVs, then bake high-poly normals. */
-				if ( m_normalMapResolution > 0 )
+				if ( m_normalMapResolution > 0 && !this->isCancelled() )
 				{
 					ShapeProcessor< vertex_data_t, index_data_t > processor{output};
 					processor.generateLightmapUV();
@@ -296,6 +345,10 @@ namespace EmEn::Base::VertexFactory
 			}
 
 		private:
+
+			/** @brief How many collapses between two reads of the cancellation flag (a relaxed load: cheap, but not per
+			 * collapse). */
+			static constexpr size_t CancellationCheckInterval{4096};
 
 			/** @brief Two UVs of one vertex closer than this (squared) are the same UV (a seam is far wider). */
 			static constexpr vertex_data_t UVMatchToleranceSquared{static_cast< vertex_data_t >(1e-10)};
@@ -1705,6 +1758,7 @@ namespace EmEn::Base::VertexFactory
 			vertex_data_t m_boundaryPenaltyWeight;
 			uint32_t m_normalMapResolution{0};
 			ThreadPool * m_threadPool{nullptr};
+			const std::atomic_bool * m_cancellationFlag{nullptr};
 			mutable PixelFactory::Pixmap< uint8_t > m_normalMap;
 	};
 }

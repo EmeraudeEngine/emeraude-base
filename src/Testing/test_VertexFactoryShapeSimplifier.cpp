@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <atomic>
 #include <cmath>
 
 /* Local inclusions. */
@@ -137,6 +138,37 @@ TEST(VertexFactoryShapeSimplifier, EmptyGroupStaysEmpty)
  * Since 2026-10-07 the computed frame derives the handedness from the UV winding, and the decimator recomputes the
  * frame of its output: the island must be GENUINELY mirrored (its U reversed), not a sphere tagged -1 by hand.
  */
+TEST(VertexFactoryShapeDecimator, aRaisedCancellationFlagStopsTheDecimation)
+{
+	/* The engine raises its shutdown flag: a decimation of a large mesh must not hold the exit for seconds. */
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16);
+	const std::atomic_bool cancelled{true};
+
+	ShapeDecimator< float, uint32_t > decimator{sphere, 0.5F};
+	decimator.setCancellationFlag(&cancelled);
+
+	EXPECT_TRUE(decimator.isCancelled());
+	EXPECT_TRUE(decimator.decimate().triangles().empty());
+}
+
+TEST(VertexFactoryShapeDecimator, aLoweredCancellationFlagChangesNothing)
+{
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16);
+	const std::atomic_bool cancelled{false};
+
+	const ShapeDecimator< float, uint32_t > reference{sphere, 0.5F};
+	ShapeDecimator< float, uint32_t > watched{sphere, 0.5F};
+	watched.setCancellationFlag(&cancelled);
+
+	const auto expected = reference.decimate();
+	const auto actual = watched.decimate();
+
+	EXPECT_FALSE(watched.isCancelled());
+	ASSERT_GT(expected.triangles().size(), 0U);
+	EXPECT_EQ(actual.triangles().size(), expected.triangles().size());
+	EXPECT_EQ(actual.vertices().size(), expected.vertices().size());
+}
+
 TEST(VertexFactoryShapeDecimator, decimatedVerticesKeepTheTangentHandedness)
 {
 	auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16, ShapeBuilderOptions< float >{true, true, false, false, false});
