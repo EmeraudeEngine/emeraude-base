@@ -1637,3 +1637,72 @@ TEST(VertexFactoryShapeGenerator, readIndexedVertexBufferRefusesInconsistentSize
 	EXPECT_FALSE(readBack.readIndexedVertexBuffer(vertices, indices, {{0, static_cast< uint32_t >(indices.size())}}, NormalType::Normal, TextureCoordinatesType::UV));
 	EXPECT_TRUE(readBack.triangles().empty());
 }
+
+namespace
+{
+	/* A 2 × 2 quad facing +Z, built like generateQuad() (V grows DOWN the image, so dP/dv = -Y), with its U optionally
+	 * mirrored (u → 1 − u, dP/du = -X): the usual way a symmetric model saves texture space. */
+	Shape< float, uint32_t >
+	buildQuad (bool mirroredU)
+	{
+		Shape< float, uint32_t > shape{2};
+		ShapeBuilder< float, uint32_t > builder{shape, ShapeBuilderOptions< float >{false, true, false, false, false}};
+
+		const auto u = [mirroredU] (float value) {
+			return mirroredU ? 1.0F - value : value;
+		};
+
+		builder.beginConstruction(ConstructionMode::TriangleStrip);
+		builder.options().enableGlobalNormal(EmEn::Base::Math::Vector< 3, float >::positiveZ());
+
+		builder.setPosition(-1.0F, -1.0F, 0.0F);
+		builder.setTextureCoordinates(u(0.0F), 1.0F);
+		builder.newVertex();
+
+		builder.setPosition(1.0F, -1.0F, 0.0F);
+		builder.setTextureCoordinates(u(1.0F), 1.0F);
+		builder.newVertex();
+
+		builder.setPosition(-1.0F, 1.0F, 0.0F);
+		builder.setTextureCoordinates(u(0.0F), 0.0F);
+		builder.newVertex();
+
+		builder.setPosition(1.0F, 1.0F, 0.0F);
+		builder.setTextureCoordinates(u(1.0F), 0.0F);
+		builder.newVertex();
+
+		builder.endConstruction();
+
+		return shape;
+	}
+
+	void
+	expectFrame (const Shape< float, uint32_t > & shape, float tangentX, float handedness)
+	{
+		ASSERT_FALSE(shape.vertices().empty());
+
+		for ( const auto & vertex : shape.vertices() )
+		{
+			EXPECT_NEAR(vertex.tangent()[EmEn::Base::Math::X], tangentX, 1.0E-5F);
+			EXPECT_EQ(vertex.tangentHandedness(), handedness);
+			/* The image's up: +Y on both quads (V grows down the image, Khronos normal maps are +Y up). */
+			EXPECT_NEAR(vertex.biNormal()[EmEn::Base::Math::Y], 1.0F, 1.0E-5F);
+		}
+	}
+}
+
+/* The computed tangent space (every generator, the OBJ loader, the UV unwraps) took T from the UVs without the sign of
+ * their determinant, and never set the handedness (2026-10-06, found by reading): a MIRRORED UV island got T = -dP/du
+ * and kept the default handedness +1 — its normal map lit backwards in X. Owner decision (2026-10-07): derive the frame
+ * from the UV winding (Lengyel 2001 / MikkTSpace). The reference quad must not change; the mirrored one must get
+ * T = dP/du = -X and a handedness of -1, so that its bitangent is the same image-up +Y. */
+TEST(VertexFactoryShapeGenerator, computedTangentFrameOfTheReferenceQuad)
+{
+	expectFrame(buildQuad(false), 1.0F, 1.0F);
+	expectFrame(ShapeGenerator::generateQuad< float, uint32_t >(2.0F, 0.0F, ShapeBuilderOptions< float >{false, true, false, false, false}), 1.0F, 1.0F);
+}
+
+TEST(VertexFactoryShapeGenerator, computedTangentFrameOfAMirroredUVIsland)
+{
+	expectFrame(buildQuad(true), -1.0F, -1.0F);
+}

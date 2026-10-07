@@ -716,6 +716,54 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_NE(result.shape.triangles()[0].vertexIndex(0), result.shape.triangles()[1].vertexIndex(0));
 	}
 
+	/* A MIRROR SEAM: two quads share an edge (same position, UV and normal on both sides) and the right one is mapped
+	 * mirrored in U — the usual way a symmetric model saves texture space. Its frame is the other side's mirror image
+	 * (opposite tangent, opposite handedness, the same bitangent), so the seam corners cannot be ONE vertex: the loader
+	 * keys a vertex by (v, vt, vn) AND the side of its face's UV mapping (2026-10-07, base item
+	 * computed-tangent-space-never-derives-the-handedness). Before, the two seam vertices were shared and took one
+	 * side's frame, lighting the other side's normal map backwards along the seam. */
+	TEST(VertexFactoryOBJ, aMirrorSeamSplitsItsVerticesAndEachSideGetsItsFrame)
+	{
+		const auto buffer = toBytes(
+			"v -1 -1 0\nv 0 -1 0\nv 0 1 0\nv -1 1 0\nv 1 -1 0\nv 1 1 0\n"
+			"vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\n"
+			"vn 0 0 1\n"
+			"f 1/1/1 2/2/1 3/3/1 4/4/1\n"
+			"f 2/2/1 5/1/1 6/4/1 3/3/1\n");
+
+		MemoryStream stream{buffer};
+		OBJ format;
+		Result result;
+		ReadOptions options{};
+		options.requestTangentSpace = true;
+		ASSERT_TRUE(format.readStream(stream, result, options));
+		ASSERT_EQ(result.shape.triangles().size(), 4U);
+
+		/* Four corners per quad: the two seam corners are split. */
+		EXPECT_EQ(result.shape.vertices().size(), 8U);
+
+		const auto & vertices = result.shape.vertices();
+		const auto & triangles = result.shape.triangles();
+		const auto & reference = vertices[triangles[0].vertexIndex(0)];
+
+		for ( uint32_t triangle = 0; triangle < 4; ++triangle )
+		{
+			/* Triangles 0-1 are the left quad, 2-3 the mirrored right one. */
+			const auto side = triangle < 2 ? 1.0F : -1.0F;
+
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				const auto & vertex = vertices[triangles[triangle].vertexIndex(corner)];
+
+				EXPECT_EQ(vertex.tangentHandedness(), reference.tangentHandedness() * side) << "triangle " << triangle << ", corner " << corner;
+				EXPECT_NEAR(vertex.tangent()[Math::X], reference.tangent()[Math::X] * side, 1.0E-5F) << "triangle " << triangle << ", corner " << corner;
+				EXPECT_NEAR(vertex.biNormal()[Math::Y], reference.biNormal()[Math::Y], 1.0E-5F) << "triangle " << triangle << ", corner " << corner;
+			}
+		}
+
+		EXPECT_NEAR(std::abs(reference.biNormal()[Math::Y]), 1.0F, 1.0E-5F);
+	}
+
 	TEST(VertexFactoryOBJ, sharedPositionKeepsEachCornerNormalWithoutTextureCoordinates)
 	{
 		/* The same defect on the "v//vn" path. */

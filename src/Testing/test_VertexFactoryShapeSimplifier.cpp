@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <cmath>
+#include <vector>
 
 /* Local inclusions. */
 #include "VertexFactory/ShapeDecimator.hpp"
@@ -134,6 +135,8 @@ TEST(VertexFactoryShapeSimplifier, EmptyGroupStaysEmpty)
 /*
  * The decimator rebuilds its output vertices with saveVertex() (handedness +1): until 2026-10-06 it copied only the
  * 3D tangent, so every LOD level of a mirrored UV island (handedness -1) lit its normal map backwards.
+ * Since 2026-10-07 the computed frame derives the handedness from the UV winding, and the decimator recomputes the
+ * frame of its output: the island must be GENUINELY mirrored (its U reversed), not a sphere tagged -1 by hand.
  */
 TEST(VertexFactoryShapeDecimator, decimatedVerticesKeepTheTangentHandedness)
 {
@@ -141,7 +144,18 @@ TEST(VertexFactoryShapeDecimator, decimatedVerticesKeepTheTangentHandedness)
 
 	for ( auto & vertex : sphere.vertices() )
 	{
-		vertex.setTangentHandedness(-1.0F);
+		auto textureCoordinates = vertex.textureCoordinates();
+		textureCoordinates[EmEn::Base::Math::X] = 1.0F - textureCoordinates[EmEn::Base::Math::X];
+
+		vertex.setTextureCoordinates(textureCoordinates);
+	}
+
+	ASSERT_TRUE(sphere.computeTriangleTangent());
+	ASSERT_TRUE(sphere.computeVertexTangent());
+
+	for ( const auto & vertex : sphere.vertices() )
+	{
+		ASSERT_EQ(vertex.tangentHandedness(), -1.0F) << "the source island must be mirrored";
 	}
 
 	const ShapeDecimator< float, uint32_t > decimator{sphere, 0.5F};
@@ -150,15 +164,40 @@ TEST(VertexFactoryShapeDecimator, decimatedVerticesKeepTheTangentHandedness)
 	ASSERT_GT(decimated.vertices().size(), 0U);
 	ASSERT_LT(decimated.triangles().size(), sphere.triangles().size());
 
+	/* The decimator recomputes the frame of its output from the UVs, and folds a few of them over (27 of 448 triangles
+	 * here, measured 2026-10-07): a vertex next to a fold-over may side with it. A vertex whose triangles are ALL on the
+	 * island's mirrored side must be -1. */
+	std::vector< bool > touchesAnUnmirroredTriangle(decimated.vertices().size(), false);
+
+	for ( const auto & triangle : decimated.triangles() )
+	{
+		if ( triangle.surfaceTangentHandedness() > 0.0F )
+		{
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				touchesAnUnmirroredTriangle[triangle.vertexIndex(corner)] = true;
+			}
+		}
+	}
+
+	size_t inside = 0;
 	size_t lost = 0;
 
-	for ( const auto & vertex : decimated.vertices() )
+	for ( size_t index = 0; index < decimated.vertices().size(); ++index )
 	{
-		if ( vertex.tangentHandedness() != -1.0F )
+		if ( touchesAnUnmirroredTriangle[index] )
+		{
+			continue;
+		}
+
+		++inside;
+
+		if ( decimated.vertices()[index].tangentHandedness() != -1.0F )
 		{
 			++lost;
 		}
 	}
 
-	EXPECT_EQ(lost, 0U) << lost << " of " << decimated.vertices().size() << " vertices lost their handedness in the decimation.";
+	EXPECT_GT(inside * 10, decimated.vertices().size() * 8) << "most of the island must stay mirrored";
+	EXPECT_EQ(lost, 0U) << lost << " of " << inside << " vertices inside the mirrored island lost their handedness in the decimation.";
 }

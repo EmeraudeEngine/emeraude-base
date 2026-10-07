@@ -77,6 +77,17 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Sets the handedness of the surface tangent frame: +1, or -1 on a mirrored UV island.
+			 * @param handedness The handedness, +1 or -1.
+			 * @return void
+			 */
+			void
+			setSurfaceTangentHandedness (vertex_data_t handedness) noexcept
+			{
+				m_surfaceTangentHandedness = handedness;
+			}
+
+			/**
 			 * @brief Sets the surface normal.
 			 * @param normal A reference to a vector.
 			 * @return void
@@ -132,6 +143,17 @@ namespace EmEn::Base::VertexFactory
 			surfaceTangent () const noexcept
 			{
 				return m_surfaceTangent;
+			}
+
+			/**
+			 * @brief Returns the handedness of the surface tangent frame (+1, or -1 on a mirrored UV island).
+			 * @return vertex_data_t
+			 */
+			[[nodiscard]]
+			vertex_data_t
+			surfaceTangentHandedness () const noexcept
+			{
+				return m_surfaceTangentHandedness;
 			}
 
 			/**
@@ -231,12 +253,15 @@ namespace EmEn::Base::VertexFactory
 			{
 				m_surfaceTangent[Math::Y] = -m_surfaceTangent[Math::Y];
 				m_surfaceNormal[Math::Y] = -m_surfaceNormal[Math::Y];
+				/* A mirror: cross(M·N, M·T) = −M·(N × T), and the bitangent must become M·B. */
+				m_surfaceTangentHandedness = -m_surfaceTangentHandedness;
 			}
 
 		private:
 
 			Math::Vector< 3, vertex_data_t > m_surfaceTangent{};
 			Math::Vector< 3, vertex_data_t > m_surfaceNormal{};
+			vertex_data_t m_surfaceTangentHandedness{1};
 			std::array< index_data_t, 3 > m_vertexIndexes{0, 0, 0}; /* Position, tangent, normal and texture coordinates indices. */
 			std::array< index_data_t, 3 > m_vertexColorIndexes{0, 0, 0};
 			std::array< index_data_t, 3 > m_edgeIndexes{

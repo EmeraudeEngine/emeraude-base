@@ -30,15 +30,15 @@ affected.
 
 Derive the handedness from the UV winding (Lengyel 2001 / MikkTSpace): per triangle the sign of (Δu1·Δv2 − Δu2·Δv1), per vertex the sign of its triangles.
 
-## What remains — owner decision first
+## What remains
 
-- [ ] **Decision**: derive the handedness from the UV winding (the standard, Lengyel 2001 / MikkTSpace: per
-      triangle `sign((Δu1·Δv2 − Δu2·Δv1))`, per vertex the sign of its triangles — a vertex shared by triangles of
-      both signs is a seam the loader must split), or keep +1 everywhere and document mirrored UVs as unsupported
-      without authored tangents. Recommendation: derive it — it changes the rendering ONLY where it is wrong
-      today (mirrored islands), and glTF without `TANGENT` is required by the spec to use MikkTSpace.
-- [ ] A failing test: a quad whose UVs are mirrored in U gets handedness -1 from the computed path.
-- [ ] Runtime: an OBJ with a mirrored island under `normal-map-debug`.
+Done (2026-10-07): the frame derived from the UV winding in every computed path, the OBJ loader splitting mirror-seam
+vertices, three failing-then-passing tests, Release + ASan / UBSan green (base `docs/caution-points.md` § VertexFactory).
+
+- [ ] **Runtime**: generated shapes change where their UVs are mirrored (torus, capsule, half the hollowed cube, a cap
+      of the cylinder and the cone). Look at them under `normal-map-debug` with a directional normal map (and the
+      option-4 Khronos control): the bumps must be lit from the same side as on the cuboid / sphere. Then delete this
+      item.
 
 ## References
 

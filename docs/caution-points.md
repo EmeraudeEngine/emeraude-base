@@ -399,6 +399,26 @@ it passed or failed **by timing**, which is worse than not testing it. It now re
 
 ## VertexFactory
 
+### ⚠️⚠️ The computed tangent frame was backwards on every MIRRORED UV island — tangent AND handedness (2026-10-07, FIXED)
+
+`Math::Vector::tangent()` normalises without dividing by the UV determinant r = Δu1·Δv2 − Δu2·Δv1: it answers
+−sign(r)·dP/du, and nothing ever set the handedness. In the engine's UV space (V grows DOWN the image) an unmirrored
+island has r < 0 — `generateQuad()`: T = +X, B = cross(N, T) = +Y, the image's up — so it was right; a MIRRORED
+island (r > 0) got T = −dP/du with the default handedness +1: its normal map lit backwards in X. Owner decision:
+derive the frame from the UV winding (Lengyel 2001 / MikkTSpace). `Shape::triangleTangentFrame()` gives each
+triangle T = dP/du and a handedness (−1 when mirrored); `computeVertexTangent()` / `computeVertexTBNSpace()` give
+each vertex its triangles' majority side and average only that side's tangents. Every computed path inherits it
+(generators through `ShapeBuilder`, OBJ, the decimator, the UV unwraps of `ShapeProcessor` — which no longer mixes two
+conventions in one shape). A vertex shared by both sides sits on a MIRROR SEAM and cannot be right for both: the OBJ
+loader splits it (its vertex key is (v, vt, vn, side)); `Shape` itself does not (it would invalidate edges and
+boundary loops). Tests: `computedTangentFrameOfTheReferenceQuad` / `…OfAMirroredUVIsland`,
+`VertexFactoryOBJ.aMirrorSeamSplitsItsVerticesAndEachSideGetsItsFrame` (failing before).
+⚠️ **Rendering changes on generated shapes** whose UVs run mirrored (census 2026-10-07): torus and capsule entirely,
+the hollowed cube on half its triangles, one cap of the cylinder and the cone. Quad, cuboid, sphere and geodesic
+sphere are unchanged. **Rule:** a tangent from UVs needs the sign of their determinant; never normalise it away.
+Also measured: `ShapeDecimator` folds a few UVs over (27 of 448 triangles on a 50 % sphere), whose frames then side
+with the fold-over.
+
 ### ⚠️⚠️ `Shape::transform()` zeroed every bitangent — a `Vector< 4 >` product picked the HANDEDNESS overload (2026-10-06, FIXED)
 
 > [!CAUTION]

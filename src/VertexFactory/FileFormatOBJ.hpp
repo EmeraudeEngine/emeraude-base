@@ -467,10 +467,13 @@ namespace EmEn::Base::VertexFactory
 			/** @brief The index standing for an attribute a face corner does not give, in a vertex key. */
 			static constexpr auto NoAttribute{std::numeric_limits< index_data_t >::max()};
 
-			/** @brief An OBJ vertex is the whole (v, vt, vn) triple, 0-based: the key of one shape vertex. */
-			using VertexKey = std::array< index_data_t, 3 >;
+			/**
+			 * @brief An OBJ vertex is the whole (v, vt, vn) triple, 0-based, plus the SIDE of its face's UV mapping (1 when
+			 * mirrored, see uvSide()): the key of one shape vertex.
+			 */
+			using VertexKey = std::array< index_data_t, 4 >;
 
-			/** @brief Hashes a vertex key (multiplicative mixing of the three indices). */
+			/** @brief Hashes a vertex key (multiplicative mixing of the four entries). */
 			struct VertexKeyHash final
 			{
 				[[nodiscard]]
@@ -482,12 +485,13 @@ namespace EmEn::Base::VertexFactory
 					auto hash = static_cast< std::uint64_t >(key[0]);
 					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[1]);
 					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[2]);
+					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[3]);
 
 					return static_cast< size_t >(hash ^ (hash >> 32U));
 				}
 			};
 
-			/** @brief The shape vertex of every (v, vt, vn) triple already met. */
+			/** @brief The shape vertex of every (v, vt, vn, side) key already met. */
 			using VertexIndexMap = std::unordered_map< VertexKey, index_data_t, VertexKeyHash >;
 
 			/**
@@ -496,12 +500,56 @@ namespace EmEn::Base::VertexFactory
 			 * numerous attribute) and to append a vertex only when the POSITION differed, so a face sharing a position
 			 * with another normal or texture coordinates (a hard edge, a UV seam) inherited the first face's — on
 			 * basic-scenery's temple, 381 triangles a ZERO normal (black) and 4880 corners a foreign one.
+			 * @note The side is the fourth entry (2026-10-07): a corner of a mirror seam is one vertex per side.
 			 * @pre The indices are in range of m_v, m_vt, m_vn, or NoAttribute for vt and vn.
-			 * @param key The 0-based (v, vt, vn) triple.
+			 * @param key The 0-based (v, vt, vn) triple and the side.
 			 * @param vertexIndexes A reference to the triples already met.
 			 * @param vertices A reference to the shape vertices.
 			 * @return std::optional< index_data_t > The shape vertex index, or nothing past the index type's capacity.
 			 */
+			/**
+			 * @brief Returns the side of a face triangle's UV mapping: 1 when it is MIRRORED (its UV determinant
+			 * r = Δu1·Δv2 − Δu2·Δv1 is positive, Shape::triangleTangentFrame()), 0 otherwise or without texture coordinates.
+			 * @note A position shared by both sides with the same (vt, vn) sits on a mirror seam; its tangent frames are
+			 * opposite, so it is two shape vertices (MikkTSpace splits them the same way).
+			 * @param faceIndices The face corners.
+			 * @param triangleOffset The fan offset of the triangle (corners 0, 1 + offset, 2 + offset).
+			 * @return index_data_t
+			 */
+			[[nodiscard]]
+			index_data_t
+			uvSide (const std::vector< OBJVertex< index_data_t > > & faceIndices, index_data_t triangleOffset) const noexcept
+			{
+				const auto cornerTextureCoordinates = [this, &faceIndices] (size_t corner) noexcept -> std::optional< Math::Vector< 3, vertex_data_t > > {
+					if ( corner >= faceIndices.size() )
+					{
+						return std::nullopt;
+					}
+
+					const auto vtIndex = faceIndices[corner].vtIndex();
+
+					if ( vtIndex == 0 || vtIndex > m_vt.size() )
+					{
+						return std::nullopt;
+					}
+
+					return m_vt[vtIndex - 1];
+				};
+
+				const auto uvA = cornerTextureCoordinates(0);
+				const auto uvB = cornerTextureCoordinates(1 + static_cast< size_t >(triangleOffset));
+				const auto uvC = cornerTextureCoordinates(2 + static_cast< size_t >(triangleOffset));
+
+				if ( !uvA.has_value() || !uvB.has_value() || !uvC.has_value() )
+				{
+					return 0;
+				}
+
+				const auto determinant = (((*uvB)[Math::X] - (*uvA)[Math::X]) * ((*uvC)[Math::Y] - (*uvA)[Math::Y])) - (((*uvC)[Math::X] - (*uvA)[Math::X]) * ((*uvB)[Math::Y] - (*uvA)[Math::Y]));
+
+				return determinant > 0 ? 1 : 0;
+			}
+
 			[[nodiscard]]
 			std::optional< index_data_t >
 			vertexIndexOf (const VertexKey & key, VertexIndexMap & vertexIndexes, std::vector< ShapeVertex< vertex_data_t > > & vertices) const noexcept
@@ -825,7 +873,7 @@ namespace EmEn::Base::VertexFactory
 
 								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
 								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
-								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, NoAttribute, hasNormal ? vnIndex : NoAttribute}, vertexIndexes, vertices);
+								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, NoAttribute, hasNormal ? vnIndex : NoAttribute, 0}, vertexIndexes, vertices);
 
 								if ( !geometryVertexIndex.has_value() )
 								{
@@ -918,6 +966,9 @@ namespace EmEn::Base::VertexFactory
 
 							ShapeTriangle< vertex_data_t, index_data_t > triangle;
 
+							/* The side of this triangle's UV mapping: a mirror seam corner is one vertex per side. */
+							const auto side = this->uvSide(faceIndices, triangleOffset);
+
 							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
 							{
 								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
@@ -938,7 +989,7 @@ namespace EmEn::Base::VertexFactory
 
 								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
 								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
-								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, NoAttribute}, vertexIndexes, vertices);
+								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, NoAttribute, side}, vertexIndexes, vertices);
 
 								if ( !geometryVertexIndex.has_value() )
 								{
@@ -1036,6 +1087,9 @@ namespace EmEn::Base::VertexFactory
 
 							ShapeTriangle< vertex_data_t, index_data_t > triangle;
 
+							/* The side of this triangle's UV mapping: a mirror seam corner is one vertex per side. */
+							const auto side = this->uvSide(faceIndices, triangleOffset);
+
 							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
 							{
 								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
@@ -1058,7 +1112,7 @@ namespace EmEn::Base::VertexFactory
 
 								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
 								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
-								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, hasNormal ? vnIndex : NoAttribute}, vertexIndexes, vertices);
+								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, hasNormal ? vnIndex : NoAttribute, side}, vertexIndexes, vertices);
 
 								if ( !geometryVertexIndex.has_value() )
 								{

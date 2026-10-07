@@ -34,6 +34,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 #include <functional>
 #include <iostream>
 #include <limits>
@@ -822,17 +823,11 @@ namespace EmEn::Base::VertexFactory
 					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
 					const auto & vertexC = verticesRef[triangle.vertexIndex(2)];
 
-					/* Compute the surface tangent. */
-					const auto tangent = Math::Vector< 3, vertex_data_t >::tangent(
-						vertexA.position(),
-						vertexA.textureCoordinates(),
-						vertexB.position(),
-						vertexB.textureCoordinates(),
-						vertexC.position(),
-						vertexC.textureCoordinates()
-					);
+					/* Compute the surface tangent frame (the tangent and its handedness). */
+					const auto [tangent, handedness] = triangleTangentFrame(vertexA, vertexB, vertexC);
 
 					triangle.setSurfaceTangent(tangent);
+					triangle.setSurfaceTangentHandedness(handedness);
 				}
 
 				return true;
@@ -874,6 +869,9 @@ namespace EmEn::Base::VertexFactory
 					/* Project the edge onto the plane defined by the surface normal (Gram-Schmidt). */
 					const auto projected = edge - ((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((normal * Math::Vector< 3, vertex_data_t >::dotProduct(edge, normal)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))));
 					const auto length = projected.length();
+
+					/* No texture coordinates: no mirrored island either. */
+					triangle.setSurfaceTangentHandedness(1);
 
 					if ( length > static_cast< vertex_data_t >(1e-6) )
 					{
@@ -930,17 +928,11 @@ namespace EmEn::Base::VertexFactory
 					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
 					const auto & vertexC = verticesRef[triangle.vertexIndex(2)];
 
-					/* Compute the surface tangent. */
-					const auto tangent = Math::Vector< 3, vertex_data_t >::tangent(
-						vertexA.position(),
-						vertexA.textureCoordinates(),
-						vertexB.position(),
-						vertexB.textureCoordinates(),
-						vertexC.position(),
-						vertexC.textureCoordinates()
-					);
+					/* Compute the surface tangent frame (the tangent and its handedness). */
+					const auto [tangent, handedness] = triangleTangentFrame(vertexA, vertexB, vertexC);
 
 					triangle.setSurfaceTangent(tangent);
+					triangle.setSurfaceTangentHandedness(handedness);
 
 					/* Compute the surface normal. */
 					const auto normal = Math::Vector< 3, vertex_data_t >::normal(
@@ -1012,14 +1004,20 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t globalVertexIndex = 0; globalVertexIndex < m_vertices.size(); ++globalVertexIndex )
 				{
+					const auto handedness = this->vertexTangentHandedness(adjacency[globalVertexIndex]);
 					Math::Vector< 3, vertex_data_t > tangent;
 
 					for ( const auto triIndex : adjacency[globalVertexIndex] )
 					{
-						tangent += m_triangles[triIndex].surfaceTangent();
+						/* Only the triangles of the vertex's side: a mirrored neighbour's tangent points the other way. */
+						if ( m_triangles[triIndex].surfaceTangentHandedness() == handedness )
+						{
+							tangent += m_triangles[triIndex].surfaceTangent();
+						}
 					}
 
 					m_vertices[globalVertexIndex].setTangent(tangent.normalize());
+					m_vertices[globalVertexIndex].setTangentHandedness(handedness);
 				}
 
 				return true;
@@ -1047,16 +1045,23 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t globalVertexIndex = 0; globalVertexIndex < m_vertices.size(); ++globalVertexIndex )
 				{
+					const auto handedness = this->vertexTangentHandedness(adjacency[globalVertexIndex]);
 					Math::Vector< 3, vertex_data_t > tangent{};
 					Math::Vector< 3, vertex_data_t > normal{};
 
 					for ( const auto triIndex : adjacency[globalVertexIndex] )
 					{
-						tangent += m_triangles[triIndex].surfaceTangent();
+						/* Only the triangles of the vertex's side: a mirrored neighbour's tangent points the other way. */
+						if ( m_triangles[triIndex].surfaceTangentHandedness() == handedness )
+						{
+							tangent += m_triangles[triIndex].surfaceTangent();
+						}
+
 						normal += m_triangles[triIndex].surfaceNormal();
 					}
 
 					m_vertices[globalVertexIndex].setTangent(tangent.normalize());
+					m_vertices[globalVertexIndex].setTangentHandedness(handedness);
 					m_vertices[globalVertexIndex].setNormal(normal.normalize());
 				}
 
@@ -2161,6 +2166,60 @@ namespace EmEn::Base::VertexFactory
 			}
 
 		private:
+
+			/**
+			 * @brief Returns the tangent frame of a triangle from its texture coordinates: the tangent dP/du and the
+			 * handedness, -1 on a MIRRORED UV island (Lengyel 2001; MikkTSpace, the glTF reference).
+			 * @note Math::Vector::tangent() normalises without dividing by the UV determinant
+			 * r = Δu1·Δv2 − Δu2·Δv1: it answers −sign(r)·dP/du. In the engine's UV space V grows DOWN the image, where an
+			 * unmirrored island has r < 0 (generateQuad(): T = +X, bitangent cross(N, T) = +Y, the image's up) — the
+			 * answer as it is, handedness +1. A mirrored island (r > 0) gets −answer = dP/du and a handedness of -1, so its
+			 * bitangent cross(N, T)·(−1) is the image's up as well. A degenerate mapping (r = 0) keeps the answer, +1.
+			 * @param vertexA The first vertex, counter-clockwise.
+			 * @param vertexB The second vertex.
+			 * @param vertexC The third vertex.
+			 * @return std::pair< Math::Vector< 3, vertex_data_t >, vertex_data_t >
+			 */
+			[[nodiscard]]
+			static
+			std::pair< Math::Vector< 3, vertex_data_t >, vertex_data_t >
+			triangleTangentFrame (const ShapeVertex< vertex_data_t > & vertexA, const ShapeVertex< vertex_data_t > & vertexB, const ShapeVertex< vertex_data_t > & vertexC) noexcept
+			{
+				const auto & uvA = vertexA.textureCoordinates();
+				const auto & uvB = vertexB.textureCoordinates();
+				const auto & uvC = vertexC.textureCoordinates();
+
+				const auto tangent = Math::Vector< 3, vertex_data_t >::tangent(vertexA.position(), uvA, vertexB.position(), uvB, vertexC.position(), uvC);
+				const auto determinant = ((uvB[Math::X] - uvA[Math::X]) * (uvC[Math::Y] - uvA[Math::Y])) - ((uvC[Math::X] - uvA[Math::X]) * (uvB[Math::Y] - uvA[Math::Y]));
+
+				if ( determinant > 0 )
+				{
+					return {-tangent, static_cast< vertex_data_t >(-1)};
+				}
+
+				return {tangent, static_cast< vertex_data_t >(1)};
+			}
+
+			/**
+			 * @brief Returns the handedness of a vertex: the side most of its triangles are on (+1 on a tie).
+			 * @note A vertex shared by triangles of both sides sits on a mirror seam; it should be split (one copy per
+			 * side), which this shape does not do — its frame is then right for its majority side only.
+			 * @param triangleIndexes The indexes of the triangles around the vertex.
+			 * @return vertex_data_t
+			 */
+			[[nodiscard]]
+			vertex_data_t
+			vertexTangentHandedness (const std::vector< size_t > & triangleIndexes) const noexcept
+			{
+				int64_t balance = 0;
+
+				for ( const auto triangleIndex : triangleIndexes )
+				{
+					balance += m_triangles[triangleIndex].surfaceTangentHandedness() < 0 ? -1 : 1;
+				}
+
+				return balance < 0 ? static_cast< vertex_data_t >(-1) : static_cast< vertex_data_t >(1);
+			}
 
 			/**
 			 * @brief Builds an adjacency table mapping each vertex index to the list of triangle indices that reference it.
