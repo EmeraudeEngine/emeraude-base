@@ -19,6 +19,17 @@ tags: [performance, cpp]
 
 ⚠️ The historical entry was marked WIP with no record of what was already covered.
 
+## First profile-driven pass (2026-10-07, Linux, RTX 3070 Ti)
+
+`perf` on `citadel` (fixed pose) and `balls-of-steel`, 20 s each, Release. Where the CPU goes: OpenAL Soft's mixer
+(its own thread) 12–16 %, shared-count atomics 3.5 %, mutexes 3–5 %, `dynamic_cast` 1.2–1.6 %. The only small hot
+out-of-line accessor: `Vulkan::AbstractDeviceDependentObject::device()` (by-value `shared_ptr`, ~280 call sites).
+A/B, inline + `const &`: **295.0 → 295.5 FPS** (median of 5 alternated runs, runs 283–298) — noise, under the 5 % gate
+of Ave Performus: NOT adopted, reverted. ⚠️ Both benches are GPU-bound (93–99 % GPU): an inlining gain cannot show
+in the frame time there — a further pass needs a CPU-bound bench (or CPU-ms per frame, `perf stat`), else this item
+measures nothing. The `MeshResource::geometry()` mutex (from the same profile) is an engine change: no gain either,
+kept as a race fix (engine `docs/subsystems/graphics/20-15b-level-of-detail.md`).
+
 ## Where it starts, and why the item lives here
 
 **Owner decision (2026-08-26): emeraude-base owns this sweep.** It is cascade-wide work, and the

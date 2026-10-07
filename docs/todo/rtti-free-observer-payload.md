@@ -40,8 +40,9 @@ use `typeid` and the standalone build fails under `-fno-rtti`.
 the same change (signatures only: every read already went through `anyValue< T >()`). Doctrine:
 `docs/error-handling.md` § The Observer payload is a `Base::Any`.
 
-- [ ] emeraude-base ALONE with `-DEMERAUDE_DISABLE_RTTI=On` (dedicated git-ignored build dir), `EmeraudeBaseUnitTests`
-      green in Release — on Linux, then on Windows (`/GR-`: the build that refused `<any>`) and macOS by the peers.
+Base alone without RTTI ACCEPTED on three OS (2026-10-07, base `92ab1fd`): Linux `-fno-rtti` + `ASIO_NO_TYPEID`, macOS
+142/142 steps, Windows MSVC `/GR-` 145/145 steps with no STL1003 and nothing from `Any.hpp` under `/W4 /WX` — ctest
+2435 run / 2432 passed / 3 skipped on each.
 - [ ] Flip the default of `EMERAUDE_DISABLE_RTTI` to `On` **only after** the engine and projet-alpha items are closed
       (`rtti-removal` in emeraude-engine, `actor-trait-queries-without-rtti` in projet-alpha); document the flip in
       `docs/integration.md` and `docs/error-handling.md`.
