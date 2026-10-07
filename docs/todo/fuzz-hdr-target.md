@@ -2,7 +2,7 @@
 id: fuzz-hdr-target
 title: Add a fuzz_hdr target for FileFormatHDR (RGBE)
 status: open
-priority: unranked
+priority: medium
 scope: src/Fuzzing, src/PixelFactory/FileFormatHDR.hpp
 opened: 2026-08-28
 tags: [fuzzing, pixelfactory, hardening]

@@ -2,7 +2,7 @@
 id: rtti-free-observer-payload
 title: RTTI-free foundation — replace the std::any Observer payload, arm ASIO_NO_TYPEID
 status: open
-priority: unranked
+priority: low
 scope: src/Observer*, cmake/SetupASIO.cmake, compile policy (EMERAUDE_DISABLE_RTTI)
 opened: 2026-09-08
 tags: [architecture, cpp, rtti, cascade-wide]

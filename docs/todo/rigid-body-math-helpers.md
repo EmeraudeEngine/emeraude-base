@@ -2,7 +2,7 @@
 id: rigid-body-math-helpers
 title: Rigid-body math helpers — inertia tensors of the primitives, orientation integration
 status: in-progress
-priority: unranked
+priority: medium
 scope: Math (Matrix, Quaternion, CartesianFrame)
 opened: 2026-10-01
 tags: [physics, math, physics-overhaul]

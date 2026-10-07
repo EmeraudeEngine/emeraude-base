@@ -2,7 +2,7 @@
 id: measure-aggressive-optimization
 title: Measure EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION before moving its default
 status: open
-priority: unranked
+priority: low
 scope: compile policy (CMakeLists.txt, EMERAUDE_COMPILE_OPTIONS)
 opened: 2026-09-08
 tags: [performance, build, cpp]

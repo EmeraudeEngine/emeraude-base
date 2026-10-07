@@ -2,7 +2,7 @@
 id: non-throwing-thread-start
 title: A thread that cannot start aborts the process (std::thread's constructor throws)
 status: open
-priority: unranked
+priority: high
 scope: a new base thread helper (Threading / RAII), then every std::thread construction of the cascade
 opened: 2026-10-01
 tags: [threads, exceptions, robustness, cascade]

@@ -2,7 +2,7 @@
 id: event-trait-join-under-lock
 title: EventTrait destroys (joins) its timers while holding the mutex a timer callback may take
 status: open
-priority: unranked
+priority: high
 scope: Time (EventTrait, TimedEvent)
 opened: 2026-09-30
 tags: [threads, deadlock, lifetime, robustus]

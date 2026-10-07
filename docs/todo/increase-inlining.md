@@ -2,7 +2,7 @@
 id: increase-inlining
 title: Increase inlining where it pays
 status: in-progress
-priority: unranked
+priority: low
 scope: cascade-wide (emeraude-base first)
 opened: unknown
 tags: [performance, cpp]

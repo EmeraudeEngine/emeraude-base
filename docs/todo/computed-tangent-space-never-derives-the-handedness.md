@@ -2,7 +2,7 @@
 id: computed-tangent-space-never-derives-the-handedness
 title: The computed tangent space never derives the bitangent handedness — a mirrored UV island lights its normal map backwards
 status: open
-priority: unranked
+priority: high
 scope: src/VertexFactory/Shape.hpp (computeTriangleTangent, computeVertexTangent, computeVertexTBNSpace) and their callers
 opened: 2026-10-06
 tags: [vertex-factory, tangent-space, owner-decision]

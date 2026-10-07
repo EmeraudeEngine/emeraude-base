@@ -2,7 +2,7 @@
 id: shape-casts-with-hit-normal
 title: Ray and shape casts that answer the hit distance and the surface normal
 status: in-progress
-priority: unranked
+priority: medium
 scope: Math/Space3D/Intersections, Math/Space3D/Collisions
 opened: 2026-10-01
 tags: [physics, collisions, character-controller, physics-overhaul]

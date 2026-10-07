@@ -2,7 +2,7 @@
 id: runaway-nested-parentheses
 title: Expressions wrapped in dozens of nested parentheses by an old automated fix
 status: open
-priority: unranked
+priority: low
 scope: Math/Matrix, Math/Space3D/SAT, PixelFactory/Color, PixelFactory/Processor, Algorithms/PerlinNoise, VertexFactory/Shape, VertexFactory/TextureCoordinates
 opened: 2026-10-01
 tags: [cleanup, readability]

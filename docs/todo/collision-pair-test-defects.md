@@ -2,7 +2,7 @@
 id: collision-pair-test-defects
 title: Collision pair tests — wrong deep cases, approximate closest points, a reversed MTV
 status: open
-priority: unranked
+priority: high
 scope: Math/Space3D/Collisions, Math/Space3D/SAT.hpp
 opened: 2026-10-01
 tags: [physics, collisions, physics-overhaul]

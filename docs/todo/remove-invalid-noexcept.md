@@ -2,7 +2,7 @@
 id: remove-invalid-noexcept
 title: Remove every invalid noexcept keyword
 status: in-progress
-priority: unranked
+priority: low
 scope: cascade-wide (emeraude-base first)
 opened: unknown
 tags: [cpp, hygiene]

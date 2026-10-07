@@ -2,7 +2,7 @@
 id: cartesian-frame-angle-getters
 title: Math — CartesianFrame::getPitchAngle/getYawAngle/getRollAngle are not Euler angles
 status: open
-priority: unranked
+priority: high
 scope: Math / CartesianFrame
 opened: 2026-09-29
 tags: [math, naming, transforms]

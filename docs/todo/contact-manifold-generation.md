@@ -2,7 +2,7 @@
 id: contact-manifold-generation
 title: Contact manifolds — 1 to 4 contact points with feature ids for every solid pair
 status: in-progress
-priority: unranked
+priority: medium
 scope: Math/Space3D/Collisions, Math/OrientedCuboid
 opened: 2026-10-01
 tags: [physics, collisions, physics-overhaul]

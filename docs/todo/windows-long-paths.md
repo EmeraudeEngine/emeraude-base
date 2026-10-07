@@ -2,7 +2,7 @@
 id: windows-long-paths
 title: File IO fails on Windows for paths longer than MAX_PATH (260 characters)
 status: open
-priority: unranked
+priority: high
 scope: IO (filePutContents and the other IO wrappers), the applications' Windows manifest
 opened: 2026-10-01
 tags: [io, windows, paths]

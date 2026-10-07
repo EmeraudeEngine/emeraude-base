@@ -2,7 +2,7 @@
 id: std-move-function-args
 title: Use std::move on function arguments where it pays
 status: in-progress
-priority: unranked
+priority: low
 scope: cascade-wide (emeraude-base first)
 opened: unknown
 tags: [performance, cpp]

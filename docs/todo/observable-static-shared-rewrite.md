@@ -2,7 +2,7 @@
 id: observable-static-shared-rewrite
 title: Rewrite the Observer/Observable pattern for static and shared objects
 status: open
-priority: unranked
+priority: low
 scope: src/Observer*
 opened: unknown
 tags: [architecture, cpp]
