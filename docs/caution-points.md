@@ -497,8 +497,15 @@ boundary loops). Tests: `computedTangentFrameOfTheReferenceQuad` / `…OfAMirror
 the hollowed cube on half its triangles, one cap of the cylinder and the cone. Quad, cuboid, sphere and geodesic
 sphere are unchanged. **Rule:** a tangent from UVs needs the sign of their determinant; never normalise it away.
 Runtime proof (2026-10-07, projet-alpha `normal-map-debug --demo-options 4,0,3`, the torus, under the right / left omnis): its joints read exactly like the unmirrored reference quad's — the wall facing the lamp lit (~230), the other dark (0-20); 0 VUID.
-Also measured: `ShapeDecimator` folds a few UVs over (27 of 448 triangles on a 50 % sphere), whose frames then side
-with the fold-over.
+⚠️ **`ShapeDecimator` folded UVs over** (27 of 448 triangles on a 50 % sphere; FIXED 2026-10-07, base item
+decimator-uv-fold-overs): mostly NOT the collapses — its work copy is deduplicated by POSITION, so a UV seam's two
+vertices were one, and the output gave it ONE UV: every triangle beside the seam spanned the texture backwards (~30 on a
+32 × 16 sphere at ANY ratio). The output now takes each corner's UV from its source triangle (`CornerUVTable`: the work
+triangles keep the source order and corner slots) and splits the seam again (one output vertex per vertex and UV); and a
+collapse that would reverse a neighbouring triangle's UV winding is refused (`checkUVFoldOver()`, the UV counterpart of
+the 3D flip check) — 3 of 192 at 25 % before it. Test `decimationNeverFoldsTheUVsOver` (0.95 / 0.75 / 0.5 / 0.25: 0
+folded, the same triangle counts reached). **Rule:** a mesh simplified on a position-merged copy gives its output the
+attributes PER CORNER, never per merged vertex.
 
 ### ⚠️⚠️ `Shape::transform()` zeroed every bitangent — a `Vector< 4 >` product picked the HANDEDNESS overload (2026-10-06, FIXED)
 

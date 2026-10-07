@@ -28,7 +28,6 @@
 
 /* STL inclusions. */
 #include <cmath>
-#include <vector>
 
 /* Local inclusions. */
 #include "VertexFactory/ShapeDecimator.hpp"
@@ -164,40 +163,47 @@ TEST(VertexFactoryShapeDecimator, decimatedVerticesKeepTheTangentHandedness)
 	ASSERT_GT(decimated.vertices().size(), 0U);
 	ASSERT_LT(decimated.triangles().size(), sphere.triangles().size());
 
-	/* The decimator recomputes the frame of its output from the UVs, and folds a few of them over (27 of 448 triangles
-	 * here, measured 2026-10-07): a vertex next to a fold-over may side with it. A vertex whose triangles are ALL on the
-	 * island's mirrored side must be -1. */
-	std::vector< bool > touchesAnUnmirroredTriangle(decimated.vertices().size(), false);
-
-	for ( const auto & triangle : decimated.triangles() )
-	{
-		if ( triangle.surfaceTangentHandedness() > 0.0F )
-		{
-			for ( uint32_t corner = 0; corner < 3; ++corner )
-			{
-				touchesAnUnmirroredTriangle[triangle.vertexIndex(corner)] = true;
-			}
-		}
-	}
-
-	size_t inside = 0;
+	/* Every vertex: the decimator no longer folds UVs over (base item decimator-uv-fold-overs, 2026-10-07 — until then
+	 * a vertex next to a fold-over could side with it). */
 	size_t lost = 0;
 
-	for ( size_t index = 0; index < decimated.vertices().size(); ++index )
+	for ( const auto & vertex : decimated.vertices() )
 	{
-		if ( touchesAnUnmirroredTriangle[index] )
-		{
-			continue;
-		}
-
-		++inside;
-
-		if ( decimated.vertices()[index].tangentHandedness() != -1.0F )
+		if ( vertex.tangentHandedness() != -1.0F )
 		{
 			++lost;
 		}
 	}
 
-	EXPECT_GT(inside * 10, decimated.vertices().size() * 8) << "most of the island must stay mirrored";
-	EXPECT_EQ(lost, 0U) << lost << " of " << inside << " vertices inside the mirrored island lost their handedness in the decimation.";
+	EXPECT_EQ(lost, 0U) << lost << " of " << decimated.vertices().size() << " vertices lost their handedness in the decimation.";
+}
+
+/*
+ * A decimated LOD must not fold its UVs over: a triangle whose UV winding is reversed maps its texture mirrored and
+ * turns its tangent frame around (base item decimator-uv-fold-overs, 2026-10-07: 27 of 448 triangles on a 50 % sphere).
+ * The source sphere has no mirrored island, so every output triangle must keep the source's winding.
+ */
+TEST(VertexFactoryShapeDecimator, decimationNeverFoldsTheUVsOver)
+{
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16, ShapeBuilderOptions< float >{true, true, false, false, false});
+
+	for ( const auto ratio : {0.95F, 0.75F, 0.5F, 0.25F} )
+	{
+		const ShapeDecimator< float, uint32_t > decimator{sphere, ratio};
+		const auto decimated = decimator.decimate();
+
+		ASSERT_GT(decimated.triangles().size(), 0U);
+
+		size_t folded = 0;
+
+		for ( const auto & triangle : decimated.triangles() )
+		{
+			if ( triangle.surfaceTangentHandedness() < 0.0F )
+			{
+				++folded;
+			}
+		}
+
+		EXPECT_EQ(folded, 0U) << folded << " of " << decimated.triangles().size() << " triangles folded over at a ratio of " << ratio;
+	}
 }

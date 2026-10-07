@@ -33,10 +33,12 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <map>
 #include <queue>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
@@ -123,6 +125,10 @@ namespace EmEn::Base::VertexFactory
 
 				initializeData(vertices, triangles, workShape);
 
+				/* Each corner's UV in its own chart (see CornerUVTable): what the output keeps, and what a collapse must
+				 * not turn over. */
+				const CornerUVTable cornerUVs{m_source, workShape};
+
 				/* Compute initial quadrics. */
 				computeInitialQuadrics(vertices, triangles);
 
@@ -165,6 +171,13 @@ namespace EmEn::Base::VertexFactory
 
 					/* Sliver triangle check. */
 					if ( checkSliverCreation(candidate.v0, candidate.v1, candidate.optimalPos, vertices, triangles) )
+					{
+						continue;
+					}
+
+					/* UV fold-over check: a collapse must not reverse a triangle's UV winding (its texture mirrored, its
+					 * tangent frame turned around) — the 3D flip check above cannot see it. */
+					if ( checkUVFoldOver(candidate.v0, candidate.v1, vertices, triangles, cornerUVs) )
 					{
 						continue;
 					}
@@ -257,7 +270,7 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
-				auto output = buildOutputShape(vertices, triangles, workShape);
+				auto output = buildOutputShape(vertices, triangles, workShape, cornerUVs);
 
 				/* Normal map baking: generate lightmap UVs, then bake high-poly normals. */
 				if ( m_normalMapResolution > 0 )
@@ -283,6 +296,9 @@ namespace EmEn::Base::VertexFactory
 			}
 
 		private:
+
+			/** @brief Two UVs of one vertex closer than this (squared) are the same UV (a seam is far wider). */
+			static constexpr vertex_data_t UVMatchToleranceSquared{static_cast< vertex_data_t >(1e-10)};
 
 			/* ---- Internal types ---- */
 
@@ -330,6 +346,102 @@ namespace EmEn::Base::VertexFactory
 				size_t srcTriIndex{0};
 				uint32_t groupIndex{0};
 				bool removed{false};
+			};
+
+			/**
+			 * @brief The UV of every triangle corner in its own chart. The work shape is deduplicated by POSITION, so a
+			 * vertex of a UV seam carries several UVs: the source triangle's corner tells which one (the work triangles
+			 * keep the source order and corner slots), and a corner whose vertex was collapsed into another takes, among
+			 * that vertex's UVs, the one nearest the corner's own.
+			 */
+			class CornerUVTable final
+			{
+				public:
+
+					/**
+					 * @brief Builds the table.
+					 * @param source The source shape (one vertex per (position, attributes)).
+					 * @param workShape Its position-deduplicated copy (same triangles, same order).
+					 */
+					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const Shape< vertex_data_t, index_data_t > & workShape) noexcept
+						: m_source{&source},
+						m_workShape{&workShape},
+						m_valid{source.triangles().size() == workShape.triangles().size()}
+					{
+						if ( !m_valid )
+						{
+							return;
+						}
+
+						m_vertexUVs.resize(workShape.vertices().size());
+
+						const auto & workTriangles = workShape.triangles();
+
+						for ( size_t t = 0; t < workTriangles.size(); ++t )
+						{
+							for ( index_data_t corner = 0; corner < 3; ++corner )
+							{
+								const auto & uv = this->sourceCornerUV(t, corner);
+								auto & known = m_vertexUVs[workTriangles[t].vertexIndex(corner)];
+
+								if ( std::ranges::none_of(known, [&uv] (const auto & other) { return (other - uv).lengthSquared() <= UVMatchToleranceSquared; }) )
+								{
+									known.push_back(uv);
+								}
+							}
+						}
+					}
+
+					/**
+					 * @brief Returns the UV of a triangle corner held by a given work vertex, and its index among that
+					 * vertex's UVs.
+					 * @param triangleIndex The source (and work) triangle index.
+					 * @param corner The corner slot, 0 to 2.
+					 * @param vertex The work vertex now at that corner.
+					 * @return std::pair< size_t, Math::Vector< 3, vertex_data_t > >
+					 */
+					[[nodiscard]]
+					std::pair< size_t, Math::Vector< 3, vertex_data_t > >
+					resolve (size_t triangleIndex, index_data_t corner, index_data_t vertex) const noexcept
+					{
+						if ( !m_valid || vertex >= m_vertexUVs.size() || m_vertexUVs[vertex].empty() )
+						{
+							return {0, m_workShape->vertices()[vertex].textureCoordinates()};
+						}
+
+						const auto & wanted = this->sourceCornerUV(triangleIndex, corner);
+						const auto & candidates = m_vertexUVs[vertex];
+						size_t best = 0;
+						auto bestDistance = (candidates[0] - wanted).lengthSquared();
+
+						for ( size_t index = 1; index < candidates.size(); ++index )
+						{
+							const auto distance = (candidates[index] - wanted).lengthSquared();
+
+							if ( distance < bestDistance )
+							{
+								best = index;
+								bestDistance = distance;
+							}
+						}
+
+						return {best, candidates[best]};
+					}
+
+				private:
+
+					[[nodiscard]]
+					const Math::Vector< 3, vertex_data_t > &
+					sourceCornerUV (size_t triangleIndex, index_data_t corner) const noexcept
+					{
+						return m_source->vertices()[m_source->triangles()[triangleIndex].vertexIndex(corner)].textureCoordinates();
+					}
+
+					/* Non-owning: the table lives inside decimate(), with both shapes. */
+					const Shape< vertex_data_t, index_data_t > * m_source{nullptr};
+					const Shape< vertex_data_t, index_data_t > * m_workShape{nullptr};
+					std::vector< std::vector< Math::Vector< 3, vertex_data_t > > > m_vertexUVs;
+					bool m_valid{false};
 			};
 
 			struct CollapseCandidate
@@ -887,6 +999,63 @@ namespace EmEn::Base::VertexFactory
 				return checkTriangles(v0, v1) || checkTriangles(v1, v0);
 			}
 
+			/**
+			 * @brief Returns whether collapsing v1 into v0 would reverse the UV winding of a triangle around v1 (v0 keeps
+			 * its UV: only the triangles that held v1 and not v0 change their UVs).
+			 * @param v0 The surviving vertex.
+			 * @param v1 The removed vertex.
+			 * @param vertices The working vertices.
+			 * @param triangles The working triangles.
+			 * @param cornerUVs The corner UVs.
+			 * @return bool True when a UV fold-over would be created (the collapse is rejected).
+			 */
+			[[nodiscard]]
+			static
+			bool
+			checkUVFoldOver (index_data_t v0, index_data_t v1, const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, const CornerUVTable & cornerUVs) noexcept
+			{
+				const auto determinant = [] (const std::array< Math::Vector< 3, vertex_data_t >, 3 > & uv) noexcept {
+					return ((uv[1][Math::X] - uv[0][Math::X]) * (uv[2][Math::Y] - uv[0][Math::Y])) - ((uv[2][Math::X] - uv[0][Math::X]) * (uv[1][Math::Y] - uv[0][Math::Y]));
+				};
+
+				for ( const auto triIdx : vertices[v1].adjacentTris )
+				{
+					const auto & tri = triangles[triIdx];
+
+					if ( tri.removed || tri.v[0] == v0 || tri.v[1] == v0 || tri.v[2] == v0 )
+					{
+						continue;
+					}
+
+					std::array< Math::Vector< 3, vertex_data_t >, 3 > before{};
+					std::array< Math::Vector< 3, vertex_data_t >, 3 > after{};
+					auto beforeIt = before.begin();
+					auto afterIt = after.begin();
+					index_data_t corner = 0;
+
+					for ( const auto vertex : tri.v )
+					{
+						*beforeIt = cornerUVs.resolve(tri.srcTriIndex, corner, vertex).second;
+						*afterIt = vertex == v1 ? cornerUVs.resolve(tri.srcTriIndex, corner, v0).second : *beforeIt;
+
+						++beforeIt;
+						++afterIt;
+						++corner;
+					}
+
+					const auto areaBefore = determinant(before);
+					const auto areaAfter = determinant(after);
+
+					/* A triangle already degenerate in UV space has no winding to keep. */
+					if ( areaBefore != 0 && (areaAfter == 0 || (areaBefore > 0) != (areaAfter > 0)) )
+					{
+						return true;
+					}
+				}
+
+				return false;
+			}
+
 			/* ---- Priority queue ---- */
 
 			[[nodiscard]]
@@ -928,12 +1097,21 @@ namespace EmEn::Base::VertexFactory
 
 			[[nodiscard]]
 			Shape< vertex_data_t, index_data_t >
-			buildOutputShape (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, const Shape< vertex_data_t, index_data_t > & workShape) const noexcept
+			buildOutputShape (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, const Shape< vertex_data_t, index_data_t > & workShape, const CornerUVTable & cornerUVs) const noexcept
 			{
 				Shape< vertex_data_t, index_data_t > output;
 
-				/* Build vertex compaction map. */
-				std::unordered_map< index_data_t, index_data_t > vertexMap;
+				/* ⚠️ UVs PER CORNER, from the triangle's own chart. The work shape is deduplicated by POSITION only, so a
+				 * vertex of a UV seam (a sphere's u = 0 / u = 1 column) is ONE work vertex: giving it one UV made every
+				 * triangle on the other side of the seam span the whole texture backwards — ~30 folded triangles on a
+				 * 32 × 16 sphere at ANY ratio (base item decimator-uv-fold-overs, 2026-10-07). The work triangles keep the
+				 * source order and corner slots, so the source triangle's corner gives the right UV; a corner whose vertex
+				 * was collapsed into another takes, among that vertex's UVs, the one nearest the corner's own. One output
+				 * vertex per (work vertex, UV): the seam is split again. */
+				/* Output vertices keyed by (work vertex, UV index). */
+				std::map< std::pair< index_data_t, size_t >, index_data_t > vertexMap;
+				/* Three per triangle: the output vertex of each corner. */
+				std::vector< index_data_t > outputCorners(triangles.size() * 3);
 
 				for ( size_t t = 0; t < triangles.size(); ++t )
 				{
@@ -942,23 +1120,33 @@ namespace EmEn::Base::VertexFactory
 						continue;
 					}
 
-					for ( int i = 0; i < 3; ++i )
-					{
-						const auto srcIdx = triangles[t].v[i];
+					const auto & triangle = triangles[t];
+					index_data_t corner = 0;
 
-						if ( vertexMap.contains(srcIdx) )
+					for ( const auto srcIdx : triangle.v )
+					{
+						const auto slot = (t * 3) + corner;
+						const auto [uvIndex, uv] = cornerUVs.resolve(triangle.srcTriIndex, corner, srcIdx);
+						const auto key = std::make_pair(srcIdx, uvIndex);
+
+						++corner;
+
+						if ( const auto known = vertexMap.find(key); known != vertexMap.end() )
 						{
+							outputCorners[slot] = known->second;
+
 							continue;
 						}
 
 						const auto & srcVertex = workShape.vertices()[vertices[srcIdx].srcIndex];
 						const auto & newPos = vertices[srcIdx].position;
 
-						const auto dstIdx = output.saveVertex(newPos, srcVertex.normal(), srcVertex.textureCoordinates());
+						const auto dstIdx = output.saveVertex(newPos, srcVertex.normal(), uv);
 						output.vertices()[dstIdx].setTangent(srcVertex.tangent());
 						output.vertices()[dstIdx].setTangentHandedness(srcVertex.tangentHandedness());
 
-						vertexMap[srcIdx] = dstIdx;
+						vertexMap.emplace(key, dstIdx);
+						outputCorners[slot] = dstIdx;
 					}
 				}
 
@@ -989,9 +1177,9 @@ namespace EmEn::Base::VertexFactory
 				{
 					const auto & tri = triangles[triIdx];
 
-					const auto dv0 = vertexMap[tri.v[0]];
-					const auto dv1 = vertexMap[tri.v[1]];
-					const auto dv2 = vertexMap[tri.v[2]];
+					const auto dv0 = outputCorners[(triIdx * 3) + 0];
+					const auto dv1 = outputCorners[(triIdx * 3) + 1];
+					const auto dv2 = outputCorners[(triIdx * 3) + 2];
 
 					const auto c0 = output.saveVertexColor({});
 					const auto c1 = output.saveVertexColor({});
