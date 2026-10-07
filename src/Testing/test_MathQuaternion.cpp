@@ -531,6 +531,21 @@ TYPED_TEST(MathQuaternion, EulerAnglesZero)
 	ASSERT_NEAR(quat[W], TypeParam{1}, static_cast< TypeParam >(0.01));
 }
 
+TYPED_TEST(MathQuaternion, EulerAnglesOfANearlyUnitQuaternionAtTheGimbalLockAreFinite)
+{
+	/* A 90° rotation about Y whose components are a few ulps too long — what accumulated rotations leave: the middle
+	 * angle's sine, 2 (w·y − x·z), lands a hair past 1, and an unclamped asin() answered NaN. */
+	const auto component = std::nextafter(std::nextafter(std::sqrt(TypeParam{0.5}), TypeParam{1}), TypeParam{1});
+	const Quaternion< TypeParam > quat{TypeParam{0}, component, TypeParam{0}, component};
+
+	const auto angles = quat.eulerAngles();
+
+	ASSERT_TRUE(std::isfinite(angles[X]));
+	ASSERT_TRUE(std::isfinite(angles[Y]));
+	ASSERT_TRUE(std::isfinite(angles[Z]));
+	ASSERT_NEAR(angles[Y], std::numbers::pi_v< TypeParam > / 2, static_cast< TypeParam >(1.0e-3));
+}
+
 TYPED_TEST(MathQuaternion, EulerAnglesRoundTrip)
 {
 	const Vector< 3, TypeParam > inputAngles{

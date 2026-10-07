@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -677,7 +678,8 @@ namespace EmEn::Base::Math
 				auto sqy = m_data[1] * m_data[1];
 				auto sqz = m_data[2] * m_data[2];
 
-				vector[Y] = static_cast< precision_t >(std::asin(Two * ((m_data[3] * m_data[1]) - (m_data[0] * m_data[2]))));
+				/* Clamped: rounding takes the sine a hair past ±1 at a ±90° middle angle, and asin() answers NaN there. */
+				vector[Y] = static_cast< precision_t >(std::asin(std::clamp(Two * ((m_data[3] * m_data[1]) - (m_data[0] * m_data[2])), -One, One)));
 
 				if ( PiOver2 - std::abs(vector[Y]) > std::numeric_limits< precision_t >::epsilon() )
 				{

@@ -747,72 +747,95 @@ TYPED_TEST(MathCartesianFrame, LookAtTargetFlipped)
 // ANGLE GETTERS
 // ============================================================================
 
-TYPED_TEST(MathCartesianFrame, GetPitchAngle)
+TYPED_TEST(MathCartesianFrame, EulerAnglesOfTheIdentityFrameAreZero)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
+	if constexpr ( std::is_floating_point_v< TypeParam > )
 	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+		const auto frame = CartesianFrame< TypeParam >{};
+		constexpr auto Tolerance = static_cast< TypeParam >(1.0e-5);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-
-		// Default frame: backward = (0, 0, 1), negativeZ = (0, 0, -1)
-		// Angle between them is 180 degrees (π radians)
-		const auto initialAngle = frame.getPitchAngle();
-		ASSERT_NEAR(initialAngle, std::numbers::pi_v< TypeParam >, static_cast< TypeParam >(0.01));
-
-		// After pitching -90 degrees, backward should point toward negativeZ
-		frame.pitch(Radian< TypeParam >(-90), true);
-		const auto pitchedAngle = frame.getPitchAngle();
-
-		// After -90 degree pitch, backward should be closer to negativeZ
-		ASSERT_LT(pitchedAngle, initialAngle);
+		/* The getters used to answer the angle between the backward axis and -Z / +X / +Y: 180° / 90° / 90° here. */
+		ASSERT_NEAR(frame.getPitchAngle(), TypeParam{0}, Tolerance);
+		ASSERT_NEAR(frame.getYawAngle(), TypeParam{0}, Tolerance);
+		ASSERT_NEAR(frame.getRollAngle(), TypeParam{0}, Tolerance);
 	}
 }
 
-TYPED_TEST(MathCartesianFrame, GetYawAngle)
+TYPED_TEST(MathCartesianFrame, EulerAnglesOfASingleAxisRotation)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
+	if constexpr ( std::is_floating_point_v< TypeParam > )
 	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+		constexpr auto Tolerance = static_cast< TypeParam >(1.0e-4);
+		const auto angle = Radian< TypeParam >(35);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
+		{
+			auto frame = CartesianFrame< TypeParam >{};
+			frame.pitch(angle, true);
 
-		const auto initialAngle = frame.getYawAngle();
+			ASSERT_NEAR(frame.getPitchAngle(), angle, Tolerance);
+			ASSERT_NEAR(frame.getYawAngle(), TypeParam{0}, Tolerance);
+			ASSERT_NEAR(frame.getRollAngle(), TypeParam{0}, Tolerance);
+		}
 
-		// Default backward is Z+, angle to X+ should be 90 degrees
-		ASSERT_NEAR(initialAngle, Radian< TypeParam >(90), static_cast< TypeParam >(0.01));
+		{
+			auto frame = CartesianFrame< TypeParam >{};
+			frame.yaw(-angle, true);
+
+			ASSERT_NEAR(frame.getPitchAngle(), TypeParam{0}, Tolerance);
+			ASSERT_NEAR(frame.getYawAngle(), -angle, Tolerance);
+			ASSERT_NEAR(frame.getRollAngle(), TypeParam{0}, Tolerance);
+		}
+
+		{
+			auto frame = CartesianFrame< TypeParam >{};
+			frame.roll(angle, true);
+
+			ASSERT_NEAR(frame.getPitchAngle(), TypeParam{0}, Tolerance);
+			ASSERT_NEAR(frame.getYawAngle(), TypeParam{0}, Tolerance);
+			ASSERT_NEAR(frame.getRollAngle(), angle, Tolerance);
+		}
 	}
 }
 
-TYPED_TEST(MathCartesianFrame, GetRollAngle)
+TYPED_TEST(MathCartesianFrame, EulerAnglesAtTheGimbalLockAreFinite)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
+	if constexpr ( std::is_floating_point_v< TypeParam > )
 	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+		constexpr auto Tolerance = static_cast< TypeParam >(1.0e-3);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
+		for ( const auto degrees : {TypeParam{90}, TypeParam{-90}} )
+		{
+			auto frame = CartesianFrame< TypeParam >{};
+			frame.yaw(Radian< TypeParam >(degrees), true);
 
-		const auto angle = frame.getRollAngle();
-
-		// Default backward is Z+, angle to Y+ should be 90 degrees
-		ASSERT_NEAR(angle, Radian< TypeParam >(90), static_cast< TypeParam >(0.01));
+			ASSERT_TRUE(std::isfinite(frame.getPitchAngle()));
+			ASSERT_TRUE(std::isfinite(frame.getRollAngle()));
+			ASSERT_NEAR(frame.getYawAngle(), Radian< TypeParam >(degrees), Tolerance);
+		}
 	}
 }
+
+TYPED_TEST(MathCartesianFrame, EulerAnglesOfAComposedRotationFollowTheZYXOrder)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		constexpr auto Tolerance = static_cast< TypeParam >(1.0e-4);
+		const auto pitchAngle = Radian< TypeParam >(20);
+		const auto yawAngle = Radian< TypeParam >(-50);
+		const auto rollAngle = Radian< TypeParam >(70);
+
+		/* World axes, X first, then Y, then Z: R = Rz · Ry · Rx, the ZYX Tait-Bryan order. */
+		auto frame = CartesianFrame< TypeParam >{};
+		frame.rotate(pitchAngle, Vector< 3, TypeParam >::positiveX(), false);
+		frame.rotate(yawAngle, Vector< 3, TypeParam >::positiveY(), false);
+		frame.rotate(rollAngle, Vector< 3, TypeParam >::positiveZ(), false);
+
+		ASSERT_NEAR(frame.getPitchAngle(), pitchAngle, Tolerance);
+		ASSERT_NEAR(frame.getYawAngle(), yawAngle, Tolerance);
+		ASSERT_NEAR(frame.getRollAngle(), rollAngle, Tolerance);
+	}
+}
+
 
 // ============================================================================
 // MATRIX GETTERS

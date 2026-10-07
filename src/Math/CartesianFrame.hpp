@@ -562,36 +562,43 @@ namespace EmEn::Base::Math
 			}
 
 			/**
-			 * @brief Returns the pitch (X) angle of the frame in radian.
+			 * @brief Returns the pitch of the frame: its rotation about X, in radian.
+			 * @note The three getters are the ZYX Tait-Bryan decomposition of the orientation, R = Rz(roll) · Ry(yaw) ·
+			 * Rx(pitch) (Quaternion::eulerAngles()): an untouched frame answers 0 / 0 / 0. ⚠️ The middle angle is the YAW
+			 * (Y is up): at a yaw of ±90° the decomposition is singular (gimbal lock), and the pitch and the roll share
+			 * the rotation left (the pitch reads 0 there). Until 2026-10-07 they answered the angle between the backward
+			 * axis and -Z / +X / +Y (180° / 90° / 90° for an untouched frame).
 			 * @return precision_t
 			 */
 			[[nodiscard]]
 			precision_t
-			getPitchAngle () const noexcept
+			getPitchAngle () const noexcept requires (std::is_floating_point_v< precision_t >)
 			{
-				return Vector< 3, precision_t >::angle(m_backward, Vector< 3, precision_t >::negativeZ());
+				return this->toQuaternion().eulerAngles()[X];
 			}
 
 			/**
-			 * @brief Returns the yaw (Y) angle of the frame in radian.
+			 * @brief Returns the yaw of the frame: its rotation about Y (up), in radian, in [-π/2, π/2].
+			 * @note ZYX Tait-Bryan: see getPitchAngle().
 			 * @return precision_t
 			 */
 			[[nodiscard]]
 			precision_t
-			getYawAngle () const noexcept
+			getYawAngle () const noexcept requires (std::is_floating_point_v< precision_t >)
 			{
-				return Vector< 3, precision_t >::angle(m_backward, Vector< 3, precision_t >::positiveX());
+				return this->toQuaternion().eulerAngles()[Y];
 			}
 
 			/**
-			 * @brief Returns the roll (Z) angle of the frame in radian.
+			 * @brief Returns the roll of the frame: its rotation about Z, in radian.
+			 * @note ZYX Tait-Bryan: see getPitchAngle().
 			 * @return precision_t
 			 */
 			[[nodiscard]]
 			precision_t
 			getRollAngle () const noexcept requires (std::is_floating_point_v< precision_t >)
 			{
-				return Vector< 3, precision_t >::angle(m_backward, Vector< 3, precision_t >::positiveY());
+				return this->toQuaternion().eulerAngles()[Z];
 			}
 
 			/**

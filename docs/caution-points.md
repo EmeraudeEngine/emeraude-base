@@ -225,6 +225,20 @@ headers now prefix every local constant per file (`CastContactTolerance`, `BoxBo
 > `2 atan2(sin(angle/2), w)`, exact for small angles and unchanged for large ones (test
 > `MathRigidBody.aTinyRotationKeepsItsAngle`). Any other `acos` of a near-1 cosine has the same trap.
 
+### `CartesianFrame::getPitchAngle()` / `getYawAngle()` / `getRollAngle()` were NOT Euler angles (2026-10-07, FIXED)
+
+They answered the angle between the backward axis and -Z / +X / +Y: 180° / 90° / 90° for an untouched frame (found by
+the engine's editor panel, 2026-09-29). Owner decision: real Tait-Bryan angles. They now answer the components of
+`toQuaternion().eulerAngles()`, the ZYX order R = Rz(roll) · Ry(yaw) · Rx(pitch) — 0 / 0 / 0 for an untouched frame
+(tests `MathCartesianFrame.EulerAngles*`). ⚠️ The MIDDLE angle is the yaw (Y is up): at a yaw of ±90° the
+decomposition is singular and the pitch reads 0, the roll carrying what is left. Each getter converts the frame to a
+quaternion: read the three at once through `toQuaternion().eulerAngles()`.
+
+Found on the way: `Quaternion::eulerAngles()` took `asin()` of the middle sine unclamped; a 90° rotation whose
+quaternion is a few ulps too long (accumulated rotations) gave NaN for all three angles. Clamped to [-1, 1] (test
+`MathQuaternion.EulerAnglesOfANearlyUnitQuaternionAtTheGimbalLockAreFinite`, failing before). Same family as the
+`acos` above: an inverse trigonometric function of a computed sine or cosine takes a clamp.
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate
