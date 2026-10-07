@@ -1,7 +1,7 @@
 ---
 id: windows-long-paths
 title: File IO fails on Windows for paths longer than MAX_PATH (260 characters)
-status: open
+status: in-progress
 priority: high
 scope: IO (filePutContents and the other IO wrappers), the applications' Windows manifest
 opened: 2026-10-01
@@ -24,6 +24,10 @@ there were 0 errors. Neither the `\\?\` prefix nor a `longPathAware` application
 The failure is handled (traced, the shader still runs), and the default `%LOCALAPPDATA%\…\shader-binaries\` paths
 (the longest name is ~101 characters) stay under the limit. A long user profile path or a deep cache / data
 directory would hit it in any IO (caches, captures, settings).
+
+## Owner decision (2026-10-07)
+
+BOTH: `\\?\`-prefixed absolute normalized paths inside the base `IO::` wrappers on Windows, AND a `longPathAware` manifest in projet-alpha.
 
 ## What remains
 

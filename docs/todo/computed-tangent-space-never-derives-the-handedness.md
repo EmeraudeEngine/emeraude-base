@@ -1,7 +1,7 @@
 ---
 id: computed-tangent-space-never-derives-the-handedness
 title: The computed tangent space never derives the bitangent handedness — a mirrored UV island lights its normal map backwards
-status: open
+status: in-progress
 priority: high
 scope: src/VertexFactory/Shape.hpp (computeTriangleTangent, computeVertexTangent, computeVertexTBNSpace) and their callers
 opened: 2026-10-06
@@ -25,6 +25,10 @@ retain their OLD handedness, although the frame is recomputed from the NEW UVs �
 
 Read from the code, not measured. A file carrying its tangents (glTF `TANGENT` vec4, the native format) is not
 affected.
+
+## Owner decision (2026-10-07)
+
+Derive the handedness from the UV winding (Lengyel 2001 / MikkTSpace): per triangle the sign of (Δu1·Δv2 − Δu2·Δv1), per vertex the sign of its triangles.
 
 ## What remains — owner decision first
 

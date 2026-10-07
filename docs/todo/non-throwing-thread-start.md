@@ -1,7 +1,7 @@
 ---
 id: non-throwing-thread-start
 title: A thread that cannot start aborts the process (std::thread's constructor throws)
-status: open
+status: in-progress
 priority: high
 scope: a new base thread helper (Threading / RAII), then every std::thread construction of the cascade
 opened: 2026-10-01
@@ -27,6 +27,10 @@ The sites, about ten:
   within 6 s fail `NIM_ADD`. It has no caller today.
 
 The owner chose a base helper and a dedicated pass over a change inside section 14.
+
+## Owner decision (2026-10-07)
+
+An RAII `Base::Thread`: `[[nodiscard]] bool start(callable)`, join on destruction or an explicit `detach()`, on `pthread_create` (POSIX) and `_beginthreadex` (Windows); a failed start is a value, each site decides.
 
 ## What remains
 

@@ -1,7 +1,7 @@
 ---
 id: event-trait-join-under-lock
 title: EventTrait destroys (joins) its timers while holding the mutex a timer callback may take
-status: open
+status: in-progress
 priority: high
 scope: Time (EventTrait, TimedEvent)
 opened: 2026-09-30
@@ -24,6 +24,10 @@ Found on 2026-09-30 while fixing a use-after-free in projet-alpha (a scene timer
 
 No caller does either today (the only engine-side user, projet-alpha's `LightenMarbles`, does not touch the
 timer API from its callback). Nothing has deadlocked yet.
+
+## Owner decision (2026-10-07)
+
+Destroy outside the lock; a callback that destroys its OWN timer is DEFERRED (the timer is marked, its thread exits after the callback returns — no self-join).
 
 ## What remains
 

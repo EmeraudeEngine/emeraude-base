@@ -1,7 +1,7 @@
 ---
 id: process-cpu-time-resolution-contract
 title: processCPUTimeNanoseconds() promises a resolution Windows does not have
-status: open
+status: in-progress
 priority: high
 scope: src/Time/Time.cpp + src/Testing/test_Debug.cpp
 opened: 2026-09-15
@@ -34,6 +34,10 @@ The assertion is `EXPECT_GT(elapsed, 0U)` because of a **written claim that is f
 `test_Debug.cpp:38` says the timer *"now delegates to `Time::processCPUTimeNanoseconds()` —
 cross-platform and full-nanosecond"*. True on POSIX, false on Windows. Any fix that leaves that
 sentence standing will be re-broken by the next person who reads it.
+
+## Owner decision (2026-10-07)
+
+Options 1 + 2: document the Windows floor and EXPOSE the resolution next to the getter (a `processCPUTimeResolutionNanoseconds()`); the test asserts against it; the false comment of `test_Debug.cpp:38` is fixed. CPU time stays CPU time (no QueryPerformanceCounter).
 
 ## What remains
 
