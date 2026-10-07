@@ -57,6 +57,16 @@ namespace EmEn::Base::Hash
 	std::string sha256 (const std::string & input) noexcept;
 
 	/**
+	 * @brief Computes the HMAC-SHA-256 (RFC 2104) of a message, in lower-case hexadecimal.
+	 * @note Signs a request to a server sharing the key (e.g. the crash report endpoint of app_system).
+	 * @param key A reference to the secret key (any length; a key longer than 64 bytes is hashed first).
+	 * @param message A reference to the message.
+	 * @return std::string 64 hexadecimal characters.
+	 */
+	[[nodiscard]]
+	std::string hmacSha256 (const std::string & key, const std::string & message) noexcept;
+
+	/**
 	 * @brief Hash a string using SHA-2 (512 bits) algorithm.
 	 * @param input A reference to a string.
 	 * @return std::string.

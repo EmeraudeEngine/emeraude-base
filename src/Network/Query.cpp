@@ -74,13 +74,13 @@ namespace EmEn::Base::Network
 
 		for ( const auto & [key, value] : obj.m_variables )
 		{
-			auto encoded = PercentEncoding::encode(key, PercentEncoding::Component::Query);
+			auto encoded = PercentEncoding::encode(key, PercentEncoding::Component::QueryVariable);
 
 			/* A value-less key is emitted bare (no trailing '='): matches how a
 			 * flag-style query ("?y") round-trips. */
 			if ( !value.empty() )
 			{
-				encoded += '=' + PercentEncoding::encode(value, PercentEncoding::Component::Query);
+				encoded += '=' + PercentEncoding::encode(value, PercentEncoding::Component::QueryVariable);
 			}
 
 			variables.emplace_back(std::move(encoded));

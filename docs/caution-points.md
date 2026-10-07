@@ -375,6 +375,13 @@ silently wrong. Found by engine resource sharing: the server's SHA-256 of a 1.6 
 `Hash.lengthFieldPastFourGigabits` hashes 512 MiB + 3 bytes against Python's `hashlib` (failed before, passes now).
 MD5 keeps its RFC 1321 two-word counter and was correct.
 
+### `Hash::hmacSha256()` returns HEX, keyed per RFC 2104 (2026-10-07)
+
+Added for app_system's crash report (a request signed with a shared secret). Lower-case hexadecimal like every other
+`Hash::` function; a key longer than the 64-byte block is hashed first, as RFC 2104 requires — a hand-rolled HMAC that
+truncates or zero-pads a long key instead signs differently from every server library. Proven by the RFC 4231
+vectors 1, 2 and 6 (`Hash.hmacSha256KnownAnswer`), and accepted by a server checking with Python's `hmac` (app_system `tools/bugreports-tests/server.py`).
+
 ## Network
 
 ### ⚠️⚠️ Closing a socket over unread bytes is a RST — and a RST loses the last answer on Windows (fixed Oct 2026)
@@ -405,6 +412,17 @@ local. It is never a member, however `mutable`. Fixed by threading it through
 
 ⚠️ The same shape is still present elsewhere in the cascade wherever a `const` method caches "the
 last error" on the object. Look for `mutable` next to a word like *last*, *cached*, *current*.
+
+### ⚠️⚠️ A query value holding `&`, `=` or `+` was re-emitted LITERALLY — a presigned S3 URL broke (2026-10-07, FIXED)
+
+`URI` stores the query DECODED (`Query::fromString()`) and re-encodes it on output (`URI::resource()`, the request
+target). The re-encoding used `Component::Query`, which keeps the sub-delimiters `& = + ;` literal — right for a whole
+query string, wrong for ONE key or value: `a%26b` came back as `a&b` (a new variable), `%3D` as `=`, and `%2B` as `+`,
+which S3 and every form decoder read as a SPACE. The `X-Amz-Security-Token` of an S3 presigned URL holds `%2B` and
+`%3D`: the PUT reached S3 with a token that no longer matched its signature. `Query`'s output now encodes each key and
+value with `Component::QueryVariable` (`Query` minus `& = + ;`). Order is the `std::map` order (sorted), not the
+original one — harmless for AWS SigV4 (it sorts too), but a scheme signing the raw query string as received would still
+break: such a URL needs the original string, not a `URI`. Test `NetworkURI.queryValueDelimitersSurviveARoundTrip`.
 
 ### ⚠️ Anything concatenated into a request line must be validated, not just the host
 

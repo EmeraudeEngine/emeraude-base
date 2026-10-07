@@ -64,6 +64,14 @@ TEST(Hash, sha256)
 	ASSERT_EQ(Hash::sha256("TestString"), "6dd79f2770a0bb38073b814a5ff000647b37be5abbde71ec9176c6ce0cb32a27");
 }
 
+TEST(Hash, hmacSha256KnownAnswer)
+{
+	/* RFC 4231 test cases 1, 2 and 6 (a key longer than the block is hashed first). */
+	ASSERT_EQ(Hash::hmacSha256(std::string(20, '\x0b'), "Hi There"), "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7");
+	ASSERT_EQ(Hash::hmacSha256("Jefe", "what do ya want for nothing?"), "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843");
+	ASSERT_EQ(Hash::hmacSha256(std::string(131, '\xaa'), "Test Using Larger Than Block-Size Key - Hash Key First"), "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54");
+}
+
 TEST(Hash, sha512)
 {
 	ASSERT_EQ(Hash::sha512("TestString"), "69dfd91314578f7f329939a7ea6be4497e6fe3909b9c8f308fe711d29d4340d90d77b7fdf359b7d0dbeed940665274f7ca514cd067895fdf59de0cf142b62336");

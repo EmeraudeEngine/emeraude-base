@@ -43,6 +43,7 @@ namespace EmEn::Base::Network::PercentEncoding
 		Path,       /* pchar + '/' */
 		Segment,    /* pchar (no '/': for a single path segment) */
 		Query,      /* pchar + '/' + '?' */
+		QueryVariable, /* Query without '&' '=' '+' ';': one key or value of a query (Network::Query). */
 		Fragment,   /* pchar + '/' + '?' */
 		Userinfo    /* unreserved + sub-delims + ':' */
 	};

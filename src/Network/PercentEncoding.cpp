@@ -85,6 +85,13 @@ namespace EmEn::Base::Network::PercentEncoding
 				return true;
 			}
 
+			/* NOTE: A key or value of a query is delimited by '&' and '=', and form decoders (S3 among them) read a
+			 * literal '+' as a space: a presigned URL whose token holds "%2B" or "%3D" broke once re-emitted. */
+			if ( component == Component::QueryVariable && (character == '&' || character == '=' || character == '+' || character == ';') )
+			{
+				return false;
+			}
+
 			/* sub-delims (RFC 3986 §2.2): "!$&'()*+,;=" — allowed in every component below. */
 			switch ( character )
 			{
@@ -107,6 +114,7 @@ namespace EmEn::Base::Network::PercentEncoding
 					return character == ':' || character == '@';
 
 				case Component::Query :
+				case Component::QueryVariable :
 				case Component::Fragment :
 					/* pchar + '/' + '?'. */
 					return character == ':' || character == '@' || character == '/' || character == '?';
