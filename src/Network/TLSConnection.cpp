@@ -27,7 +27,9 @@
 #include "TLSConnection.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <string>
 
@@ -43,6 +45,9 @@ namespace EmEn::Base::Network
 	{
 		constexpr auto Tag{"Network::TLSConnection"};
 		constexpr size_t MaxProxyResponseSize{8192};
+
+		/** @brief How long disconnect() waits for the peer's close_notify after sending its own. */
+		constexpr std::chrono::milliseconds CloseNotifyGrace{200};
 	}
 
 	TLSConnection::TLSConnection (asio::ssl::context & tlsContext, const TLSConnectionOptions & options) noexcept
@@ -546,19 +551,58 @@ namespace EmEn::Base::Network
 		return std::nullopt;
 	}
 
+	bool
+	TLSConnection::isOpenAndIdle () noexcept
+	{
+		if ( !m_connected )
+		{
+			return false;
+		}
+
+		auto & socket = m_stream.next_layer();
+		asio::error_code error;
+
+		socket.non_blocking(true, error);
+
+		if ( error )
+		{
+			return false;
+		}
+
+		std::array< char, 1 > probe{};
+
+		/* NOTE: The returned count is not needed: whatever arrived (a byte, or 0 at the end of the stream) disqualifies. */
+		static_cast< void >(socket.receive(asio::buffer(probe), asio::socket_base::message_peek, error));
+
+		asio::error_code restoreError;
+		socket.non_blocking(false, restoreError);
+
+		if ( (error == asio::error::would_block || error == asio::error::try_again) && !restoreError )
+		{
+			return true;
+		}
+
+		m_connected = false;
+
+		return false;
+	}
+
 	void
 	TLSConnection::disconnect () noexcept
 	{
 		if ( m_connected && !m_cleartext )
 		{
-			/* Best-effort TLS close_notify, bounded by the write timeout. */
+			/* Best-effort TLS close_notify. Ours goes out at once; waiting for the peer's answer is NOT required (RFC 8446
+			 * § 6.1), so it is bounded by a short grace: a kept-alive connection closed while the server still holds it
+			 * open (the HTTPSClient pool's eviction) would otherwise hold its caller for the whole write timeout — 30 s
+			 * per connection, measured 2026-10-07. */
 			asio::error_code shutdownError{asio::error::would_block};
 
 			m_stream.async_shutdown([&shutdownError] (const asio::error_code & error) {
 				shutdownError = error;
 			});
 
-			this->runWithTimeout(m_options.writeTimeout);
+			this->runWithTimeout(std::min(m_options.writeTimeout, CloseNotifyGrace));
 
 			m_connected = false;
 		}

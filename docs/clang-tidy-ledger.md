@@ -26,6 +26,7 @@ those whose file is inside the module (the header filter also reports every incl
 | Module | Date | Findings by check | Notes |
 |---|---|---|---|
 | — | — | no full run recorded yet under this ledger | |
+| `src/Network/HTTPSClient.*` (keep-alive pool), `TLSConnection.*` (`isOpenAndIdle()`, close_notify grace), `src/IO/IO.*` (`systemTreePath()`), tests `test_NetworkHTTPSClient.cpp`, `test_NetworkHTTPSClientLive.cpp`, `test_IO.cpp`, `TLSTestHelpers.hpp` | 2026-10-07 | clang-tidy 21.1.6: 12 on the changed lines, fixed (1 modernize-use-designated-initializers on `ConnectionKey`, 7 misc-const-correctness and 3 bugprone-unchecked-optional-access in the new tests, 1 pro-type-reinterpret-cast in the live test). 0 left. | base httpsclient-keep-alive, windows-long-paths |
 | `src/PixelFactory/FileFormatHDR.hpp` (legacy RLE shift bound), `src/Fuzzing/fuzz_hdr.cpp` (new), test `test_PixelFactoryFileFormats.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines (the fuzz target is not in the compile database; read by hand). | base fuzz-hdr-target |
 | `src/Math/Space3D/SAT.hpp`, `Collisions/SamePrimitive.hpp`, `Collisions/CapsuleTriangle.hpp`, `Collisions/CapsuleCuboid.hpp` (overlaps on the exact manifolds), test `test_MathSpace3D.cpp` | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines. | base collision-pair-test-defects |
 | `src/Network/HTTPServer.cpp` / `.hpp` (network thread on `Base::Thread`) | 2026-10-07 | clang-tidy 21.1.6: 0 on the changed lines. | base non-throwing-thread-start |

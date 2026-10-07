@@ -31,14 +31,18 @@
  * server on 127.0.0.1. Test-binary only — never part of the library. */
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 /* Third-party inclusions.
  * NOTE: the no-exceptions hook MUST be included before any asio header. */
@@ -313,6 +317,60 @@ namespace EmEn::Base::Testing
 				{
 					m_thread.join();
 				}
+
+				/* Keep-alive connections: their blocking reads end when their socket is shut down. */
+				{
+					const std::scoped_lock lock{m_keepAliveAccess};
+
+					for ( const auto & stream : m_keepAliveStreams )
+					{
+						asio::error_code ignored;
+						stream->lowest_layer().shutdown(asio::socket_base::shutdown_both, ignored);
+					}
+				}
+
+				for ( auto & connectionThread : m_keepAliveThreads )
+				{
+					if ( connectionThread.joinable() )
+					{
+						connectionThread.join();
+					}
+				}
+			}
+
+			/**
+			 * @brief Serves several requests per connection (keep-alive), each connection on its own thread, until the
+			 * client closes it or a response carries 'Connection: close'. For HTTPSClient's connection reuse.
+			 * @param state The state.
+			 * @param closeAfterEachResponse When true, the server still CLOSES each connection after one response,
+			 * WITHOUT announcing it — a server that dropped an idle connection, as seen by a pooled client.
+			 * @return void
+			 */
+			void
+			setKeepAlive (bool state, bool closeAfterEachResponse = false) noexcept
+			{
+				m_keepAlive = state;
+				m_closeAfterEachResponse = closeAfterEachResponse;
+			}
+
+			/**
+			 * @brief Keep-alive mode: whether the server answers the client's close_notify with its own (real servers do,
+			 * or drop the TCP connection). Off = a peer that keeps the connection open and silent.
+			 * @param state The state. Default on.
+			 * @return void
+			 */
+			void
+			setAnswerCloseNotify (bool state) noexcept
+			{
+				m_answerCloseNotify = state;
+			}
+
+			/** @brief Returns the number of TLS connections accepted (handshake done). */
+			[[nodiscard]]
+			size_t
+			connectionCount () const noexcept
+			{
+				return m_connectionCount.load();
 			}
 
 			HTTPSTestServer (const HTTPSTestServer & copy) noexcept = delete;
@@ -367,7 +425,21 @@ namespace EmEn::Base::Testing
 						return;
 					}
 
-					this->serveConnection(std::move(socket));
+					if ( m_keepAlive )
+					{
+						const std::scoped_lock lock{m_keepAliveAccess};
+
+						auto stream = std::make_shared< asio::ssl::stream< asio::ip::tcp::socket > >(std::move(socket), m_serverContext);
+
+						m_keepAliveStreams.push_back(stream);
+						m_keepAliveThreads.emplace_back([this, stream] () {
+							this->serveKeepAliveConnection(*stream);
+						});
+					}
+					else
+					{
+						this->serveConnection(std::move(socket));
+					}
 
 					this->scheduleAccept();
 				});
@@ -429,6 +501,8 @@ namespace EmEn::Base::Testing
 					/* Expected when a test client rejects our certificate. */
 					return;
 				}
+
+				++m_connectionCount;
 
 				/* Read one request, up to the header terminator (bounded). */
 				std::string request;
@@ -503,6 +577,103 @@ namespace EmEn::Base::Testing
 				stream.shutdown(error);
 			}
 
+			/**
+			 * @brief Serves a keep-alive connection: request after request until the client closes, an error, or a
+			 * 'Connection: close' response.
+			 * @param stream The connection.
+			 * @return void
+			 */
+			void
+			serveKeepAliveConnection (asio::ssl::stream< asio::ip::tcp::socket > & stream) noexcept
+			{
+				asio::error_code error;
+
+				stream.handshake(asio::ssl::stream_base::server, error);
+
+				if ( error )
+				{
+					return;
+				}
+
+				++m_connectionCount;
+
+				std::string pending;
+
+				while ( true )
+				{
+					while ( pending.find("\r\n\r\n") == std::string::npos && pending.size() < MaxRequestSize )
+					{
+						std::array< char, 2048 > buffer{};
+
+						const auto bytesRead = stream.read_some(asio::buffer(buffer), error);
+
+						if ( error )
+						{
+							/* The client closed (or the server is shutting down). Its close_notify is answered, unless the
+							 * test wants a silent peer. */
+							if ( error == asio::error::eof && m_answerCloseNotify )
+							{
+								asio::error_code ignored;
+								stream.shutdown(ignored);
+							}
+							else if ( error == asio::error::eof )
+							{
+								/* Silent: hold the connection until the server is destroyed. */
+								std::array< char, 64 > sink{};
+								asio::error_code ignored;
+
+								static_cast< void >(stream.next_layer().read_some(asio::buffer(sink), ignored));
+							}
+
+							return;
+						}
+
+						pending.append(buffer.data(), bytesRead);
+					}
+
+					const auto headerEnd = pending.find("\r\n\r\n");
+
+					if ( headerEnd == std::string::npos )
+					{
+						return;
+					}
+
+					size_t requestEnd = headerEnd + 4 + declaredContentLength(pending.substr(0, headerEnd + 4));
+
+					while ( pending.size() < requestEnd && pending.size() < MaxRequestSize )
+					{
+						std::array< char, 2048 > buffer{};
+
+						const auto bytesRead = stream.read_some(asio::buffer(buffer), error);
+
+						if ( error )
+						{
+							return;
+						}
+
+						pending.append(buffer.data(), bytesRead);
+					}
+
+					requestEnd = std::min(requestEnd, pending.size());
+
+					const auto request = pending.substr(0, requestEnd);
+					pending.erase(0, requestEnd);
+
+					const auto response = m_handler(request);
+
+					++m_requestCount;
+
+					asio::write(stream, asio::buffer(response), error);
+
+					if ( error || m_closeAfterEachResponse || response.find("Connection: close") != std::string::npos )
+					{
+						stream.shutdown(error);
+
+						return;
+					}
+				}
+			}
+
 			static constexpr size_t MaxRequestSize{16384};
 
 			asio::io_context m_ioContext;
@@ -515,5 +686,12 @@ namespace EmEn::Base::Testing
 			uint16_t m_port{0};
 			bool m_proxyMode{false};
 			std::atomic< bool > m_abortWithoutCloseNotify{false};
+			std::atomic< size_t > m_connectionCount{0};
+			std::mutex m_keepAliveAccess;
+			std::vector< std::shared_ptr< asio::ssl::stream< asio::ip::tcp::socket > > > m_keepAliveStreams;
+			std::vector< std::thread > m_keepAliveThreads;
+			std::atomic< bool > m_keepAlive{false};
+			std::atomic< bool > m_closeAfterEachResponse{false};
+			std::atomic< bool > m_answerCloseNotify{true};
 	};
 }

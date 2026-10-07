@@ -201,6 +201,16 @@ namespace EmEn::Base::Network
 				return m_handshakeRefused;
 			}
 
+			/**
+			 * @brief Returns whether an established connection can carry a new request: still open, and nothing pending
+			 * to read (a non-blocking peek finds no byte). The peer's close_notify or FIN, a reset, or bytes nobody asked
+			 * for all mean it cannot — it is then marked disconnected.
+			 * @note For a connection kept idle between requests (HTTPSClient's keep-alive). Cheap: one system call.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool isOpenAndIdle () noexcept;
+
 		private:
 
 			/**

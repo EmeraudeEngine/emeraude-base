@@ -29,6 +29,8 @@
 /* STL inclusions. */
 #include <cstdlib>
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <optional>
 #include <fstream>
@@ -928,4 +930,223 @@ TEST(NetworkHTTPSClient, truncatedBodyFails)
 	Network::HTTPSClient client{tlsContext};
 
 	EXPECT_FALSE(client.get(serverURI(server, "/broken.bin")).has_value());
+}
+
+namespace
+{
+	/** @brief A 200 response that leaves the connection open (no 'Connection: close'), framed by its length. */
+	std::string
+	keepAliveResponse (const std::string & body) noexcept
+	{
+		return "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
+	}
+}
+
+/* Keep-alive (owner, 2026-10-07): a small call cost ~80 ms through a new TCP connect + TLS handshake against ~15 ms on a
+ * reused connection (measured, base item httpsclient-keep-alive). The client keeps a connection after a length-framed
+ * response the server did not close, and reuses it for the next request to the same host. */
+TEST(NetworkHTTPSClient, aBurstOfRequestsReusesOneConnection)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return keepAliveResponse("kept");
+	}};
+	server.setKeepAlive(true);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+	const Network::HTTPSClient client{tlsContext};
+
+	for ( int index = 0; index < 5; ++index )
+	{
+		const auto result = client.get(serverURI(server, "/burst"));
+
+		ASSERT_TRUE(result.has_value()) << "request " << index;
+
+		if ( result.has_value() )
+		{
+			EXPECT_EQ(result->body, "kept");
+		}
+	}
+
+	EXPECT_EQ(server.requestCount(), 5U);
+	EXPECT_EQ(server.connectionCount(), 1U);
+}
+
+TEST(NetworkHTTPSClient, aConnectionCloseResponseIsNotReused)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return plainResponse("closed");
+	}};
+	server.setKeepAlive(true);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+	const Network::HTTPSClient client{tlsContext};
+
+	for ( int index = 0; index < 3; ++index )
+	{
+		ASSERT_TRUE(client.get(serverURI(server, "/close")).has_value()) << "request " << index;
+	}
+
+	EXPECT_EQ(server.connectionCount(), 3U);
+}
+
+TEST(NetworkHTTPSClient, anIdleConnectionTheServerDroppedIsReplacedSilently)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	/* The server closes after each response WITHOUT announcing it: the pooled connection is dead when reused. */
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return keepAliveResponse("again");
+	}};
+	server.setKeepAlive(true, true);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+	const Network::HTTPSClient client{tlsContext};
+
+	for ( int index = 0; index < 3; ++index )
+	{
+		const auto result = client.get(serverURI(server, "/dropped"));
+
+		ASSERT_TRUE(result.has_value()) << "request " << index;
+
+		if ( result.has_value() )
+		{
+			EXPECT_EQ(result->body, "again");
+		}
+	}
+
+	EXPECT_EQ(server.requestCount(), 3U);
+	EXPECT_EQ(server.connectionCount(), 3U);
+}
+
+TEST(NetworkHTTPSClient, aPostNeverRidesAPooledConnection)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return keepAliveResponse("ok");
+	}};
+	server.setKeepAlive(true);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+	const Network::HTTPSClient client{tlsContext};
+
+	ASSERT_TRUE(client.get(serverURI(server, "/first")).has_value());
+
+	/* A POST cannot be replayed: it opens its own connection although one is idle... */
+	Network::HTTPRequestOptions options;
+	options.body = "payload";
+	options.contentType = "text/plain";
+
+	ASSERT_TRUE(client.request(Network::HTTPRequest::Method::POST, serverURI(server, "/post"), options).has_value());
+	EXPECT_EQ(server.connectionCount(), 2U);
+
+	/* ...and the next GET reuses one of the two now idle. */
+	ASSERT_TRUE(client.get(serverURI(server, "/after")).has_value());
+	EXPECT_EQ(server.connectionCount(), 2U);
+	EXPECT_EQ(server.requestCount(), 3U);
+}
+
+TEST(NetworkHTTPSClient, aBodyReadUntilCloseIsNeverReused)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	/* No Content-Length, not chunked: the body ends with the connection, which is then spent. */
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return std::string{"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nuntil close"};
+	}};
+	server.setKeepAlive(true, true);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+	const Network::HTTPSClient client{tlsContext};
+
+	for ( int index = 0; index < 2; ++index )
+	{
+		const auto result = client.get(serverURI(server, "/until-close"));
+
+		ASSERT_TRUE(result.has_value()) << "request " << index;
+
+		if ( result.has_value() )
+		{
+			EXPECT_EQ(result->body, "until close");
+		}
+	}
+
+	EXPECT_EQ(server.connectionCount(), 2U);
+}
+
+TEST(NetworkHTTPSClient, reuseCanBeTurnedOff)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	std::atomic< int > closeHeaders{0};
+
+	HTTPSTestServer server{credentials, [&closeHeaders] (const std::string & request) {
+		if ( request.find("Connection: close") != std::string::npos )
+		{
+			++closeHeaders;
+		}
+
+		return keepAliveResponse("single");
+	}};
+	server.setKeepAlive(true);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+	Network::HTTPSClientOptions options;
+	options.reuseConnections = false;
+	const Network::HTTPSClient client{tlsContext, options};
+
+	for ( int index = 0; index < 3; ++index )
+	{
+		ASSERT_TRUE(client.get(serverURI(server, "/off")).has_value()) << "request " << index;
+	}
+
+	EXPECT_EQ(server.connectionCount(), 3U);
+	EXPECT_EQ(closeHeaders.load(), 3);
+}
+
+TEST(NetworkHTTPSClient, closingAnIdleConnectionDoesNotWaitForASilentPeer)
+{
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	/* A server that keeps the connection open and never answers the client's close_notify. */
+	HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		return keepAliveResponse("idle");
+	}};
+	server.setKeepAlive(true);
+	server.setAnswerCloseNotify(false);
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	const auto start = std::chrono::steady_clock::now();
+
+	{
+		const Network::HTTPSClient client{tlsContext};
+
+		ASSERT_TRUE(client.get(serverURI(server, "/idle")).has_value());
+
+		/* The client goes away with one idle connection in its pool: closing it waits for the peer's close_notify at
+		 * most a short grace (RFC 8446 § 6.1), not the write timeout — 30 s per connection before 2026-10-07. */
+	}
+
+	const auto elapsed = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::steady_clock::now() - start);
+
+	EXPECT_LT(elapsed.count(), 2000);
 }

@@ -278,6 +278,8 @@ a whole multiple of 15.625 ms, so an interval shorter than that reads 0 (`DebugS
 failed 2 runs in 6 there with a fixed busy loop). **Rule:** compare a CPU-time interval against
 `Time::processCPUTimeResolutionNanoseconds()`, never against 0, and size a CPU-time measurement in resolutions, not in
 loop iterations. Do not "fix" it with `QueryPerformanceCounter`: that is elapsed time, not CPU time.
+Accepted 2026-10-07: Windows `DebugStatistics.*` 30/30 (was 4 pass / 2 fail in 6), macOS 30/30; the resolutions are
+1 ns (Linux), **1 µs** (macOS 26 / M2, `clock_getres`), 15.625 ms (Windows).
 
 ## Threads
 
@@ -292,6 +294,10 @@ caller of `start()` decides what a refusal means. Owner policy: a feature thread
 trace); the Tracer writes synchronously; `executeCommandPumpingEvents()` blocks; `ThreadPool` keeps the workers that
 started and, with none, runs the tasks on the calling thread; `Core`'s logic / rendering threads end the start-up
 with a non-zero exit code. `Thread::failNextStartsForTesting(n)` makes the next n starts fail (tests only).
+Accepted 2026-10-07 on the three OS (build clean, `BaseThread.*` / `ThreadPool.*` / `TimeEventTrait.*` 20× green, MCP
+1881/0, logs complete). Not exercised at run time anywhere: the engine sites' refusal paths and the Tracer's synchronous
+fallback (the engine has no failure seam), and `Desktop::Notification::show()` on Windows (thread-free since that day,
+compiled clean) — it has NO caller in the engine or projet-alpha.
 
 ## IO / std::filesystem (triad, 2026-09-30)
 
@@ -322,6 +328,12 @@ characters) could not be written. Owner decision: both supports.
   libraries) — only when the system's `LongPathsEnabled` is 1.
 **Rule:** a file access goes through `IO::` (or `IO::systemPath()`), not through a bare `std::filesystem` / fstream
 call, or a long Windows path fails there. The `\\?\` form turns off every normalisation: never build one by hand.
+⚠️ **A whole-tree operation takes the extended form for its ROOT whatever the root's own length** —
+`IO::systemTreePath()`, used by `eraseDirectory(recursive)` and a recursive `forEachDirectoryEntry()`: the
+descendants' length decides, and MS-STL's `remove_all()` from a short root stopped at the first descendant past MAX_PATH
+("145: The directory is not empty", Windows peer 2026-10-07, proven by an MSVC probe). The engine's `TextureCache` used
+raw `std::filesystem` / fstreams and lost its cache under a long `--cache-directory` without `longPathAware`: now
+through `IO::` (engine commit of the same day).
 
 ### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
 
@@ -383,6 +395,25 @@ truncates or zero-pads a long key instead signs differently from every server li
 vectors 1, 2 and 6 (`Hash.hmacSha256KnownAnswer`), and accepted by a server checking with Python's `hmac` (app_system `tools/bugreports-tests/server.py`).
 
 ## Network
+
+### ⚠️⚠️ HTTPSClient keeps connections alive — what makes a connection reusable, and what never rides one (2026-10-07)
+
+Owner decision after a measurement: a small HEAD cost ~80 ms through a new TCP connect + TLS handshake (~80 % of the
+call); with the pool, **11.3 ms median** (20 calls: 0.29-0.45 s instead of 1.6-1.85 s, live, Linux). The client keeps
+a connection (`HTTPSClientOptions::reuseConnections`, default on) when the response was framed by its LENGTH (a body
+read until close spends the connection) and `HTTPResponse::keepConnectionAlive()` (RFC 9112 § 9.3); at most 4 idle per
+(host, port, proxy, cleartext), 30 s each. A pooled connection is probed (`TLSConnection::isOpenAndIdle()`: a
+non-blocking peek — the peer's close_notify or FIN, unexpected bytes, a reset all disqualify) and, if it still fails
+before the first response byte, the request is retried ONCE on a new connection. **Rules:**
+- A non-idempotent request (POST, PATCH, CONNECT) NEVER takes a pooled connection: one the server closed while idle
+  could fail it after it was acted upon, and it cannot be replayed. It may still leave its connection to the pool.
+- The pool is SHARED state (several workers on one client), guarded by its own mutex; a connection taken from it
+  belongs to one exchange until given back. Nothing is closed under the lock.
+- `TLSConnection::disconnect()` sends its close_notify and waits for the peer's answer at most 200 ms (RFC 8446 § 6.1
+  does not require waiting): closing an idle connection the server still held open used to block the caller for the
+  whole write timeout — 30 s per connection (test `closingAnIdleConnectionDoesNotWaitForASilentPeer`, 30 047 ms before).
+- A test server that keeps connections must answer the client's close_notify, as real servers do
+  (`HTTPSTestServer::setKeepAlive()`, one thread per connection).
 
 ### ⚠️⚠️ Closing a socket over unread bytes is a RST — and a RST loses the last answer on Windows (fixed Oct 2026)
 

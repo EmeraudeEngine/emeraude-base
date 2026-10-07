@@ -139,6 +139,17 @@ namespace EmEn::Base::IO
 	std::filesystem::path systemPath (const std::filesystem::path & path) noexcept;
 
 	/**
+	 * @brief Returns the form of a path that is the ROOT of a whole-tree operation (a recursive walk or removal).
+	 * @note Windows: always absolute, lexically normal and extended (\\?\), whatever the root's own length — the
+	 * descendants' length is what matters: a short root walked in its short form stops at the first descendant past
+	 * MAX_PATH (measured 2026-10-07). Elsewhere the path comes back unchanged.
+	 * @param path A path.
+	 * @return std::filesystem::path
+	 */
+	[[nodiscard]]
+	std::filesystem::path systemTreePath (const std::filesystem::path & path) noexcept;
+
+	/**
 	 * @brief Renames (moves) a file or a directory, replacing an existing target file — the commit of a "write aside,
 	 * then rename" save. Never throws (std::error_code overload), works past MAX_PATH on Windows (systemPath()).
 	 * @param from The current path.
@@ -310,14 +321,14 @@ namespace EmEn::Base::IO
 			return true;
 		};
 
-		const auto directory = systemPath(path);
-
+		/* A recursive walk reaches descendants longer than its root: the root takes the extended form whatever its own
+		 * length (systemTreePath()). */
 		if ( recursive )
 		{
-			return walk(std::filesystem::recursive_directory_iterator{directory, std::filesystem::directory_options::skip_permission_denied, errorCode});
+			return walk(std::filesystem::recursive_directory_iterator{systemTreePath(path), std::filesystem::directory_options::skip_permission_denied, errorCode});
 		}
 
-		return walk(std::filesystem::directory_iterator{directory, errorCode});
+		return walk(std::filesystem::directory_iterator{systemPath(path), errorCode});
 	}
 
 	/**

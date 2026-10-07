@@ -32,6 +32,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -172,6 +175,17 @@ namespace EmEn::Base::Network
 
 		/** @brief Maximum number of redirects followed before giving up. */
 		uint8_t maxRedirects{5};
+
+		/**
+		 * @brief Keeps a connection open after a complete, length-framed response the server did not close, and reuses
+		 * it for the next request to the same host, port and proxy (keep-alive, owner 2026-10-07): a small call costs
+		 * ~15 ms on a reused connection against ~80 ms with a new TCP connect and TLS handshake (measured).
+		 * @note A non-idempotent request (POST, PATCH, CONNECT) always opens a NEW connection — a pooled one the server
+		 * closed while idle would fail it, and it cannot be replayed; it may still leave its connection to the pool.
+		 * At most 4 idle connections per (host, port, proxy), each dropped after 30 s idle. Off: one connection per
+		 * request, with 'Connection: close'.
+		 */
+		bool reuseConnections{true};
 
 		/**
 		 * @brief Accept http:// URIs whose host resolves ONLY to private addresses (loopback, RFC 1918,
@@ -397,6 +411,51 @@ namespace EmEn::Base::Network
 			[[nodiscard]]
 			static bool resolveRedirect (const URI & current, const std::string & location, URI & resolved) noexcept;
 
+			/** @brief What an idle connection is bound to: its target, its proxy, its transport. The TLS context (trust and
+			 * verification) is this client's own, the same for every key. */
+			struct ConnectionKey final
+			{
+				std::string host;
+				std::string proxyHost;
+				uint16_t port{0};
+				uint16_t proxyPort{0};
+				bool cleartext{false};
+
+				[[nodiscard]]
+				auto operator<=> (const ConnectionKey & other) const noexcept = default;
+			};
+
+			/** @brief A connection kept open between two requests. */
+			struct IdleConnection final
+			{
+				std::unique_ptr< TLSConnection > connection;
+				std::chrono::steady_clock::time_point idleSince;
+			};
+
+			/**
+			 * @brief Takes an idle connection for a key, for the caller alone: the most recent one still open and idle
+			 * (TLSConnection::isOpenAndIdle()), the others closed. nullptr when none is left.
+			 * @param key The key.
+			 * @return std::unique_ptr< TLSConnection >
+			 */
+			[[nodiscard]]
+			std::unique_ptr< TLSConnection > takeIdleConnection (const ConnectionKey & key) const noexcept;
+
+			/**
+			 * @brief Gives a connection back to the pool after an exchange that left it reusable; it is closed instead
+			 * when its key already holds MaxIdleConnectionsPerKey.
+			 * @param key The key.
+			 * @param connection The connection [std::move].
+			 * @return void
+			 */
+			void keepIdleConnection (const ConnectionKey & key, std::unique_ptr< TLSConnection > connection) const noexcept;
+
+			/** @brief The idle connections kept per key. */
+			static constexpr size_t MaxIdleConnectionsPerKey{4};
+
+			/** @brief How long a connection may stay idle in the pool (servers commonly close after 5 to 60 s). */
+			static constexpr std::chrono::seconds IdleConnectionLifetime{30};
+
 			/* ⚠️ The coarse reason used to be a `mutable` member written by these const methods.
 			 * Net::Manager runs several download() calls CONCURRENTLY on one shared client, so that
 			 * member was a genuine data race, and a failing transfer could report the reason of
@@ -404,5 +463,10 @@ namespace EmEn::Base::Network
 			 * makes every call self-contained. Never put it back on the object. */
 			asio::ssl::context & m_tlsContext;
 			HTTPSClientOptions m_options;
+			/* The idle connections (keep-alive). ⚠️ SHARED state, unlike the per-call outcome above: it is meant to be
+			 * shared by the concurrent workers, guarded by its own mutex, and a connection taken from it belongs to one
+			 * exchange alone until it is given back. Closing a connection (close_notify) never happens under the lock. */
+			mutable std::mutex m_idleConnectionsAccess;
+			mutable std::map< ConnectionKey, std::vector< IdleConnection > > m_idleConnections;
 	};
 }

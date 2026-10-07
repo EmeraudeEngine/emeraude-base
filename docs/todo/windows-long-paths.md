@@ -31,16 +31,15 @@ BOTH: `\\?\`-prefixed absolute normalized paths inside the base `IO::` wrappers 
 
 ## What remains
 
-Done on Linux (2026-10-07): `IO::systemPath()` in every `IO::` wrapper (the `\\?\` form from 248 characters),
-`IO::windowsExtendedLengthPath()` (pure, tested on every OS), `IO::renameFile()` (used by the engine's shader-binary
-and pipeline caches), projet-alpha's `long-path-aware.manifest`. Linux: the cascade builds, 2379 / 2379 Release and
-ASan + UBSan; `IOSystemPath.shortPathsAreUnchangedAndLongOnesStayUsable` writes, reads, renames and erases a
-300+-character path (proves nothing about Windows: Linux has no MAX_PATH).
+Windows peer, 2026-10-07 (base d59ec3f): build clean, the manifest embedded (`mt -inputresource` shows
+`longPathAware`), the 300-character `--cache-directory` run wrote 35 shader binaries + the pipeline cache through the
+extended form with a no-`longPathAware` copy of the executable (longest 403 characters, 0 errors). Two defects found,
+fixed the same day on Linux: `eraseDirectory(recursive)` from a SHORT root (now `IO::systemTreePath()`), and the
+engine's `TextureCache` bypassing `IO::`.
 
-- [ ] **Windows proof**, without `LongPathsEnabled` first: `EmeraudeBaseUnitTests --gtest_filter=IO*` green (the
-      long-path test goes through `\\?\` there), then projet-alpha with a 300-character `--cache-directory`: the shader
-      binaries and the pipeline cache are written (0 "Unable to write the shader binary"). Check the manifest is in the
-      executable (`mt.exe -inputresource:projet-alpha.exe;#1 -out:con`). Then delete this item.
+- [ ] **Windows re-proof**: `--gtest_filter=IO*` 22/22 (IOSystemPath now also walks and erases the tree), and the
+      no-`longPathAware` copy with a 300-character `--cache-directory`: the texture cache created and written too
+      (0 "Failed to create the texture cache directory"). Then delete this item.
 
 ## References
 

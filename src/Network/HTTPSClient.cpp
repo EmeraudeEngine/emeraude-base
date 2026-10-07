@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <string_view>
 #include <utility>
@@ -660,6 +661,113 @@ namespace EmEn::Base::Network
 		return std::nullopt;
 	}
 
+	std::unique_ptr< TLSConnection >
+	HTTPSClient::takeIdleConnection (const ConnectionKey & key) const noexcept
+	{
+		while ( true )
+		{
+			std::unique_ptr< TLSConnection > candidate;
+			std::vector< std::unique_ptr< TLSConnection > > expired;
+
+			{
+				const std::scoped_lock lock{m_idleConnectionsAccess};
+
+				const auto keyIt = m_idleConnections.find(key);
+
+				if ( keyIt == m_idleConnections.end() )
+				{
+					return nullptr;
+				}
+
+				auto & idle = keyIt->second;
+				const auto now = std::chrono::steady_clock::now();
+
+				/* The most recently used first: the likeliest to be still open. */
+				while ( !idle.empty() && candidate == nullptr )
+				{
+					auto entry = std::move(idle.back());
+
+					idle.pop_back();
+
+					if ( now - entry.idleSince > IdleConnectionLifetime )
+					{
+						expired.push_back(std::move(entry.connection));
+					}
+					else
+					{
+						candidate = std::move(entry.connection);
+					}
+				}
+
+				if ( idle.empty() )
+				{
+					m_idleConnections.erase(keyIt);
+				}
+			}
+
+			/* Outside the lock: the expired ones close here (close_notify), the candidate is probed here. */
+			expired.clear();
+
+			if ( candidate == nullptr )
+			{
+				return nullptr;
+			}
+
+			if ( candidate->isOpenAndIdle() )
+			{
+				return candidate;
+			}
+		}
+	}
+
+	void
+	HTTPSClient::keepIdleConnection (const ConnectionKey & key, std::unique_ptr< TLSConnection > connection) const noexcept
+	{
+		if ( connection == nullptr || !connection->isConnected() )
+		{
+			return;
+		}
+
+		/* Closed after the lock is released: a connection over the cap, and every expired one. */
+		std::vector< std::unique_ptr< TLSConnection > > closing;
+
+		{
+			const std::scoped_lock lock{m_idleConnectionsAccess};
+
+			const auto now = std::chrono::steady_clock::now();
+
+			for ( auto keyIt = m_idleConnections.begin(); keyIt != m_idleConnections.end(); )
+			{
+				auto & idle = keyIt->second;
+
+				for ( auto & entry : idle )
+				{
+					if ( now - entry.idleSince > IdleConnectionLifetime )
+					{
+						closing.push_back(std::move(entry.connection));
+					}
+				}
+
+				std::erase_if(idle, [] (const IdleConnection & entry) {
+					return entry.connection == nullptr;
+				});
+
+				keyIt = idle.empty() ? m_idleConnections.erase(keyIt) : std::next(keyIt);
+			}
+
+			auto & idle = m_idleConnections[key];
+
+			if ( idle.size() < MaxIdleConnectionsPerKey )
+			{
+				idle.push_back({std::move(connection), now});
+			}
+			else
+			{
+				closing.push_back(std::move(connection));
+			}
+		}
+	}
+
 	std::optional< HTTPResult >
 	HTTPSClient::performHop (HTTPRequest::Method method, const URI & uri, BodySink sink, const std::filesystem::path & filepath, const HTTPRequestOptions & options, std::chrono::steady_clock::time_point deadline, DownloadOutcome & outcome, const DownloadProgress * progress) const noexcept
 	{
@@ -676,8 +784,8 @@ namespace EmEn::Base::Network
 			return std::nullopt;
 		}
 
-		/* Build the request (origin-form target, explicit close — no keep-alive
-		 * reuse yet, identity encoding so no client-side decompression needed). */
+		/* Build the request (origin-form target, identity encoding so no client-side decompression needed). HTTP/1.1
+		 * connections are persistent by default: 'Connection: close' only when this client does not reuse them. */
 		const auto callerHasUserAgent = std::ranges::any_of(options.headers, [] (const auto & header) {
 			return headerNameEquals(header.first, HTTPRequest::UserAgent);
 		});
@@ -717,7 +825,11 @@ namespace EmEn::Base::Network
 
 		request += HTTPRequest::AcceptEncoding;
 		request += ": identity\r\n";
-		request += "Connection: close\r\n";
+
+		if ( !m_options.reuseConnections )
+		{
+			request += "Connection: close\r\n";
+		}
 
 		/* Caller headers. run() validated every one of them before this function ever ran, so no
 		 * CR or LF can reach this concatenation. */
@@ -748,46 +860,96 @@ namespace EmEn::Base::Network
 		request += "\r\n";
 		request += options.body;
 
-		TLSConnection connection{m_tlsContext, m_options.transportTimeouts};
-
 		std::string proxyHost;
 		uint16_t proxyPort = 0;
 
 		/* NOTE: the cleartext path goes straight to a private address — never through a proxy, which would
 		 * carry it off the private network. */
-		bool connected = false;
+		const bool proxied = !cleartext && this->resolveProxy(host, proxyHost, proxyPort);
+		const ConnectionKey connectionKey{
+			.host = host,
+			.proxyHost = proxied ? proxyHost : std::string{},
+			.port = port,
+			.proxyPort = proxied ? proxyPort : uint16_t{0},
+			.cleartext = cleartext
+		};
 
-		if ( cleartext )
-		{
-			connected = connection.connectCleartextPrivate(host, port);
-		}
-		else if ( this->resolveProxy(host, proxyHost, proxyPort) )
-		{
-			connected = connection.connectViaProxy(proxyHost, proxyPort, host, port);
-		}
-		else
-		{
-			connected = connection.connect(host, port);
-		}
+		/* A request that cannot be replayed never rides a pooled connection: one the server closed while idle would
+		 * fail it after it may have been acted upon. Idempotent methods (RFC 9110 § 9.2.2) are retried once. */
+		const bool idempotent = method != HTTPRequest::Method::POST && method != HTTPRequest::Method::PATCH && method != HTTPRequest::Method::CONNECT;
 
-		if ( !connected )
-		{
-			/* Tell the two apart instead of calling both Unreachable. DownloadOutcome::TLSFailure
-			 * documents itself as "handshake or certificate verification refused the peer", and
-			 * until 2026-08-28 nothing in this file ever produced it - an expired certificate came
-			 * back as Unreachable, which invites the retry that must never happen and hides the
-			 * one thing the caller has to show the user. */
-			outcome = connection.handshakeRefused() ? DownloadOutcome::TLSFailure : DownloadOutcome::Unreachable;
+		std::unique_ptr< TLSConnection > connection;
+		bool reused = false;
 
-			return std::nullopt;
+		if ( m_options.reuseConnections && idempotent )
+		{
+			connection = this->takeIdleConnection(connectionKey);
+			reused = connection != nullptr;
 		}
 
-		/* Past the handshake: anything from here is protocol or local I/O. */
-		outcome = DownloadOutcome::Protocol;
+		std::array< char, TransportReadBufferSize > buffer{};
+		std::optional< size_t > firstRead;
 
-		if ( !connection.write(request.data(), request.size()) )
+		while ( true )
 		{
-			return std::nullopt;
+			if ( connection == nullptr )
+			{
+				connection = std::make_unique< TLSConnection >(m_tlsContext, m_options.transportTimeouts);
+				reused = false;
+
+				bool connected = false;
+
+				if ( cleartext )
+				{
+					connected = connection->connectCleartextPrivate(host, port);
+				}
+				else if ( proxied )
+				{
+					connected = connection->connectViaProxy(proxyHost, proxyPort, host, port);
+				}
+				else
+				{
+					connected = connection->connect(host, port);
+				}
+
+				if ( !connected )
+				{
+					/* Tell the two apart instead of calling both Unreachable. DownloadOutcome::TLSFailure
+					 * documents itself as "handshake or certificate verification refused the peer", and
+					 * until 2026-08-28 nothing in this file ever produced it - an expired certificate came
+					 * back as Unreachable, which invites the retry that must never happen and hides the
+					 * one thing the caller has to show the user. */
+					outcome = connection->handshakeRefused() ? DownloadOutcome::TLSFailure : DownloadOutcome::Unreachable;
+
+					return std::nullopt;
+				}
+			}
+
+			/* Past the handshake: anything from here is protocol or local I/O. */
+			outcome = DownloadOutcome::Protocol;
+
+			const bool written = connection->write(request.data(), request.size());
+
+			if ( written )
+			{
+				firstRead = connection->read(buffer.data(), buffer.size());
+			}
+
+			/* A pooled connection that fails before the first response byte was closed by the server while idle (the
+			 * idle check and the server's close crossed): the request never reached it — retried on a new one. */
+			if ( reused && (!written || !firstRead.has_value() || firstRead.value() == 0) )
+			{
+				connection = nullptr;
+
+				continue;
+			}
+
+			if ( !written )
+			{
+				return std::nullopt;
+			}
+
+			break;
 		}
 
 		/* Body ceiling per sink: a file body may be large because it never sits in RAM; anything
@@ -836,8 +998,6 @@ namespace EmEn::Base::Network
 			std::filesystem::remove(filepath, removeError);
 		};
 
-		std::array< char, TransportReadBufferSize > buffer{};
-
 		/* Progress total: the Content-Length of a 2xx hop, when the body is framed by it (a
 		 * Transfer-Encoding header takes precedence and leaves the total unknown). Resolved
 		 * once, when the headers are complete. */
@@ -845,6 +1005,9 @@ namespace EmEn::Base::Network
 		bool progressTotalResolved = false;
 
 		auto result = HTTPResponseParser::Result::NeedMoreData;
+		/* Whether the body ended with the connection (read until close): such a connection is spent. */
+		bool endedByClose = false;
+		bool firstReadPending = true;
 
 		while ( result == HTTPResponseParser::Result::NeedMoreData )
 		{
@@ -870,7 +1033,10 @@ namespace EmEn::Base::Network
 				return std::nullopt;
 			}
 
-			const auto bytesRead = connection.read(buffer.data(), buffer.size());
+			/* The first read already happened (it told a stale pooled connection apart). */
+			const auto bytesRead = firstReadPending ? firstRead : connection->read(buffer.data(), buffer.size());
+
+			firstReadPending = false;
 
 			if ( !bytesRead.has_value() )
 			{
@@ -883,6 +1049,7 @@ namespace EmEn::Base::Network
 			{
 				/* Peer closed: let the parser decide (until-close = done, else truncated). */
 				result = parser.finish();
+				endedByClose = true;
 
 				break;
 			}
@@ -986,6 +1153,13 @@ namespace EmEn::Base::Network
 					(*progress)(0, progressTotal);
 				}
 			}
+		}
+
+		/* Keep-alive: a response framed by its length (not by the close), that the server did not close (RFC 9112 § 9.3),
+		 * leaves the connection ready for the next request. */
+		if ( m_options.reuseConnections && !endedByClose && parser.response().keepConnectionAlive() )
+		{
+			this->keepIdleConnection(connectionKey, std::move(connection));
 		}
 
 		HTTPResult httpResult;

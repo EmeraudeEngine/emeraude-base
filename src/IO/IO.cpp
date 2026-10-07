@@ -148,6 +148,32 @@ namespace EmEn::Base::IO
 #endif
 	}
 
+	std::filesystem::path
+	systemTreePath (const std::filesystem::path & path) noexcept
+	{
+#if IS_WINDOWS
+		if ( path.empty() )
+		{
+			return path;
+		}
+
+		std::error_code errorCode;
+		const auto absolute = std::filesystem::absolute(path, errorCode);
+
+		if ( errorCode )
+		{
+			return path;
+		}
+
+		auto normal = absolute.lexically_normal();
+		normal.make_preferred();
+
+		return std::filesystem::path{windowsExtendedLengthPath(std::wstring_view{normal.native()})};
+#else
+		return path;
+#endif
+	}
+
 	bool
 	renameFile (const std::filesystem::path & from, const std::filesystem::path & to) noexcept
 	{
@@ -406,7 +432,9 @@ namespace EmEn::Base::IO
 
 		if ( recursive )
 		{
-			std::filesystem::remove_all(systemDirectory, errorCode);
+			/* The DESCENDANTS' length decides: a short root walked in its short form stops past MAX_PATH (Windows,
+			 * 2026-10-07: "145: The directory is not empty" on a 300-character tree). */
+			std::filesystem::remove_all(systemTreePath(path), errorCode);
 		}
 		else
 		{

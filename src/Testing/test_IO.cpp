@@ -543,7 +543,22 @@ TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
 	EXPECT_FALSE(EmEn::Base::IO::fileExists(file));
 	EXPECT_TRUE(EmEn::Base::IO::fileExists(renamed));
 
-	EXPECT_TRUE(EmEn::Base::IO::eraseFile(renamed));
+	/* A recursive walk and a recursive removal from the SHORT root reach the long descendants (Windows: the root takes
+	 * the extended form whatever its own length — eraseDirectory() failed with "145: The directory is not empty"). */
+	size_t files = 0;
+
+	ASSERT_TRUE(EmEn::Base::IO::forEachDirectoryEntry(base, true, [&files] (const std::filesystem::directory_entry & entry) {
+		std::error_code entryError;
+
+		if ( entry.is_regular_file(entryError) )
+		{
+			++files;
+		}
+
+		return true;
+	}));
+	EXPECT_EQ(files, 1U);
+
 	EXPECT_TRUE(EmEn::Base::IO::eraseDirectory(base, true));
 	EXPECT_FALSE(EmEn::Base::IO::directoryExists(base));
 }

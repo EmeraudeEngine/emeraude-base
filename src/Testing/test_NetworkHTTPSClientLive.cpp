@@ -42,6 +42,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <system_error>
 
 /* Local inclusions. */
 #include "Network/HTTPSClient.hpp"
@@ -99,26 +100,33 @@ TEST(NetworkHTTPSClientLive, downloadsMrBeanImageToFile)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-mr-bean.jpg";
+	std::error_code errorCode;
+	const auto filepath = std::filesystem::temp_directory_path(errorCode) / "emeraude-mr-bean.jpg";
 
 	ASSERT_TRUE(client.download(Network::URI{MrBeanImageURL}, filepath))
 		<< "download failed (non-2xx status, network, DNS, or TLS)." << ExternalResourceHint;
 
-	/* Verify we actually got the binary: JPEG magic (FF D8 FF) + a sane size. */
-	std::ifstream file{filepath, std::ios::binary};
-	ASSERT_TRUE(file.is_open());
+	/* Verify we actually got the binary: JPEG magic (FF D8 FF) + a sane size. ⚠️ The stream is CLOSED before the file
+	 * is removed, and only the error_code overloads are used: Windows refuses to remove an open file (a sharing
+	 * violation), and the throwing overload then aborted the process under -fno-exceptions (Windows, 2026-10-07). */
+	std::array< char, 3 > magic{};
 
-	std::array< unsigned char, 3 > magic{};
-	file.read(reinterpret_cast< char * >(magic.data()), magic.size());
+	{
+		std::ifstream file{filepath, std::ios::binary};
+		ASSERT_TRUE(file.is_open());
 
-	EXPECT_EQ(magic[0], 0xFF);
-	EXPECT_EQ(magic[1], 0xD8);
-	EXPECT_EQ(magic[2], 0xFF);
+		file.read(magic.data(), magic.size());
+	}
 
-	const auto fileSize = std::filesystem::file_size(filepath);
+	EXPECT_EQ(static_cast< unsigned char >(magic[0]), 0xFF);
+	EXPECT_EQ(static_cast< unsigned char >(magic[1]), 0xD8);
+	EXPECT_EQ(static_cast< unsigned char >(magic[2]), 0xFF);
+
+	const auto fileSize = std::filesystem::file_size(filepath, errorCode);
+	EXPECT_FALSE(errorCode);
 	EXPECT_GT(fileSize, 100000U) << "file suspiciously small: " << fileSize << " bytes";
 
-	std::filesystem::remove(filepath);
+	std::filesystem::remove(filepath, errorCode);
 }
 
 TEST(NetworkHTTPSClientLive, getReturnsImageContentType)

@@ -33,7 +33,7 @@ found*. Windows is now the only platform where that chain has never run.
 | 2. The trust store | ✅ `NetworkTrustStore.*` 6/6, `/etc/ssl/cert.pem` loaded (128 certs) | ✅ **43 CAs imported from the `ROOT` store** — the hand-written CryptoAPI import works |
 | 3. The client, hermetic then live | ✅ `Network*` 78 passed / 3 skipped, then the 3 live ones passed | ✅ `Network*` **78/78**, plus a live HTTPS download with a clean cache |
 | 4. The downloader from the console | ✅ 2026-08-28 — `Done` + 13566 B, badssl → `TLSFailure`, cache clean | ✅ live download, cache clean |
-| 5. The `ExternalData` chain | ✅ 2026-08-28 — 6/6 via `app_system/tools/external-data-check/`, **2 engine defects fixed to get there** | ❌ **the last gap on Windows** |
+| 5. The `ExternalData` chain | ✅ 2026-08-28 — 6/6 via `app_system/tools/external-data-check/`, **2 engine defects fixed to get there** | ✅ 2026-10-07 — the fixture replayed verbatim (hosted by projet-alpha, current engine): register, Loaded, TLSFailure, cleartext refused, cache intact across a relaunch, clearCache — all rows pass |
 
 macOS notes worth keeping:
 
@@ -162,7 +162,12 @@ for the other.
   here, and retracted in `emeraude-engine/src/Net/AGENTS.md` and in the `TCPServer` sources, so the
   symptom is not hunted a third time.
 - [x] **W7** The hermetic suite's listening socket on 127.0.0.1 — no firewall problem in practice.
-- [ ] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
+- [x] **W8 — DONE 2026-10-07** (Windows peer, base d59ec3f / engine 7ac57ad2): steps 2-4 green (`Network*` 115 + 3
+  live skipped; 45 CAs imported; download → Done 13903 B, badssl → `TLSFailure`; `index.json` atomic, a planted `.part`
+  swept at the next start), then the fixture's rows 1-5 all pass. The live suite's `downloadsMrBeanImageToFile`
+  aborted on Windows — a TEST defect (removing an open file with the throwing overload), fixed the same day.
+  The former entry follows, kept for its traps.
+- [x] **W8 ⚠️ The `ExternalData` resource chain (step 5)** — the one Windows gap left, and the one
   that matters most for shipping: it is the path a `"Source": "ExternalData"` resource takes.
   ⚠️ **Pull the engine first.** The macOS run of 2026-08-28 found two defects on this exact path
   that were blocking it on *every* platform (a sterile container binding, and `TLSFailure` reported
