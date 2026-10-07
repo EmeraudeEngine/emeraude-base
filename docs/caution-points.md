@@ -225,6 +225,23 @@ headers now prefix every local constant per file (`CastContactTolerance`, `BoxBo
 > `2 atan2(sin(angle/2), w)`, exact for small angles and unchanged for large ones (test
 > `MathRigidBody.aTinyRotationKeepsItsAngle`). Any other `acos` of a near-1 cosine has the same trap.
 
+### ⚠️⚠️ Overlap MTVs: SAT measured containment as zero, and capsule pairs were approximate (2026-10-07, FIXED)
+
+Item collision-pair-test-defects (physics overhaul P1 survey), each proven by a failing test (`MathSpace3D.Collision*`):
+- **SAT (3D triangle ↔ triangle)**: the penetration along an axis was `min(maxA, maxB) − max(minA, minB)`, which is
+  0 when one interval contains the other — a flat triangle on its own normal — so that axis won with a ZERO MTV; and
+  the MTV pointed from A to B, i.e. INTO B. Now `min(maxA − minB, maxB − minA)` with the side it gives, pushing A out
+  of B like every other overload. **Rule:** a projected-interval penetration is the shorter way OUT, never the
+  intersection length.
+- **Capsule ↔ triangle / capsule ↔ AABB** now answer from the exact contact manifolds of `Contacts/` (bool: the
+  manifold's overlap; MTV: `−normal × maximumDepth()`). Before: four alternating projections from the axis centre
+  (stopped short for an axis nearly parallel to a face), an axis piercing a triangle got `normal × radius` (a
+  winding-chosen side, too short past the radius), and a capsule deep in a box pushed only its centre point out.
+  `closestPointsCapsuleTriangle()` / `closestPointsCapsuleCuboid()` are exact too (the `Contacts/` routines).
+- Checked, no defect: coincident centres fall back on −Y in every overlap (the manifolds' +Y normal from A to B,
+  owner decision), and the "same side" inside tests take the triangle's own normal, so the winding does not matter —
+  both pinned by tests.
+
 ### `CartesianFrame::getPitchAngle()` / `getYawAngle()` / `getRollAngle()` were NOT Euler angles (2026-10-07, FIXED)
 
 They answered the angle between the backward axis and -Z / +X / +Y: 180° / 90° / 90° for an untouched frame (found by

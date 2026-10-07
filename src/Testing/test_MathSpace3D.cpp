@@ -41,6 +41,7 @@
 #include "Math/Space3D/Collisions/SphereCuboid.hpp"
 #include "Math/Space3D/Collisions/TriangleCuboid.hpp"
 #include "Math/Space3D/Collisions/TriangleSphere.hpp"
+#include "Math/Space3D/Contacts/RoundShapes.hpp"
 #include "Math/Space3D/Intersections/LineCapsule.hpp"
 #include "Math/Space3D/Intersections/LineCuboid.hpp"
 #include "Math/Space3D/Intersections/LineLine.hpp"
@@ -975,6 +976,31 @@ TYPED_TEST(MathSpace3D, CollisionTriangleTriangleWithMTV)
 	ASSERT_TRUE(isColliding(tri1, tri2, mtv));
 	// MTV is computed (may be small for coplanar triangles)
 	// Just verify collision is detected
+}
+
+/* Every MTV overload pushes A OUT OF B. Triangle-triangle returned SAT::checkCollision()'s MTV as is, oriented from
+ * A to B: following it drove A deeper into B (base item collision-pair-test-defects, 2026-10-07). */
+TYPED_TEST(MathSpace3D, CollisionTriangleTriangleMTVPushesAOutOfB)
+{
+	/* B lies flat in z = 0; A stands across it, mostly above. */
+	const Triangle< TypeParam > triangleB{{-2, -2, 0}, {2, -2, 0}, {0, 2, 0}};
+	const Triangle< TypeParam > triangleA{{0, -1, static_cast< TypeParam >(-0.2)}, {0, 1, static_cast< TypeParam >(-0.2)}, {0, 0, static_cast< TypeParam >(1.8)}};
+	Vector< 3, TypeParam > mtv;
+
+	ASSERT_TRUE(isColliding(triangleA, triangleB, mtv));
+
+	const auto centroidA = (triangleA.points()[0] + triangleA.points()[1] + triangleA.points()[2]) / static_cast< TypeParam >(3);
+	const auto centroidB = (triangleB.points()[0] + triangleB.points()[1] + triangleB.points()[2]) / static_cast< TypeParam >(3);
+
+	const auto alongBToA = Vector< 3, TypeParam >::dotProduct(mtv, centroidA - centroidB);
+
+	EXPECT_GT(alongBToA, TypeParam{0}) << "the MTV must point from B towards A";
+
+	/* Moved by (a hair more than) its MTV, A no longer touches B. */
+	const auto push = mtv * static_cast< TypeParam >(1.001);
+	const Triangle< TypeParam > movedA{triangleA.points()[0] + push, triangleA.points()[1] + push, triangleA.points()[2] + push};
+
+	EXPECT_FALSE(isColliding(movedA, triangleB));
 }
 
 TYPED_TEST(MathSpace3D, CollisionTriangleTriangleNonCoplanar)
@@ -2137,6 +2163,155 @@ TYPED_TEST(MathSpace3D, CapsuleContainsPointInHemisphere)
 // ============================================================================
 // COLLISION TESTS - CAPSULE COLLISIONS
 // ============================================================================
+
+/* Capsule overlap tests with an MTV must PUSH THE CAPSULE OUT, however deep (base item collision-pair-test-defects,
+ * 2026-10-07). The checks: the MTV's direction, its length, and that the capsule moved by a hair more is free. */
+TYPED_TEST(MathSpace3D, CollisionCapsuleTriangleDeepPierceIsPushedOutOnItsSide)
+{
+	const auto radius = static_cast< TypeParam >(0.2);
+	constexpr auto Tolerance = static_cast< TypeParam >(1.0e-3);
+
+	for ( const bool reversedWinding : {false, true} )
+	{
+		/* A big triangle in y = 0, either winding: the push must not depend on it. */
+		const Point< TypeParam > a{-3, 0, -3};
+		const Point< TypeParam > b{3, 0, -3};
+		const Point< TypeParam > c{0, 0, 3};
+		const auto triangle = reversedWinding ? Triangle< TypeParam >{a, c, b} : Triangle< TypeParam >{a, b, c};
+
+		/* Mostly above, 0.3 below: out upwards by 0.3 + radius. Mostly below, 0.3 above: out downwards. */
+		for ( const TypeParam side : {TypeParam{1}, TypeParam{-1}} )
+		{
+			const Capsule< TypeParam > capsule{{0, static_cast< TypeParam >(-0.3) * side, 0}, {0, TypeParam{1} * side, 0}, radius};
+			Vector< 3, TypeParam > mtv;
+
+			ASSERT_TRUE(isColliding(capsule, triangle, mtv));
+
+			EXPECT_NEAR(mtv[X], TypeParam{0}, Tolerance);
+			EXPECT_NEAR(mtv[Y], static_cast< TypeParam >(0.5) * side, Tolerance) << "winding reversed: " << reversedWinding;
+			EXPECT_NEAR(mtv[Z], TypeParam{0}, Tolerance);
+
+			const auto push = mtv * static_cast< TypeParam >(1.01);
+			const Capsule< TypeParam > moved{capsule.startPoint() + push, capsule.endPoint() + push, radius};
+
+			EXPECT_FALSE(isColliding(moved, triangle)) << "winding reversed: " << reversedWinding;
+		}
+	}
+}
+
+TYPED_TEST(MathSpace3D, CollisionCapsuleCuboidSpanningTheBoxIsPushedOutWhole)
+{
+	/* The axis crosses the whole box, both ends outside: the closest-point MTV pushed only the middle out. */
+	const AACuboid< TypeParam > cuboid{{1, 1, 1}, {-1, -1, -1}};
+	const auto radius = static_cast< TypeParam >(0.2);
+	const Capsule< TypeParam > capsule{{-3, static_cast< TypeParam >(0.5), 0}, {3, static_cast< TypeParam >(0.5), 0}, radius};
+	Vector< 3, TypeParam > mtv;
+
+	ASSERT_TRUE(isColliding(capsule, cuboid, mtv));
+
+	/* The shortest way out: up, to y = 1 + radius. */
+	EXPECT_NEAR(mtv[X], TypeParam{0}, static_cast< TypeParam >(1.0e-3));
+	EXPECT_NEAR(mtv[Y], static_cast< TypeParam >(0.7), static_cast< TypeParam >(1.0e-3));
+	EXPECT_NEAR(mtv[Z], TypeParam{0}, static_cast< TypeParam >(1.0e-3));
+
+	const auto push = mtv * static_cast< TypeParam >(1.01);
+	const Capsule< TypeParam > moved{capsule.startPoint() + push, capsule.endPoint() + push, radius};
+
+	EXPECT_FALSE(isColliding(moved, cuboid));
+}
+
+TYPED_TEST(MathSpace3D, CollisionCapsuleCuboidTiltedInsideIsPushedOutWhole)
+{
+	/* A tilted capsule wholly inside the box: the deep case pushed only the axis point nearest to the centre (+Y by
+	 * 1.1), leaving the low end inside. The way out of the whole segment is along Z, by 1 + radius. */
+	const AACuboid< TypeParam > cuboid{{1, 1, 1}, {-1, -1, -1}};
+	const auto radius = static_cast< TypeParam >(0.2);
+	const Capsule< TypeParam > capsule{{static_cast< TypeParam >(-0.5), static_cast< TypeParam >(0.8), 0}, {static_cast< TypeParam >(0.5), static_cast< TypeParam >(-0.6), 0}, radius};
+	Vector< 3, TypeParam > mtv;
+
+	ASSERT_TRUE(isColliding(capsule, cuboid, mtv));
+
+	EXPECT_NEAR(std::abs(mtv[Z]), static_cast< TypeParam >(1.2), static_cast< TypeParam >(1.0e-3));
+
+	const auto push = mtv * static_cast< TypeParam >(1.01);
+	const Capsule< TypeParam > moved{capsule.startPoint() + push, capsule.endPoint() + push, radius};
+
+	EXPECT_FALSE(isColliding(moved, cuboid));
+}
+
+TYPED_TEST(MathSpace3D, CollisionCapsuleTriangleNearlyParallelFindsTheLowEnd)
+{
+	/* An axis nearly parallel to the face, its low end 0.05 above it: within the radius. A few alternating projections
+	 * from the axis centre converge slowly here and can stop short of the end. */
+	const Triangle< TypeParam > triangle{{-4, 0, -4}, {4, 0, -4}, {0, 0, 4}};
+	const auto radius = static_cast< TypeParam >(0.1);
+	const Capsule< TypeParam > capsule{{static_cast< TypeParam >(-1.5), static_cast< TypeParam >(0.35), 0}, {static_cast< TypeParam >(1.5), static_cast< TypeParam >(0.05), 0}, radius};
+	Vector< 3, TypeParam > mtv;
+
+	ASSERT_TRUE(isColliding(capsule, triangle));
+	ASSERT_TRUE(isColliding(capsule, triangle, mtv));
+
+	/* Out upwards by radius − 0.05. */
+	EXPECT_NEAR(mtv[Y], static_cast< TypeParam >(0.05), static_cast< TypeParam >(1.0e-3));
+}
+
+/* Coincident centres leave the direction undefined. Owner decision (2026-10-01): a FIXED axis, the manifolds' normal
+ * +Y from A to B; an MTV pushes A out of B, so it is −Y. Every overlap fallback must agree with the manifold. */
+TYPED_TEST(MathSpace3D, CollisionCoincidentCentresFallBackOnTheManifoldAxis)
+{
+	const Sphere< TypeParam > sphereA{1, {2, 3, 4}};
+	const Sphere< TypeParam > sphereB{static_cast< TypeParam >(0.5), {2, 3, 4}};
+	Vector< 3, TypeParam > mtv;
+	ContactManifold< TypeParam > manifold;
+
+	ASSERT_TRUE(isColliding(sphereA, sphereB, mtv));
+	ASSERT_TRUE(computeContactManifold(sphereA, sphereB, manifold));
+
+	const auto up = Vector< 3, TypeParam >::positiveY();
+	const auto down = Vector< 3, TypeParam >::negativeY(static_cast< TypeParam >(1.5));
+
+	EXPECT_EQ(manifold.normal(), up);
+	EXPECT_EQ(mtv, down);
+
+	/* The capsule pairs: a sphere centred on a capsule's axis, two capsules sharing their axis. */
+	const Capsule< TypeParam > capsule{{2, 3, 4}, {2, 3, 4}, static_cast< TypeParam >(0.25)};
+
+	ASSERT_TRUE(isColliding(capsule, sphereB, mtv));
+	EXPECT_LT(mtv[Y], TypeParam{0});
+	EXPECT_EQ(mtv[X], TypeParam{0});
+	EXPECT_EQ(mtv[Z], TypeParam{0});
+
+	ASSERT_TRUE(isColliding(capsule, capsule.startPoint(), mtv));
+	EXPECT_LT(mtv[Y], TypeParam{0});
+}
+
+/* The "same side" inside tests (c1, c2, c3 >= 0) take the normal from the triangle's own points: a reversed winding
+ * flips the normal and the three products together, so the answer must not change (item collision-pair-test-defects:
+ * "check the other winding gives the same answer", 2026-10-07). */
+TYPED_TEST(MathSpace3D, CollisionSphereTriangleIgnoresTheWinding)
+{
+	const Point< TypeParam > a{-3, 0, -3};
+	const Point< TypeParam > b{3, 0, -3};
+	const Point< TypeParam > c{0, 0, 3};
+	const Triangle< TypeParam > forward{a, b, c};
+	const Triangle< TypeParam > backward{a, c, b};
+
+	for ( const TypeParam side : {TypeParam{1}, TypeParam{-1}} )
+	{
+		/* Above (or below) the face interior, 0.3 into it. */
+		const Sphere< TypeParam > sphere{static_cast< TypeParam >(0.5), {static_cast< TypeParam >(0.2), static_cast< TypeParam >(0.2) * side, static_cast< TypeParam >(0.1)}};
+		Vector< 3, TypeParam > mtvForward;
+		Vector< 3, TypeParam > mtvBackward;
+
+		ASSERT_TRUE(isColliding(sphere, forward, mtvForward));
+		ASSERT_TRUE(isColliding(sphere, backward, mtvBackward));
+
+		EXPECT_NEAR(mtvForward[Y], static_cast< TypeParam >(0.3) * side, static_cast< TypeParam >(1.0e-4));
+		EXPECT_NEAR(mtvBackward[Y], mtvForward[Y], static_cast< TypeParam >(1.0e-4));
+		EXPECT_NEAR(mtvBackward[X], mtvForward[X], static_cast< TypeParam >(1.0e-4));
+		EXPECT_NEAR(mtvBackward[Z], mtvForward[Z], static_cast< TypeParam >(1.0e-4));
+	}
+}
 
 TYPED_TEST(MathSpace3D, CollisionCapsulePointInside)
 {

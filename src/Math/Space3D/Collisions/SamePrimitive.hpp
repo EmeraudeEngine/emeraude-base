@@ -93,6 +93,7 @@ namespace EmEn::Base::Math::Space3D
 		std::array< Vector< 3, precision_t >, 3 > verticesA = {pA[0], pA[1], pA[2]};
 		std::array< Vector< 3, precision_t >, 3 > verticesB = {pB[0], pB[1], pB[2]};
 
+		/* NOTE: SAT::checkCollision() pushes A out of B, like every MTV overload here. */
 		return SAT::checkCollision(verticesA, verticesB, minimumTranslationVector);
 	}
 

@@ -29,6 +29,7 @@
 /* Local inclusions for usages. */
 #include "Math/Space3D/Capsule.hpp"
 #include "Math/Space3D/Triangle.hpp"
+#include "Math/Space3D/Contacts/CapsuleTriangle.hpp"
 
 namespace EmEn::Base::Math::Space3D
 {
@@ -113,7 +114,9 @@ namespace EmEn::Base::Math::Space3D
 
 	/**
 	 * @brief Finds the closest points between a capsule axis and a triangle.
-	 * @note Uses iterative refinement for accuracy.
+	 * @note EXACT (Contacts' CapsuleTriangleDetail::closestOfSegmentAndTriangle(): the piercing point, else the best of
+	 * the segment ends against the face and the segment against the three edges). It used four alternating projections
+	 * from the axis centre, which stopped short for an axis nearly parallel to the face (2026-10-07).
 	 * @tparam precision_t The data precision.
 	 * @param capsule The capsule.
 	 * @param triangle The triangle.
@@ -125,16 +128,21 @@ namespace EmEn::Base::Math::Space3D
 	void
 	closestPointsCapsuleTriangle (const Capsule< precision_t > & capsule, const Triangle< precision_t > & triangle, Point< precision_t > & closestOnAxis, Point< precision_t > & closestOnTriangle) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
-		/* NOTE: Start with the centroid of the capsule axis. */
-		closestOnAxis = capsule.centroid();
-		closestOnTriangle = closestPointOnTriangle(closestOnAxis, triangle);
+		Vector< 3, precision_t > faceNormal;
 
-		/* NOTE: Iterative refinement. */
-		for ( int iteration = 0; iteration < 4; ++iteration )
+		if ( !TriangleDetail::unitNormal(triangle, faceNormal) )
 		{
-			closestOnAxis = capsule.closestPointOnAxis(closestOnTriangle);
+			/* A degenerate triangle: its nearest point to the axis centre. */
+			closestOnAxis = capsule.centroid();
 			closestOnTriangle = closestPointOnTriangle(closestOnAxis, triangle);
+
+			return;
 		}
+
+		const auto closest = CapsuleTriangleDetail::closestOfSegmentAndTriangle(capsule.startPoint(), capsule.endPoint(), triangle, faceNormal);
+
+		closestOnAxis = closest.onSegment;
+		closestOnTriangle = closest.onTriangle;
 	}
 
 	/**
@@ -154,19 +162,18 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		/* NOTE: Find the closest points between capsule axis and triangle. */
-		Point< precision_t > closestOnAxis, closestOnTriangle;
-		closestPointsCapsuleTriangle(capsule, triangle, closestOnAxis, closestOnTriangle);
+		/* NOTE: The contact manifold's exact test (Contacts/CapsuleTriangle.hpp), so both agree on every pair. */
+		ContactManifold< precision_t > manifold;
 
-		/* NOTE: Check if the distance is within the capsule radius. */
-		const auto distanceSq = Vector< 3, precision_t >::distanceSquared(closestOnAxis, closestOnTriangle);
-
-		return distanceSq <= capsule.squaredRadius();
+		return computeContactManifold(capsule, triangle, manifold);
 	}
 
 	/**
 	 * @brief Checks if a capsule is colliding with a triangle and gives the MTV.
 	 * @note The MTV pushes the capsule out of the triangle (consistent with convention: MTV pushes first arg out of second).
+	 * @note From the contact manifold: −normal × the deepest point's depth. An axis PIERCING the triangle goes out on
+	 * the side of the capsule's centre, by the depth of its far end plus the radius, whatever the winding — it used to
+	 * get normal × radius, a winding-chosen side and too short as soon as the axis went deeper (2026-10-07).
 	 * @tparam precision_t The data precision. Default float.
 	 * @param capsule A reference to a capsule.
 	 * @param triangle A reference to a triangle.
@@ -185,39 +192,17 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		/* NOTE: Find the closest points between capsule axis and triangle. */
-		Point< precision_t > closestOnAxis, closestOnTriangle;
-		closestPointsCapsuleTriangle(capsule, triangle, closestOnAxis, closestOnTriangle);
+		ContactManifold< precision_t > manifold;
 
-		const auto axisToTriangle = closestOnTriangle - closestOnAxis;
-		const auto distanceSq = axisToTriangle.lengthSquared();
-		const auto radiusSq = capsule.squaredRadius();
-
-		if ( distanceSq > radiusSq )
+		if ( !computeContactManifold(capsule, triangle, manifold) )
 		{
 			minimumTranslationVector.reset();
 
 			return false;
 		}
 
-		/* NOTE: Collision detected. Compute MTV. */
-		const auto distance = std::sqrt(distanceSq);
-
-		if ( distance > std::numeric_limits< precision_t >::epsilon() )
-		{
-			const auto overlap = capsule.radius() - distance;
-
-			/* NOTE: MTV points from triangle towards capsule axis, pushing capsule away from triangle. */
-			minimumTranslationVector = (-axisToTriangle / distance) * overlap;
-		}
-		else
-		{
-			/* NOTE: The capsule axis intersects the triangle plane. Push along triangle normal. */
-			const auto & triPoints = triangle.points();
-			const auto normal = Vector< 3, precision_t >::normal(triPoints[0], triPoints[1], triPoints[2]);
-
-			minimumTranslationVector = normal * capsule.radius();
-		}
+		/* NOTE: The manifold normal goes from the capsule (A) to the triangle (B): moving A by −normal × depth frees it. */
+		minimumTranslationVector = manifold.normal() * -manifold.maximumDepth();
 
 		return true;
 	}

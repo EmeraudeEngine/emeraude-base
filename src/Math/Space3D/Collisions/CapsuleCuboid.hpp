@@ -29,6 +29,8 @@
 /* Local inclusions for usages. */
 #include "Math/Space3D/AACuboid.hpp"
 #include "Math/Space3D/Capsule.hpp"
+#include "Math/Space3D/OrientedBox.hpp"
+#include "Math/Space3D/Contacts/CapsuleBox.hpp"
 
 namespace EmEn::Base::Math::Space3D
 {
@@ -55,6 +57,26 @@ namespace EmEn::Base::Math::Space3D
 	}
 
 	/**
+	 * @brief Returns an axis-aligned cuboid as an oriented box (world axes), for the contact routines of Contacts/.
+	 * @tparam precision_t The data precision.
+	 * @param cuboid The AABB.
+	 * @return OrientedBox< precision_t >
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	OrientedBox< precision_t >
+	toOrientedBox (const AACuboid< precision_t > & cuboid) noexcept requires (std::is_floating_point_v< precision_t >)
+	{
+		constexpr auto Half = static_cast< precision_t >(0.5);
+
+		return OrientedBox< precision_t >{
+			(cuboid.maximum() + cuboid.minimum()) * Half,
+			{Vector< 3, precision_t >::positiveX(), Vector< 3, precision_t >::positiveY(), Vector< 3, precision_t >::positiveZ()},
+			(cuboid.maximum() - cuboid.minimum()) * Half
+		};
+	}
+
+	/**
 	 * @brief Finds the closest point on a segment to an AABB, and the closest point on the AABB to that segment point.
 	 * @note This uses an iterative refinement approach for accuracy.
 	 * @tparam precision_t The data precision.
@@ -68,20 +90,30 @@ namespace EmEn::Base::Math::Space3D
 	void
 	closestPointsCapsuleCuboid (const Capsule< precision_t > & capsule, const AACuboid< precision_t > & cuboid, Point< precision_t > & closestOnAxis, Point< precision_t > & closestOnCuboid) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
-		/* NOTE: Start with the centroid of the capsule axis. */
-		closestOnAxis = capsule.centroid();
-		closestOnCuboid = clampPointToCuboid(closestOnAxis, cuboid);
+		/* NOTE: EXACT (Contacts' CapsuleBoxDetail::closestOfSegmentAndBox(), a convex piecewise quadratic minimised
+		 * piece by piece). It used four alternating projections from the axis centre (2026-10-07). */
+		constexpr auto Half = static_cast< precision_t >(0.5);
+		constexpr auto Degenerate = static_cast< precision_t >(1.0e-6);
 
-		/* NOTE: Iterative refinement: alternate between finding closest point on axis and closest point on cuboid.
-		 * This converges quickly (usually 2-3 iterations). */
-		for ( int iteration = 0; iteration < 4; ++iteration )
+		const auto segmentCenter = (capsule.startPoint() + capsule.endPoint()) * Half;
+		auto direction = capsule.endPoint() - capsule.startPoint();
+		const auto length = direction.length();
+		precision_t halfLength = 0;
+
+		if ( length > Degenerate )
 		{
-			/* Find closest point on capsule axis to the current closest point on cuboid. */
-			closestOnAxis = capsule.closestPointOnAxis(closestOnCuboid);
-
-			/* Find closest point on cuboid to the current closest point on axis. */
-			closestOnCuboid = clampPointToCuboid(closestOnAxis, cuboid);
+			direction *= static_cast< precision_t >(1) / length;
+			halfLength = length * Half;
 		}
+		else
+		{
+			direction = Vector< 3, precision_t >::positiveX();
+		}
+
+		const auto closest = CapsuleBoxDetail::closestOfSegmentAndBox(segmentCenter, direction, halfLength, toOrientedBox(cuboid));
+
+		closestOnAxis = segmentCenter + (direction * closest.parameter);
+		closestOnCuboid = clampPointToCuboid(closestOnAxis, cuboid);
 	}
 
 	/**
@@ -101,20 +133,17 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		/* NOTE: Find the closest points between capsule axis and cuboid. */
-		Point< precision_t > closestOnAxis;
-		Point< precision_t > closestOnCuboid;
-		closestPointsCapsuleCuboid(capsule, cuboid, closestOnAxis, closestOnCuboid);
+		/* NOTE: The contact manifold's exact test (Contacts/CapsuleBox.hpp), so both agree on every pair. */
+		ContactManifold< precision_t > manifold;
 
-		/* NOTE: Check if the distance is within the capsule radius. */
-		const auto distanceSq = Vector< 3, precision_t >::distanceSquared(closestOnAxis, closestOnCuboid);
-
-		return distanceSq <= capsule.squaredRadius();
+		return computeContactManifold(capsule, toOrientedBox(cuboid), manifold);
 	}
 
 	/**
 	 * @brief Checks if a capsule is colliding with an axis-aligned cuboid and gives the MTV.
 	 * @note The MTV pushes the capsule out of the cuboid (consistent with convention: MTV pushes first arg out of second).
+	 * @note From the contact manifold: −normal × the deepest point's depth, for the WHOLE segment. The deep case used to
+	 * push only the axis point nearest to the centre out, leaving a tilted capsule's other end inside (2026-10-07).
 	 * @tparam precision_t The data precision. Default float.
 	 * @param capsule A reference to a capsule.
 	 * @param cuboid A reference to a cuboid.
@@ -133,91 +162,17 @@ namespace EmEn::Base::Math::Space3D
 			return false;
 		}
 
-		/* NOTE: Find the closest points between capsule axis and cuboid. */
-		Point< precision_t > closestOnAxis;
-		Point< precision_t > closestOnCuboid;
-		closestPointsCapsuleCuboid(capsule, cuboid, closestOnAxis, closestOnCuboid);
+		ContactManifold< precision_t > manifold;
 
-		const auto axisToCuboid = closestOnCuboid - closestOnAxis;
-		const auto distanceSq = axisToCuboid.lengthSquared();
-		const auto radiusSq = capsule.squaredRadius();
-
-		if ( distanceSq > radiusSq )
+		if ( !computeContactManifold(capsule, toOrientedBox(cuboid), manifold) )
 		{
 			minimumTranslationVector.reset();
 
 			return false;
 		}
 
-		/* NOTE: Collision detected. Compute MTV. */
-		const auto distance = std::sqrt(distanceSq);
-
-		/* NOTE: Check if the capsule axis is outside the cuboid. */
-		if ( distance > std::numeric_limits< precision_t >::epsilon() )
-		{
-			const auto overlap = capsule.radius() - distance;
-
-			/* NOTE: MTV points from cuboid towards capsule axis, pushing capsule away from cuboid. */
-			minimumTranslationVector = (-axisToCuboid / distance) * overlap;
-		}
-		/* NOTE: The closest point on the axis is inside or on the surface of the cuboid. */
-		else
-		{
-			const auto & min = cuboid.minimum();
-			const auto & max = cuboid.maximum();
-
-			/* NOTE: Find the shortest distance to push out to a face. */
-			const std::array< precision_t, 6 > overlaps = {
-				(max[X] - closestOnAxis[X]) + capsule.radius(),
-				(closestOnAxis[X] - min[X]) + capsule.radius(),
-				(max[Y] - closestOnAxis[Y]) + capsule.radius(),
-				(closestOnAxis[Y] - min[Y]) + capsule.radius(),
-				(max[Z] - closestOnAxis[Z]) + capsule.radius(),
-				(closestOnAxis[Z] - min[Z]) + capsule.radius()
-			};
-
-			precision_t minOverlap = overlaps[0];
-			int minIndex = 0;
-
-			for ( int i = 1; i < 6; ++i )
-			{
-				if ( overlaps[i] < minOverlap )
-				{
-					minOverlap = overlaps[i];
-					minIndex = i;
-				}
-			}
-
-			switch ( minIndex )
-			{
-				case 0:
-					minimumTranslationVector = Vector< 3, precision_t >::positiveX(minOverlap);
-					break;
-
-				case 1:
-					minimumTranslationVector = Vector< 3, precision_t >::negativeX(minOverlap);
-					break;
-
-				case 2:
-					minimumTranslationVector = Vector< 3, precision_t >::positiveY(minOverlap);
-					break;
-
-				case 3:
-					minimumTranslationVector = Vector< 3, precision_t >::negativeY(minOverlap);
-					break;
-
-				case 4:
-					minimumTranslationVector = Vector< 3, precision_t >::positiveZ(minOverlap);
-					break;
-
-				case 5:
-					minimumTranslationVector = Vector< 3, precision_t >::negativeZ(minOverlap);
-					break;
-
-				default:
-					break;
-			}
-		}
+		/* NOTE: The manifold normal goes from the capsule (A) to the box (B): moving A by −normal × depth frees it. */
+		minimumTranslationVector = manifold.normal() * -manifold.maximumDepth();
 
 		return true;
 	}

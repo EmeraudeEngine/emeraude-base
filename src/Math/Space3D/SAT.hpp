@@ -77,7 +77,12 @@ namespace EmEn::Base::Math::Space3D::SAT
 	 * @tparam precision_t The floating-point precision type (e.g., float, double).
 	 * @param verticesA A container of 3D vectors representing the vertices of the first triangle (must have 3 vertices).
 	 * @param verticesB A container of 3D vectors representing the vertices of the second triangle (must have 3 vertices).
-	 * @param[out] MTV The Minimum Translation Vector. If no collision occurs, its value is undefined.
+	 * @param[out] MTV The Minimum Translation Vector: moved by it, A leaves B (the convention of every MTV overload of
+	 * Space3D::Collisions). If no collision occurs, its value is undefined.
+	 * @note The penetration along an axis is min(maxA − minB, maxB − minA), the shorter way out, which also gives the
+	 * side; min(maxA, maxB) − max(minA, minB) — what this used to compute — is 0 when one interval contains the other
+	 * (a flat triangle on its own normal), so that axis "won" with a zero MTV (2026-10-07). The MTV also pointed from A
+	 * to B, i.e. INTO B.
 	 * @return bool Returns true if a collision is detected, false otherwise.
 	 */
 	template< typename vertex_container_a_t, typename vertex_container_b_t, typename precision_t >
@@ -209,26 +214,25 @@ namespace EmEn::Base::Math::Space3D::SAT
 				return false;
 			}
 
-			precision_t o = std::min(maxA, maxB) - std::max(minA, minB);
+			/* The shorter way out of B along this axis: backwards (A ends below minB) or forwards (A starts past maxB). */
+			const precision_t backwards = maxA - minB;
+			const precision_t forwards = maxB - minA;
 
-			if ( o < overlap )
+			if ( backwards < overlap )
 			{
-				overlap = o;
+				overlap = backwards;
+				smallest_axis = -axis;
+			}
+
+			if ( forwards < overlap )
+			{
+				overlap = forwards;
 				smallest_axis = axis;
 			}
 		}
 
+		/* Pushes A out of B. */
 		MTV = smallest_axis * overlap;
-
-		/* Ensure MTV points from A to B. */
-		Vector< 3, precision_t > centerA = (verticesA[0] + verticesA[1] + verticesA[2]) / static_cast< precision_t >(3);
-		Vector< 3, precision_t > centerB = (verticesB[0] + verticesB[1] + verticesB[2]) / static_cast< precision_t >(3);
-		Vector< 3, precision_t > direction = centerB - centerA;
-
-		if ( Vector< 3, precision_t >::dotProduct(direction, MTV) < 0 )
-		{
-			MTV = -MTV;
-		}
 
 		return true;
 	}
