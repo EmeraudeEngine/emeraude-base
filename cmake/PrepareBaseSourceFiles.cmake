@@ -23,6 +23,7 @@ set(EMERAUDE_BASE_CORE_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ObserverTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/SourceCodeParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/String.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Thread.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/ThreadPool.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/TokenFormatter.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Variant.cpp
@@ -167,6 +168,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryTextPixmap.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_StaticVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_String.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Thread.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ThreadPool.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Time.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_TokenFormatter.cpp

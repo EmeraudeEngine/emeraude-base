@@ -30,16 +30,24 @@ The owner chose a base helper and a dedicated pass over a change inside section 
 
 ## Owner decision (2026-10-07)
 
-An RAII `Base::Thread`: `[[nodiscard]] bool start(callable)`, join on destruction or an explicit `detach()`, on `pthread_create` (POSIX) and `_beginthreadex` (Windows); a failed start is a value, each site decides.
+An RAII `Base::Thread`: `[[nodiscard]] bool start(callable)`, join on destruction or an explicit `detach()`, on
+`pthread_create` (POSIX) and `_beginthreadex` (Windows); a failed start is a value. What a refused start means, per
+site category:
+1. A feature thread (audio input, audio / video recorders, track mixer, remote console, HTTP / MCP server, timers):
+   the feature is refused (false + trace); `ExternalInput::start()` and `TimedEvent::start()` return bool,
+   `RemoteListener` reports whether it runs.
+2. The Tracer's logger thread: synchronous writing, no log lost.
+3. `executeCommandPumpingEvents()`: the synchronous path its comment already intends.
+4. `ThreadPool`: keeps the workers that started; with none, runs the tasks on the calling thread.
+5. `Core`'s logic and rendering threads: a clean start-up failure (an error, a non-zero exit code).
 
 ## What remains
 
-- [ ] Design the helper with the owner: an RAII `Thread` (join on destruction, or an explicit detach) with
-  `[[nodiscard]] bool start(callable)`, implemented on `pthread_create` (POSIX) and `_beginthreadex` (Windows), and
-  reporting the failure as a value. Unit tests: a start, a join, the destructor's join, and a refused start (inject the
-  failure through a test hook, or a `RLIMIT_NPROC` sandbox on Linux).
-- [ ] Migrate every site above. Each caller decides what a failed start means: refuse the feature with an error, or
-  fall back to the synchronous path, as `executeCommandPumpingEvents()` already intends.
+- [x] ~~Design~~ `src/Thread.hpp` / `.cpp` (2026-10-07), tests `BaseThread.*` (a refused start through the
+  `failNextStartsForTesting()` seam; a self-join detached instead of aborting).
+- [ ] Migrate every site, with the policy above. The census of 2026-10-07 found more than the list above: also
+  `Core.cpp` (logic and rendering threads), `Tracer.cpp`, `Graphics/Recorder.cpp` (×2), and in the base
+  `Network/HTTPServer.cpp`, `Time/TimedEvent.hpp`, `ThreadPool.cpp` (its workers).
 - [ ] Fix `Notification.windows.cpp` with it: remove the icon from a timer on the window's own thread, and use a
   distinct `uID` per notification.
 - [ ] Re-test on the three OS; `std::thread{` / `std::thread(` absent from the cascade (`/usr/bin/grep -rn`).
