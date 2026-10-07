@@ -32,6 +32,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <fstream>
 #include <sstream>
@@ -1135,16 +1136,17 @@ TEST(NetworkHTTPSClient, closingAnIdleConnectionDoesNotWaitForASilentPeer)
 
 	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
 
+	auto client = std::make_unique< Network::HTTPSClient >(tlsContext);
+
+	ASSERT_TRUE(client->get(serverURI(server, "/idle")).has_value());
+
+	/* Only the client's destruction is timed: the connect before it may cost seconds on its own (Windows resolves
+	 * "localhost" to ::1 first, which this IPv4-only server refuses after ~2 s — Windows peer, 2026-10-07). The client
+	 * goes away with one idle connection in its pool: closing it waits for the peer's close_notify at most a short grace
+	 * (RFC 8446 § 6.1), not the write timeout — 30 s per connection before 2026-10-07. */
 	const auto start = std::chrono::steady_clock::now();
 
-	{
-		const Network::HTTPSClient client{tlsContext};
-
-		ASSERT_TRUE(client.get(serverURI(server, "/idle")).has_value());
-
-		/* The client goes away with one idle connection in its pool: closing it waits for the peer's close_notify at
-		 * most a short grace (RFC 8446 § 6.1), not the write timeout — 30 s per connection before 2026-10-07. */
-	}
+	client.reset();
 
 	const auto elapsed = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::steady_clock::now() - start);
 
