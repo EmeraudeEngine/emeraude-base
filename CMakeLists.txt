@@ -363,10 +363,6 @@ elseif ( APPLE )
 		${EMERAUDE_PARANOID_WARNINGS}												# The paranoid warning set (see above)
 		-Wformat 																	# Check format string arguments
 		-Wformat-security															# Warn about format string vulnerabilities
-		-Wno-unknown-pragmas														# Ignore unknown pragma directives
-		-Wno-nullability-extension													# Ignore nullability extension warnings
-		-Wno-nullability-completeness												# Ignore incomplete nullability annotations
-		-Wno-gnu-zero-variadic-macro-arguments										# Ignore GNU variadic macro extension
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
