@@ -35,10 +35,13 @@
 #include <fstream>
 #include <iterator>
 #include <limits>
+#include <memory>
+#include <optional>
 #include <string_view>
 #include <utility>
 
 /* Local inclusions. */
+#include "emeraude_platform.hpp"
 #include "Logging/Logging.hpp"
 #include "String.hpp"
 #include "URI.hpp"
@@ -135,6 +138,49 @@ namespace EmEn::Base::Network
 		}
 
 		/**
+		 * @brief Reads one environment variable.
+		 * @note std::getenv() is deprecated by the MSVC CRT (C4996: its result can be invalidated by a concurrent
+		 * _putenv()); Windows reads through _dupenv_s(), which returns an owned copy (released by std::free()).
+		 * @param name The variable name. Must not be null.
+		 * @return std::optional< std::string > No value when the variable is not set (or cannot be read).
+		 */
+		std::optional< std::string >
+		readEnvironmentVariable (const char * name) noexcept
+		{
+#if IS_WINDOWS
+			/* NOTE: A deleter type, not &std::free: taking the address of a standard library function is unspecified. */
+			struct CRTFree
+			{
+				void
+				operator() (char * pointer) const noexcept
+				{
+					std::free(pointer);
+				}
+			};
+
+			char * buffer = nullptr;
+			size_t length = 0;
+
+			const auto error = _dupenv_s(&buffer, &length, name);
+			const std::unique_ptr< char, CRTFree > owned{buffer};
+
+			if ( error != 0 || owned == nullptr )
+			{
+				return std::nullopt;
+			}
+
+			return std::string{owned.get()};
+#else
+			if ( const auto * value = std::getenv(name); value != nullptr )
+			{
+				return std::string{value};
+			}
+
+			return std::nullopt;
+#endif
+		}
+
+		/**
 		 * @brief Reads an environment variable, trying the lower- then upper-case name.
 		 * @param lowerName The lower-case variable name.
 		 * @param upperName The upper-case variable name.
@@ -143,14 +189,14 @@ namespace EmEn::Base::Network
 		std::string
 		environmentValue (const char * lowerName, const char * upperName) noexcept
 		{
-			if ( const auto * value = std::getenv(lowerName); value != nullptr )
+			if ( auto value = readEnvironmentVariable(lowerName); value.has_value() )
 			{
-				return value;
+				return std::move(*value);
 			}
 
-			if ( const auto * value = std::getenv(upperName); value != nullptr )
+			if ( auto value = readEnvironmentVariable(upperName); value.has_value() )
 			{
-				return value;
+				return std::move(*value);
 			}
 
 			return {};

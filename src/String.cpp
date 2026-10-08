@@ -230,7 +230,7 @@ namespace EmEn::Base::String
 
 		for ( size_t i = 0; i < length; ++i )
 		{
-			output[i] = static_cast< char >(std::toupper(source[i]));
+			output[i] = static_cast< char >(std::toupper(static_cast< unsigned char >(source[i])));
 		}
 
 		return output;
@@ -247,7 +247,7 @@ namespace EmEn::Base::String
 
 		for ( size_t i = 0; i < length; ++i )
 		{
-			output[i] = static_cast< char >(std::tolower(source[i]));
+			output[i] = static_cast< char >(std::tolower(static_cast< unsigned char >(source[i])));
 		}
 
 		return output;
@@ -258,7 +258,7 @@ namespace EmEn::Base::String
 	{
 		std::string output{source};
 
-		output[0] = static_cast< char >(std::toupper(output[0]));
+		output[0] = static_cast< char >(std::toupper(static_cast< unsigned char >(output[0])));
 
 		return output;
 	}

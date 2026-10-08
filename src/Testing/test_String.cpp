@@ -634,6 +634,50 @@ TEST(String, ucfirstEdgeCases)
 	ASSERT_EQ(String::ucfirst("!hello"), "!hello");
 }
 
+/* toUpper() / toLower() / ucfirst() hand every byte to std::toupper() / std::tolower(), whose argument must be
+ * representable as an unsigned char: a UTF-8 byte (>= 0x80) passed as a negative char is undefined behaviour (the MSVC
+ * Debug CRT asserts on it). The bytes of a multi-byte sequence come back unchanged, only the ASCII letters move. */
+TEST(String, caseConversionKeepsNonASCIIBytes)
+{
+	/* "été Ünïcode" in UTF-8: é = C3 A9, Ü = C3 9C, ï = C3 AF. */
+	const std::string mixed{"\xC3\xA9t\xC3\xA9 \xC3\x9Cn\xC3\xAF" "code"};
+
+	ASSERT_EQ(String::toUpper(mixed), std::string{"\xC3\xA9T\xC3\xA9 \xC3\x9CN\xC3\xAF" "CODE"});
+	ASSERT_EQ(String::toLower(mixed), std::string{"\xC3\xA9t\xC3\xA9 \xC3\x9Cn\xC3\xAF" "code"});
+
+	/* A first byte >= 0x80 is kept by ucfirst(). */
+	ASSERT_EQ(String::ucfirst(mixed), mixed);
+
+	/* Every byte value, one at a time: only 'a'-'z' / 'A'-'Z' change. */
+	for ( int value = 0; value < 256; ++value )
+	{
+		const std::string single(1, static_cast< char >(value));
+		const auto upper = String::toUpper(single);
+		const auto lower = String::toLower(single);
+
+		ASSERT_EQ(upper.size(), 1U);
+		ASSERT_EQ(lower.size(), 1U);
+
+		if ( value >= 'a' && value <= 'z' )
+		{
+			ASSERT_EQ(static_cast< unsigned char >(upper[0]), value - 'a' + 'A');
+		}
+		else
+		{
+			ASSERT_EQ(static_cast< unsigned char >(upper[0]), value);
+		}
+
+		if ( value >= 'A' && value <= 'Z' )
+		{
+			ASSERT_EQ(static_cast< unsigned char >(lower[0]), value - 'A' + 'a');
+		}
+		else
+		{
+			ASSERT_EQ(static_cast< unsigned char >(lower[0]), value);
+		}
+	}
+}
+
 TEST(String, unicodeToUTF8Range)
 {
 	/* ASCII range */

@@ -27,15 +27,18 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <limits>
+#include <string>
 
 /* Local inclusions. */
 #include "Network/TrustStore.hpp"
 #include "Constants.hpp"
+#include "IO/IO.hpp"
 
 /* Third-party inclusions. LibreSSL, used directly to prove the store content. */
+#include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
@@ -52,16 +55,25 @@ namespace
 	X509 *
 	loadCertificate (const std::filesystem::path & filepath) noexcept
 	{
-		FILE * file = std::fopen(filepath.string().c_str(), "rb");
+		/* NOTE: Read through IO:: and parsed from memory: no FILE * (std::fopen() is deprecated by the MSVC CRT, C4996)
+		 * and no path::string(), which throws on MS-STL for a path the ANSI code page cannot hold. */
+		std::string pem;
 
-		if ( file == nullptr )
+		if ( !IO::fileGetContents(filepath, pem) || pem.size() > static_cast< size_t >(std::numeric_limits< int >::max()) )
 		{
 			return nullptr;
 		}
 
-		X509 * certificate = PEM_read_X509(file, nullptr, nullptr, nullptr);
+		BIO * memory = BIO_new_mem_buf(pem.data(), static_cast< int >(pem.size()));
 
-		std::fclose(file);
+		if ( memory == nullptr )
+		{
+			return nullptr;
+		}
+
+		X509 * certificate = PEM_read_bio_X509(memory, nullptr, nullptr, nullptr);
+
+		BIO_free(memory);
 
 		return certificate;
 	}

@@ -300,6 +300,90 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_FALSE(format.readStream(stream, result, {}));
 	}
 
+	/* ===== ASCII STL — a malformed or non-finite triplet refuses the file (owner, 2026-10-08) ===== */
+
+	namespace
+	{
+		/* One facet whose normal and vertex lines are given; CRLF line ends, like a Windows exporter. */
+		std::vector< std::byte >
+		makeAsciiSTL (const std::string & normalLine, const std::string & vertexLine) noexcept
+		{
+			const std::string text =
+				"solid test\r\n"
+				"  facet normal " + normalLine + "\r\n"
+				"    outer loop\r\n"
+				"      vertex " + vertexLine + "\r\n"
+				"      vertex 1 0 0\r\n"
+				"      vertex 0 1 0\r\n"
+				"    endloop\r\n"
+				"  endfacet\r\n"
+				"endsolid test\r\n";
+
+			std::vector< std::byte > buffer(text.size());
+			std::memcpy(buffer.data(), text.data(), text.size());
+
+			return buffer;
+		}
+
+		[[nodiscard]]
+		bool
+		readAsciiSTL (const std::string & normalLine, const std::string & vertexLine, Result & result) noexcept
+		{
+			const auto buffer = makeAsciiSTL(normalLine, vertexLine);
+
+			MemoryStream stream{buffer};
+			STL format;
+
+			return format.readStream(stream, result, {});
+		}
+	}
+
+	TEST(VertexFactorySTL, wellFormedAsciiReadsBack)
+	{
+		Result result;
+		ASSERT_TRUE(readAsciiSTL("0 0 1", "0 0 0", result));
+
+		EXPECT_EQ(result.shape.triangles().size(), 1U);
+		EXPECT_EQ(result.shape.vertices().size(), 3U);
+	}
+
+	TEST(VertexFactorySTL, asciiAcceptsSignsExponentsAndBlanks)
+	{
+		/* A leading '+' (accepted by the former std::sscanf()), exponents, tabs and several blanks. */
+		Result result;
+		ASSERT_TRUE(readAsciiSTL("+0.0e+00\t0.000000e+00   1.0E0", "-1.5e-3 +2 \t 3.25  ", result));
+
+		EXPECT_EQ(result.shape.triangles().size(), 1U);
+	}
+
+	TEST(VertexFactorySTL, asciiMalformedVertexRefusesTheFile)
+	{
+		/* Each one used to load as a (0, 0, 0) vertex, silently. */
+		for ( const auto * const vertexLine : {"1 2", "", "1 2 x", "a b c", "1 2 3 garbage", "1,0 2,0 3,0", "++1 2 3"} )
+		{
+			Result result;
+			EXPECT_FALSE(readAsciiSTL("0 0 1", vertexLine, result)) << "vertex '" << vertexLine << "'";
+		}
+	}
+
+	TEST(VertexFactorySTL, asciiNonFiniteValueRefusesTheFile)
+	{
+		for ( const auto * const vertexLine : {"nan 0 0", "0 inf 0", "0 0 -inf", "1e40 0 0"} )
+		{
+			Result result;
+			EXPECT_FALSE(readAsciiSTL("0 0 1", vertexLine, result)) << "vertex '" << vertexLine << "'";
+		}
+	}
+
+	TEST(VertexFactorySTL, asciiMalformedNormalRefusesTheFile)
+	{
+		for ( const auto * const normalLine : {"0 0", "0 0 nan", "x y z"} )
+		{
+			Result result;
+			EXPECT_FALSE(readAsciiSTL(normalLine, "0 0 0", result)) << "normal '" << normalLine << "'";
+		}
+	}
+
 	/* ===== Legacy id Tech formats (MDL/MD2/MD3) — read-only; goal is "never crash the engine,
 	 * cancel the load on bad input". Run under ASan/UBSan. ===== */
 

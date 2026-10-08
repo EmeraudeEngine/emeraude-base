@@ -391,3 +391,54 @@ TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
 	std::filesystem::remove_all(directory, error);
 }
 
+namespace
+{
+	/* A Radiance header with the given resolution line, followed by one flat RGBE pixel (a scanline under 8 pixels is
+	 * stored flat): a valid 1x1 picture when the line reads "-Y 1 +X 1". */
+	[[nodiscard]]
+	std::vector< std::byte >
+	makeHDRWithResolutionLine (const std::string & resolutionLine)
+	{
+		const std::string text =
+			"#?RADIANCE\n"
+			"FORMAT=32-bit_rle_rgbe\n"
+			"\n" +
+			resolutionLine + "\n"
+			"\x80\x80\x80\x81";
+
+		std::vector< std::byte > buffer(text.size());
+		std::transform(text.cbegin(), text.cend(), buffer.begin(), [] (char character) { return static_cast< std::byte >(character); });
+
+		return buffer;
+	}
+}
+
+/* The resolution line is parsed by std::from_chars() (std::sscanf() is deprecated by the MSVC CRT): the former grammar
+ * (optional blanks, trailing text ignored), digits only, and a value past uint64_t refused. */
+TEST(PixelFactoryFileFormats, hdrResolutionLineGrammar)
+{
+	for ( const auto * const accepted : {"-Y 1 +X 1", "-Y1 +X1", "-Y   1  +X  1  ", "-Y 1 +X 1 trailing", "-Y 01 +X 1\r"} )
+	{
+		const auto buffer = makeHDRWithResolutionLine(accepted);
+
+		IO::MemoryStream stream{buffer};
+		PixelFactory::FileFormatHDR< float, uint32_t > format;
+		PixelFactory::Pixmap< float, uint32_t > pixmap;
+
+		ASSERT_TRUE(format.readStream(stream, pixmap)) << "line '" << accepted << "'";
+		EXPECT_EQ(pixmap.width(), 1U);
+		EXPECT_EQ(pixmap.height(), 1U);
+	}
+
+	for ( const auto * const refused : {"-Y -1 +X 1", "-Y +1 +X 1", "+X 1 -Y 1", "-Y 1", "-Y 0 +X 1", "-Y 1 +X 0", "-Y x +X 1",
+		"-Y 99999999999999999999 +X 1", "-Y 4294967296 +X 1", ""} )
+	{
+		const auto buffer = makeHDRWithResolutionLine(refused);
+
+		IO::MemoryStream stream{buffer};
+		PixelFactory::FileFormatHDR< float, uint32_t > format;
+		PixelFactory::Pixmap< float, uint32_t > pixmap;
+
+		EXPECT_FALSE(format.readStream(stream, pixmap)) << "line '" << refused << "'";
+	}
+}

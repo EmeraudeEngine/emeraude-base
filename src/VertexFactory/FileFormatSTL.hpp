@@ -28,16 +28,23 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
+#include <cctype>
+#include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "emeraude_platform.hpp"
 #include "Logging/Logging.hpp"
 
 /* Local inclusions for usages. */
@@ -213,6 +220,78 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Parses exactly three finite floats separated by blanks ("ni nj nk", "x y z").
+			 * @note Owner decision (2026-10-08): a malformed or non-finite triplet REFUSES the file — it used to become
+			 * (0, 0, 0) silently, a 'nan' or an 'inf' passed as is (std::sscanf, its result unchecked; deprecated by the
+			 * MSVC CRT, C4996). Trailing blanks are accepted, any other trailing text is not.
+			 * @note strtof on macOS (libc++ lacks std::from_chars for floats, as in FileFormatOBJ::parseFloat()); the view
+			 * always ends a NUL-terminated line.
+			 * @param text The text after the keyword.
+			 * @param values The three values.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			parseThreeFloats (std::string_view text, std::array< float, 3 > & values) noexcept
+			{
+				size_t position = 0;
+
+				const auto skipBlanks = [&text, &position] () noexcept {
+					while ( position < text.size() && (text[position] == ' ' || text[position] == '\t' || text[position] == '\r') )
+					{
+						++position;
+					}
+				};
+
+				for ( auto & value : values )
+				{
+					skipBlanks();
+
+					/* std::from_chars() refuses the leading '+' that std::sscanf() accepted (some exporters write it). */
+					if ( position + 1 < text.size() && text[position] == '+' && (std::isdigit(static_cast< unsigned char >(text[position + 1])) != 0 || text[position + 1] == '.') )
+					{
+						++position;
+					}
+
+					if ( position >= text.size() )
+					{
+						return false;
+					}
+
+					const auto * const first = text.data() + position;
+#if IS_MACOS
+					char * end = nullptr;
+					value = std::strtof(first, &end);
+
+					if ( end == first )
+					{
+						return false;
+					}
+
+					const auto * const last = end;
+#else
+					const auto [last, error] = std::from_chars(first, text.data() + text.size(), value);
+
+					if ( error != std::errc{} )
+					{
+						return false;
+					}
+#endif
+					if ( !std::isfinite(value) || last > text.data() + text.size() )
+					{
+						return false;
+					}
+
+					position = static_cast< size_t >(last - text.data());
+				}
+
+				skipBlanks();
+
+				return position == text.size();
+			}
+
+			/**
 			 * @brief Reads an ASCII STL file.
 			 * @param file A reference to the input stream.
 			 * @param geometry A reference to the geometry to fill.
@@ -243,9 +322,12 @@ namespace EmEn::Base::VertexFactory
 					std::string currentLine;
 					std::vector< ShapeVertex< vertex_data_t > > faceVertices;
 					Math::Vector< 3, float > normal;
+					size_t lineNumber = 0;
 
 					while ( std::getline(file, currentLine) )
 					{
+						++lineNumber;
+
 						/* Trim leading whitespace */
 						const auto first = currentLine.find_first_not_of(" \t\r");
 
@@ -263,16 +345,32 @@ namespace EmEn::Base::VertexFactory
 						{
 							/* "facet normal ni nj nk"
 							 * scan after "facet normal" */
-							float nx = 0.0F, ny = 0.0F, nz = 0.0F;
-							sscanf(currentLine.c_str() + first + 12, "%f %f %f", &nx, &ny, &nz);
+							std::array< float, 3 > values{};
 
-							normal = {nx, ny, nz};
+							if ( !parseThreeFloats(std::string_view{currentLine}.substr(first + 12), values) )
+							{
+								Logging::error("VertexFactory::FileFormatSTL", "readAscii(), line " + std::to_string(lineNumber) + ": a malformed or non-finite facet normal, the file is refused !");
+
+								return false;
+							}
+
+							normal = {values[0], values[1], values[2]};
 							faceVertices.clear();
 						}
 						else if ( currentLine.compare(first, 6, "vertex") == 0 )
 						{
-							float x = 0.0F, y = 0.0F, z = 0.0F;
-							sscanf(currentLine.c_str() + first + 6, "%f %f %f", &x, &y, &z);
+							std::array< float, 3 > values{};
+
+							if ( !parseThreeFloats(std::string_view{currentLine}.substr(first + 6), values) )
+							{
+								Logging::error("VertexFactory::FileFormatSTL", "readAscii(), line " + std::to_string(lineNumber) + ": a malformed or non-finite vertex, the file is refused !");
+
+								return false;
+							}
+
+							const auto x = values[0];
+							const auto y = values[1];
+							const auto z = values[2];
 
 							ShapeVertex< vertex_data_t > v;
 							v.setPosition(Math::Vector< 3, vertex_data_t >{static_cast< vertex_data_t >(x), static_cast< vertex_data_t >(y), static_cast< vertex_data_t >(z)});

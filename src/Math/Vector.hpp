@@ -1676,13 +1676,11 @@ namespace EmEn::Base::Math
 				{
 					return {distance, 0};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {distance, 0, 0};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {distance, 0, 0, 0};
 				}
@@ -1707,13 +1705,11 @@ namespace EmEn::Base::Math
 				{
 					return {-distance, 0};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {-distance, 0, 0};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {-distance, 0, 0, 0};
 				}
@@ -1738,13 +1734,11 @@ namespace EmEn::Base::Math
 				{
 					return {0, distance};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {0, distance, 0};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {0, distance, 0, 0};
 				}
@@ -1769,13 +1763,11 @@ namespace EmEn::Base::Math
 				{
 					return {0, -distance};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {0, -distance, 0};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {0, -distance, 0, 0};
 				}
@@ -1801,8 +1793,7 @@ namespace EmEn::Base::Math
 				{
 					return {0, 0, distance};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {0, 0, distance, 0};
 				}
@@ -1828,8 +1819,7 @@ namespace EmEn::Base::Math
 				{
 					return {0, 0, -distance};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {0, 0, -distance, 0};
 				}

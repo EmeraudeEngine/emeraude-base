@@ -41,10 +41,12 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <system_error>
 
 /* Local inclusions. */
+#include "emeraude_platform.hpp"
 #include "Network/HTTPSClient.hpp"
 #include "Network/TrustStore.hpp"
 
@@ -61,11 +63,34 @@ namespace
 	 * fragment is the HTML page, not the file. */
 	constexpr auto MrBeanImageURL{"https://upload.wikimedia.org/wikipedia/commons/6/6f/Rowan_Atkinson_and_Manneken_Pis.jpg"};
 
-	/** @brief Skips the calling test unless live network tests are explicitly enabled. */
+	/**
+	 * @brief Skips the calling test unless live network tests are explicitly enabled.
+	 * @note Windows reads through _dupenv_s(): std::getenv() is deprecated by the MSVC CRT (C4996).
+	 */
 	bool
 	liveNetworkEnabled () noexcept
 	{
-		return std::getenv("EMERAUDE_RUN_LIVE_NETWORK_TESTS") != nullptr;
+		constexpr auto VariableName{"EMERAUDE_RUN_LIVE_NETWORK_TESTS"};
+#if IS_WINDOWS
+		struct CRTFree
+		{
+			void
+			operator() (char * pointer) const noexcept
+			{
+				std::free(pointer);
+			}
+		};
+
+		char * buffer = nullptr;
+		size_t length = 0;
+
+		const auto error = _dupenv_s(&buffer, &length, VariableName);
+		const std::unique_ptr< char, CRTFree > owned{buffer};
+
+		return error == 0 && owned != nullptr;
+#else
+		return std::getenv(VariableName) != nullptr;
+#endif
 	}
 
 	/* Shared reminder for every live-resource failure: a third-party endpoint is

@@ -213,6 +213,35 @@ names at namespace scope of the test file that instantiates it.
 headers now prefix every local constant per file (`CastContactTolerance`, `BoxBoxFaceBias`, …); measured: clang's
 `-Wshadow-all` does not catch it either for a template inside a nested namespace.
 
+### The paranoid MSVC set, compiled for the first time on Windows — what it found (Ave Robustus II, 2026-10-08)
+
+The MSVC block of the PARANOID option (`/W4 /permissive- /w14242 … /WX`, without the former `/wd4100 /wd4127 /wd4702
+/wd4996`) found, in base: 6 C4702, 5 C4996, 1 C4242 (through the STL, attributed to the engine's caller). GCC and clang
+say nothing about any of them. The fixes, all kept by the cascade's three compilers:
+
+- **C4702 after an `if constexpr` that returns.** `Vector::positiveX()` … `negativeZ()` wrote `if constexpr (dim == 2)
+  return …; if constexpr (dim == 3) return …; if constexpr (dim == 4) … else return {};` — in the 3D instantiation the
+  trailing `else` follows a `return`. **Chain the branches** (`else if constexpr`), never a fall-through after one.
+- **C4996, the CRT functions MSVC deprecates** — replaced, never `_CRT_SECURE_NO_WARNINGS`:
+  `std::getenv()` → `_dupenv_s()` (an owned copy, freed by a deleter TYPE: taking the address of `std::free` is
+  unspecified) on Windows, `std::getenv()` elsewhere (`HTTPSClient.cpp` `readEnvironmentVariable()`);
+  `std::sscanf()` → `std::from_chars()` (`FileFormatHDR::parseResolutionLine()`, `FileFormatSTL::parseThreeFloats()`);
+  `std::fopen()` in a test → `IO::fileGetContents()` + a memory BIO (no `path::string()` either).
+- **`std::sscanf()` hid two real defects.** The ASCII STL reader never checked its result: a malformed `vertex` /
+  `facet normal` line became (0, 0, 0) silently and `nan` / `inf` passed. **Owner decision (2026-10-08): a malformed or
+  non-finite triplet REFUSES the file** (an error naming the line). The HDR resolution line was scanned with `%lu`:
+  `unsigned long` is 32 bits on Windows, so an oversized value was undefined behaviour there; now `uint64_t`, digits
+  only, out of range refused. Tests: `VertexFactorySTL.ascii*`, `PixelFactoryFileFormats.hdrResolutionLineGrammar`.
+- **The `<cctype>` functions take an `unsigned char` value.** `String::toUpper()` / `toLower()` / `ucfirst()` passed a
+  plain `char`: a UTF-8 byte (>= 0x80) is negative there, undefined behaviour (the MSVC Debug CRT asserts). Cast through
+  `unsigned char`; never `std::ranges::transform(s, s.begin(), ::toupper)` (C4242, and the same UB) — use
+  `String::toUpper()`. Test: `String.caseConversionKeepsNonASCIIBytes`.
+- **An `int` literal into a `std::pair< …, uint16_t >`** (`return {Outcome::Success, 0};`) is C4242 inside `<utility>`:
+  write `uint16_t{0}`.
+
+**Before pushing** C or CRT calls: grep the diff for `getenv`, `sscanf`, `fopen`, `_wfopen`, `strcpy`, `sprintf`, `::toupper`
+/ `::tolower` — each one is an MSVC error now.
+
 ## Math
 
 ### ⚠️⚠️ A small rotation read back with `2 acos(w)` is ZERO in float — use `2 atan2(|v|, w)` (2026-10-01, FIXED)

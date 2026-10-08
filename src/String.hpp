@@ -188,6 +188,7 @@ namespace EmEn::Base::String
 
 	/**
 	 * @brief Returns the string in upper case.
+	 * @note Byte-wise, in the C locale: only the ASCII letters change; a byte >= 0x80 (a UTF-8 sequence) is kept as is.
 	 * @param source A reference to the input string.
 	 * @return std::string
 	 */
@@ -196,6 +197,7 @@ namespace EmEn::Base::String
 
 	/**
 	 * @brief Returns the string in lower case.
+	 * @note Byte-wise, in the C locale: only the ASCII letters change; a byte >= 0x80 (a UTF-8 sequence) is kept as is.
 	 * @param source A reference to the input string.
 	 * @return std::string
 	 */

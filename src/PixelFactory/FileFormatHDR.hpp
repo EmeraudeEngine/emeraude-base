@@ -29,12 +29,15 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cstdint>
-#include <cstdio>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
@@ -123,21 +126,22 @@ namespace EmEn::Base::PixelFactory
 				dimension_t height = 0;
 
 				{
-					unsigned long rows = 0;
-					unsigned long columns = 0;
+					const auto resolution = parseResolutionLine(line);
 
-					if ( std::sscanf(line.c_str(), "-Y %lu +X %lu", &rows, &columns) != 2 || rows == 0 || columns == 0 )
+					if ( !resolution.has_value() || resolution->first == 0 || resolution->second == 0 )
 					{
 						std::cerr << "FileFormatHDR::readStream(), unsupported resolution line '" << line << "' (expected '-Y h +X w') !" "\n";
 
 						return false;
 					}
 
-					/* The resolution line is scanned as 'unsigned long': a declaration wider than the
+					const auto [rows, columns] = *resolution;
+
+					/* The resolution line is scanned as 'uint64_t': a declaration wider than the
 					 * pixmap dimension type would truncate silently (4294967296 -> 0 with uint32_t). */
 					constexpr auto maxDimension = static_cast< uint64_t >(std::numeric_limits< dimension_t >::max());
 
-					if ( static_cast< uint64_t >(rows) > maxDimension || static_cast< uint64_t >(columns) > maxDimension )
+					if ( rows > maxDimension || columns > maxDimension )
 					{
 						std::cerr << "FileFormatHDR::readStream(), resolution line '" << line << "' exceeds the pixmap dimension type !" "\n";
 
@@ -360,6 +364,81 @@ namespace EmEn::Base::PixelFactory
 				}
 
 				return line;
+			}
+
+			/**
+			 * @brief Parses the canonical resolution line "-Y <rows> +X <columns>".
+			 * @note The grammar of the former std::sscanf("-Y %lu +X %lu") (deprecated by the MSVC CRT, C4996): blanks
+			 * are optional around the tokens and trailing text is ignored; a number is digits only (no sign) and a value
+			 * past uint64_t is refused (with 'unsigned long', 32 bits on Windows, that overflow was undefined).
+			 * @param line The header line, without its end of line.
+			 * @return std::optional< std::pair< uint64_t, uint64_t > > The rows and the columns, no value when the line
+			 * does not match.
+			 */
+			[[nodiscard]]
+			static
+			std::optional< std::pair< uint64_t, uint64_t > >
+			parseResolutionLine (std::string_view line) noexcept
+			{
+				size_t position = 0;
+
+				const auto skipBlanks = [&line, &position] () noexcept {
+					while ( position < line.size() && (line[position] == ' ' || line[position] == '\t' || line[position] == '\r') )
+					{
+						++position;
+					}
+				};
+
+				const auto expectToken = [&line, &position, &skipBlanks] (std::string_view token) noexcept {
+					skipBlanks();
+
+					if ( line.substr(position, token.size()) != token )
+					{
+						return false;
+					}
+
+					position += token.size();
+
+					return true;
+				};
+
+				const auto readNumber = [&line, &position, &skipBlanks] () noexcept -> std::optional< uint64_t > {
+					skipBlanks();
+
+					uint64_t value = 0;
+					const auto * const first = line.data() + position;
+					const auto [end, error] = std::from_chars(first, line.data() + line.size(), value);
+
+					if ( error != std::errc{} )
+					{
+						return std::nullopt;
+					}
+
+					position += static_cast< size_t >(end - first);
+
+					return value;
+				};
+
+				if ( !expectToken("-Y") )
+				{
+					return std::nullopt;
+				}
+
+				const auto rows = readNumber();
+
+				if ( !rows.has_value() || !expectToken("+X") )
+				{
+					return std::nullopt;
+				}
+
+				const auto columns = readNumber();
+
+				if ( !columns.has_value() )
+				{
+					return std::nullopt;
+				}
+
+				return std::pair{*rows, *columns};
 			}
 
 			/**
