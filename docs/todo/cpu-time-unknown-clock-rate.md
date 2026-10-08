@@ -16,8 +16,9 @@ records no duration at all, silently. (Negative / failed `std::clock()` samples 
 check: drop, clamp or count?)
 
 ## What remains
+- **Owner decision (2026-10-08): a failed / negative sample is DROPPED and COUNTED** (a visible failure counter), in `CPUTime` and
+  `Statistics::RealTime`.
 - A generic conversion (`duration * 1'000'000 / CLOCKS_PER_SEC` in 64 bits) for any rate; test.
-- Owner: confirm "drop" for a failed / negative sample (also applied to `Statistics::RealTime`).
 
 ## References
 - Found by the Ave Robustus II warning pass (2026-10-08, projet-alpha `docs/plans/ave-robustus-ii.md`); not raised by a warning, so left for its own fix.

@@ -15,7 +15,8 @@ tags: [ave-robustus-ii, math, defect]
 segments `synthesize()` divides by zero (infinite times).
 
 ## What remains
-- The constructors apply the setters' rule (owner: refuse → which default? or clamp to 1); test.
+- **Owner decision (2026-10-08): CLAMP to 1** (with a trace), the setters' minimum.
+- The constructors apply it; test.
 
 ## References
 - Found by the Ave Robustus II warning pass (2026-10-08, projet-alpha `docs/plans/ave-robustus-ii.md`); not raised by a warning, so left for its own fix.

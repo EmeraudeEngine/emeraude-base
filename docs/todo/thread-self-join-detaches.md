@@ -16,7 +16,8 @@ while its thread still runs — a silent use-after-free instead of a contract fa
 II rule 5).
 
 ## What remains
-- Owner decision D2 of the plan: refuse loudly (Debug `assert`, Release trace + `std::abort`).
+- **Owner decision (2026-10-08), D2: ABORT** (Debug and Release, with a trace) — but ONLY after every path that can self-destroy a
+  thread today has been found and fixed in its owner. Same rule for a task waiting for its own `TaskHandle`.
 - Find every path that can self-destroy a thread today (a thread body releasing the last reference of its owner) and
   fix the owner, BEFORE switching the fallback to an abort.
 - Test: death test for the self-join.

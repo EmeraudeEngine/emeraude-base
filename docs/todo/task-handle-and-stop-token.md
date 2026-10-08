@@ -29,9 +29,22 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   penalties 672, queue 442, collapses 2 148, output 643.
 
 ## What remains
+- **Owner decision (2026-10-08), D7: REWRITE** — the decimator's work data goes flat (lean work copy: positions + triangles only;
+  CSR adjacency; a sorted / open-addressing dedup) to reach the ≤ 50 ms stop bound; step by step, each step A/B-measured.
 - **The remaining latency is DEALLOCATION, not computation**: on a stop, the work stops within milliseconds, but the
   return frees the dedup hash map (1.1 M nodes) and two `std::unordered_set` per vertex (1.1 M vertices). Reaching the
   D7 bound (≤ 50 ms) needs flat data structures (CSR adjacency, a sorted / open-addressing dedup) — also a large
   allocation and speed gain (Allocatus Reduxus). Owner decision: do it, or accept a size-proportional bound.
+- **The first uninterruptible block is the COPY of the source** (`auto workShape = m_source;` at the top of
+  `decimate()`): a stop requested at 0 ms still costs 0.47 s on the macOS peer (M2, 2026-10-08, base `73a319a`; worst
+  0.47 s idle, 0.79 s under a -j8 build). Measured on Linux (i9-14900K, Release, probe outside the suite): copying the
+  2.24 M-triangle sphere (1 122 226 vertices × 92 B, 2 240 000 triangles × 64 B, 6 720 000 edges) takes 0.57-0.61 s,
+  destroying it 0.07 s. The work shape only needs positions + triangles for the connectivity: building it lean (no
+  edges, no attributes) would cut both the latency and ~hundreds of MB of allocation — same owner decision as above
+  (flat data), plus a check before the copy for a stop requested before the start.
+- Windows peer (laptop, MSVC Release, 2026-10-08, base `73a319a`): worst **1.65 s**; stop at 0 ms 1.50 s, shrinking
+  steadily to 0.33 s at 1500 ms (a stop landing inside the copy waits for its end), then 0.68-1.65 s in the later
+  stages; a full decimation takes more than 12 s there. Same probe there: copy 1.28-1.30 s, destroy 0.20 s
+  (Linux ×2.2 and ×2.9) — copy + destroy = 1.48-1.50 s, the whole 0 ms row: the source copy IS that latency.
 - `Base::Thread` with the `std::jthread` model (stop token to the body, request_stop + join in the destructor).
 - `setCancellationFlag()` goes with the engine migration (P2, engine item `jobs-owned-by-their-starter`).

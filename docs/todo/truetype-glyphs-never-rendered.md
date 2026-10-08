@@ -18,10 +18,9 @@ rendering code (copy of `face->glyph->bitmap`, vertical offset, widest-char book
 The two TrueType tests of `test_PixelFactoryTextPixmap.cpp` are commented out, which is why nothing caught it.
 
 ## What remains
-- Owner: is TrueType support wanted in the base (the engine's `FontResource` may only use pixmap fonts — see engine item
-  `merge-font-pixelfactory-fontresource`)? If yes: implement the glyph copy (grayscale bitmap → `Pixmap`), the
-  baseline offset and the fixed-width pass; re-enable the two tests; hostile fonts (truncated, huge sizes).
-- If no: remove the TrueType path and FreeType from the base.
+- **Owner decision (2026-10-08): KEEP TrueType and finish it** — the owner will need `.ttf` fonts.
+- Implement the glyph copy (grayscale bitmap → `Pixmap`), the baseline offset and the fixed-width pass; re-enable the
+  two tests; hostile fonts (truncated, huge sizes). See engine item `merge-font-pixelfactory-fontresource`.
 
 ## References
 - projet-alpha `docs/plans/ave-robustus-ii.md` § 5 (P0).
