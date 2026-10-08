@@ -343,6 +343,9 @@ namespace
 			return time_point{duration{current()}};
 		}
 	};
+
+	/* The point of this clock: it is NOT monotonic (it can go backwards). */
+	static_assert(!ScriptedStatisticsClock::is_steady);
 }
 
 /* 2026-10-08: CPUTime recorded nothing when CLOCKS_PER_SEC was not 1e3, 1e6 or 1e9. The conversion is now generic and

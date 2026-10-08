@@ -51,6 +51,17 @@ Neither step changes behaviour.
 this today. Fix each site as the compiler actually flags it — a broad sweep is churn with no
 verification signal, and the trigger is context-dependent (PCH on/off, optimisation level).
 
+### ⚠️ The Linux clang build of the cascade does NOT compile the base TESTS — syntax-check them with clang (2026-10-08)
+
+projet-alpha's `.claude-build-clang` builds the libraries, not `EmeraudeBaseUnitTests`, so a clang-only finding in a test
+reaches the macOS peer first. It did on base `320e8f9`: `static constexpr bool is_steady{false};` in a test clock inside
+an anonymous namespace — libc++ never reads it, AppleClang breaks on `-Werror,-Wunused-const-variable`; GCC is silent.
+Fixed by USING it (`static_assert(!ScriptedStatisticsClock::is_steady)` states the clock's point), not by
+`[[maybe_unused]]`. **Before pushing a test change:** run `clang++ -fsyntax-only` on every touched test TU with the flags
+of its `compile_commands.json` entry, GCC-only `-W…` options removed (`-Wduplicated-cond`, `-Wduplicated-branches`,
+`-Wlogical-op`, `-Wdangling-reference`, `-Wsuggest-attribute=…`), `-Wno-deprecated*` removed, plus `-Wall -Wextra`.
+Checked: it reproduces the macOS error on the faulty file.
+
 ### Clang `-Wunused-lambda-capture`: never capture a `constexpr` local — Debug-only breakage
 
 `ShapeGenerator.hpp` captured its `constexpr` locals (`half`, `one`, `zero`, `twoPi`) in the
