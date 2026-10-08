@@ -33,10 +33,70 @@
 #include <iostream>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 
 namespace EmEn::Base
 {
+	void
+	TaskHandle::requestStop () noexcept
+	{
+		if ( m_state != nullptr )
+		{
+			m_state->stopSource.request_stop();
+		}
+	}
+
+	bool
+	TaskHandle::finished () const noexcept
+	{
+		if ( m_state == nullptr )
+		{
+			return true;
+		}
+
+		const std::scoped_lock lock{m_state->mutex};
+
+		return m_state->finished;
+	}
+
+	void
+	TaskHandle::wait () noexcept
+	{
+		if ( m_state == nullptr )
+		{
+			return;
+		}
+
+		std::unique_lock< std::mutex > lock{m_state->mutex};
+
+		if ( !m_state->finished && m_state->runningThread == std::this_thread::get_id() )
+		{
+			/* NOTE: The task itself waits for its own end: it would never come. Refused (decision D2 open: abort?). */
+			Logging::error("TaskHandle", "wait(), a task cannot wait for its own handle: refused (it would never return) !");
+
+			return;
+		}
+
+		m_state->finishedSignal.wait(lock, [this] () {
+			return m_state->finished;
+		});
+	}
+
+	void
+	TaskHandle::reset () noexcept
+	{
+		if ( m_state == nullptr )
+		{
+			return;
+		}
+
+		this->requestStop();
+		this->wait();
+
+		m_state.reset();
+	}
+
 	ThreadPool::ThreadPool (size_t threadCount)
 	{
 		/* Ensure at least one worker. */

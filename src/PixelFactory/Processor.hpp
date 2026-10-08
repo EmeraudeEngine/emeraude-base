@@ -428,41 +428,33 @@ namespace EmEn::Base::PixelFactory
 
 				this->prepareSwapBuffer();
 
+				/* NOTE: 64-bit magnitudes: std::abs() of INT32_MIN overflows an int32_t. */
+				const auto xMagnitude = static_cast< uint64_t >(std::abs(static_cast< int64_t >(xDirection)));
+				const auto yMagnitude = static_cast< uint64_t >(std::abs(static_cast< int64_t >(yDirection)));
+
 				/* NOTE: The shift is completely moving the pixmap outside the canvas in X-Axis or Y-axis. */
-				if ( static_cast< dimension_t >(std::abs(xDirection)) < m_target.width() && static_cast< dimension_t >(std::abs(yDirection)) < m_target.height() )
+				if ( xMagnitude < m_target.width() && yMagnitude < m_target.height() )
 				{
-					const auto rowSize = m_target.pitch();
-					const auto xShift = xDirection * static_cast< int32_t >(m_target.colorCount());
-
-					/* NOTE: Defines chunk sizes to move. Both magnitudes were checked against the
-					 * pixmap dimensions just above, so the differences cannot wrap. */
-					const auto xLimit = rowSize - static_cast< uint32_t >(std::abs(xShift));
-					const auto rowShift = static_cast< dimension_t >(std::abs(yDirection));
-					const auto yLimit = m_target.height() - rowShift;
-
-					size_t src = 0;
-					size_t dst = 0;
+					/* NOTE: Offsets count ELEMENTS (pixel_data_t), copy sizes count BYTES: they used to be mixed, which is
+					 * only right for 8-bit pixmaps. Both magnitudes were checked against the dimensions just above. */
+					const auto rowElements = static_cast< size_t >(m_target.width()) * m_target.colorCount();
+					const auto xShiftElements = static_cast< size_t >(xMagnitude) * m_target.colorCount();
+					const auto copyBytes = (rowElements - xShiftElements) * sizeof(pixel_data_t);
+					const auto rowShift = static_cast< size_t >(yMagnitude);
+					const auto yLimit = static_cast< size_t >(m_target.height()) - rowShift;
 
 					for ( size_t rowIndex = 0; rowIndex < yLimit; rowIndex++ )
 					{
-						if ( yDirection > 0 )
-						{
-							src = rowIndex;
-							dst = (rowIndex + rowShift) * rowSize;
-						}
-						else
-						{
-							src = rowIndex + rowShift;
-							dst = rowIndex  * rowSize;
-						}
+						const auto sourceRow = yDirection > 0 ? rowIndex : rowIndex + rowShift;
+						const auto destinationOffset = (yDirection > 0 ? rowIndex + rowShift : rowIndex) * rowElements;
 
-						if ( xShift > 0 )
+						if ( xDirection > 0 )
 						{
-							std::memcpy(m_swapBuffer.data() + dst + xShift, m_target.rowPointer(src), xLimit);
+							std::memcpy(m_swapBuffer.data() + destinationOffset + xShiftElements, m_target.rowPointer(sourceRow), copyBytes);
 						}
 						else
 						{
-							std::memcpy(m_swapBuffer.data() + dst, m_target.rowPointer(src) - xShift, xLimit);
+							std::memcpy(m_swapBuffer.data() + destinationOffset, m_target.rowPointer(sourceRow) + xShiftElements, copyBytes);
 						}
 					}
 				}
@@ -532,24 +524,25 @@ namespace EmEn::Base::PixelFactory
 
 				this->prepareSwapBuffer();
 
-				const auto rowSize = m_target.pitch();
-				const auto xShift = static_cast< uint32_t >(xDirection) * m_target.colorCount();
+				/* NOTE: Offsets count ELEMENTS (pixel_data_t), copy sizes count BYTES (see move()). */
+				const auto rowElements = static_cast< size_t >(m_target.width()) * m_target.colorCount();
+				const auto xShiftElements = static_cast< size_t >(xDirection) * m_target.colorCount();
 
-				/* NOTE: Defines chunk sizes to move. */
-				const auto rowCopySizeA = rowSize - xShift;
-				const auto rowCopySizeB = rowSize - rowCopySizeA;
+				/* NOTE: Defines chunk sizes to move: A stays left of the wrap, B wraps to the row start. */
+				const auto rowElementsA = rowElements - xShiftElements;
+				const auto rowElementsB = xShiftElements;
 
 				auto dstRowIndex = static_cast< size_t >(yDirection);
 
 				for ( size_t rowIndex = 0; rowIndex < m_target.height(); rowIndex++ )
 				{
-					auto dst = dstRowIndex * rowSize;
+					auto dst = dstRowIndex * rowElements;
 
-					std::memcpy(m_swapBuffer.data() + dst, m_target.rowPointer(rowIndex) + rowCopySizeA, rowCopySizeB);
+					std::memcpy(m_swapBuffer.data() + dst, m_target.rowPointer(rowIndex) + rowElementsA, rowElementsB * sizeof(pixel_data_t));
 
-					dst += rowCopySizeB;
+					dst += rowElementsB;
 
-					std::memcpy(m_swapBuffer.data() + dst, m_target.rowPointer(rowIndex), rowCopySizeA);
+					std::memcpy(m_swapBuffer.data() + dst, m_target.rowPointer(rowIndex), rowElementsA * sizeof(pixel_data_t));
 
 					/* NOTE: Next row on the destination and loop if requested. */
 					dstRowIndex++;
@@ -598,7 +591,8 @@ namespace EmEn::Base::PixelFactory
 
 				this->prepareSwapBuffer();
 
-				const auto rowSize = m_target.pitch();
+				/* NOTE: Offsets count ELEMENTS (pixel_data_t), copy sizes count BYTES (see move()). */
+				const auto rowElements = static_cast< size_t >(m_target.width()) * m_target.colorCount();
 				/* NOTE: 64-bit magnitude: std::abs() of INT32_MIN overflows an int32_t. */
 				const auto rowShift = static_cast< uint64_t >(std::abs(static_cast< int64_t >(distance)));
 
@@ -606,15 +600,15 @@ namespace EmEn::Base::PixelFactory
 				 * is copied, as Processor::move() does. The remaining height would wrap below zero. */
 				if ( rowShift < m_target.height() )
 				{
-					const auto bufferSize = static_cast< size_t >(m_target.height() - rowShift) * rowSize;
+					const auto copyBytes = static_cast< size_t >(m_target.height() - rowShift) * rowElements * sizeof(pixel_data_t);
 
 					if ( distance > 0 )
 					{
-						std::memcpy(m_swapBuffer.data() + (static_cast< size_t >(rowShift) * rowSize), m_target.rowPointer(0UL), bufferSize);
+						std::memcpy(m_swapBuffer.data() + (static_cast< size_t >(rowShift) * rowElements), m_target.rowPointer(0UL), copyBytes);
 					}
 					else
 					{
-						std::memcpy(m_swapBuffer.data(), m_target.rowPointer(static_cast< size_t >(rowShift)), bufferSize);
+						std::memcpy(m_swapBuffer.data(), m_target.rowPointer(static_cast< size_t >(rowShift)), copyBytes);
 					}
 				}
 
@@ -646,15 +640,18 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				const auto pixelSize = m_target.colorCount() * sizeof(pixel_data_t);
-				const auto rowSize = destinationClip.width() * pixelSize;
+				/* NOTE: Indices count ELEMENTS (pixel_data_t), the copy size counts BYTES: the indices used to be multiplied
+				 * by sizeof(pixel_data_t), reading and writing sizeof(pixel_data_t) times too far for a float or 16-bit
+				 * pixmap (out of bounds). */
+				const auto pixelElements = static_cast< size_t >(m_target.colorCount());
+				const auto rowBytes = static_cast< size_t >(destinationClip.width()) * pixelElements * sizeof(pixel_data_t);
 
 				for ( size_t destinationY = 0; destinationY < destinationClip.height(); destinationY++ )
 				{
-					const auto sourceIndex = ((sourceClip.top() + destinationY) * source.width() + sourceClip.left()) * pixelSize;
-					const auto destinationIndex = ((destinationClip.top() + destinationY) * m_target.width() + destinationClip.left()) * pixelSize;
+					const auto sourceIndex = ((sourceClip.top() + destinationY) * source.width() + sourceClip.left()) * pixelElements;
+					const auto destinationIndex = ((destinationClip.top() + destinationY) * m_target.width() + destinationClip.left()) * pixelElements;
 
-					std::memcpy(m_target.data().data() + destinationIndex, source.data().data() + sourceIndex, rowSize);
+					std::memcpy(m_target.data().data() + destinationIndex, source.data().data() + sourceIndex, rowBytes);
 				}
 
 				m_target.markRectangleUpdated(destinationClip);
@@ -722,15 +719,18 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				const auto pixelSize = m_target.colorCount() * sizeof(pixel_data_t);
-				const auto rowSize = destinationClip.width() * pixelSize;
+				/* NOTE: Indices count ELEMENTS (pixel_data_t), the copy size counts BYTES: the indices used to be multiplied
+				 * by sizeof(pixel_data_t), reading and writing sizeof(pixel_data_t) times too far for a float or 16-bit
+				 * pixmap (out of bounds). */
+				const auto pixelElements = static_cast< size_t >(m_target.colorCount());
+				const auto rowBytes = static_cast< size_t >(destinationClip.width()) * pixelElements * sizeof(pixel_data_t);
 
 				for ( size_t destinationY = 0; destinationY < destinationClip.height(); destinationY++ )
 				{
-					const auto sourceIndex = ((sourceClip.top() + destinationY) * rawData.width + sourceClip.left()) * pixelSize;
-					const auto destinationIndex = ((destinationClip.top() + destinationY) * m_target.width() + destinationClip.left()) * pixelSize;
+					const auto sourceIndex = ((sourceClip.top() + destinationY) * rawData.width + sourceClip.left()) * pixelElements;
+					const auto destinationIndex = ((destinationClip.top() + destinationY) * m_target.width() + destinationClip.left()) * pixelElements;
 
-					std::memcpy(m_target.data().data() + destinationIndex, rawData.pointer + sourceIndex, rowSize);
+					std::memcpy(m_target.data().data() + destinationIndex, rawData.pointer + sourceIndex, rowBytes);
 				}
 
 				m_target.markRectangleUpdated(destinationClip);
@@ -1368,14 +1368,17 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
+				/* NOTE: Indices count ELEMENTS, the copy size counts BYTES (they were both in bytes: out of bounds for a
+				 * float or 16-bit pixmap). */
 				const auto rowBytes = destination.pitch();
-				const auto pixelBytes = source.colorCount() * sizeof(pixel_data_t);
+				const auto rowElements = static_cast< size_t >(destination.width()) * destination.colorCount();
+				const auto pixelElements = static_cast< size_t >(source.colorCount());
 
 				for ( size_t rowIndex = 0; rowIndex < rectangle.height(); rowIndex++ )
 				{
 					const auto baseY = rowIndex + rectangle.top();
-					const auto destinationIndex = rowIndex * rowBytes;
-					const auto sourceIndex = (baseY * source.width() + rectangle.left()) * pixelBytes;
+					const auto destinationIndex = rowIndex * rowElements;
+					const auto sourceIndex = (baseY * source.width() + rectangle.left()) * pixelElements;
 
 					std::memcpy(destination.data().data() + destinationIndex, source.data().data() + sourceIndex, rowBytes);
 				}
@@ -2593,17 +2596,14 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Prepares the swap buffer for copy operations.
+			 * @brief Prepares the swap buffer for copy operations: one ELEMENT per pixmap element, all cleared.
+			 * @note It used to be sized in BYTES (sizeof(pixel_data_t) times too large for a float or 16-bit pixmap) and
+			 * kept the previous swap's pixels where move() / shiftTextArea() copy nothing: the vacated area is now empty.
 			 */
 			void
 			prepareSwapBuffer () noexcept
 			{
-				const auto size = m_target.bytes();
-
-				if ( m_swapBuffer.size() != size )
-				{
-					m_swapBuffer.resize(size, 0);
-				}
+				m_swapBuffer.assign(m_target.elementCount(), pixel_data_t{0});
 			}
 
 			/**
@@ -2619,7 +2619,7 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				if ( m_swapBuffer.size() != m_target.bytes() )
+				if ( m_swapBuffer.size() != m_target.elementCount() )
 				{
 					return false;
 				}
@@ -2988,7 +2988,10 @@ namespace EmEn::Base::PixelFactory
 			void
 			mirrorX (const Pixmap< pixel_data_t, dimension_t > & source, Pixmap< pixel_data_t, dimension_t > & output) noexcept
 			{
-				const auto rowElementCount = source.pitch();
+				/* NOTE: pitch() counts BYTES: it was used as the element stride too (out of bounds for a float or 16-bit
+				 * pixmap). */
+				const auto rowElementCount = static_cast< size_t >(source.width()) * source.colorCount();
+				const auto rowBytes = source.pitch();
 				const auto rowCount = source.height();
 
 				/* Copy rows in reversed order to a new pixmap. */
@@ -2996,7 +2999,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					const auto invertedRow = rowCount - (rowIndex + 1);
 
-					std::memcpy(output.data().data() + (invertedRow * rowElementCount), source.data().data() + (rowIndex * rowElementCount), rowElementCount);
+					std::memcpy(output.data().data() + (invertedRow * rowElementCount), source.data().data() + (rowIndex * rowElementCount), rowBytes);
 				}
 			}
 

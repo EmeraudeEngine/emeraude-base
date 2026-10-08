@@ -36,6 +36,7 @@
 #include <mutex>
 #include <numeric>
 #include <random>
+#include <stop_token>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -1614,4 +1615,228 @@ TEST(ThreadPool, keepsTheWorkersThatStarted)
 	pool.wait();
 
 	EXPECT_EQ(runs.load(), 16);
+}
+
+/* ===== TaskHandle / ThreadPool::submit() — Ave Robustus II, decision D1 (2026-10-08) ===== */
+
+namespace
+{
+	/** @brief Spins (bounded) until a flag is raised; returns whether it was. */
+	bool
+	waitForFlag (const std::atomic_bool & flag, std::chrono::milliseconds limit = std::chrono::milliseconds{5000})
+	{
+		const auto deadline = std::chrono::steady_clock::now() + limit;
+
+		while ( !flag.load() )
+		{
+			if ( std::chrono::steady_clock::now() > deadline )
+			{
+				return false;
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+
+		return true;
+	}
+}
+
+TEST(ThreadPoolTaskHandle, SubmitRunsAndWaitReturnsAfterTheTask)
+{
+	ThreadPool pool{2};
+	std::atomic_int value{0};
+
+	auto handle = pool.submit([&value] (const std::stop_token &) {
+		std::this_thread::sleep_for(std::chrono::milliseconds{20});
+		value = 42;
+	});
+
+	ASSERT_TRUE(handle.valid());
+
+	handle.wait();
+
+	EXPECT_TRUE(handle.finished());
+	EXPECT_EQ(value.load(), 42);
+}
+
+TEST(ThreadPoolTaskHandle, DestructorStopsAndWaits)
+{
+	ThreadPool pool{2};
+	std::atomic_bool started{false};
+	std::atomic_bool sawStop{false};
+	std::atomic_bool returned{false};
+
+	{
+		auto handle = pool.submit([&] (const std::stop_token & stopToken) {
+			started = true;
+
+			/* Bounded: 10 s at most, far longer than the test waits. */
+			for ( int step = 0; step < 10000 && !stopToken.stop_requested(); ++step )
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds{1});
+			}
+
+			sawStop = stopToken.stop_requested();
+			returned = true;
+		});
+
+		ASSERT_TRUE(waitForFlag(started));
+
+		/* The handle goes out of scope here: stop requested, then waited for. */
+	}
+
+	EXPECT_TRUE(returned.load());
+	EXPECT_TRUE(sawStop.load());
+}
+
+TEST(ThreadPoolTaskHandle, WaitsOnlyForItsOwnTask)
+{
+	ThreadPool pool{2};
+	std::atomic_bool releaseBlocker{false};
+	std::atomic_bool blockerStarted{false};
+
+	auto blocker = pool.submit([&] (const std::stop_token &) {
+		blockerStarted = true;
+
+		/* Ignores the stop on purpose: only the flag releases it (bounded). */
+		for ( int step = 0; step < 10000 && !releaseBlocker.load(); ++step )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+	});
+
+	ASSERT_TRUE(waitForFlag(blockerStarted));
+
+	std::atomic_bool quickDone{false};
+
+	auto quick = pool.submit([&quickDone] (const std::stop_token &) {
+		quickDone = true;
+	});
+
+	quick.wait();
+
+	EXPECT_TRUE(quickDone.load());
+	EXPECT_FALSE(blocker.finished());
+
+	releaseBlocker = true;
+	blocker.wait();
+
+	EXPECT_TRUE(blocker.finished());
+}
+
+TEST(ThreadPoolTaskHandle, StopRequestedBeforeStart)
+{
+	ThreadPool pool{1};
+	std::atomic_bool releaseBlocker{false};
+	std::atomic_bool blockerStarted{false};
+
+	auto blocker = pool.submit([&] (const std::stop_token &) {
+		blockerStarted = true;
+
+		for ( int step = 0; step < 10000 && !releaseBlocker.load(); ++step )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+	});
+
+	ASSERT_TRUE(waitForFlag(blockerStarted));
+
+	std::atomic_bool stoppedAtStart{false};
+
+	auto queued = pool.submit([&stoppedAtStart] (const std::stop_token & stopToken) {
+		stoppedAtStart = stopToken.stop_requested();
+	});
+
+	/* The only worker is busy: the second task has not started yet. */
+	queued.requestStop();
+	releaseBlocker = true;
+	queued.wait();
+
+	EXPECT_TRUE(stoppedAtStart.load());
+}
+
+TEST(ThreadPoolTaskHandle, MoveTransfersAndAssignmentStopsThePrevious)
+{
+	ThreadPool pool{2};
+	std::atomic_bool firstReturned{false};
+	std::atomic_bool firstStarted{false};
+
+	auto handle = pool.submit([&] (const std::stop_token & stopToken) {
+		firstStarted = true;
+
+		for ( int step = 0; step < 10000 && !stopToken.stop_requested(); ++step )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+
+		firstReturned = true;
+	});
+
+	ASSERT_TRUE(waitForFlag(firstStarted));
+
+	TaskHandle moved{std::move(handle)};
+
+	EXPECT_TRUE(moved.valid());
+
+	/* Assigning a new task stops and waits for the one held before. */
+	moved = pool.submit([] (const std::stop_token &) {});
+
+	EXPECT_TRUE(firstReturned.load());
+
+	moved.wait();
+}
+
+TEST(ThreadPoolTaskHandle, CallableIsDestroyedBeforeWaitReturns)
+{
+	ThreadPool pool{2};
+	auto capture = std::make_shared< int >(7);
+	const std::weak_ptr< int > observer = capture;
+
+	auto handle = pool.submit([owned = std::move(capture)] (const std::stop_token &) {
+		static_cast< void >(owned);
+	});
+
+	handle.wait();
+
+	/* The task's captures are gone when wait() returns: the owner may destroy what they pointed to. */
+	EXPECT_TRUE(observer.expired());
+}
+
+TEST(ThreadPoolTaskHandle, TaskWaitingForItsOwnHandleIsRefused)
+{
+	ThreadPool pool{2};
+	auto holder = std::make_shared< TaskHandle >();
+	std::atomic_bool handleStored{false};
+	std::atomic_bool returnedFromSelfWait{false};
+
+	*holder = pool.submit([holder, &handleStored, &returnedFromSelfWait] (const std::stop_token &) {
+		if ( !waitForFlag(handleStored) )
+		{
+			return;
+		}
+
+		/* Would never return if it waited: refused and traced instead. */
+		holder->wait();
+
+		returnedFromSelfWait = true;
+	});
+
+	handleStored = true;
+
+	ASSERT_TRUE(waitForFlag(returnedFromSelfWait));
+
+	holder->wait();
+	EXPECT_TRUE(holder->finished());
+}
+
+TEST(ThreadPoolTaskHandle, EmptyHandleIsHarmless)
+{
+	TaskHandle empty;
+
+	EXPECT_FALSE(empty.valid());
+	EXPECT_TRUE(empty.finished());
+
+	empty.requestStop();
+	empty.wait();
+	empty.reset();
 }

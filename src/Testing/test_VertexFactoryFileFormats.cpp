@@ -424,7 +424,7 @@ namespace EmEn::Base::VertexFactory
 		 * fuzz_mdx MD2 crashes: an empty frame table (frames[0] on a null buffer) and an out-of-range
 		 * triangle vertex index (OOB read). Counts stay small so exceedsStream() does not reject first. */
 		std::vector< std::byte >
-		makeMD2 (int32_t numVertices, int32_t numFrames, uint16_t triVertexIndex) noexcept
+		makeMD2 (int32_t numVertices, int32_t numFrames, uint16_t triVertexIndex, int32_t skinSize = 1) noexcept
 		{
 			constexpr size_t headerSize = 68;
 			constexpr size_t stSize = 4;    /* short s, short t */
@@ -444,8 +444,8 @@ namespace EmEn::Base::VertexFactory
 			const auto putI32 = [&buffer] (size_t off, int32_t value) noexcept { std::memcpy(buffer.data() + off, &value, sizeof(value)); };
 
 			std::memcpy(buffer.data(), "IDP2", 4);
-			putI32(8, 1);                                       /* skinwidth (non-zero divisor) */
-			putI32(12, 1);                                      /* skinheight */
+			putI32(8, skinSize);                                /* skinwidth (a divisor of the texture coordinates) */
+			putI32(12, skinSize);                               /* skinheight */
 			putI32(24, numVertices);                            /* num_vertices */
 			putI32(28, 1);                                      /* num_st */
 			putI32(32, 1);                                      /* num_tris */
@@ -512,6 +512,81 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+	}
+
+	/* Ave Robustus II (2026-10-08): the skin size divides every texture coordinate — a zero size from the file put inf /
+	 * NaN into the geometry and the load SUCCEEDED. The control (size 1) proves the layout itself loads. */
+	TEST(VertexFactoryMDx, md2ZeroSkinSizeIsRejected)
+	{
+		{
+			const auto control = makeMD2(/* numVertices */ 1, /* numFrames */ 1, /* triVertexIndex */ 0, /* skinSize */ 1);
+
+			MemoryStream stream{control};
+			MDx format;
+			Result result;
+			EXPECT_TRUE(format.readStream(stream, result, {}));
+		}
+
+		for ( const int32_t skinSize : {0, -1} )
+		{
+			const auto buffer = makeMD2(/* numVertices */ 1, /* numFrames */ 1, /* triVertexIndex */ 0, skinSize);
+
+			MemoryStream stream{buffer};
+			MDx format;
+			Result result;
+			EXPECT_FALSE(format.readStream(stream, result, {})) << "skin size " << skinSize;
+		}
+	}
+
+	/* An MD5 block shorter than its declared count read the closing brace and the next blocks as entries. */
+	TEST(VertexFactoryMDx, md5ShortJointBlockIsRejected)
+	{
+		const auto md5 = [] (int numJoints) {
+			const std::string text =
+				"MD5Version 10\n"
+				"commandline \"\"\n"
+				"numJoints " + std::to_string(numJoints) + "\n"
+				"numMeshes 1\n"
+				"joints {\n"
+				"\t\"root\"\t-1 ( 0 0 0 ) ( 0 0 0 )\n"
+				"}\n"
+				"mesh {\n"
+				"\tshader \"x\"\n"
+				"\tnumverts 3\n"
+				"\tvert 0 ( 0 0 ) 0 1\n"
+				"\tvert 1 ( 0 0 ) 1 1\n"
+				"\tvert 2 ( 0 0 ) 2 1\n"
+				"\tnumtris 1\n"
+				"\ttri 0 0 1 2\n"
+				"\tnumweights 3\n"
+				"\tweight 0 0 1.0 ( 0 0 0 )\n"
+				"\tweight 1 0 1.0 ( 1 0 0 )\n"
+				"\tweight 2 0 1.0 ( 0 1 0 )\n"
+				"}\n";
+
+			std::vector< std::byte > bytes(text.size());
+			std::memcpy(bytes.data(), text.data(), text.size());
+
+			return bytes;
+		};
+
+		{
+			const auto control = md5(1);
+
+			MemoryStream stream{control};
+			MDx format;
+			Result result;
+			EXPECT_TRUE(format.readStream(stream, result, {}));
+		}
+
+		{
+			const auto shortBlock = md5(2);
+
+			MemoryStream stream{shortBlock};
+			MDx format;
+			Result result;
+			EXPECT_FALSE(format.readStream(stream, result, {}));
+		}
 	}
 
 	TEST(VertexFactoryMDx, md3HostileSurfaceDoesNotCrash)

@@ -279,6 +279,15 @@ namespace EmEn::Base::VertexFactory
 				mdl_header_t header;
 				file.read(reinterpret_cast< char * >(&header), sizeof(mdl_header_t));
 
+				/* NOTE: The skin size divides every texture coordinate below: a zero or negative size from the (untrusted)
+				 * file used to put inf / NaN into the geometry. */
+				if ( !file || header.skinwidth <= 0 || header.skinheight <= 0 )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), unreadable header or a skin size that is not positive !");
+
+					return false;
+				}
+
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_skins)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), skin count exceeds the stream size !");
@@ -491,6 +500,14 @@ namespace EmEn::Base::VertexFactory
 			{
 				md2_header_t header;
 				file.read(reinterpret_cast< char * >(&header), sizeof(md2_header_t));
+
+				/* NOTE: The skin size divides every texture coordinate below (see loadMDL()). */
+				if ( !file || header.skinwidth <= 0 || header.skinheight <= 0 )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMD2(), unreadable header or a skin size that is not positive !");
+
+					return false;
+				}
 
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_st)) )
 				{
@@ -1028,7 +1045,14 @@ namespace EmEn::Base::VertexFactory
 
 						for ( auto & joint : joints )
 						{
-							std::getline(file, line);
+							/* NOTE: A block holding fewer lines than its declared count used to read the closing brace and the
+							 * next blocks as entries: refused (no joint line contains a '}'). */
+							if ( !std::getline(file, line) || line.find('}') != std::string::npos )
+							{
+								Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), fewer joint lines than declared !");
+
+								return false;
+							}
 
 							const size_t startQuote = line.find('"');
 							const size_t endQuote = line.find('"', startQuote + 1);
@@ -1072,7 +1096,14 @@ namespace EmEn::Base::VertexFactory
 
 								for ( auto & vert : mesh.verts )
 								{
-									std::getline(file, line);
+									/* NOTE: A block holding fewer lines than its declared count used to read the closing brace and the
+									 * next blocks as entries: refused (no vertex line contains a '}'). */
+									if ( !std::getline(file, line) || line.find('}') != std::string::npos )
+									{
+										Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), fewer vertex lines than declared !");
+
+										return false;
+									}
 									std::stringstream ss(line);
 									std::string temp; char trash;
 
@@ -1094,7 +1125,14 @@ namespace EmEn::Base::VertexFactory
 
 								for ( auto & tri : mesh.tris )
 								{
-									std::getline(file, line);
+									/* NOTE: A block holding fewer lines than its declared count used to read the closing brace and the
+									 * next blocks as entries: refused (no triangle line contains a '}'). */
+									if ( !std::getline(file, line) || line.find('}') != std::string::npos )
+									{
+										Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), fewer triangle lines than declared !");
+
+										return false;
+									}
 									std::stringstream ss(line);
 									std::string temp;
 
@@ -1115,7 +1153,14 @@ namespace EmEn::Base::VertexFactory
 
 								for ( auto & weight : mesh.weights )
 								{
-									std::getline(file, line);
+									/* NOTE: A block holding fewer lines than its declared count used to read the closing brace and the
+									 * next blocks as entries: refused (no weight line contains a '}'). */
+									if ( !std::getline(file, line) || line.find('}') != std::string::npos )
+									{
+										Logging::error("VertexFactory::FileFormatMDx", "loadMD5(), fewer weight lines than declared !");
+
+										return false;
+									}
 									std::stringstream ss(line);
 									std::string temp; char trash;
 

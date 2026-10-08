@@ -33,6 +33,7 @@
 #include <numbers>
 #include <numeric>
 #include <queue>
+#include <stop_token>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -100,10 +101,13 @@ namespace EmEn::Base::VertexFactory
 			 * hard edges and UV seams). Set flags to false for more aggressive merging.
 			 * @param keepNormals If true, vertices with different normals are kept separate. Default true.
 			 * @param keepTextureCoordinates If true, vertices with different UVs (either set) are kept separate. Default true.
+			 * @param stopToken Interrupts the READ phase (the hashing of every vertex, the long part) at a bounded
+			 * interval: the shape is then left UNTOUCHED and 0 is returned. Once the result is being written (vertex
+			 * array, triangle remap, edges) the call completes. Default: never stopped.
 			 * @return size_t The number of vertices removed.
 			 */
 			size_t
-			deduplicateVertices (bool keepNormals = true, bool keepTextureCoordinates = true) noexcept
+			deduplicateVertices (bool keepNormals = true, bool keepTextureCoordinates = true, const std::stop_token & stopToken = {}) noexcept
 			{
 				if ( m_shape.empty() )
 				{
@@ -166,8 +170,17 @@ namespace EmEn::Base::VertexFactory
 
 				newVertices.reserve(oldCount);
 
+				/* NOTE: How many vertices between two reads of the stop request (cheap, but not per vertex). */
+				constexpr index_data_t StopCheckInterval{4096};
+
 				for ( index_data_t i = 0; i < oldCount; ++i )
 				{
+					if ( i % StopCheckInterval == 0 && stopToken.stop_requested() )
+					{
+						/* Read phase only: nothing was written yet, the shape is untouched. */
+						return 0;
+					}
+
 					const auto & vert = oldVertices[i];
 
 					const auto p = quantizeVec(vert.position());

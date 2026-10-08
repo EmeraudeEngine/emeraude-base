@@ -15,6 +15,9 @@ nothing fancier.* Hardening landed in the A.2 characterization pass and the A.3 
   normal indices, MD3 OOB index + 64 GB `reserveData` (triangle total bounded vs stream) + offset
   signed-overflow (`int64_t`), MD5 null-deref (derive `jointCount` from `joints.size()`, validate
   weight→joint / vertex→weight / triangle→vertex cross-refs before building).
+  2026-10-08: an MDL / MD2 skin width or height that is not positive is refused (it divides every texture
+  coordinate: inf / NaN in the geometry), and an MD5 block holding fewer lines than its declared count is refused
+  (it used to read the closing brace and the next blocks as entries).
 - **OBJ**: a face index that references a non-existent vertex is bounds-checked **before** the
   access (was `std::vector::at` → `out_of_range` → terminate). `resolveIndex()` widens to `int64_t`
   so a list larger than `INT_MAX` cannot wrap (the former `int32_t` cast was UB).

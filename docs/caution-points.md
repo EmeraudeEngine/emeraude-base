@@ -344,6 +344,30 @@ task. Proof: `BaseThread.aNewThreadSeesItsObjectAlreadyRecorded` holds `start()`
 (16 × 500 Release, 16 × 300 ASan) gives 0 failure and every trace on Linux. **Rule:** an object handing work to
 another thread publishes its own state BEFORE the other thread can observe it, never after the hand-over call.
 
+### ⚠️⚠️ A job that touches an object is `submit()`ted, and the object keeps its `TaskHandle` (Ave Robustus II, 2026-10-08)
+
+`ThreadPool::enqueue()` returns nothing: no owner, no individual wait, no cancellation — so ad-hoc flags grew and an
+outsider (`Core`) drained the pool for objects it did not own. `ThreadPool::submit(callable)` returns a move-only
+`TaskHandle` (`src/ThreadPool.hpp`, owner decision D1): the callable receives a `std::stop_token`; the handle's
+destructor and move-assignment request the stop and wait for THAT task only; when `wait()` returns, the callable and
+its captures are already destroyed (the owner may free what they pointed to). **Rule:** a task touching an object
+(`this`, a reference) is submitted and the object keeps the handle as a member, declared AFTER the state the task
+uses; `enqueue()` stays for fire-and-forget work capturing values only. A long task checks its token at a bounded
+interval in every stage (`ShapeDecimator::setStopToken()`: every 4096 iterations of every stage loop).
+⚠️ A task waiting for its OWN handle would never return: `wait()` refuses it with a trace (decision D2 open: abort?).
+⚠️ A pool worker waiting for a task still QUEUED behind it can deadlock a small pool, as with any pool wait.
+⚠️ The measured stop latency of a 2.24 M-triangle decimation is 0.74 s worst (was 1.52 s): the work stops within
+milliseconds, the rest is the DEALLOCATION of its node-based containers (item `task-handle-and-stop-token`).
+Proof: 8 `ThreadPoolTaskHandle.*` tests, 20 rounds under TSan with 0 report; Release and ASan/UBSan green.
+
+### ⚠️ TSan reports OpenMP regions as races — run a TSan test with `OMP_NUM_THREADS=1` (2026-10-08)
+
+libgomp is not built with TSan: its barriers are invisible, so the end of a `#pragma omp parallel for` looks
+unsynchronized. Measured on `VertexFactoryShapeDecimator.aRequestedStopTokenStopsTheDecimation` (its sphere goes through
+`Shape::computeTriangleTangent()`'s OpenMP loop): 7 "data race" reports between an OpenMP worker and the main thread's
+later stack frames — 0 with `OMP_NUM_THREADS=1`, same test, same binary. **Rule:** run TSan with `OMP_NUM_THREADS=1`
+(it then checks our own threads only); a race INSIDE an OpenMP region needs an Archer / TSan-aware OpenMP runtime.
+
 ## IO / std::filesystem (triad, 2026-09-30)
 
 ### ⚠️⚠️ Every std::filesystem call WITHOUT an error_code throws — and under -fno-exceptions that is std::terminate
@@ -573,14 +597,18 @@ Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToB
 
 ## VertexFactory
 
-### `ShapeDecimator` can be interrupted — `setCancellationFlag()` (2026-10-08)
+### `ShapeDecimator` can be interrupted — `setStopToken()` (2026-10-08)
 
 A decimation of a large mesh lasts SECONDS, and the engine runs it on a worker (automatic LODs): a shutdown waited for
-every running one. `setCancellationFlag(const std::atomic_bool *)` (non-owning, nullptr = none) is read between the
-stages and every `CancellationCheckInterval` (4096) collapses; a raised flag makes `decimate()` return an EMPTY shape
-(`isCancelled()` tells it from a failure). A lowered flag changes nothing (same triangles, same vertices — test
-`VertexFactoryShapeDecimator.aLoweredCancellationFlagChangesNothing`). Not interruptible INSIDE a stage: the vertex
-deduplication and the collapse-queue build of a huge mesh still run to their end.
+every running one. `setStopToken(std::stop_token)` (the token of the job's `TaskHandle`, Ave Robustus II D1) is read
+every `CancellationCheckInterval` (4096) iterations of EVERY stage loop (deduplication read phase, initialisation,
+corner UV table, quadrics, penalties, collapse queue, collapses, output, orientation check, normal-map bake); a stop
+makes `decimate()` return an EMPTY shape (`isCancelled()` tells it from a failure; test
+`aRequestedStopTokenStopsTheDecimation`). A lowered flag changes nothing (same triangles, same vertices — test
+`VertexFactoryShapeDecimator.aLoweredCancellationFlagChangesNothing`).
+`setCancellationFlag(const std::atomic_bool *)` is TRANSITIONAL (read too) until the engine's LOD jobs own a
+`TaskHandle` (engine item `jobs-owned-by-their-starter`). ⚠️ The stop latency is bounded by the DEALLOCATION of the
+stages' node-based containers, 0.74 s on 2.24 M triangles (item `task-handle-and-stop-token`).
 
 ### ⚠️⚠️ The computed tangent frame was backwards on every MIRRORED UV island — tangent AND handedness (2026-10-07, FIXED)
 
@@ -1040,6 +1068,18 @@ became `0x01010101` ≈ `2.4e-38F` — a silently black/transparent HDR image, n
 Fixed sites: `fill(pixel_data_t)` (Grayscale/RGB branch), `fillChannel(Channel, pixel_data_t)`
 (Grayscale branch — which additionally forgot `markEverythingUpdated()` before its early return),
 and `zeroFill()` for consistency.
+
+### ⚠️⚠️ `Pixmap::pitch()` counts BYTES; a `data()` offset counts ELEMENTS (2026-10-08, FIXED)
+
+`pitch()` is `width × colorCount × sizeof(pixel_data_t)`: a byte count, right for a `memcpy` size, wrong as an index
+into `data()` (a vector of `pixel_data_t`). `Processor` used it as both — `move()`, `shift()`, `shiftTextArea()`,
+`blit()`, `crop()`, `mirrorX()` and its swap buffer (sized in bytes) were right for 8-bit pixmaps only and read / wrote
+2× (16-bit) or 4× (float) too far. Fixed: offsets in elements, copy sizes in bytes; the swap buffer holds
+`elementCount()` elements and is CLEARED at every use (it used to keep the previous swap's pixels where `move()` copies
+nothing). `move()` / `shiftTextArea()` take `std::abs()` in 64 bits (`std::abs(INT32_MIN)` overflows an `int32_t`).
+**Rule:** name a value `…Elements` or `…Bytes`, never `…Size`. Proof: `PixelFactoryProcessor.everyPrecisionMatchesEightBit`
+(the same operations on 8-bit, 16-bit and float pixmaps give the same pixels), `moveVacatesWithEmptyPixels`,
+`moveExtremeDirections`; ASan/UBSan green.
 
 ### `fill(const pixel_data_t * data, size_t size)` — the tiling was wrong four ways
 

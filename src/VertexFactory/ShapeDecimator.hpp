@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <stop_token>
 #include <cmath>
 #include <cstdint>
 #include <functional>
@@ -99,11 +100,21 @@ namespace EmEn::Base::VertexFactory
 			~ShapeDecimator () = default;
 
 			/**
-			 * @brief Lets the caller interrupt decimate(): the flag is read between the stages and every
-			 * CancellationCheckInterval collapses, and a raised flag makes decimate() return an EMPTY shape.
-			 * @note Non-owning: the flag must outlive decimate(). The engine passes its shutdown flag
-			 * (Resources::AbstractServiceProvider::cancelBackgroundWork()): a decimation of a large mesh lasts seconds,
-			 * and a shutdown waited for every running one (2026-10-08).
+			 * @brief Lets the caller interrupt decimate() through a std::stop_token (Ave Robustus II, decision D1): every
+			 * stage checks it every CancellationCheckInterval iterations, and a requested stop makes decimate() return an
+			 * EMPTY shape. The token comes from the TaskHandle of the job running the decimation.
+			 * @param stopToken The token.
+			 */
+			void
+			setStopToken (std::stop_token stopToken) noexcept
+			{
+				m_stopToken = std::move(stopToken);
+			}
+
+			/**
+			 * @brief TRANSITIONAL: the engine's former global shutdown flag, still read until its LOD jobs own a TaskHandle
+			 * (Ave Robustus II, phase P2, engine item jobs-owned-by-their-starter) — then this setter goes.
+			 * @note Non-owning: the flag must outlive decimate().
 			 * @param flag A pointer to the flag, nullptr for none (the default).
 			 */
 			void
@@ -113,14 +124,14 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Returns whether the cancellation flag is raised.
+			 * @brief Returns whether a stop was requested (stop token or transitional flag).
 			 * @return bool
 			 */
 			[[nodiscard]]
 			bool
 			isCancelled () const noexcept
 			{
-				return m_cancellationFlag != nullptr && m_cancellationFlag->load(std::memory_order_relaxed);
+				return m_stopToken.stop_requested() || (m_cancellationFlag != nullptr && m_cancellationFlag->load(std::memory_order_relaxed));
 			}
 
 			/**
@@ -141,7 +152,7 @@ namespace EmEn::Base::VertexFactory
 				 * The original source (m_bakeSource) is preserved for normal map baking. */
 				auto workShape = m_source;
 				ShapeProcessor< vertex_data_t, index_data_t > connProcessor{workShape};
-				connProcessor.deduplicateVertices(false, false);
+				connProcessor.deduplicateVertices(false, false, m_stopToken);
 
 				if ( this->isCancelled() )
 				{
@@ -155,25 +166,40 @@ namespace EmEn::Base::VertexFactory
 				std::vector< VertexData > vertices;
 				std::vector< TriangleData > triangles;
 
-				initializeData(vertices, triangles, workShape);
+				/* NOTE: Every stage below returns early on a stop request (Ave Robustus II: a bounded stop latency). */
+				if ( !this->initializeData(vertices, triangles, workShape) )
+				{
+					return {};
+				}
 
 				/* Each corner's UV in its own chart (see CornerUVTable): what the output keeps, and what a collapse must
 				 * not turn over. */
-				const CornerUVTable cornerUVs{m_source, workShape};
+				const CornerUVTable cornerUVs{m_source, workShape, *this};
+
+				if ( cornerUVs.cancelled() )
+				{
+					return {};
+				}
 
 				/* Compute initial quadrics. */
-				computeInitialQuadrics(vertices, triangles);
+				if ( !this->computeInitialQuadrics(vertices, triangles) )
+				{
+					return {};
+				}
 
 				/* Detect and penalize boundaries and UV seams. */
-				applyBoundaryAndSeamPenalties(vertices, triangles);
-
-				if ( this->isCancelled() )
+				if ( !this->applyBoundaryAndSeamPenalties(vertices, triangles) )
 				{
 					return {};
 				}
 
 				/* Build initial collapse candidates. */
-				auto queue = buildCollapseQueue(vertices, triangles);
+				CollapseQueue queue;
+
+				if ( !this->buildCollapseQueue(vertices, triangles, queue) )
+				{
+					return {};
+				}
 
 				/* Iterative edge collapse. */
 				size_t liveTriCount = triangles.size();
@@ -320,6 +346,11 @@ namespace EmEn::Base::VertexFactory
 
 				auto output = buildOutputShape(vertices, triangles, workShape, cornerUVs);
 
+				if ( this->isCancelled() )
+				{
+					return {};
+				}
+
 				/* Normal map baking: generate lightmap UVs, then bake high-poly normals. */
 				if ( m_normalMapResolution > 0 && !this->isCancelled() )
 				{
@@ -327,6 +358,12 @@ namespace EmEn::Base::VertexFactory
 					processor.generateLightmapUV();
 
 					m_normalMap = bakeNormalMap(output, m_normalMapResolution);
+				}
+
+				/* NOTE: A stop during the bake leaves no normal map: the whole decimation reports the cancellation. */
+				if ( this->isCancelled() )
+				{
+					return {};
 				}
 
 				return output;
@@ -345,9 +382,22 @@ namespace EmEn::Base::VertexFactory
 
 		private:
 
-			/** @brief How many collapses between two reads of the cancellation flag (a relaxed load: cheap, but not per
-			 * collapse). */
+			/** @brief How many iterations of any stage loop between two reads of the stop request (cheap, but not per
+			 * iteration). */
 			static constexpr size_t CancellationCheckInterval{4096};
+
+			/**
+			 * @brief Counts one iteration of a stage loop and, every CancellationCheckInterval of them, reads the stop
+			 * request.
+			 * @param counter The stage's own iteration counter.
+			 * @return bool True when the stage must stop now.
+			 */
+			[[nodiscard]]
+			bool
+			checkpoint (size_t & counter) const noexcept
+			{
+				return (++counter % CancellationCheckInterval) == 0 && this->isCancelled();
+			}
 
 			/** @brief Two UVs of one vertex closer than this (squared) are the same UV (a seam is far wider). */
 			static constexpr vertex_data_t UVMatchToleranceSquared{static_cast< vertex_data_t >(1e-10)};
@@ -414,8 +464,9 @@ namespace EmEn::Base::VertexFactory
 					 * @brief Builds the table.
 					 * @param source The source shape (one vertex per (position, attributes)).
 					 * @param workShape Its position-deduplicated copy (same triangles, same order).
+					 * @param owner The decimator, whose stop request interrupts the build (cancelled() then reports it).
 					 */
-					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const Shape< vertex_data_t, index_data_t > & workShape) noexcept
+					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const Shape< vertex_data_t, index_data_t > & workShape, const ShapeDecimator & owner) noexcept
 						: m_source{&source},
 						m_workShape{&workShape},
 						m_valid{source.triangles().size() == workShape.triangles().size()}
@@ -428,9 +479,18 @@ namespace EmEn::Base::VertexFactory
 						m_vertexUVs.resize(workShape.vertices().size());
 
 						const auto & workTriangles = workShape.triangles();
+						size_t iteration = 0;
 
 						for ( size_t t = 0; t < workTriangles.size(); ++t )
 						{
+							if ( owner.checkpoint(iteration) )
+							{
+								m_valid = false;
+								m_cancelled = true;
+
+								return;
+							}
+
 							for ( index_data_t corner = 0; corner < 3; ++corner )
 							{
 								const auto & uv = this->sourceCornerUV(t, corner);
@@ -480,6 +540,17 @@ namespace EmEn::Base::VertexFactory
 						return {best, candidates[best]};
 					}
 
+					/**
+					 * @brief Returns whether the build was interrupted by a stop request.
+					 * @return bool
+					 */
+					[[nodiscard]]
+					bool
+					cancelled () const noexcept
+					{
+						return m_cancelled;
+					}
+
 				private:
 
 					[[nodiscard]]
@@ -494,6 +565,7 @@ namespace EmEn::Base::VertexFactory
 					const Shape< vertex_data_t, index_data_t > * m_workShape{nullptr};
 					std::vector< std::vector< Math::Vector< 3, vertex_data_t > > > m_vertexUVs;
 					bool m_valid{false};
+					bool m_cancelled{false};
 			};
 
 			struct CollapseCandidate
@@ -515,9 +587,12 @@ namespace EmEn::Base::VertexFactory
 
 			/* ---- Initialization ---- */
 
-			void
+			[[nodiscard]]
+			bool
 			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const Shape< vertex_data_t, index_data_t > & workShape) const noexcept
 			{
+				size_t iteration = 0;
+
 				const auto & srcVerts = workShape.vertices();
 				const auto & srcTris = workShape.triangles();
 				const auto & srcGroups = workShape.groups();
@@ -530,6 +605,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t i = 0; i < srcVerts.size(); ++i )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					vertices[i].position = srcVerts[i].position();
 					vertices[i].srcIndex = static_cast< index_data_t >(i);
 				}
@@ -547,6 +627,11 @@ namespace EmEn::Base::VertexFactory
 
 					for ( index_data_t i = 0; i < groupLength; ++i )
 					{
+						if ( this->checkpoint(iteration) )
+						{
+							return false;
+						}
+
 						const auto triIdx = groupOffset + i;
 
 						if ( triIdx < srcTris.size() )
@@ -558,6 +643,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t t = 0; t < srcTris.size(); ++t )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					const auto & tri = srcTris[t];
 
 					triangles[t].v[0] = tri.vertexIndex(0);
@@ -589,6 +679,8 @@ namespace EmEn::Base::VertexFactory
 						}
 					}
 				}
+
+				return true;
 			}
 
 			/* ---- Quadric computation ---- */
@@ -605,11 +697,19 @@ namespace EmEn::Base::VertexFactory
 				return Quadric{{a * a, a * b, a * c, a * d, b * b, b * c, b * d, c * c, c * d, d * d}};
 			}
 
-			void
+			[[nodiscard]]
+			bool
 			computeInitialQuadrics (std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles) const noexcept
 			{
+				size_t iteration = 0;
+
 				for ( size_t t = 0; t < triangles.size(); ++t )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					const auto & tri = triangles[t];
 					const auto & p0 = vertices[tri.v[0]].position;
 					const auto & p1 = vertices[tri.v[1]].position;
@@ -640,6 +740,8 @@ namespace EmEn::Base::VertexFactory
 					vertices[tri.v[1]].quadric += Q;
 					vertices[tri.v[2]].quadric += Q;
 				}
+
+				return true;
 			}
 
 			/* ---- Boundary and UV seam detection ---- */
@@ -655,15 +757,23 @@ namespace EmEn::Base::VertexFactory
 				return (static_cast< uint64_t >(lo) << 32) | static_cast< uint64_t >(hi);
 			}
 
-			void
+			[[nodiscard]]
+			bool
 			applyBoundaryAndSeamPenalties (std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles) const noexcept
 			{
+				size_t iteration = 0;
+
 				/* Count edge occurrences to find boundaries. */
 				std::unordered_map< uint64_t, size_t > edgeCounts;
 				std::unordered_map< uint64_t, std::array< index_data_t, 2 > > edgeVerts;
 
 				for ( const auto & tri : triangles )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					for ( int i = 0; i < 3; ++i )
 					{
 						const auto a = tri.v[i];
@@ -678,6 +788,11 @@ namespace EmEn::Base::VertexFactory
 				/* Apply penalty to boundary edges. */
 				for ( const auto & [key, count] : edgeCounts )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					if ( count != 1 )
 					{
 						continue;
@@ -743,6 +858,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t v = 0; v < vertices.size(); ++v )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					if ( vertices[v].adjacentTris.size() < 2 )
 					{
 						continue;
@@ -795,6 +915,8 @@ namespace EmEn::Base::VertexFactory
 						vertices[v].quadric += penalty;
 					}
 				}
+
+				return true;
 			}
 
 			/* ---- Optimal position and quadric evaluation ---- */
@@ -1111,14 +1233,19 @@ namespace EmEn::Base::VertexFactory
 			/* ---- Priority queue ---- */
 
 			[[nodiscard]]
-			CollapseQueue
-			buildCollapseQueue (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles) const noexcept
+			bool
+			buildCollapseQueue (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, CollapseQueue & queue) const noexcept
 			{
-				CollapseQueue queue;
 				std::unordered_set< uint64_t > processedEdges;
+				size_t iteration = 0;
 
 				for ( size_t t = 0; t < triangles.size(); ++t )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
 					const auto & tri = triangles[t];
 
 					for ( int i = 0; i < 3; ++i )
@@ -1142,7 +1269,7 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
-				return queue;
+				return true;
 			}
 
 			/* ---- Output shape construction ---- */
@@ -1164,9 +1291,15 @@ namespace EmEn::Base::VertexFactory
 				std::map< std::pair< index_data_t, size_t >, index_data_t > vertexMap;
 				/* Three per triangle: the output vertex of each corner. */
 				std::vector< index_data_t > outputCorners(triangles.size() * 3);
+				size_t iteration = 0;
 
 				for ( size_t t = 0; t < triangles.size(); ++t )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return {};
+					}
+
 					if ( triangles[t].removed )
 					{
 						continue;
@@ -1227,6 +1360,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( const auto triIdx : survivingTriIndices )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return {};
+					}
+
 					const auto & tri = triangles[triIdx];
 
 					const auto dv0 = outputCorners[(triIdx * 3) + 0];
@@ -1291,6 +1429,11 @@ namespace EmEn::Base::VertexFactory
 
 						for ( const auto & srcVert : m_source.vertices() )
 						{
+							if ( this->checkpoint(iteration) )
+							{
+								return {};
+							}
+
 							const auto dist = (srcVert.position() - pos).lengthSquared();
 
 							if ( dist < bestDist )
@@ -1366,8 +1509,15 @@ namespace EmEn::Base::VertexFactory
 					return cx + (cy * GridRes) + (cz * GridRes * GridRes);
 				};
 
+				size_t iteration = 0;
+
 				for ( size_t t = 0; t < highTris.size(); ++t )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return {};
+					}
+
 					const auto & tri = highTris[t];
 					const auto & p0 = highVerts[tri.vertexIndex(0)].position();
 					const auto & p1 = highVerts[tri.vertexIndex(1)].position();
@@ -1447,6 +1597,11 @@ namespace EmEn::Base::VertexFactory
 
 				for ( size_t t = 0; t < lowTris.size(); ++t )
 				{
+					if ( this->checkpoint(iteration) )
+					{
+						return {};
+					}
+
 					const auto & tri = lowTris[t];
 					const auto & tc0 = lowVerts[tri.vertexIndex(0)].textureCoordinates();
 					const auto & tc1 = lowVerts[tri.vertexIndex(1)].textureCoordinates();
@@ -1477,6 +1632,12 @@ namespace EmEn::Base::VertexFactory
 
 				auto processRow = [&] (uint32_t py)
 				{
+					/* NOTE: One read per row (rows may run in parallel: the stop request is thread-safe). */
+					if ( this->isCancelled() )
+					{
+						return;
+					}
+
 					for ( uint32_t px = 0; px < resolution; ++px )
 					{
 						const auto u = (static_cast< vertex_data_t >(px) + static_cast< vertex_data_t >(0.5)) * invRes;
@@ -1661,6 +1822,11 @@ namespace EmEn::Base::VertexFactory
 				 * Empty pixels have the default normal (0.5, 0.5, 1.0, 1.0) = RGB(128, 128, 255). */
 				dilateNormalMap(normalMap, 8);
 
+				if ( this->isCancelled() )
+				{
+					return {};
+				}
+
 				return normalMap;
 			}
 
@@ -1757,6 +1923,7 @@ namespace EmEn::Base::VertexFactory
 			vertex_data_t m_boundaryPenaltyWeight;
 			uint32_t m_normalMapResolution{0};
 			ThreadPool * m_threadPool{nullptr};
+			std::stop_token m_stopToken;
 			const std::atomic_bool * m_cancellationFlag{nullptr};
 			mutable PixelFactory::Pixmap< uint8_t > m_normalMap;
 	};

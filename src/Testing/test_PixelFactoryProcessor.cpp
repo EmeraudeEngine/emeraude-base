@@ -1362,3 +1362,144 @@ TEST(PixelFactoryProcessor, shiftTextAreaWholeHeightOrMore)
 	}
 }
 
+
+namespace
+{
+	/** @brief A 5 x 4 RGB pixmap whose elements are their own index (0 … 59), in any precision. */
+	template< typename pixel_data_t >
+	Pixmap< pixel_data_t >
+	indexedRGB ()
+	{
+		std::vector< pixel_data_t > data(5U * 4U * 3U);
+		uint32_t value = 0;
+
+		for ( auto & element : data )
+		{
+			element = static_cast< pixel_data_t >(value++);
+		}
+
+		return Pixmap< pixel_data_t >{5, 4, ChannelMode::RGB, std::span< const pixel_data_t >{data}};
+	}
+
+	/** @brief The elements of a pixmap as floats, to compare precisions. */
+	template< typename pixel_data_t >
+	std::vector< float >
+	elementsOf (const Pixmap< pixel_data_t > & pixmap)
+	{
+		std::vector< float > elements;
+		elements.reserve(pixmap.data().size());
+
+		for ( const auto element : pixmap.data() )
+		{
+			elements.push_back(static_cast< float >(element));
+		}
+
+		return elements;
+	}
+
+	/** @brief Runs every row-copy operation of the processor on an indexed pixmap of the given precision. */
+	template< typename pixel_data_t >
+	std::vector< std::vector< float > >
+	rowCopyResults ()
+	{
+		std::vector< std::vector< float > > results;
+
+		const auto runOnCopy = [&results] (const auto & operation) {
+			auto pixmap = indexedRGB< pixel_data_t >();
+			Processor< pixel_data_t > processor{pixmap};
+
+			EXPECT_TRUE(operation(processor));
+
+			results.push_back(elementsOf(pixmap));
+		};
+
+		runOnCopy([] (auto & processor) { return processor.move(2, 1); });
+		runOnCopy([] (auto & processor) { return processor.move(-1, -2); });
+		runOnCopy([] (auto & processor) { return processor.shift(2, 1); });
+		runOnCopy([] (auto & processor) { return processor.shift(-1, -3); });
+		runOnCopy([] (auto & processor) { return processor.shiftTextArea(1); });
+		runOnCopy([] (auto & processor) { return processor.shiftTextArea(-2); });
+
+		{
+			const auto source = indexedRGB< pixel_data_t >();
+			Pixmap< pixel_data_t > target{5, 4, ChannelMode::RGB};
+			const Processor< pixel_data_t > processor{target};
+
+			EXPECT_TRUE(processor.blit(source, {1, 1, 3, 2}, {0, 2, 3, 2}));
+
+			results.push_back(elementsOf(target));
+		}
+
+		{
+			Pixmap< pixel_data_t > cropped;
+
+			EXPECT_TRUE(Processor< pixel_data_t >::crop(indexedRGB< pixel_data_t >(), {1, 1, 3, 2}, cropped));
+
+			results.push_back(elementsOf(cropped));
+		}
+
+		results.push_back(elementsOf(Processor< pixel_data_t >::mirror(indexedRGB< pixel_data_t >(), MirrorMode::X)));
+
+		return results;
+	}
+}
+
+/* Ave Robustus II (2026-10-08): move / shift / shiftTextArea / blit / crop / mirrorX mixed byte counts (pitch(),
+ * bytes(), sizeof) with element offsets: right for 8-bit pixmaps only — a float or 16-bit pixmap was read and written
+ * sizeof(pixel_data_t) times too far (out of bounds) and the swap buffer was sized in bytes. Every precision must give
+ * exactly the 8-bit result. */
+TEST(PixelFactoryProcessor, everyPrecisionMatchesEightBit)
+{
+	const auto reference = rowCopyResults< uint8_t >();
+	const auto sixteenBit = rowCopyResults< uint16_t >();
+	const auto floatingPoint = rowCopyResults< float >();
+
+	ASSERT_EQ(reference.size(), sixteenBit.size());
+	ASSERT_EQ(reference.size(), floatingPoint.size());
+
+	for ( size_t index = 0; index < reference.size(); ++index )
+	{
+		EXPECT_EQ(reference[index], sixteenBit[index]) << "operation #" << index;
+		EXPECT_EQ(reference[index], floatingPoint[index]) << "operation #" << index;
+	}
+}
+
+/* The swap buffer kept the previous operation's pixels where move() copies nothing: the second move showed the
+ * ORIGINAL image in the vacated columns. */
+TEST(PixelFactoryProcessor, moveVacatesWithEmptyPixels)
+{
+	auto pixmap = indexedRGB< uint8_t >();
+	Processor< uint8_t > processor{pixmap};
+
+	ASSERT_TRUE(processor.move(1, 0));
+	ASSERT_TRUE(processor.move(1, 0));
+
+	/* Positive X moves the content by two pixels (move()'s own convention): the two vacated columns are empty. */
+	for ( size_t row = 0; row < 4; ++row )
+	{
+		for ( size_t element = 0; element < size_t{2} * 3U; ++element )
+		{
+			EXPECT_EQ(pixmap.data()[(row * 5U * 3U) + element], 0) << "row " << row << " element " << element;
+		}
+	}
+}
+
+/* move() took std::abs() of an int32_t direction: INT32_MIN overflowed (UB). Any extreme direction moves everything
+ * out of the canvas and leaves it empty. */
+TEST(PixelFactoryProcessor, moveExtremeDirections)
+{
+	for ( const int32_t direction : {std::numeric_limits< int32_t >::min(), std::numeric_limits< int32_t >::max(), 5, -5} )
+	{
+		auto horizontal = indexedRGB< uint8_t >();
+		Processor< uint8_t > horizontalProcessor{horizontal};
+
+		EXPECT_TRUE(horizontalProcessor.move(direction, 0)) << "direction " << direction;
+		EXPECT_TRUE(std::ranges::all_of(horizontal.data(), [] (uint8_t element) { return element == 0; })) << "direction " << direction;
+
+		auto vertical = indexedRGB< uint8_t >();
+		Processor< uint8_t > verticalProcessor{vertical};
+
+		EXPECT_TRUE(verticalProcessor.move(0, direction)) << "direction " << direction;
+		EXPECT_TRUE(std::ranges::all_of(vertical.data(), [] (uint8_t element) { return element == 0; })) << "direction " << direction;
+	}
+}

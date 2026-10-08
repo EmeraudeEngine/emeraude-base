@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <condition_variable>
 #include <concepts>
 #include <cstddef>
 #include <deque>
@@ -38,6 +39,8 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <optional>
+#include <stop_token>
 #include <thread>
 #include <type_traits>
 #include <utility>
@@ -48,6 +51,203 @@
 
 namespace EmEn::Base
 {
+	/**
+	 * @class TaskHandle
+	 * @brief Owns one task submitted with ThreadPool::submit(): the std::jthread model applied to a pool task
+	 * (Ave Robustus II, owner decision D1, 2026-10-08).
+	 *
+	 * The task receives a std::stop_token. Destroying (or reassigning) the handle requests the task to stop and waits
+	 * for THAT task only — never for the whole pool. When wait() returns, the task's callable and everything it captured
+	 * are destroyed. The object that starts a job keeps its handle as a member: its own destruction then stops and waits
+	 * for the job, so nothing else (a global flag, another class's drain) has to.
+	 *
+	 * @note Thread-safe: requestStop(), finished() and wait() may be called from any thread. A task waiting for its OWN
+	 * handle would never return: it is refused and traced (owner decision D2 still open on whether it should abort).
+	 */
+	class TaskHandle final
+	{
+		public:
+
+			/** @brief The state shared by a handle and its task. */
+			struct State final
+			{
+				std::stop_source stopSource;
+				std::mutex mutex;
+				std::condition_variable finishedSignal;
+				std::thread::id runningThread;
+				bool finished{false};
+			};
+
+			/** @brief Constructs an empty handle (no task; valid() is false). */
+			TaskHandle () noexcept = default;
+
+			/**
+			 * @brief Constructs a handle over a task's shared state (ThreadPool::submit()).
+			 * @param state The shared state.
+			 */
+			explicit
+			TaskHandle (std::shared_ptr< State > state) noexcept
+				: m_state{std::move(state)}
+			{
+
+			}
+
+			/** @brief Destructs the handle: requests the task to stop, then waits for it. */
+			~TaskHandle ()
+			{
+				this->reset();
+			}
+
+			/** @brief Copy constructor (deleted: one owner per task). */
+			TaskHandle (const TaskHandle & copy) = delete;
+
+			/** @brief Copy assignment (deleted). */
+			TaskHandle & operator= (const TaskHandle & copy) = delete;
+
+			/**
+			 * @brief Move constructor: the task changes owner, the source becomes empty.
+			 * @param other The handle to take the task from.
+			 */
+			TaskHandle (TaskHandle && other) noexcept = default;
+
+			/**
+			 * @brief Move assignment: the task held before is stopped and waited for, then the other one is taken.
+			 * @param other The handle to take the task from.
+			 * @return TaskHandle &
+			 */
+			TaskHandle &
+			operator= (TaskHandle && other) noexcept
+			{
+				if ( this != &other )
+				{
+					this->reset();
+
+					m_state = std::move(other.m_state);
+				}
+
+				return *this;
+			}
+
+			/**
+			 * @brief Returns whether the handle owns a task (false when empty, moved from, reset, or refused by the pool).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			valid () const noexcept
+			{
+				return m_state != nullptr;
+			}
+
+			/** @brief Asks the task to stop (its std::stop_token reports it). No effect on an empty handle. */
+			void requestStop () noexcept;
+
+			/**
+			 * @brief Returns whether the task has finished (or will never run). An empty handle reports true.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool finished () const noexcept;
+
+			/**
+			 * @brief Blocks until the task has finished and its callable is destroyed. Returns at once on an empty handle.
+			 * @note Called from the task's own thread, it would never return: refused and traced.
+			 */
+			void wait () noexcept;
+
+			/** @brief Requests the task to stop, waits for it and releases the handle (valid() becomes false). */
+			void reset () noexcept;
+
+		private:
+
+			std::shared_ptr< State > m_state;
+	};
+
+	/**
+	 * @class TaskRunner
+	 * @brief The callable a ThreadPool runs for ThreadPool::submit(): runs the task with its stop token, destroys it, then
+	 * marks the handle finished. A runner destroyed without running (never the case today: the pool runs every queued
+	 * task before it stops) still marks the handle finished, so no wait() can hang on it.
+	 * @tparam function_t The task's callable type, invocable with a std::stop_token.
+	 */
+	template< typename function_t >
+	class TaskRunner final
+	{
+		public:
+
+			/**
+			 * @brief Constructs the runner.
+			 * @param state The state shared with the handle.
+			 * @param function The task.
+			 */
+			template< typename forwarded_t >
+			TaskRunner (std::shared_ptr< TaskHandle::State > state, forwarded_t && function) noexcept
+				: m_state{std::move(state)},
+				m_function{std::in_place, std::forward< forwarded_t >(function)}
+			{
+
+			}
+
+			/** @brief Destructs the runner: a task that never ran still releases its handle. */
+			~TaskRunner ()
+			{
+				this->finish();
+			}
+
+			TaskRunner (const TaskRunner & copy) = delete;
+			TaskRunner & operator= (const TaskRunner & copy) = delete;
+			TaskRunner (TaskRunner && other) noexcept = default;
+			TaskRunner & operator= (TaskRunner && other) noexcept = delete;
+
+			/** @brief Runs the task, destroys it, then reports the handle finished. */
+			void
+			operator() () noexcept
+			{
+				if ( m_state == nullptr || !m_function.has_value() )
+				{
+					return;
+				}
+
+				{
+					const std::scoped_lock lock{m_state->mutex};
+
+					m_state->runningThread = std::this_thread::get_id();
+				}
+
+				(*m_function)(m_state->stopSource.get_token());
+
+				this->finish();
+			}
+
+		private:
+
+			/** @brief Destroys the callable FIRST, then marks the handle finished (the waiter may destroy its owner next). */
+			void
+			finish () noexcept
+			{
+				m_function.reset();
+
+				if ( m_state == nullptr )
+				{
+					return;
+				}
+
+				{
+					/* NOTE: notified UNDER the lock (see PeerStore / SharingServer, 2026-10-08). */
+					const std::scoped_lock lock{m_state->mutex};
+
+					m_state->finished = true;
+					m_state->runningThread = {};
+					m_state->finishedSignal.notify_all();
+				}
+
+				m_state.reset();
+			}
+
+			std::shared_ptr< TaskHandle::State > m_state;
+			std::optional< function_t > m_function;
+	};
+
 	/**
 	 * @class ThreadPool
 	 * @brief High-performance thread pool optimized for game engine workloads.
@@ -623,6 +823,33 @@ namespace EmEn::Base
 			enqueue (std::function< void() > task)
 			{
 				return this->enqueueTask(Task{std::move(task)});
+			}
+
+			/**
+			 * @brief Submits a task the caller OWNS through the returned handle (Ave Robustus II, decision D1).
+			 * @note The task is invoked with a std::stop_token: a long task checks it at a bounded interval and returns
+			 * when a stop is requested. The handle's destructor requests the stop and waits for this task only. Use
+			 * enqueue() for fire-and-forget work that captures values only; a task touching an object (`this`) is
+			 * submitted, and the object keeps the handle as a member.
+			 * @tparam function_t A callable invocable with a std::stop_token.
+			 * @param callable The task.
+			 * @return TaskHandle A valid handle, or an empty one (valid() false) when the pool refuses the task (stopping).
+			 */
+			template< typename function_t >
+			requires std::invocable< function_t, std::stop_token >
+			[[nodiscard]]
+			TaskHandle
+			submit (function_t && callable)
+			{
+				auto state = std::make_shared< TaskHandle::State >();
+
+				if ( !this->enqueueTask(Task{TaskRunner< std::decay_t< function_t > >{state, std::forward< function_t >(callable)}}) )
+				{
+					/* NOTE: The refused runner was destroyed and marked the state finished: nothing to wait for. */
+					return {};
+				}
+
+				return TaskHandle{std::move(state)};
 			}
 
 			/**

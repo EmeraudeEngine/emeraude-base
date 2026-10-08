@@ -27,7 +27,12 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <iostream>
+#include <stop_token>
+#include <thread>
 #include <cmath>
 
 /* Local inclusions. */
@@ -149,6 +154,88 @@ TEST(VertexFactoryShapeDecimator, aRaisedCancellationFlagStopsTheDecimation)
 
 	EXPECT_TRUE(decimator.isCancelled());
 	EXPECT_TRUE(decimator.decimate().triangles().empty());
+}
+
+/* Ave Robustus II, decision D1 (2026-10-08): the stop token is the decimator's cancellation. */
+TEST(VertexFactoryShapeDecimator, aRequestedStopTokenStopsTheDecimation)
+{
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 32, 16);
+	std::stop_source stopSource;
+
+	stopSource.request_stop();
+
+	ShapeDecimator< float, uint32_t > decimator{sphere, 0.5F};
+	decimator.setStopToken(stopSource.get_token());
+
+	EXPECT_TRUE(decimator.isCancelled());
+	EXPECT_TRUE(decimator.decimate().triangles().empty());
+}
+
+/* Stop latency on a large mesh: a stop requested at any moment of the decimation must end it within the bound
+ * (decision D7 proposes 50 ms). Measurement, not a gate — run it on demand:
+ *   EmeraudeBaseUnitTests --gtest_also_run_disabled_tests --gtest_filter='*DISABLED_StopLatency*' */
+TEST(VertexFactoryShapeDecimator, DISABLED_StopLatencyOnALargeMesh)
+{
+	/* ~2.2 M triangles, the order of the IvySim_Leaves mesh that stalled the Windows shutdown for 10-20 s. */
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 1400, 800);
+
+	std::cout << "[latency] source triangles: " << sphere.triangles().size() << "\n";
+
+	const auto decimateWithStopAfter = [&sphere] (std::chrono::milliseconds delay) {
+		std::stop_source stopSource;
+		ShapeDecimator< float, uint32_t > decimator{sphere, 0.25F};
+		decimator.setStopToken(stopSource.get_token());
+
+		std::atomic_bool returned{false};
+		std::chrono::steady_clock::time_point returnedAt;
+
+		std::thread worker{[&decimator, &returned, &returnedAt] () {
+			static_cast< void >(decimator.decimate());
+			returnedAt = std::chrono::steady_clock::now();
+			returned = true;
+		}};
+
+		std::this_thread::sleep_for(delay);
+
+		const auto requestedAt = std::chrono::steady_clock::now();
+		stopSource.request_stop();
+		worker.join();
+
+		const bool finishedBefore = returnedAt < requestedAt;
+
+		return std::make_pair(finishedBefore, std::chrono::duration_cast< std::chrono::microseconds >(returnedAt - requestedAt).count());
+	};
+
+	int64_t worstMicroseconds = 0;
+
+	for ( const int delayMs : {0, 25, 50, 100, 200, 400, 700, 1000, 1500, 2000, 3000, 4000, 6000, 8000, 12000} )
+	{
+		const auto [finishedBefore, latency] = decimateWithStopAfter(std::chrono::milliseconds{delayMs});
+
+		std::cout << "[latency] stop at " << delayMs << " ms: " << (finishedBefore ? "finished before the stop" : std::to_string(latency) + " us") << "\n";
+
+		if ( !finishedBefore )
+		{
+			worstMicroseconds = std::max(worstMicroseconds, latency);
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	std::cout << "[latency] worst: " << worstMicroseconds << " us\n";
+
+	EXPECT_LT(worstMicroseconds, 50000);
+}
+
+/* One full decimation of the large mesh, for a profiler (perf record): which stage holds the time. On demand only. */
+TEST(VertexFactoryShapeDecimator, DISABLED_ProfileALargeDecimation)
+{
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 1400, 800);
+	const ShapeDecimator< float, uint32_t > decimator{sphere, 0.25F};
+
+	EXPECT_FALSE(decimator.decimate().triangles().empty());
 }
 
 TEST(VertexFactoryShapeDecimator, aLoweredCancellationFlagChangesNothing)
