@@ -447,6 +447,15 @@ definition, a ZIP entry name — "Zip Slip") is joined with `IO::confinedPath(ba
 absolute, root-named and `..`-escaping paths (lexical, no system call; a symlink inside the base is not resolved).
 `ZipReader::extract()` refuses such an entry (test `ZipArchive.extractionRefusesEntriesThatLeaveTheDestination`).
 
+### ⚠️ Windows cannot delete a file a handle still holds — a test destroys its readers BEFORE its cleanup, and checks it (2026-10-08)
+
+The Windows peer found `emeraude_zip_roundtrip`, `emeraude_zip_directory` and `emeraude_zip_slip` left in `%TEMP%` after
+every ctest run: those tests called `remove_all()` while their `ZipReader` was still alive, holding the archive open.
+Linux unlinks an open file, Windows refuses, and the `error_code` was never read — a silent leftover on one OS only.
+Fixed in the tests (the library releases its handle at destruction, `readerDestructorReleasesHandleWithoutExplicitClose`):
+every reader / writer lives in its own scope, and `expectTempDirRemoved()` checks the error code and that the directory
+is gone. **Rule:** a test's cleanup runs after every object holding a file is destroyed, and its result is checked.
+
 ### `ZipWriter::addFilepathToSources()` / `addDirectoryToSources()` accepted the wrong kind of path (FIXED 2026-09-30)
 
 `!is_regular_file(p) && !exists(p)` accepted an existing DIRECTORY as a file (and the reverse), while the message

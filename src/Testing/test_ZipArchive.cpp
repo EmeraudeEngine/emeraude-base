@@ -56,6 +56,22 @@ namespace
 		return dir;
 	}
 
+	/**
+	 * @brief Removes a test directory and CHECKS it is gone. Windows cannot delete a file a handle still holds: a
+	 * ZipReader alive at that point left its directory in %TEMP% silently (Windows peer, 2026-10-08). Every reader is
+	 * scoped so it is destroyed first.
+	 */
+	void
+	expectTempDirRemoved (const std::filesystem::path & dir)
+	{
+		std::error_code errorCode;
+
+		std::filesystem::remove_all(dir, errorCode);
+
+		EXPECT_FALSE(errorCode) << "cannot remove " << dir << ": " << errorCode.message();
+		EXPECT_FALSE(std::filesystem::exists(dir, errorCode)) << dir << " is still there";
+	}
+
 	void
 	writeFile (const std::filesystem::path & path, const std::string & payload) noexcept
 	{
@@ -83,17 +99,18 @@ TEST(ZipArchive, roundTripWriteThenRead)
 	ASSERT_TRUE(std::filesystem::exists(archive));
 	EXPECT_TRUE(ZipReader::isArchiveFile(archive));
 
-	ZipReader reader{archive};
-	ASSERT_TRUE(reader.open());
-	ASSERT_EQ(reader.entries().size(), 1U);
-	EXPECT_EQ(reader.entries().front(), "hello.txt");
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+		ASSERT_EQ(reader.entries().size(), 1U);
+		EXPECT_EQ(reader.entries().front(), "hello.txt");
 
-	std::vector< char > buffer;
-	ASSERT_TRUE(reader.extract("hello.txt", buffer));
-	EXPECT_EQ(std::string(buffer.begin(), buffer.end()), payload);
+		std::vector< char > buffer;
+		ASSERT_TRUE(reader.extract("hello.txt", buffer));
+		EXPECT_EQ(std::string(buffer.begin(), buffer.end()), payload);
+	}
 
-	std::error_code errorCode;
-	std::filesystem::remove_all(dir, errorCode);
+	expectTempDirRemoved(dir);
 }
 
 TEST(ZipArchive, addDirectoryToSourcesCreatesArchive)
@@ -127,22 +144,24 @@ TEST(ZipArchive, addDirectoryToSourcesCreatesArchive)
 
 	/* Entries are named relative to the directory, with generic '/' separators,
 	 * and the nested file keeps its sub-path. */
-	ZipReader reader{archive};
-	ASSERT_TRUE(reader.open());
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
 
-	const auto & entries = reader.entries();
-	ASSERT_EQ(entries.size(), 2U);
-	EXPECT_NE(std::ranges::find(entries, "root.txt"), entries.end());
-	EXPECT_NE(std::ranges::find(entries, "nested/deep.txt"), entries.end());
+		const auto & entries = reader.entries();
+		ASSERT_EQ(entries.size(), 2U);
+		EXPECT_NE(std::ranges::find(entries, "root.txt"), entries.end());
+		EXPECT_NE(std::ranges::find(entries, "nested/deep.txt"), entries.end());
 
-	std::vector< char > buffer;
-	ASSERT_TRUE(reader.extract("root.txt", buffer));
-	EXPECT_EQ(std::string(buffer.begin(), buffer.end()), rootPayload);
+		std::vector< char > buffer;
+		ASSERT_TRUE(reader.extract("root.txt", buffer));
+		EXPECT_EQ(std::string(buffer.begin(), buffer.end()), rootPayload);
 
-	ASSERT_TRUE(reader.extract("nested/deep.txt", buffer));
-	EXPECT_EQ(std::string(buffer.begin(), buffer.end()), nestedPayload);
+		ASSERT_TRUE(reader.extract("nested/deep.txt", buffer));
+		EXPECT_EQ(std::string(buffer.begin(), buffer.end()), nestedPayload);
+	}
 
-	std::filesystem::remove_all(dir, errorCode);
+	expectTempDirRemoved(dir);
 }
 
 TEST(ZipArchive, readerDestructorReleasesHandleWithoutExplicitClose)
@@ -168,10 +187,7 @@ TEST(ZipArchive, readerDestructorReleasesHandleWithoutExplicitClose)
 		 * Leak-checked under ASan. */
 	}
 
-	std::error_code errorCode;
-	std::filesystem::remove_all(dir, errorCode);
-
-	SUCCEED();
+	expectTempDirRemoved(dir);
 }
 
 TEST(ZipArchive, writerAbandonedAfterAddDoesNotLeak)
@@ -188,27 +204,25 @@ TEST(ZipArchive, writerAbandonedAfterAddDoesNotLeak)
 		 * destructor path must stay clean (no dangling owning pointer). */
 	}
 
-	std::error_code errorCode;
-	std::filesystem::remove_all(dir, errorCode);
-
-	SUCCEED();
+	expectTempDirRemoved(dir);
 }
 TEST(ZipArchive, sourcesRefuseTheWrongKindOfPath)
 {
 	const auto dir = freshTempDir("emeraude_zip_kinds");
 	writeFile(dir / "file.txt", "payload");
 
-	ZipWriter writer{dir / "archive.zip"};
+	{
+		ZipWriter writer{dir / "archive.zip"};
 
-	/* A directory is not a file, a file is not a directory ("&&" used to accept both), a missing path is neither. */
-	EXPECT_FALSE(writer.addFilepathToSources(dir, "dir"));
-	EXPECT_FALSE(writer.addDirectoryToSources(dir / "file.txt"));
-	EXPECT_FALSE(writer.addFilepathToSources(dir / "missing.txt", "missing.txt"));
-	EXPECT_FALSE(writer.addDirectoryToSources(dir / "missing"));
-	EXPECT_TRUE(writer.addFilepathToSources(dir / "file.txt", "file.txt"));
+		/* A directory is not a file, a file is not a directory ("&&" used to accept both), a missing path is neither. */
+		EXPECT_FALSE(writer.addFilepathToSources(dir, "dir"));
+		EXPECT_FALSE(writer.addDirectoryToSources(dir / "file.txt"));
+		EXPECT_FALSE(writer.addFilepathToSources(dir / "missing.txt", "missing.txt"));
+		EXPECT_FALSE(writer.addDirectoryToSources(dir / "missing"));
+		EXPECT_TRUE(writer.addFilepathToSources(dir / "file.txt", "file.txt"));
+	}
 
-	std::error_code errorCode;
-	std::filesystem::remove_all(dir, errorCode);
+	expectTempDirRemoved(dir);
 }
 
 TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
@@ -227,15 +241,17 @@ TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
 
 	const auto destination = dir / "out";
 
-	ZipReader reader{archive};
-	ASSERT_TRUE(reader.open());
-	ASSERT_EQ(reader.entries().size(), 1U);
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+		ASSERT_EQ(reader.entries().size(), 1U);
 
-	EXPECT_FALSE(reader.extract("../escaped.txt", destination));
-	EXPECT_FALSE(reader.extractAll(destination));
+		EXPECT_FALSE(reader.extract("../escaped.txt", destination));
+		EXPECT_FALSE(reader.extractAll(destination));
+	}
 
 	std::error_code errorCode;
 	EXPECT_FALSE(std::filesystem::exists(dir / "escaped.txt", errorCode));
 
-	std::filesystem::remove_all(dir, errorCode);
+	expectTempDirRemoved(dir);
 }
