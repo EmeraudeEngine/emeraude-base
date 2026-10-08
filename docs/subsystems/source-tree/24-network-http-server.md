@@ -9,6 +9,12 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
 - **Life**: `HTTPServer{options}`, `start(onRequest, onStreamShutdown, onClosed)` binds and starts the thread
   (`port = 0` → an ephemeral port, read back with `port()`); `stop()` gives each stream its last words
   (`onStreamShutdown` → `writeNowAndClose()`), closes every socket ON the network thread, joins; bounded to 3 s.
+  When the network thread is busy past the bound (a slow request handler), the queued shutdown handler is ABANDONED:
+  once the thread is joined, `stop()` closes everything itself (`closeEverything()`) and drains the io_context queue
+  (bounded `poll()` rounds), so no socket stays open for a waiting client and no stale handler survives into a later
+  `start()` (Ave Robustus II, 2026-10-08 — before, the client of the busy handler waited forever, and a restart ran
+  the stale handler on a dead stack frame and closed the restarted server's acceptor; test
+  `RestartAfterATimedOutStopStillAnswers`).
 - **Threading**: every socket operation and every handler on the network thread. Work done elsewhere answers
   through `post()` (thread-safe; the caller keeps the server alive while it may call it). Hold a connection as a
   `std::weak_ptr` to answer later.
@@ -60,7 +66,7 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
   transport read, `DownloadOutcome::Cancelled`, a partial file removed. And a `download()` overload with
   `HTTPRequestOptions` (headers, cancel; a body is refused: `BadRequest`).
 
-## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 18)
+## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 19)
 
 Ranges, loopback answer, foreign Host / Origin, bearer, non-loopback without token, smuggling and framing, oversized
 head, pipelined keep-alive, files with ranges / HEAD / 404, an answer posted from another thread, stream last words

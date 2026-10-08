@@ -430,6 +430,14 @@ namespace EmEn::Base::Network
 
 			void accept () noexcept;
 			void removeConnection (const std::shared_ptr< HTTPServerConnection > & connection) noexcept;
+
+			/**
+			 * @brief Closes the acceptor, gives every streaming connection its last words, closes every connection and the
+			 * lingering sockets.
+			 * @pre Called on the network thread, or by stop() once the network thread is joined (no other thread touches
+			 * the sockets then).
+			 */
+			void closeEverything () noexcept;
 			[[nodiscard]] bool isAcceptedHost (const std::string & host) const noexcept;
 			[[nodiscard]] bool isAcceptedOrigin (const std::string & origin) const noexcept;
 			[[nodiscard]] bool isAuthorized (const std::string & authorization) const noexcept;

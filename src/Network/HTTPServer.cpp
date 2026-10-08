@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <utility>
@@ -979,6 +980,34 @@ namespace EmEn::Base::Network
 	}
 
 	void
+	HTTPServer::closeEverything () noexcept
+	{
+		asio::error_code ec;
+
+		if ( m_acceptor != nullptr )
+		{
+			m_acceptor->cancel(ec);
+			m_acceptor->close(ec);
+		}
+
+		/* NOTE: a copy — closing a connection removes it from the set. */
+		const auto connections = m_connections;
+
+		for ( const auto & connection : connections )
+		{
+			if ( connection->isStreaming() && m_onStreamShutdown )
+			{
+				m_onStreamShutdown(*connection);
+			}
+
+			connection->close();
+		}
+
+		/* The sockets still lingering after a refusal or a final answer close now. */
+		m_gracefulCloser.abortAll();
+	}
+
+	void
 	HTTPServer::stop () noexcept
 	{
 		if ( !m_running )
@@ -987,57 +1016,90 @@ namespace EmEn::Base::Network
 		}
 
 		/* Streams get their last words and every socket closes ON the network thread (the only one that touches
-		 * them), then the loop is released. Bounded: a stuck peer cannot hold the shutdown. */
-		std::mutex doneMutex;
-		std::condition_variable doneSignal;
-		bool done = false;
+		 * them), then the loop is released. Bounded: a stuck peer cannot hold the shutdown.
+		 * NOTE: The handshake state is SHARED with the handler (Ave Robustus II, D site): when the 3 s bound expires,
+		 * the handler may still sit in the queue, and a later start() restarts the same io_context — it used to run
+		 * then with references to this function's dead stack frame, and closed the RESTARTED server's acceptor. Now
+		 * the state outlives this frame, and an abandoned handler that had not started does nothing. */
+		struct StopHandshake final
+		{
+			std::mutex mutex;
+			std::condition_variable signal;
+			bool done{false};
+			bool abandoned{false};
+		};
 
-		asio::post(m_ioContext, [this, &doneMutex, &doneSignal, &done] () {
-			asio::error_code ec;
+		const auto handshake = std::make_shared< StopHandshake >();
 
-			if ( m_acceptor != nullptr )
+		asio::post(m_ioContext, [this, handshake] () {
 			{
-				m_acceptor->cancel(ec);
-				m_acceptor->close(ec);
-			}
+				const std::scoped_lock lock{handshake->mutex};
 
-			/* NOTE: a copy — closing a connection removes it from the set. */
-			const auto connections = m_connections;
-
-			for ( const auto & connection : connections )
-			{
-				if ( connection->isStreaming() && m_onStreamShutdown )
+				if ( handshake->abandoned )
 				{
-					m_onStreamShutdown(*connection);
+					/* The stop() that posted this gave up waiting: the server may have been restarted since. */
+					return;
 				}
-
-				connection->close();
 			}
 
-			/* The sockets still lingering after a refusal or a final answer close now. */
-			m_gracefulCloser.abortAll();
+			this->closeEverything();
 
 			{
-				const std::scoped_lock lock{doneMutex};
+				const std::scoped_lock lock{handshake->mutex};
 
-				done = true;
+				handshake->done = true;
 			}
 
-			doneSignal.notify_one();
+			handshake->signal.notify_one();
 		});
 
 		{
-			std::unique_lock< std::mutex > lock{doneMutex};
+			std::unique_lock< std::mutex > lock{handshake->mutex};
 
-			doneSignal.wait_for(lock, std::chrono::seconds{3}, [&done] () {
-				return done;
-			});
+			if ( !handshake->signal.wait_for(lock, std::chrono::seconds{3}, [&handshake] () { return handshake->done; }) )
+			{
+				/* NOTE: A handler that already started finishes before the join() below returns; one that did not start
+				 * yet will return at once if it ever runs. */
+				handshake->abandoned = true;
+			}
 		}
 
 		m_workGuard.reset();
 		m_ioContext.stop();
 
 		m_networkThread.join();
+
+		/* NOTE: The network thread is gone: this thread is the only one left to touch the sockets. When the bound above
+		 * expired, the shutdown handler never ran — close everything here (the client of a busy handler otherwise
+		 * waited forever on a socket nobody closed). Then run what is left in the queue: the cancelled operations
+		 * complete with operation_aborted and the abandoned shutdown handler returns at once, so no handler survives
+		 * into a later start(). Bounded: a handler may re-arm on a closed socket, which completes at once. */
+		bool closedHere = false;
+
+		{
+			const std::scoped_lock lock{handshake->mutex};
+
+			closedHere = !handshake->done;
+		}
+
+		if ( closedHere )
+		{
+			this->closeEverything();
+		}
+
+		m_ioContext.restart();
+
+		constexpr size_t MaxDrainRounds{1024};
+
+		for ( size_t round = 0; round < MaxDrainRounds; ++round )
+		{
+			if ( m_ioContext.poll() == 0 )
+			{
+				break;
+			}
+		}
+
+		m_ioContext.stop();
 
 		/* Handlers that never ran hold connections; drop them now, on this (the last) thread. */
 		m_connections.clear();

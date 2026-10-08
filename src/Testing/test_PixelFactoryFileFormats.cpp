@@ -32,6 +32,8 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -42,6 +44,7 @@
 #include "PixelFactory/FileFormatJpeg.hpp"
 #include "PixelFactory/FileFormatPNG.hpp"
 #include "PixelFactory/FileFormatTarga.hpp"
+#include "PixelFactory/Font.hpp"
 #include "PixelFactory/Pixmap.hpp"
 
 using namespace EmEn::Base;
@@ -355,3 +358,36 @@ TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
 }
+
+/* Ave Robustus II P0 (2026-10-08): Font::readTrueTypeFile() returned on a failed FT_New_Face() without releasing the
+ * FreeType library (and on a failed FT_Set_Pixel_Sizes() without releasing the face either). The library and the face
+ * are RAII holders now. The refusal is checked here; the absence of the leak is checked by the ASan / LSan run of this
+ * suite (the previous code reports a leaked FT_Library there). */
+TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
+{
+	std::error_code error;
+	const auto directory = std::filesystem::temp_directory_path(error) / "emeraude_font_test";
+
+	ASSERT_FALSE(error);
+
+	std::filesystem::create_directories(directory, error);
+
+	ASSERT_FALSE(error);
+
+	const auto filepath = directory / "corrupt.ttf";
+
+	{
+		std::ofstream file{filepath, std::ios::binary | std::ios::trunc};
+
+		ASSERT_TRUE(file.is_open());
+
+		file << "This is not a TrueType font, only text with a .ttf extension.";
+	}
+
+	PixelFactory::Font< uint8_t > font;
+
+	EXPECT_FALSE(font.readFile(filepath, 16, false));
+
+	std::filesystem::remove_all(directory, error);
+}
+

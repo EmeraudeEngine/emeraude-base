@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 
 /* Third-party inclusions. */
 #include "ft2build.h"
@@ -39,33 +40,73 @@
 
 namespace EmEn::Base::PixelFactory
 {
+	namespace
+	{
+		/** @brief Releases a FreeType library handle (RAII, Ave Robustus II rule 1). */
+		struct FreeTypeLibraryDeleter final
+		{
+			void
+			operator() (FT_Library library) const noexcept
+			{
+				FT_Done_FreeType(library);
+			}
+		};
+
+		/** @brief Releases a FreeType face handle (RAII). */
+		struct FreeTypeFaceDeleter final
+		{
+			void
+			operator() (FT_Face face) const noexcept
+			{
+				FT_Done_Face(face);
+			}
+		};
+
+		using FreeTypeLibrary = std::unique_ptr< FT_LibraryRec_, FreeTypeLibraryDeleter >;
+		using FreeTypeFace = std::unique_ptr< FT_FaceRec_, FreeTypeFaceDeleter >;
+	}
+
 	template< typename precision_t >
 	requires (std::is_arithmetic_v< precision_t >)
 	bool
 	Font< precision_t >::readTrueTypeFile (const std::filesystem::path & filepath, uint32_t fontSize, bool fixedWidth)
 	{
-		FT_Library library{};
-		FT_Face face{};
+		/* NOTE: The library and the face are owned by RAII holders: every return below releases them (an early return
+		 * used to leak both). Declaration order matters: the face is destroyed BEFORE the library that created it. */
+		FreeTypeLibrary library;
+		FreeTypeFace face;
 
 		/* Try to init FreeType 2. */
-		if ( FT_Init_FreeType(&library) > 0 )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), FreeType 2 init failed !" "\n";
+			FT_Library rawLibrary = nullptr;
 
-			return false;
+			if ( FT_Init_FreeType(&rawLibrary) != 0 )
+			{
+				std::cerr << "[ERROR] Font::readTrueTypeFile(), FreeType 2 init failed !" "\n";
+
+				return false;
+			}
+
+			library.reset(rawLibrary);
 		}
 
 		/* Load the font face. Face index 0 (always available). */
-		if ( FT_New_Face(library, filepath.string().data(), 0, &face) > 0 )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), Font file " << filepath << " cannot be open !" "\n";
+			FT_Face rawFace = nullptr;
 
-			return false;
+			if ( FT_New_Face(library.get(), filepath.string().data(), 0, &rawFace) != 0 )
+			{
+				std::cerr << "[ERROR] Font::readTrueTypeFile(), Font file " << filepath << " cannot be open !" "\n";
+
+				return false;
+			}
+
+			face.reset(rawFace);
 		}
 
 		/* Prepare output sizes.
 		 * NOTE: 0 means square. */
-		if ( FT_Set_Pixel_Sizes(face, 0, static_cast< FT_UInt >(fontSize)) > 0 )
+		if ( FT_Set_Pixel_Sizes(face.get(), 0, static_cast< FT_UInt >(fontSize)) != 0 )
 		{
 			std::cerr << "[ERROR] Font::readTrueTypeFile(), the size request with this font is not available !" "\n";
 
@@ -76,11 +117,11 @@ namespace EmEn::Base::PixelFactory
 
 		const auto success = glyphs.writeGlyphData([&] (size_t index) {
 			/* Gets the correct glyph index inside the font for the iso code. */
-			const auto glyphIndex = FT_Get_Char_Index(face, static_cast< FT_ULong >(index));
+			const auto glyphIndex = FT_Get_Char_Index(face.get(), static_cast< FT_ULong >(index));
 
 			/* Gets the glyph loaded.
 			 * NOTE: Only one font can be loaded at a time. */
-			if ( FT_Load_Glyph(face, glyphIndex, FT_LOAD_RENDER) > 0 )
+			if ( FT_Load_Glyph(face.get(), glyphIndex, FT_LOAD_RENDER) != 0 )
 			{
 				std::cerr << "[ERROR] Glyph " << glyphIndex << " failed to load !" "\n";
 
@@ -146,9 +187,7 @@ namespace EmEn::Base::PixelFactory
 			return Pixmap< precision_t >{};
 		}, fixedWidth);
 
-		FT_Done_Face(face);
-		FT_Done_FreeType(library);
-
+		/* NOTE: The face, then the library, are released by their holders. */
 		return success;
 	}
 

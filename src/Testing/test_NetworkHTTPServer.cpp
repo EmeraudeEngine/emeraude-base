@@ -818,3 +818,48 @@ TEST(NetworkHTTPServer, CleartextDownloadFromAPrivatePeer)
 	std::filesystem::remove(source, ec);
 	std::filesystem::remove(destination, ec);
 }
+
+/* Ave Robustus II P0 (2026-10-08): stop() posted its shutdown handler with references to its own stack frame and waited
+ * at most 3 s. When the network thread was busy past that bound, the handler stayed queued; a later start() restarts
+ * the same io_context, so the stale handler ran then — on a dead stack frame, and it closed the RESTARTED server's
+ * acceptor. The restarted server must answer. */
+TEST(NetworkHTTPServer, RestartAfterATimedOutStopStillAnswers)
+{
+	HTTPServer server{testOptions()};
+	std::atomic_bool handlerEntered{false};
+
+	ASSERT_TRUE(server.start([&handlerEntered] (const std::shared_ptr< HTTPServerConnection > & connection) {
+		handlerEntered = true;
+
+		/* Longer than stop()'s 3 s bound: the network thread is busy here when stop() gives up. */
+		std::this_thread::sleep_for(std::chrono::milliseconds{3500});
+
+		connection->respond(200, "text/plain", "slow");
+	}));
+
+	const auto firstPort = server.port();
+
+	std::thread client{[firstPort] () {
+		static_cast< void >(rawExchange(firstPort, get(firstPort, "/slow")));
+	}};
+
+	for ( int attempt = 0; attempt < 400 && !handlerEntered; ++attempt )
+	{
+		std::this_thread::sleep_for(std::chrono::milliseconds{5});
+	}
+
+	ASSERT_TRUE(handlerEntered);
+
+	server.stop();
+
+	client.join();
+
+	ASSERT_TRUE(server.start(helloHandler));
+	ASSERT_NE(server.port(), 0);
+
+	const auto response = firstResponse(rawExchange(server.port(), get(server.port(), "/again")));
+
+	EXPECT_EQ(response.status, 200);
+
+	server.stop();
+}
