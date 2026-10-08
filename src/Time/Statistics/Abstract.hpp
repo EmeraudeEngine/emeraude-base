@@ -140,6 +140,19 @@ namespace EmEn::Base::Time::Statistics
 			}
 
 			/**
+			 * @brief Returns the number of samples dropped because they were not a measurement (a clock that failed or
+			 * went backwards). They count in neither the durations nor the executions per second (owner decision
+			 * 2026-10-08: dropped AND counted).
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			size_t
+			droppedSampleCount () const noexcept
+			{
+				return m_droppedSampleCount;
+			}
+
+			/**
 			 * @brief Prints statistics in the console.
 			 */
 			void print () const noexcept;
@@ -195,12 +208,22 @@ namespace EmEn::Base::Time::Statistics
 			 */
 			void insertEPS (uint32_t count) noexcept;
 
+			/**
+			 * @brief Counts one dropped sample (see droppedSampleCount()).
+			 */
+			void
+			dropSample () noexcept
+			{
+				m_droppedSampleCount++;
+			}
+
 		private:
 
 			size_t m_range{1};
 			std::vector< uint64_t > m_durations;
 			std::vector< uint32_t > m_executionsPerSeconds;
 			size_t m_topCount{0};
+			size_t m_droppedSampleCount{0};
 			size_t m_durationIndex{0};
 			size_t m_EPSIndex{0};
 	};

@@ -36,6 +36,7 @@
 
 /* Local inclusions. */
 #include "CardHand.hpp"
+#include "PortableRandom.hpp"
 
 namespace EmEn::Base::GameTools
 {
@@ -51,6 +52,7 @@ namespace EmEn::Base::GameTools
 			{
 				Top,
 				Bottom,
+				/** A pick takes any card; an insertion goes to any of the size + 1 slots, after the last card included. */
 				Randomly
 			};
 
@@ -67,7 +69,7 @@ namespace EmEn::Base::GameTools
 			void
 			shuffleCardDeck () noexcept
 			{
-				std::shuffle(m_cards.begin(), m_cards.end(), m_randomEngine);
+				PortableRandom::shuffle(m_cards, m_randomEngine);
 			}
 
 			/**
@@ -76,7 +78,7 @@ namespace EmEn::Base::GameTools
 			void
 			shuffleDiscardedCards () noexcept
 			{
-				std::shuffle(m_discardedCards.begin(), m_discardedCards.end(), m_randomEngine);
+				PortableRandom::shuffle(m_discardedCards, m_randomEngine);
 			}
 
 			/**

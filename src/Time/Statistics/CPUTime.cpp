@@ -36,9 +36,12 @@ namespace EmEn::Base::Time::Statistics
 
 		/* NOTE: std::clock() answers (clock_t)-1 when the processor time is not available, and a 32-bit clock_t
 		 * (Windows) wraps: a negative duration is not a measurement, converted to uint64_t it would poison both the
-		 * averages and the one-second accounting below. The execution is not counted. */
+		 * averages and the one-second accounting below. The execution is dropped and counted (owner decision
+		 * 2026-10-08). */
 		if ( stopTime == static_cast< std::clock_t >(-1) || m_startTime == static_cast< std::clock_t >(-1) || stopTime < m_startTime )
 		{
+			this->dropSample();
+
 			return;
 		}
 
@@ -47,24 +50,8 @@ namespace EmEn::Base::Time::Statistics
 		/* Increment executions count. */
 		m_currentExecutionsPerSecond++;
 
-		/* Insert duration for average statistics. */
-		if constexpr ( CLOCKS_PER_SEC == 1000 )
-		{
-			/* Duration is expressed in milliseconds. */
-			this->insertDuration(duration);
-		}
-
-		if constexpr ( CLOCKS_PER_SEC == 1000000 )
-		{
-			/* Duration is expressed in microseconds. */
-			this->insertDuration(duration / 1000);
-		}
-
-		if constexpr ( CLOCKS_PER_SEC == 1000000000 )
-		{
-			/* Duration is expressed in nanoseconds. */
-			this->insertDuration(duration / 1000000);
-		}
+		/* Insert duration for average statistics, in milliseconds whatever the tick rate. */
+		this->insertDuration(ticksToMilliseconds(duration, static_cast< uint64_t >(CLOCKS_PER_SEC)));
 
 		/* Keep track of time elapsed. */
 		m_delta += duration;

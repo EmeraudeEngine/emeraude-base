@@ -63,6 +63,28 @@ namespace EmEn::Base::Time::Statistics
 			/** @copydoc EmEn::Base::Time::Statistics::Abstract::stop() */
 			void stop () noexcept override;
 
+			/**
+			 * @brief Converts clock ticks to whole milliseconds for ANY tick rate, without overflow (the seconds and the
+			 * remainder are converted apart). It used to handle CLOCKS_PER_SEC = 1e3, 1e6 and 1e9 only: any other rate
+			 * recorded nothing.
+			 * @param ticks The number of ticks.
+			 * @param ticksPerSecond The tick rate. 0 is not a rate: 0 is returned.
+			 * @return uint64_t
+			 */
+			[[nodiscard]]
+			static
+			constexpr
+			uint64_t
+			ticksToMilliseconds (uint64_t ticks, uint64_t ticksPerSecond) noexcept
+			{
+				if ( ticksPerSecond == 0 )
+				{
+					return 0;
+				}
+
+				return ((ticks / ticksPerSecond) * 1000) + (((ticks % ticksPerSecond) * 1000) / ticksPerSecond);
+			}
+
 		private:
 
 			std::clock_t m_startTime{0};

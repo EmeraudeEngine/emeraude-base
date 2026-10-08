@@ -84,13 +84,15 @@ namespace EmEn::Base::Time::Statistics
 				"Duration : " << this->duration() << " ms" "\n" <<
 				"Average duration : " << this->averageDuration() << " ms" << warning << '\n' <<
 				"Executions per second : " << this->executionsPerSecond() << " times" "\n" <<
-				"Average executions per second : " << this->averageExecutionsPerSecond() << " times" << warning << "\n\n";
+				"Average executions per second : " << this->averageExecutionsPerSecond() << " times" << warning << "\n" <<
+				"Dropped samples : " << m_droppedSampleCount << "\n\n";
 		}
 		else
 		{
 			std::cout <<
 				"Time statistics" "\n" <<
-				"Duration : " << this->averageDuration() << " ms" "\n\n";
+				"Duration : " << this->averageDuration() << " ms" "\n" <<
+				"Dropped samples : " << m_droppedSampleCount << "\n\n";
 		}
 	}
 }

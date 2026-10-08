@@ -76,10 +76,12 @@ namespace EmEn::Base::Time::Statistics
 				const auto duration = std::chrono::duration_cast< std::chrono::milliseconds >(now - m_startTime).count();
 
 				/* NOTE: A clock that is not monotonic (a caller's choice) can go backwards: a negative duration is not a
-				 * measurement — converted to uint64_t it would poison the averages. The execution is not counted, as
-				 * CPUTime::stop() does. */
+				 * measurement — converted to uint64_t it would poison the averages. The execution is dropped and
+				 * counted, as CPUTime::stop() does. */
 				if ( duration < 0 )
 				{
+					this->dropSample();
+
 					return;
 				}
 

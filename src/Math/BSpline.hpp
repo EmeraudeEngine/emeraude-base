@@ -50,6 +50,28 @@ namespace EmEn::Base::Math
 	};
 
 	/**
+	 * @brief Returns a segment count of at least 1: a constructor cannot refuse, and 0 segments made synthesize() divide by
+	 * zero. 0 is clamped to 1 with a trace (owner decision 2026-10-08, the setters' minimum).
+	 * @param segments The requested number of segments.
+	 * @param caller The constructor's name, for the trace.
+	 * @return size_t
+	 */
+	[[nodiscard]]
+	inline
+	size_t
+	clampBSplineSegments (size_t segments, const char * caller) noexcept
+	{
+		if ( segments < 1 )
+		{
+			std::cerr << caller << ", 0 segment requested: clamped to 1 !" "\n";
+
+			return 1;
+		}
+
+		return segments;
+	}
+
+	/**
 	 * @brief The B-Spline point class.
 	 * @tparam vector_dim_t The dimension of the vector. This can be 2, 3 or 4.
 	 * @tparam vector_precision_t The type of number. Default float.
@@ -64,12 +86,12 @@ namespace EmEn::Base::Math
 			 * @brief Constructs a B-Spline point.
 			 * @param position A reference to a vector.
 			 * @param curveType The curve type.
-			 * @param segments The number of segments.
+			 * @param segments The number of segments, at least 1 (0 is clamped to 1 with a trace).
 			 */
 			BSplinePoint (const Vector< vector_dim_t, vector_precision_t > & position, CurveType curveType, size_t segments) noexcept
 				: m_position{position},
 				m_curveType{curveType},
-				m_segments{segments}
+				m_segments{clampBSplineSegments(segments, "BSplinePoint::BSplinePoint()")}
 			{
 
 			}
@@ -79,14 +101,14 @@ namespace EmEn::Base::Math
 			 * @param position A reference to a vector.
 			 * @param handle A reference to a vector.
 			 * @param curveType The curve type.
-			 * @param segments The number of segments.
+			 * @param segments The number of segments, at least 1 (0 is clamped to 1 with a trace).
 			 */
 			BSplinePoint (const Vector< vector_dim_t, vector_precision_t > & position, const Vector< vector_dim_t, vector_precision_t > & handle, CurveType curveType, size_t segments) noexcept
 				: m_position{position},
 				m_handleIn{-handle},
 				m_handleOut{handle},
 				m_curveType{curveType},
-				m_segments{segments}
+				m_segments{clampBSplineSegments(segments, "BSplinePoint::BSplinePoint()")}
 			{
 
 			}
@@ -97,14 +119,14 @@ namespace EmEn::Base::Math
 			 * @param handleIn A reference to a vector.
 			 * @param handleOut A reference to a vector.
 			 * @param curveType The curve type.
-			 * @param segments The number of segments.
+			 * @param segments The number of segments, at least 1 (0 is clamped to 1 with a trace).
 			 */
 			BSplinePoint (const Vector< vector_dim_t, vector_precision_t > & position, const Vector< vector_dim_t, vector_precision_t > & handleIn, const Vector< vector_dim_t, vector_precision_t > & handleOut, CurveType curveType, size_t segments) noexcept
 				: m_position{position},
 				m_handleIn{handleIn},
 				m_handleOut{handleOut},
 				m_curveType{curveType},
-				m_segments{segments}
+				m_segments{clampBSplineSegments(segments, "BSplinePoint::BSplinePoint()")}
 			{
 
 			}
@@ -226,12 +248,13 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief BSpline
-			 * @param defaultSegments The number of segments given to every point added, at least 1.
+			 * @param defaultSegments The number of segments given to every point added, at least 1 (0 is clamped to 1 with a
+			 * trace).
 			 * @param defaultCurveType The curve type given to every point added. Default BezierQuadratic.
 			 */
 			explicit
 			BSpline (size_t defaultSegments, CurveType defaultCurveType = CurveType::BezierQuadratic) noexcept
-				: m_defaultSegments{defaultSegments},
+				: m_defaultSegments{clampBSplineSegments(defaultSegments, "BSpline::BSpline()")},
 				m_defaultCurveType{defaultCurveType}
 			{
 

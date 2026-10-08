@@ -24,6 +24,7 @@
 
 /* STL inclusions. */
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -126,4 +127,36 @@ TEST(MathBSpline, everySegmentStartsAtItsOwnPoint)
 			}
 		}
 	}
+}
+
+/* 2026-10-08 (owner decision: clamp to 1): the constructors accepted 0 segments while setSegments() /
+ * setDefaultSegments() refuse it, and synthesize() then divided by zero (infinite times). */
+TEST(MathBSpline, zeroSegmentsAreClampedToOne)
+{
+	const Vector< 3, float > position{1.0F, 2.0F, 3.0F};
+	const Vector< 3, float > handle{0.0F, 1.0F, 0.0F};
+
+	EXPECT_EQ((BSplinePoint< 3, float >{position, CurveType::None, 0}.segments()), 1U);
+	EXPECT_EQ((BSplinePoint< 3, float >{position, handle, CurveType::BezierQuadratic, 0}.segments()), 1U);
+	EXPECT_EQ((BSplinePoint< 3, float >{position, -handle, handle, CurveType::BezierCubic, 0}.segments()), 1U);
+
+	BSpline< 3, float > spline{0, CurveType::BezierCubic};
+
+	EXPECT_EQ(spline.defaultSegments(), 1U);
+
+	spline.addPoint(ControlPoints[0], {2000.0F, 8.0F, 0.0F});
+	spline.addPoint(ControlPoints[1], {2000.0F, 8.0F, 0.0F});
+
+	size_t sampleCount = 0;
+	bool everyTimeFinite = true;
+
+	EXPECT_TRUE(spline.synthesize([&sampleCount, &everyTimeFinite] (float time, const Vector< 3, float > &) {
+		++sampleCount;
+		everyTimeFinite = everyTimeFinite && std::isfinite(time);
+
+		return true;
+	}));
+
+	EXPECT_EQ(sampleCount, 2U);
+	EXPECT_TRUE(everyTimeFinite);
 }

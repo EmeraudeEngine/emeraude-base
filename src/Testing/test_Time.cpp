@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ratio>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -43,6 +44,8 @@
 #include "Time/Time.hpp"
 #include "Time/EventTrait.hpp"
 #include "Time/Elapsed/CPUTime.hpp"
+#include "Time/Statistics/CPUTime.hpp"
+#include "Time/Statistics/RealTime.hpp"
 
 namespace EmEn::Base::Time
 {
@@ -310,4 +313,79 @@ namespace EmEn::Base::Time
 		/* Process CPU time never decreases — safe lower bound, not timing-sensitive. */
 		EXPECT_GE(second, first);
 	}
+}
+
+namespace
+{
+	/** @brief A clock whose time the test sets: it can go backwards, as a non-monotonic clock does. */
+	struct ScriptedStatisticsClock final
+	{
+		using rep = int64_t;
+		using period = std::milli;
+		using duration = std::chrono::duration< rep, period >;
+		using time_point = std::chrono::time_point< ScriptedStatisticsClock >;
+
+		static constexpr bool is_steady{false};
+
+		static
+		rep &
+		current () noexcept
+		{
+			static rep value{0};
+
+			return value;
+		}
+
+		static
+		time_point
+		now () noexcept
+		{
+			return time_point{duration{current()}};
+		}
+	};
+}
+
+/* 2026-10-08: CPUTime recorded nothing when CLOCKS_PER_SEC was not 1e3, 1e6 or 1e9. The conversion is now generic and
+ * exact, without overflow. */
+TEST(TimeStatisticsCPUTime, ticksToMillisecondsForAnyRate)
+{
+	using EmEn::Base::Time::Statistics::CPUTime;
+
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(1'500, 1'000), 1'500U);
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(1'500'000, 1'000'000), 1'500U);
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(1'500'000'000, 1'000'000'000), 1'500U);
+	/* An unusual rate: 128 ticks per second. */
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(192, 128), 1'500U);
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(1, 128), 7U);
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(0, 1'000), 0U);
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(1'000, 0), 0U);
+
+	/* No overflow at the top of the range. */
+	constexpr uint64_t Huge{UINT64_MAX};
+	constexpr uint64_t Rate{1'000'000'000};
+
+	EXPECT_EQ(CPUTime::ticksToMilliseconds(Huge, Rate), ((Huge / Rate) * 1000) + (((Huge % Rate) * 1000) / Rate));
+}
+
+/* 2026-10-08 (owner decision): a sample that is not a measurement is dropped AND counted. */
+TEST(TimeStatisticsRealTime, aBackwardsSampleIsDroppedAndCounted)
+{
+	ScriptedStatisticsClock::current() = 1'000;
+
+	EmEn::Base::Time::Statistics::RealTime< ScriptedStatisticsClock > statistics;
+
+	statistics.start();
+	ScriptedStatisticsClock::current() = 900;
+	statistics.stop();
+
+	EXPECT_EQ(statistics.droppedSampleCount(), 1U);
+	EXPECT_EQ(statistics.topCount(), 0U);
+
+	statistics.start();
+	ScriptedStatisticsClock::current() = 950;
+	statistics.stop();
+
+	EXPECT_EQ(statistics.droppedSampleCount(), 1U);
+	EXPECT_EQ(statistics.topCount(), 1U);
+	EXPECT_EQ(statistics.duration(), 50U);
 }

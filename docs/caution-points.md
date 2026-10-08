@@ -310,6 +310,15 @@ loop iterations. Do not "fix" it with `QueryPerformanceCounter`: that is elapsed
 Accepted 2026-10-07: Windows `DebugStatistics.*` 30/30 (was 4 pass / 2 fail in 6), macOS 30/30; the resolutions are
 1 ns (Linux), **1 µs** (macOS 26 / M2, `clock_getres`), 15.625 ms (Windows).
 
+### `Statistics::CPUTime` recorded NOTHING at an unusual `CLOCKS_PER_SEC`; bad samples are dropped AND counted (2026-10-08, FIXED)
+
+`CPUTime::stop()` converted ticks with `if constexpr` branches for 1e3, 1e6 and 1e9 ticks per second only: any other
+rate recorded no duration, silently. `CPUTime::ticksToMilliseconds(ticks, rate)` converts for any rate, exactly and
+without overflow (seconds and remainder apart). A sample that is not a measurement (`std::clock()` failed, a 32-bit
+`clock_t` wrapped, a non-monotonic clock went backwards in `RealTime`) is dropped and COUNTED:
+`Statistics::Abstract::droppedSampleCount()`, printed by `print()` (owner decision). Tests
+`TimeStatisticsCPUTime.ticksToMillisecondsForAnyRate`, `TimeStatisticsRealTime.aBackwardsSampleIsDroppedAndCounted`.
+
 ## Threads
 
 ### ⚠️⚠️ A thread is started through `Base::Thread`, never `std::thread` (2026-10-07)
@@ -925,6 +934,12 @@ fails on the pre-fix source with "an edge still names a vertex the merge removed
 
 ## Math
 
+### `BSpline` / `BSplinePoint` constructors clamp 0 segments to 1 (2026-10-08, FIXED)
+
+The setters refused 0 segments but the constructors took it, and `synthesize()` then divided by zero (non-finite
+times). A constructor cannot refuse: `clampBSplineSegments()` makes 0 a 1 with a trace (owner decision, the setters'
+minimum). Test `MathBSpline.zeroSegmentsAreClampedToOne` (non-finite times before the fix).
+
 ### ⚠️ `Utility::quickRandom()` for integers went OUT of [min, max] for 8 / 16-bit signed types — fixed 2026-10-01
 
 `static_cast< number_t >(std::rand())` truncated rand() into a NEGATIVE `int8_t` / `int16_t`, so 46 % of
@@ -1019,6 +1034,11 @@ gave citadel three terrains: macOS off Linux by up to 1.05 m, Windows by up to 0
 `PortableRandom` (or `Randomizer`, which uses it): `docs/subsystems/source-tree/23-portable-random.md`. Only a
 `std::random_device` seed may keep std's distributions. ⚠️ A golden test that fails on one OS is the defect, never a
 value to re-record.
+2026-10-08: `GameTools::CardDeck` / `CardHand` moved too (they were seeded from `std::random_device`, so not yet
+wrong — until someone seeds them for a replay); `std::shuffle` is gone from `src/`, and std's distributions remain only
+on `std::random_device`-seeded draws (`Dice`, WaveFactory noise / dither — checked that day).
+`CardDeck::Where::Randomly` now inserts into any of the size + 1 slots: the draw was in [0, size − 1], so the slot
+after the last card was never chosen (owner decision; test `GameToolsCardDeck.releaseRandomlyReachesEverySlotTheEndIncluded`).
 
 ### ⚠️ `back()` / `front()` on an empty container is UB that libstdc++ hides — `String::extractNumbers()` did it (2026-10-02, FIXED)
 

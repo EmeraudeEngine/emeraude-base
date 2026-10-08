@@ -32,6 +32,9 @@
 #include <random>
 #include <vector>
 
+/* Local inclusions. */
+#include "PortableRandom.hpp"
+
 namespace EmEn::Base::GameTools
 {
 	class CardDeck;
@@ -67,7 +70,9 @@ namespace EmEn::Base::GameTools
 			{
 				const auto seed = std::random_device{}();
 
-				std::shuffle(m_cards.begin(), m_cards.end(), std::mt19937{seed});
+				std::mt19937 engine{seed};
+
+				PortableRandom::shuffle(m_cards, engine);
 			}
 
 			/**

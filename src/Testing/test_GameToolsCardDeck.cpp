@@ -24,6 +24,10 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+/* STL inclusions. */
+#include <algorithm>
+#include <cstddef>
+
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
@@ -93,4 +97,62 @@ TEST(GameToolsCardDeck, discardRandomlyIntoEmptyPile)
 	EXPECT_EQ(deck.discardedCardCount(), 1U);
 	EXPECT_EQ(deck.discardedCards().front(), card);
 	EXPECT_TRUE(hand->cards().empty());
+}
+
+/* 2026-10-08 (owner decision): inserting Randomly may put the card in ANY slot, the one after the last card included.
+ * The draw used to be in [0, size - 1]: the end slot was never chosen. One card left in the deck, one card released
+ * Randomly: over 200 rounds both slots must appear (a miss has a probability of 2^-199). */
+TEST(GameToolsCardDeck, releaseRandomlyReachesEverySlotTheEndIncluded)
+{
+	bool sawFront = false;
+	bool sawEnd = false;
+
+	for ( int round = 0; round < 200 && !(sawFront && sawEnd); ++round )
+	{
+		CardDeck deck{1, 2};
+
+		const auto & hand = deck.hands().front();
+
+		ASSERT_TRUE(deck.pickFromCardDeck(hand, CardDeck::Where::Top));
+
+		const auto card = hand->cards().front();
+
+		ASSERT_TRUE(deck.release(hand, card, CardDeck::Where::Randomly));
+		ASSERT_EQ(deck.cardCount(), 2U);
+
+		sawFront = sawFront || deck.cards().front() == card;
+		sawEnd = sawEnd || deck.cards().back() == card;
+	}
+
+	EXPECT_TRUE(sawFront);
+	EXPECT_TRUE(sawEnd);
+}
+
+/* 2026-10-08: the shuffles go through PortableRandom::shuffle(); a shuffle keeps every card exactly once. */
+TEST(GameToolsCardDeck, shufflesKeepEveryCardOnce)
+{
+	CardDeck deck{1, 52};
+
+	deck.shuffleCardDeck();
+
+	auto cards = deck.cards();
+
+	std::ranges::sort(cards);
+
+	for ( size_t index = 0; index < cards.size(); ++index )
+	{
+		EXPECT_EQ(cards[index], index);
+	}
+
+	const auto & hand = deck.hands().front();
+
+	for ( int pick = 0; pick < 10; ++pick )
+	{
+		ASSERT_TRUE(deck.pickFromCardDeck(hand, CardDeck::Where::Randomly));
+	}
+
+	hand->shuffle();
+
+	EXPECT_EQ(hand->cardCount(), 10U);
+	EXPECT_EQ(deck.cardCount(), 42U);
 }

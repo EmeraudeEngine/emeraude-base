@@ -105,7 +105,7 @@ namespace EmEn::Base::GameTools
 				break;
 
 			case Where::Randomly :
-				pickedIterator = pile.begin() + std::uniform_int_distribution{0, static_cast< int >(pile.size() - 1)}(m_randomEngine);
+				pickedIterator = pile.begin() + static_cast< std::ptrdiff_t >(PortableRandom::uniformInteger< size_t >(m_randomEngine, 0, pile.size() - 1));
 				break;
 		}
 
@@ -172,11 +172,9 @@ namespace EmEn::Base::GameTools
 				break;
 
 			case Where::Randomly :
-				/* NOTE: An empty pile has a single slot; the distribution needs a non-empty range [0, size - 1]. */
-				if ( !pile.empty() )
-				{
-					insertPosition = std::uniform_int_distribution{0, static_cast< int >(pile.size() - 1)}(m_randomEngine);
-				}
+				/* NOTE: Any of the size + 1 slots, the one after the last card included (owner decision 2026-10-08);
+				 * an empty pile has the single slot 0. */
+				insertPosition = static_cast< std::ptrdiff_t >(PortableRandom::uniformInteger< size_t >(m_randomEngine, 0, pile.size()));
 
 				positionKnown = true;
 				break;
