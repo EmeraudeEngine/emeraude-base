@@ -9,8 +9,8 @@ by every consumer.
   heaviest, most ubiquitous headers only, since every entry enlarges the per-target PCH binary and
   the time to build it. The strict rule lives in the file header: **never** add a project
   header (base's own or a consumer's) nor a third-party header — editing one would invalidate the
-  PCH and force a full rebuild. Consumer-specific heavy headers (Eigen for app_kernel, CEF for
-  app_system) are passed **alongside** this list at the call site.
+  PCH and force a full rebuild. Consumer-specific heavy headers (Eigen, CEF in downstream
+  applications) are passed **alongside** this list at the call site.
   > The hot-set is a **CMake variable, never a header file**: a consumer composes it with its own
   > headers at the call site, without needing a header of its own.
 - **`cmake/EnablePrecompiledHeaders.cmake`** — exposes
@@ -56,7 +56,7 @@ by every consumer.
 
 - **`EMERAUDE_ENABLE_PCH`** (option, default **On**) gates the whole feature; when Off the helper
   is a no-op and the call sites stay unconditional. It is **live by default across the cascade** —
-  no build passes a `-D` for it, so base, app_kernel and app_system all compile with their PCH.
+  no build passes a `-D` for it, so base and its downstream consumers all compile with their PCH.
   Turning it off is a deliberate `-DEMERAUDE_ENABLE_PCH=OFF`, worth doing periodically: the PCH
   masks missing `#include`s, and **both configs must stay green** (see
   [`docs/caution-points.md`](../caution-points.md)).

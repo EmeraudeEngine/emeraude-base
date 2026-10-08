@@ -78,8 +78,8 @@ namespace EmEn::Base::Time
 	processCPUTimeResolutionNanoseconds () noexcept
 	{
 #if IS_WINDOWS
-		/* GetProcessTimes() advances by whole scheduler quanta: 15.625 ms, measured on 2026-09-15 (app_system Socratus
-		 * evidence, windows/control-2026-09-15: 15 readings over 400 ms of busy work, all multiples of 156250 ticks). */
+		/* GetProcessTimes() advances by whole scheduler quanta: 15.625 ms, measured on 2026-09-15 (a downstream
+		 * application's Windows control run: 15 readings over 400 ms of busy work, all multiples of 156250 ticks). */
 		return 15'625'000ULL;
 #else
 		struct timespec resolution{};

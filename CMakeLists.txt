@@ -76,7 +76,7 @@ if ( MSVC )
 
 	# ⚠️ MSVC reports __cplusplus as 199711L regardless of CXX_STANDARD unless told otherwise, so
 	# every `#if __cplusplus >= ...` in the tree silently takes the pre-C++11 branch on Windows and
-	# on Windows only — product code included. Socratus found it through the one test it makes
+	# on Windows only — product code included. A downstream test harness found it through the one test it makes
 	# visible (emeraude-base's String.startsOrEndsWith, which registers on Windows alone and made
 	# ctest report 2712 there against 2711 on the two POSIX platforms).
 	add_compile_options(/Zc:__cplusplus)

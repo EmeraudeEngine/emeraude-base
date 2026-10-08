@@ -421,10 +421,10 @@ MD5 keeps its RFC 1321 two-word counter and was correct.
 
 ### `Hash::hmacSha256()` returns HEX, keyed per RFC 2104 (2026-10-07)
 
-Added for app_system's crash report (a request signed with a shared secret). Lower-case hexadecimal like every other
+Added for a downstream application's crash report (a request signed with a shared secret). Lower-case hexadecimal like every other
 `Hash::` function; a key longer than the 64-byte block is hashed first, as RFC 2104 requires — a hand-rolled HMAC that
 truncates or zero-pads a long key instead signs differently from every server library. Proven by the RFC 4231
-vectors 1, 2 and 6 (`Hash.hmacSha256KnownAnswer`), and accepted by a server checking with Python's `hmac` (app_system `tools/bugreports-tests/server.py`).
+vectors 1, 2 and 6 (`Hash.hmacSha256KnownAnswer`), and accepted by a server checking with Python's `hmac` (a downstream application's test server).
 
 ## Network
 

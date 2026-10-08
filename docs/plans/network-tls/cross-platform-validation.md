@@ -18,9 +18,9 @@ anyone**.
 
 Priority raised from medium to high on 2026-08-27 for that reason. **Lowered back to medium on
 2026-08-28**: both platforms ran that day — macOS steps 1-3 through an out-of-tree harness, Windows
-steps 1-4 through app_system's JS path — and the trust store, the TLS client and a live download now
+steps 1-4 through a downstream application's JS path — and the trust store, the TLS client and a live download now
 work on all three. What the title said was what was left: the `ExternalData` chain itself. **macOS ran it on
-2026-08-28** (steps 4 and 5, through the replayable fixture `app_system/tools/external-data-check/`)
+2026-08-28** (steps 4 and 5, through a downstream application's replayable external-data fixture)
 and it took **two engine fixes** to get a single green row — see § *What the macOS ExternalData run
 found*. Windows is now the only platform where that chain has never run.
 
@@ -32,7 +32,7 @@ found*. Windows is now the only platform where that chain has never run.
 | 2. The trust store | ✅ `NetworkTrustStore.*` 6/6, `/etc/ssl/cert.pem` loaded (128 certs) | ✅ **43 CAs imported from the `ROOT` store** — the hand-written CryptoAPI import works |
 | 3. The client, hermetic then live | ✅ `Network*` 78 passed / 3 skipped, then the 3 live ones passed | ✅ `Network*` **78/78**, plus a live HTTPS download with a clean cache |
 | 4. The downloader from the console | ✅ 2026-08-28 — `Done` + 13566 B, badssl → `TLSFailure`, cache clean | ✅ live download, cache clean |
-| 5. The `ExternalData` chain | ✅ 2026-08-28 — 6/6 via `app_system/tools/external-data-check/`, **2 engine defects fixed to get there** | ✅ 2026-10-07 — the fixture replayed verbatim (hosted by projet-alpha, current engine): register, Loaded, TLSFailure, cleartext refused, cache intact across a relaunch, clearCache — all rows pass |
+| 5. The `ExternalData` chain | ✅ 2026-08-28 — 6/6 via a downstream application's replayable external-data fixture, **2 engine defects fixed to get there** | ✅ 2026-10-07 — the fixture replayed verbatim (hosted by projet-alpha, current engine): register, Loaded, TLSFailure, cleartext refused, cache intact across a relaunch, clearCache — all rows pass |
 
 macOS notes worth keeping:
 
@@ -63,7 +63,7 @@ the engine is not above it.
 
 Every box below is ticked, and the last one closed on 2026-08-28. **The list had been left
 unchecked while the work was already recorded elsewhere** (the sibling multicast item and
-`app_system/src/AGENTS.md`), which understated Linux and would have sent the next session
+the downstream application's own notes), which understated Linux and would have sent the next session
 re-running it. Ticked with its evidence, so the claim can be audited rather than trusted.
 
 - [x] **L1 `IP_MULTICAST_TTL` / `IP_MULTICAST_LOOP` width change** (`unsigned char` → `int`,
@@ -77,7 +77,7 @@ re-running it. Ticked with its evidence, so the claim can be audited rather than
   plain run. It also surfaced a defect of its own, as old as `NetworkInterfaces`:
   `enumerateMulticastCapable()` dropped `lo` because it trusted `IFF_MULTICAST`, which Linux never
   sets on loopback while supporting multicast there. Fixed, Linux-scoped.
-- [x] **L4 Step 5 through the fixture** (`app_system/tools/external-data-check/`) — **6/6 green**,
+- [x] **L4 Step 5 through the fixture** (a downstream application's replayable external-data fixture) — **6/6 green**,
   2026-08-28, on engine `034342c5` + base `0fc2516`, i.e. the only column taken after both fixes.
   It is the reference row of that results table. Registration went through `Core.openFiles` on an
   application owning **no `data-stores/` at all**, which closes the half Windows had to leave open.
@@ -86,11 +86,11 @@ re-running it. Ticked with its evidence, so the claim can be audited rather than
 ⚠️ **What is NOT covered on Linux, and does not belong to this checklist**: this repository's own
 **JS path for TCP client/server** (`--mode=test` → the dev-check TCP card). Linux has only ever run
 the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
-`app_system/src/AGENTS.md`.
+the downstream application's own notes.
 
 ### macOS — steps 4-5, plus what a terminal cannot prove
 
-- [x] **M1 — done 2026-08-28**, through `app_system/tools/external-data-check/` (its results table
+- [x] **M1 — done 2026-08-28**, through a downstream application's replayable external-data fixture (its results table
   carries the detail). Step 4: `isEnabled()` true, `download(README.md)` → `Done` + filepath +
   13566 B, `download(https://expired.badssl.com/x.bin)` → `Error` + `"reason":"TLSFailure"`,
   `listCache()`/`clearCache()` both clean, `index.json` written with no `.tmp` sibling surviving.
@@ -116,10 +116,10 @@ the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
   app must survive the denied state, where discovery silently finds nothing.
   Two by-products carried elsewhere: a **dev build cannot be code-signed at all**
   (`Contents/Resources/bin` is an absolute symlink out of the bundle), so
-  `APP_SYSTEM_PUBLIC_RELEASE=ON` is a signing prerequisite and not just a JS freeze; and
-  app_system's `UDPModule` was reporting a **refused send as a success**, platform-neutral, which
+  the downstream application's public-release build switch is a signing prerequisite and not just a JS freeze; and
+  a downstream application's UDP binding was reporting a **refused send as a success**, platform-neutral, which
   made this whole investigation read as "sends succeed but nothing arrives". Both fixed/recorded —
-  see `app_system/docs/packaging.md § macOS`.
+  see the downstream application's packaging notes.
 - [x] **M3 — done 2026-08-28.** `--mode=test`, driven over CDP like the Windows run. dev-check mDNS
   card: bind `0.0.0.0:5353` beside `mDNSResponder`, TTL 255 + loopback, join on **both** real NICs
   with zero failures, DNS-SD answered by **5 LAN hosts**, idempotent re-join, tolerant drop,
@@ -136,7 +136,7 @@ the **mDNS** card; Windows ran mDNS *and* TCP. See the platform table in
 
 ### Windows — ran 2026-08-28, one gap left
 
-Done through app_system's own JS path (`--mode=test`, dev-check fixtures over CDP), which is the
+Done through a downstream application's own JS path (`--mode=test`, dev-check fixtures over CDP), which is the
 layer **macOS has never run** — the two platforms validated different things, neither substitutes
 for the other.
 
@@ -172,16 +172,16 @@ for the other.
   ⚠️ **Pull the engine first.** The macOS run of 2026-08-28 found two defects on this exact path
   that were blocking it on *every* platform (a sterile container binding, and `TLSFailure` reported
   as `Unreachable`) — on an older engine this step cannot pass here either, and the symptoms look
-  like a Windows network problem. Then run `app_system/tools/external-data-check/` verbatim and fill
+  like a Windows network problem. Then run a downstream application's replayable external-data fixture verbatim and fill
   the Windows column of its results table; read its Traps section first, four of them cost real time.
-  Run `app_system/tools/external-data-check/` verbatim and fill its results table.
+  Run a downstream application's replayable external-data fixture verbatim and fill its results table.
 
 > [!NOTE]
-> What the Windows run found first was **not** in this cascade: app_system's
+> What the Windows run found first was **not** in this cascade: a downstream application's
 > `SharedDataManager::createJob<>()` locked a non-recursive mutex twice, which MS-STL turns into a
 > `std::system_error` thrown inside a `noexcept` binding — instant renderer death on **every**
 > `JobInterface` module, network or not. glibc self-deadlocks rather than throwing, so Linux would
-> have hung instead of crashing. Fixed in app_system. Noted here because it blocked the run, and
+> have hung instead of crashing. Fixed in a downstream application. Noted here because it blocked the run, and
 > because it is a good reminder that a green Linux run does not clear this class of mistake.
 
 ## The handover — what to run there, in this order
@@ -190,7 +190,7 @@ Each step is independent; stop at the first that fails and record what it said.
 
 ### 1. It builds at all
 
-- Windows: MSVC, both `EMERAUDE_USE_FULL_EXPORTS` (default) and app_system's `LEAN` variant.
+- Windows: MSVC, both `EMERAUDE_USE_FULL_EXPORTS` (default) and a downstream application's `LEAN` variant.
 - macOS: the Objective-C++ TUs (`SerialPort.mac.mm`, `WiFiScanner.mac.mm`) still compile with the
   shared STL PCH — the base auto-sets `SKIP_PRECOMPILE_HEADERS` on `.mm`, verify it still does.
 - ⚠️ **New since the last cross-platform build**: `src/Net/SerialPort.linux.cpp` grew a mirrored
@@ -258,7 +258,7 @@ which is not a definition: three machines improvising three stores produce three
 compared, and comparability is the whole point of a cross-platform handover.
 
 The fixture is now in the tree, in the consuming application:
-`app_system/tools/external-data-check/` — one store file (`ExternalDataCheck.store.json`, three
+a downstream application's replayable external-data fixture — one store file (`ExternalDataCheck.store.json`, three
 entries: a nominal one, an expired certificate, a cleartext URL), one command sequence identical on
 the three OSes, the expected outcomes, and a results table to fill. Run it verbatim.
 
@@ -266,7 +266,7 @@ Two things that cost time when this was pinned down (2026-08-28, Linux), both re
 README:
 
 - `Core::openFiles()` runs `openResourceIndex()` **before** the application's `onCoreOpenFiles()`,
-  so the console path works under app_system even though that override sends dropped files to
+  so the console path works under a downstream application even though that override sends dropped files to
   JavaScript. But a **malformed** store falls through to the application and vanishes silently,
   behind a cheerful `1 file(s) submitted to the opening pipeline.` — that message is not proof,
   `listResources` is.
@@ -286,7 +286,7 @@ clear them: it had never run this path either.
    the most expensive shape a bug can take. `Resources::Manager::getLocalStore()` returned `nullptr`
    for any store the boot-time discovery had not produced; a container captures that pointer **once**,
    at registration, and keeps it for life; the later `Manager::update()` then created a *fresh* map
-   under the same name that only the manager could see. Because app_system ships no store
+   under the same name that only the manager could see. Because a downstream application ships no store
    sub-directories at all, **all 34 containers were sterile** and the entire runtime `update()` path
    was dead code. Fixed engine-side (`getLocalStore()` creates on demand and is documented as never
    returning null). See `emeraude-engine/src/Resources/AGENTS.md`.

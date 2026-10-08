@@ -58,7 +58,7 @@ namespace EmEn::Base::Hash
 
 	/**
 	 * @brief Computes the HMAC-SHA-256 (RFC 2104) of a message, in lower-case hexadecimal.
-	 * @note Signs a request to a server sharing the key (e.g. the crash report endpoint of app_system).
+	 * @note Signs a request to a server sharing the key (e.g. the crash report endpoint of a downstream application).
 	 * @param key A reference to the secret key (any length; a key longer than 64 bytes is hashed first).
 	 * @param message A reference to the message.
 	 * @return std::string 64 hexadecimal characters.

@@ -100,7 +100,7 @@ TEST(NetworkURI, decodesPercentEncodingInComponents)
 TEST(NetworkURI, queryValueDelimitersSurviveARoundTrip)
 {
 	/* An S3 presigned URL carries a token holding "%2B", "%3D" and "%2F": re-emitted as a literal '+' (a space for
-	 * S3) or '=' it no longer matches its signature (found 2026-10-07, app_system crash report upload). */
+	 * S3) or '=' it no longer matches its signature (found 2026-10-07, a downstream application's crash report upload). */
 	const URI uri{"https://bucket.s3.amazonaws.com/a.zip?X-Amz-Security-Token=a%2Bb%3Dc%26d%3Be%2Ff&x-id=PutObject"};
 
 	EXPECT_EQ(uri.query().variables().at("X-Amz-Security-Token"), "a+b=c&d;e/f");
