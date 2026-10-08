@@ -1802,31 +1802,27 @@ TEST(ThreadPoolTaskHandle, CallableIsDestroyedBeforeWaitReturns)
 	EXPECT_TRUE(observer.expired());
 }
 
-TEST(ThreadPoolTaskHandle, TaskWaitingForItsOwnHandleIsRefused)
+/* Owner decision D2 (2026-10-08): a task waiting for (or destroying) its own handle would never return — a contract
+ * fault, aborted in every build. */
+TEST(ThreadPoolTaskHandleDeathTest, TaskWaitingForItsOwnHandleAborts)
 {
-	ThreadPool pool{2};
-	auto holder = std::make_shared< TaskHandle >();
-	std::atomic_bool handleStored{false};
-	std::atomic_bool returnedFromSelfWait{false};
+	EXPECT_DEATH({
+		ThreadPool pool{2};
+		auto holder = std::make_shared< TaskHandle >();
+		std::atomic_bool handleStored{false};
 
-	*holder = pool.submit([holder, &handleStored, &returnedFromSelfWait] (const std::stop_token &) {
-		if ( !waitForFlag(handleStored) )
-		{
-			return;
-		}
+		*holder = pool.submit([holder, &handleStored] (const std::stop_token &) {
+			if ( waitForFlag(handleStored) )
+			{
+				holder->wait();
+			}
+		});
 
-		/* Would never return if it waited: refused and traced instead. */
-		holder->wait();
+		handleStored = true;
 
-		returnedFromSelfWait = true;
-	});
-
-	handleStored = true;
-
-	ASSERT_TRUE(waitForFlag(returnedFromSelfWait));
-
-	holder->wait();
-	EXPECT_TRUE(holder->finished());
+		/* The task aborts the process; this sleep is never reached to its end. */
+		std::this_thread::sleep_for(std::chrono::seconds{10});
+	}, "its own handle");
 }
 
 TEST(ThreadPoolTaskHandle, EmptyHandleIsHarmless)

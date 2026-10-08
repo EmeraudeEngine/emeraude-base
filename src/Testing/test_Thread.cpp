@@ -165,21 +165,30 @@ TEST(BaseThread, aDetachedThreadRunsOnItsOwn)
 	EXPECT_TRUE(waitFor(*ran));
 }
 
-TEST(BaseThread, aThreadJoiningItselfIsDetachedInsteadOfAborting)
+/* Owner decision D2 (2026-10-08): a self-join is a contract fault — its owner is destroyed or stopped from its own thread,
+ * which then runs on a dead object. It used to be detached silently (a hidden use-after-free); it aborts now, in every
+ * build. */
+TEST(BaseThreadDeathTest, aThreadJoiningItselfAborts)
 {
-	std::atomic_bool joined{false};
-	auto thread = std::make_unique< Thread >();
-	auto * self = thread.get();
+	EXPECT_DEATH({
+		Thread thread;
+		std::atomic_bool started{false};
+		auto * self = &thread;
 
-	ASSERT_TRUE(thread->start([self, &joined] {
-		/* std::thread::join() here throws std::system_error (resource_deadlock_would_occur): an abort. */
-		self->join();
+		if ( thread.start([self, &started] {
+			while ( !started.load() )
+			{
+				std::this_thread::yield();
+			}
 
-		joined = true;
-	}));
-
-	ASSERT_TRUE(waitFor(joined));
-	EXPECT_FALSE(thread->joinable());
+			self->join();
+		}) )
+		{
+			started = true;
+			/* The destructor would join the aborted thread: the process never gets there. */
+			std::this_thread::sleep_for(std::chrono::seconds{10});
+		}
+	}, "joins itself");
 }
 
 TEST(BaseThread, aNewThreadSeesItsObjectAlreadyRecorded)
@@ -197,12 +206,11 @@ TEST(BaseThread, aNewThreadSeesItsObjectAlreadyRecorded)
 	ASSERT_TRUE(thread->start([self, &joined, &sawItsObject] {
 		sawItsObject = self->joinable() && self->isCurrentThread();
 
-		self->join();
-
 		joined = true;
 	}));
 
 	ASSERT_TRUE(waitFor(joined));
+	thread->join();
 	EXPECT_TRUE(sawItsObject.load());
 	EXPECT_FALSE(thread->joinable());
 }

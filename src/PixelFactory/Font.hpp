@@ -546,7 +546,7 @@ namespace EmEn::Base::PixelFactory
 			 * wide as the widest, the glyph centred); a control code (C0, DEL, C1) is an empty cell as wide as the space; a
 			 * code the font lacks shows the font's missing-glyph box.
 			 * @param filepath A reference to a filesystem path (read through IO, UTF-8 safe).
-			 * @param fontSize The desired font size, in [1, 1024]: anything else is refused.
+			 * @param fontSize The desired font size, in [1, 256] (the height of one glyph cell): anything else is refused.
 			 * @param fixedWidth Enable each glyph to be the same width at the end of the process.
 			 * @return bool False (and a trace) for an unreadable file, a non-font, a refused size, a glyph that does not
 			 * render or a hostile glyph wider than 8 font sizes; nothing is stored then for a failure before the glyphs.

@@ -61,8 +61,9 @@ namespace EmEn::Base
 	 * are destroyed. The object that starts a job keeps its handle as a member: its own destruction then stops and waits
 	 * for the job, so nothing else (a global flag, another class's drain) has to.
 	 *
-	 * @note Thread-safe: requestStop(), finished() and wait() may be called from any thread. A task waiting for its OWN
-	 * handle would never return: it is refused and traced (owner decision D2 still open on whether it should abort).
+	 * @note Thread-safe: requestStop(), finished() and wait() may be called from any thread. A task waiting for (or
+	 * destroying) its OWN handle would never return: a contract fault, traced and aborted in every build (owner decision
+	 * D2, 2026-10-08).
 	 */
 	class TaskHandle final
 	{
@@ -151,7 +152,7 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Blocks until the task has finished and its callable is destroyed. Returns at once on an empty handle.
-			 * @note Called from the task's own thread, it would never return: refused and traced.
+			 * @pre Not called from the task's own thread (it would never return): a contract fault, aborted (decision D2).
 			 */
 			void wait () noexcept;
 

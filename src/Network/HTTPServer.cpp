@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -1013,6 +1014,15 @@ namespace EmEn::Base::Network
 		if ( !m_running )
 		{
 			return;
+		}
+
+		/* NOTE: From the network thread (a request handler), the handshake below could never complete and the join would
+		 * be a self-join: a CONTRACT FAULT, aborted at once rather than after the 3 s bound (owner decision D2). */
+		if ( m_networkThread.isCurrentThread() )
+		{
+			Logging::fatal("HTTPServer", "stop(), contract violation: called from the network thread (a request handler) ! Aborting.");
+
+			std::abort();
 		}
 
 		/* Streams get their last words and every socket closes ON the network thread (the only one that touches

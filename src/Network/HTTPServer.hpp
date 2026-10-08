@@ -367,7 +367,8 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Stops the server: streams get their last words, every socket closes on the network thread, then
 			 * the thread joins. Bounded: a stuck peer cannot hold it more than 3 seconds. Idempotent.
-			 * @note Never from the network thread.
+			 * @pre Never from the network thread (a request handler): a contract fault, traced and aborted at once (owner
+			 * decision D2, 2026-10-08).
 			 */
 			void stop () noexcept;
 

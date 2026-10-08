@@ -337,7 +337,7 @@ without overflow (seconds and remainder apart). A sample that is not a measureme
 `std::thread`'s constructor throws `std::system_error` when the system cannot start a thread (resource exhaustion, a
 thread limit): under `-fno-exceptions`, an abort — and `std::thread::join()` from the thread itself throws too.
 `Base::Thread` (`src/Thread.hpp`) starts on `pthread_create()` / `_beginthreadex()` and answers `false`; it joins on
-destruction and refuses a self-join (traced, detached). **Rule:** no `std::thread` in the cascade (none is left,
+destruction and ABORTS on a self-join (since 2026-10-08, decision D2 — see below; it used to detach). **Rule:** no `std::thread` in the cascade (none is left,
 2026-10-07: `/usr/bin/grep -rn "std::thread"` finds only `std::thread::id` / `hardware_concurrency()` and tests); a
 caller of `start()` decides what a refusal means. Owner policy: a feature thread refuses its feature (`false` +
 trace); the Tracer writes synchronously; `executeCommandPumpingEvents()` blocks; `ThreadPool` keeps the workers that
@@ -374,11 +374,27 @@ its captures are already destroyed (the owner may free what they pointed to). **
 (`this`, a reference) is submitted and the object keeps the handle as a member, declared AFTER the state the task
 uses; `enqueue()` stays for fire-and-forget work capturing values only. A long task checks its token at a bounded
 interval in every stage (`ShapeDecimator::setStopToken()`: every 4096 iterations of every stage loop).
-⚠️ A task waiting for its OWN handle would never return: `wait()` refuses it with a trace (decision D2 open: abort?).
+⚠️ A task waiting for (or destroying) its OWN handle would never return: a contract fault, aborted (decision D2, below).
 ⚠️ A pool worker waiting for a task still QUEUED behind it can deadlock a small pool, as with any pool wait.
 ⚠️ The measured stop latency of a 2.24 M-triangle decimation is 0.74 s worst (was 1.52 s): the work stops within
 milliseconds, the rest is the DEALLOCATION of its node-based containers (item `task-handle-and-stop-token`).
 Proof: 8 `ThreadPoolTaskHandle.*` tests, 20 rounds under TSan with 0 report; Release and ASan/UBSan green.
+
+### ⚠️⚠️ A self-join ABORTS, in every build — never destroy or stop an owner from its own thread (D2, 2026-10-08)
+
+Owner decision D2: joining a `Base::Thread` from itself (its owner destroyed or stopped on its own thread), a task
+waiting for or destroying its own `TaskHandle`, `HTTPServer::stop()` from its network thread (a request handler) and an
+`EventTrait` owner destroyed from one of its timers' callbacks are CONTRACT FAULTS: `Logging::fatal()` then
+`std::abort()`, Release included. The self-join used to be detached silently — the thread then ran on a destroyed
+object, a hidden use-after-free. For `EventTrait` there is no safe alternative (nothing would be left to join the timer
+later); `destroyTimer()` / `destroyTimers()` from a callback stay legal (retired, joined later).
+Audit before the switch (every `Base::Thread` and `TaskHandle` of the three repositories, read-only, 2026-10-08): no
+path reaches a self-join today — servers' requests and console commands run on the main thread (queued), the observers
+of a thread's notifications never stop it, no task holds the last reference to its owner. Two places only stand on a
+caller's discipline, now documented as `@pre`: `~EventTrait` (projet-alpha's `LightenMarbles` timer copies a
+`shared_ptr< Scene >`, defused because `Act::~Act` destroys the scene's timers first) and `HTTPServer::stop()`.
+Tests: `BaseThreadDeathTest.aThreadJoiningItselfAborts`, `ThreadPoolTaskHandleDeathTest.TaskWaitingForItsOwnHandleAborts`
+(death tests: the faulty statement runs in a child process).
 
 ### ⚠️ TSan reports OpenMP regions as races — run a TSan test with `OMP_NUM_THREADS=1` (2026-10-08)
 
@@ -1132,7 +1148,8 @@ two TrueType tests were commented out too. Now (owner decision: keep TrueType) e
 - Cells: Latin-1 codes through the face's Unicode charmap; a control code (C0, DEL, C1) is an empty cell as wide as the
   space; a code the font lacks shows the font's missing-glyph box (on purpose: a visible hole). `fixedWidth`: every
   cell as wide as the widest, the glyph centred.
-- **Trust boundary:** the size must be in [1, 1024]; a glyph wider than 8 font sizes is refused; the file is read
+- **Trust boundary:** the size must be in [1, 256] (the height of ONE glyph cell; owner decision: ample for any title —
+  256 cells take ~10 MB for a usual font, 128 MiB at worst); a glyph wider than 8 font sizes is refused; the file is read
   through `IO::fileGetContents()` (UTF-8 paths) and opened from memory (`FT_New_Memory_Face`, the buffer declared
   BEFORE the face). ⚠️ FreeType is LENIENT with a truncated file: the face opens and every cut glyph renders EMPTY —
   measured with the test font cut to a third: the load "succeeded" with blank glyphs. An sfnt font (TrueType,

@@ -82,7 +82,11 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Destructs the timed events interface.
-			 * @warning It joins every timer thread: never destroy the owner from one of its own timers' callbacks.
+			 * @pre Not called from one of its own timers' callbacks (a callback destroying its owner, or releasing the last
+			 * shared_ptr to it): the timer would join itself — a contract fault, ABORTED in every build (owner decision
+			 * D2, 2026-10-08). There is no safe alternative: nothing would be left to join the timer later, and the
+			 * callback would go on running on a destroyed owner. destroyTimer() / destroyTimers() from a callback stay
+			 * legal (the timer is retired and joined later).
 			 */
 			virtual ~EventTrait () = default;
 

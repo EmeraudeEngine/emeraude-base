@@ -31,6 +31,7 @@
 #include <atomic>
 #include <cerrno>
 #include <chrono>
+#include <cstdlib>
 #include <string>
 #include <thread>
 
@@ -239,13 +240,14 @@ namespace EmEn::Base
 			return;
 		}
 
+		/* NOTE: A join from the thread itself is a CONTRACT FAULT (Ave Robustus II, owner decision D2, 2026-10-08): its owner
+		 * is being destroyed (or stopped) from the very thread it owns, which then keeps running on a dead object. It used
+		 * to be detached silently — a hidden use-after-free. It aborts, in every build, so the faulty owner shows. */
 		if ( this->isCurrentThread() )
 		{
-			Logging::error("Thread", "Thread::join(), a thread cannot join itself: it is detached instead !");
+			Logging::fatal("Thread", "Thread::join(), contract violation: a thread joins itself (its owner is destroyed or stopped from its own thread) ! Aborting.");
 
-			this->detach();
-
-			return;
+			std::abort();
 		}
 
 #if IS_WINDOWS

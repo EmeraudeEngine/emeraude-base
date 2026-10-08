@@ -51,7 +51,8 @@ namespace EmEn::Base
 	 * caller decides what a refused start means (refuse its feature, run synchronously…). Built on pthread_create()
 	 * (POSIX) and _beginthreadex() (Windows), with their default stack sizes, like std::thread.
 	 * @note RAII: a started thread is JOINED by the destructor (and by a move assignment), unless detach() was called.
-	 * A join from the thread itself is refused (traced, and the thread is detached): std::thread aborts there.
+	 * A join (or a destruction) from the thread itself is a contract fault: traced and ABORTED in every build (owner
+	 * decision D2, 2026-10-08) — the owner must never be destroyed or stopped from its own thread.
 	 */
 	class Thread final
 	{
@@ -122,7 +123,8 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Waits for the thread to end. Nothing happens on an idle object.
-			 * @note From the thread itself, the join is refused: traced, and the thread is detached instead.
+			 * @pre Not called from the thread itself (directly, or through the destructor / a move assignment): that is a
+			 * contract fault, traced and aborted in every build (owner decision D2).
 			 */
 			void join () noexcept;
 

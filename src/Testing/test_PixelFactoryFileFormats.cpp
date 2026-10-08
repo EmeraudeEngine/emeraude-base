@@ -517,13 +517,14 @@ TEST(PixelFactoryFont, trueTypeFixedWidthCellsAreEqual)
 	}
 }
 
-/* Hostile input at the trust boundary: a size out of [1, 1024], an empty file, a truncated font, a missing file. */
+/* Hostile input at the trust boundary: a size out of [1, 256], an empty file, a truncated font, a missing file. */
 TEST(PixelFactoryFont, trueTypeHostileInputsRefused)
 {
 	PixelFactory::Font< uint8_t > font;
 
 	EXPECT_FALSE(font.readFile(TrueTypeFont, 0, false));
-	EXPECT_FALSE(font.readFile(TrueTypeFont, 1025, false));
+	EXPECT_TRUE(font.readFile(TrueTypeFont, 256, false));
+	EXPECT_FALSE(font.readFile(TrueTypeFont, 257, false));
 
 	std::ifstream source{TrueTypeFont, std::ios::binary};
 

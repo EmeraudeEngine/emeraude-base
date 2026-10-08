@@ -71,8 +71,9 @@ namespace EmEn::Base::PixelFactory
 		using FreeTypeLibrary = std::unique_ptr< FT_LibraryRec_, FreeTypeLibraryDeleter >;
 		using FreeTypeFace = std::unique_ptr< FT_FaceRec_, FreeTypeFaceDeleter >;
 
-		/** @brief The largest TrueType font size read (pixels): 256 glyph cells of up to 8 × size × size elements. */
-		constexpr uint32_t MaxTrueTypeFontSize{1024};
+		/** @brief The largest TrueType font size read (pixels, the height of ONE glyph cell — owner decision 2026-10-08:
+		 * ample for any title). 256 cells of up to 8 × size × size elements: ~10 MB for a usual font, 128 MiB at worst. */
+		constexpr uint32_t MaxTrueTypeFontSize{256};
 
 		/** @brief The widest glyph cell accepted, in font sizes (a hostile outline could ask for far more). */
 		constexpr uint32_t MaxTrueTypeCellWidthFactor{8};

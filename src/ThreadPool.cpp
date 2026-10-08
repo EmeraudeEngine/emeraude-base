@@ -30,6 +30,7 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
+#include <cstdlib>
 #include <iostream>
 
 /* Local inclusions. */
@@ -72,10 +73,11 @@ namespace EmEn::Base
 
 		if ( !m_state->finished && m_state->runningThread == std::this_thread::get_id() )
 		{
-			/* NOTE: The task itself waits for its own end: it would never come. Refused (decision D2 open: abort?). */
-			Logging::error("TaskHandle", "wait(), a task cannot wait for its own handle: refused (it would never return) !");
+			/* NOTE: The task waits for its own end (or destroys its own handle): it would never come, and its owner is going
+			 * away under it. A CONTRACT FAULT, aborted in every build (owner decision D2, 2026-10-08). */
+			Logging::fatal("TaskHandle", "wait(), contract violation: a task waits for (or destroys) its own handle ! Aborting.");
 
-			return;
+			std::abort();
 		}
 
 		m_state->finishedSignal.wait(lock, [this] () {

@@ -88,7 +88,10 @@ These either throw (→ `terminate` under `-fno-exceptions`) or hide failures:
 
 > **Never `std::abort()` / `std::terminate()` on a runtime or input error.** Those must
 > propagate gracefully via §2. `abort`/`assert` are allowed **only** for **programmer-contract
-> violations** (an internal invariant the caller is responsible for), and only in Debug.
+> violations** (an internal invariant the caller is responsible for), and only in Debug — except where an owner
+> decision makes the fault fail fast in EVERY build: a `StaticVector` overflow, and (D2, 2026-10-08) a self-join of
+> `Base::Thread`, a task waiting for its own `TaskHandle`, `HTTPServer::stop()` from its network thread, an
+> `EventTrait` destroyed from its own timer (traced with `Logging::fatal()`, then `std::abort()`).
 
 **Runtime/input error** (propagate): malformed file, truncated stream, missing key, network
 failure, out-of-memory from untrusted sizes, …
