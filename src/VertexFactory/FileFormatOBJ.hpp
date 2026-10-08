@@ -739,7 +739,8 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 
-						/* NOTE: f line can express a triangle or a polygon ! */
+						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
+						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
 						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
 						{
 							/* NOTES: "f 0 1 2 3"
@@ -755,7 +756,7 @@ namespace EmEn::Base::VertexFactory
 								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
 
 								/* NOTE: Convert OBJ index to vector index. */
-								const auto vIndex = faceIndices.at(realFaceVertexIndex).vIndex() - 1;
+								const auto vIndex = faceIndices[realFaceVertexIndex].vIndex() - 1;
 								if ( vIndex >= m_v.size() || vIndex >= vertices.size() )
 								{
 									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
@@ -765,7 +766,7 @@ namespace EmEn::Base::VertexFactory
 
 
 								/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
-								vertices.at(vIndex).setPosition(m_v.at(vIndex));
+								vertices[vIndex].setPosition(m_v[vIndex]);
 
 								/* Declare the vertex index to one of the three vertices of the triangle. */
 								triangle.setVertexIndex(faceVertexIndex, vIndex);
@@ -842,7 +843,8 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 
-						/* NOTE: f line can express a triangle or a polygon ! */
+						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
+						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
 						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
 						{
 							/* NOTES: "f 0 1 2 3"
@@ -856,7 +858,7 @@ namespace EmEn::Base::VertexFactory
 							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
 							{
 								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-								const auto & OBJVertex = faceIndices.at(realFaceVertexIndex);
+								const auto & OBJVertex = faceIndices[realFaceVertexIndex];
 
 								/* NOTE: Convert OBJ index (1-based) to vector index (0-based).
 								 * Index 0 means "not defined" in our system. */
@@ -955,7 +957,8 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 
-						/* NOTE: f line can express a triangle or a polygon ! */
+						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
+						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
 						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
 						{
 							/* NOTES: "f 0 1 2 3"
@@ -972,7 +975,7 @@ namespace EmEn::Base::VertexFactory
 							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
 							{
 								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-								const auto & OBJVertex = faceIndices.at(realFaceVertexIndex);
+								const auto & OBJVertex = faceIndices[realFaceVertexIndex];
 
 								/* NOTE: Convert OBJ index (1-based) to vector index (0-based).
 								 * Index 0 means "not defined" in our system. */
@@ -1076,7 +1079,8 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 
-						/* NOTE: f line can express a triangle or a polygon ! */
+						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
+						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
 						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
 						{
 							/* NOTES: "f 0 1 2 3"
@@ -1093,7 +1097,7 @@ namespace EmEn::Base::VertexFactory
 							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
 							{
 								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-								const auto & OBJVertex = faceIndices.at(realFaceVertexIndex);
+								const auto & OBJVertex = faceIndices[realFaceVertexIndex];
 
 								/* NOTE: Convert OBJ index (1-based) to vector index (0-based).
 								 * Index 0 means "not defined" in our system. */

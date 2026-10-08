@@ -208,7 +208,8 @@ namespace EmEn::Base::PixelFactory
 
 					for ( ; currentChar < text.size(); ++currentChar )
 					{
-						auto ASCIICode = text.at(currentChar);
+						/* NOTE: currentChar < text.size(): the loop condition. */
+						auto ASCIICode = text[currentChar];
 
 						/* NOTE: Check for a new line feed. */
 						if ( ASCIICode == '\n' )

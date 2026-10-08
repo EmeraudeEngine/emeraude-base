@@ -28,10 +28,14 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
+#include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <iostream>
 #include <numbers>
 #include <numeric>
+#include <optional>
 #include <queue>
 #include <stop_token>
 #include <type_traits>
@@ -242,7 +246,16 @@ namespace EmEn::Base::VertexFactory
 					return {};
 				}
 
-				/* Build canonical position map: quantized position → first vertex index. */
+				/* NOTE: An inconsistent shape (a triangle past the vertex array) is refused: the canonical map below is
+				 * indexed by the triangles' vertices (a throwing .at() aborted there until 2026-10-08). */
+				if ( !m_shape.indicesInRange() )
+				{
+					std::cerr << "ShapeProcessor::findBoundaryLoops(), a triangle refers to a vertex that does not exist !" "\n";
+
+					return {};
+				}
+
+				/* Build canonical position map: vertex index → first vertex index at the same quantized position. */
 				const auto canonicalMap = this->buildCanonicalMap();
 
 				/* Build edge occurrence map using canonical indices. */
@@ -265,8 +278,8 @@ namespace EmEn::Base::VertexFactory
 						const auto actualA = tri.vertexIndex(e);
 						const auto actualB = tri.vertexIndex((e + 1) % 3);
 
-						const auto canonA = canonicalMap.at(actualA);
-						const auto canonB = canonicalMap.at(actualB);
+						const auto canonA = canonicalMap[actualA];
+						const auto canonB = canonicalMap[actualB];
 
 						const auto edgeKey = packEdgeKey(canonA, canonB);
 
@@ -292,8 +305,8 @@ namespace EmEn::Base::VertexFactory
 						continue;
 					}
 
-					const auto canonA = canonicalMap.at(info.actualA);
-					const auto canonB = canonicalMap.at(info.actualB);
+					const auto canonA = canonicalMap[info.actualA];
+					const auto canonB = canonicalMap[info.actualB];
 
 					adjacency[canonA].emplace_back(canonB, info.actualA);
 					adjacency[canonB].emplace_back(canonA, info.actualB);
@@ -343,7 +356,17 @@ namespace EmEn::Base::VertexFactory
 
 					do
 					{
-						const auto & edges = adjacency.at(currentCanonical);
+						/* NOTE: Every edge adds both of its ends to the adjacency, so the walk only reaches keys of it. */
+						const auto edgesIt = adjacency.find(currentCanonical);
+
+						assert(edgesIt != adjacency.end() && "ShapeProcessor::findBoundaryLoops(), the walk left the adjacency.");
+
+						if ( edgesIt == adjacency.end() )
+						{
+							break;
+						}
+
+						const auto & edges = edgesIt->second;
 
 						index_data_t actualVertex = edges.front().second;
 						loop.vertexIndices.push_back(actualVertex);
@@ -1363,8 +1386,19 @@ namespace EmEn::Base::VertexFactory
 						if ( dist > bestDist )
 						{
 							bestDist = dist;
-							bestA = chart.globalToLocal.at(vA);
-							bestB = chart.globalToLocal.at(vB);
+							const auto localA = chart.globalToLocal.find(vA);
+							const auto localB = chart.globalToLocal.find(vB);
+
+							/* NOTE: The candidates are vertices of the chart (its boundary or all of them), which globalToLocal maps. */
+							assert(localA != chart.globalToLocal.end() && localB != chart.globalToLocal.end() && "ShapeProcessor::selectPinnedVertices(), a chart vertex is not mapped.");
+
+							if ( localA == chart.globalToLocal.end() || localB == chart.globalToLocal.end() )
+							{
+								continue;
+							}
+
+							bestA = localA->second;
+							bestB = localB->second;
 						}
 					}
 				}
@@ -1414,14 +1448,33 @@ namespace EmEn::Base::VertexFactory
 				{
 					const auto & tri = m_shape.triangles()[chart.triangleIndices[t]];
 
-					index_data_t globalV[3];
-					size_t localV[3];
+					const std::array< index_data_t, 3 > globalV{tri.vertexIndex(0), tri.vertexIndex(1), tri.vertexIndex(2)};
 
-					for ( int i = 0; i < 3; ++i )
+					/* NOTE: globalToLocal is built from the chart's own triangles, so every corner is mapped. */
+					const auto toLocal = [&chart] (index_data_t global) -> std::optional< size_t > {
+						const auto local = chart.globalToLocal.find(global);
+
+						assert(local != chart.globalToLocal.end() && "ShapeProcessor::solveChartLSCM(), a chart corner is not mapped.");
+
+						if ( local == chart.globalToLocal.end() )
+						{
+							return std::nullopt;
+						}
+
+						return local->second;
+					};
+
+					const auto local0 = toLocal(globalV[0]);
+					const auto local1 = toLocal(globalV[1]);
+					const auto local2 = toLocal(globalV[2]);
+
+					/* A corner that is not mapped leaves its triangle out, as a degenerate one is below. */
+					if ( !local0.has_value() || !local1.has_value() || !local2.has_value() )
 					{
-						globalV[i] = tri.vertexIndex(i);
-						localV[i] = chart.globalToLocal.at(globalV[i]);
+						continue;
 					}
+
+					const std::array< size_t, 3 > localV{*local0, *local1, *local2};
 
 					const auto & p0 = m_shape.vertex(globalV[0]).position();
 					const auto & p1 = m_shape.vertex(globalV[1]).position();
@@ -1455,7 +1508,7 @@ namespace EmEn::Base::VertexFactory
 					const auto rowReal = t * 2;
 					const auto rowImag = (t * 2) + 1;
 
-					for ( int k = 0; k < 3; ++k )
+					for ( size_t k = 0; k < 3; ++k )
 					{
 						const auto fi = localToFree[localV[k]];
 
@@ -1954,13 +2007,15 @@ namespace EmEn::Base::VertexFactory
 			 * @return std::unordered_map< index_data_t, index_data_t >
 			 */
 			[[nodiscard]]
-			std::unordered_map< index_data_t, index_data_t >
+			std::vector< index_data_t >
 			buildCanonicalMap () const noexcept
 			{
 				std::unordered_map< PositionKey, index_data_t, PositionKeyHash > positionToCanonical;
-				std::unordered_map< index_data_t, index_data_t > canonicalMap;
 
 				const auto & vertices = m_shape.vertices();
+
+				/* NOTE: Dense: every vertex index has an entry (one allocation, no node per vertex). */
+				std::vector< index_data_t > canonicalMap(vertices.size());
 
 				for ( index_data_t i = 0; i < static_cast< index_data_t >(vertices.size()); ++i )
 				{

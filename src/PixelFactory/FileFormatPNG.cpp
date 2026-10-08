@@ -299,7 +299,8 @@ namespace EmEn::Base::PixelFactory
 		{
 			const auto offset = yIndex * pixmap.width() * pixmap.colorCount();
 
-			rowPointers.at(yIndex) = static_cast< png_bytep >(buffer.data() + offset);
+			/* NOTE: rowPointers was resized to height() just above. */
+			rowPointers[yIndex] = static_cast< png_bytep >(buffer.data() + offset);
 		}
 
 		/* Phase 2 — image. A corrupt IDAT longjmps here; rowPointers unwinds normally. */

@@ -614,6 +614,36 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Returns whether every triangle refers to existing vertices (and, when asked, to existing vertex colors).
+			 * @note A shape assembled by a loader or by hand can break it. The consumers that index the vertex arrays
+			 * through the triangles check it once and refuse an inconsistent shape (createIndexedVertexBuffer(),
+			 * ShapeProcessor::findBoundaryLoops()) — they used a throwing .at() (an abort) or an unchecked [] before.
+			 * @param withVertexColors Also check the vertex color indices. Default false.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			indicesInRange (bool withVertexColors = false) const noexcept
+			{
+				return std::ranges::all_of(m_triangles, [this, withVertexColors] (const auto & triangle) {
+					for ( index_data_t corner = 0; corner < 3; ++corner )
+					{
+						if ( static_cast< size_t >(triangle.vertexIndex(corner)) >= m_vertices.size() )
+						{
+							return false;
+						}
+
+						if ( withVertexColors && static_cast< size_t >(triangle.vertexColorIndex(corner)) >= m_vertexColors.size() )
+						{
+							return false;
+						}
+					}
+
+					return true;
+				});
+			}
+
+			/**
 			 * @brief Checks if the geometry is empty.
 			 * @note Inverse of Shape::isValid(). Provided to satisfy C++ conventions.
 			 * @return bool
@@ -1509,6 +1539,18 @@ namespace EmEn::Base::VertexFactory
 			index_data_t
 			createIndexedVertexBuffer (std::vector< vertex_data_t > & vertexBuffer, std::vector< index_data_t > & indexBuffer, NormalType normalType = NormalType::None, TextureCoordinatesType textureCoordinatesType = TextureCoordinatesType::None, VertexColorType vertexColorType = VertexColorType::None, SkeletalAnimationType skeletalAnimationType = SkeletalAnimationType::None, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None) const noexcept
 			{
+				/* NOTE: An inconsistent shape (a triangle past the vertex or the vertex color array) is refused: 0 elements,
+				 * empty buffers. It used to abort (.at()) or read out of bounds (the vertex colors). */
+				if ( !this->indicesInRange(vertexColorType != VertexColorType::None) )
+				{
+					std::cerr << "Shape::createIndexedVertexBuffer(), a triangle refers to a vertex (or a vertex color) that does not exist !" "\n";
+
+					vertexBuffer.clear();
+					indexBuffer.clear();
+
+					return 0;
+				}
+
 				/* NOTE: Keep track of vertex already used. */
 				std::set< index_data_t > shapeVertexIndicesDone{};
 
@@ -1534,7 +1576,8 @@ namespace EmEn::Base::VertexFactory
 							continue;
 						}
 
-						const auto & vertex = m_vertices.at(shapeVertexIndex);
+						/* NOTE: In range: indicesInRange() above. */
+						const auto & vertex = m_vertices[shapeVertexIndex];
 
 						index_data_t vertexBufferOffset = vertexElementCount * shapeVertexIndex;
 
@@ -2101,7 +2144,15 @@ namespace EmEn::Base::VertexFactory
 					for ( index_data_t triangleVertexIndex = 0; triangleVertexIndex < 3; ++triangleVertexIndex )
 					{
 						const auto shapeVertexIndex = triangle.vertexIndex(triangleVertexIndex);
-						const auto & vertex = obj.m_vertices.at(shapeVertexIndex);
+
+						if ( static_cast< size_t >(shapeVertexIndex) >= obj.m_vertices.size() )
+						{
+							out << "Triangle vertex index #" << triangleVertexIndex << " (Shape vertex index : #" << shapeVertexIndex << "): OUT OF RANGE." "\n";
+
+							continue;
+						}
+
+						const auto & vertex = obj.m_vertices[shapeVertexIndex];
 
 						out <<
 							"Triangle vertex index #" << triangleVertexIndex << " (Shape vertex index : #" << shapeVertexIndex << "). " "\n"
@@ -2114,7 +2165,14 @@ namespace EmEn::Base::VertexFactory
 						{
 							const auto shapeColorIndex = triangle.vertexColorIndex(triangleVertexIndex);
 
-							out << ", Vertex Color:" << obj.m_vertexColors.at(shapeColorIndex);
+							if ( static_cast< size_t >(shapeColorIndex) < obj.m_vertexColors.size() )
+							{
+								out << ", Vertex Color:" << obj.m_vertexColors[shapeColorIndex];
+							}
+							else
+							{
+								out << ", Vertex Color: #" << shapeColorIndex << " OUT OF RANGE";
+							}
 						}
 
 						out << "\n";

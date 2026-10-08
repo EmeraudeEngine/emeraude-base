@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <cassert>
 #include <cstdint>
 #include <queue>
 #include <type_traits>
@@ -860,7 +861,17 @@ namespace EmEn::Base::VertexFactory
 					{
 						loop.vertexIndices.push_back(current);
 
-						const auto & adj = adjacency.at(current);
+						/* NOTE: Every edge adds both of its ends to the adjacency, so the walk only reaches keys of it. */
+						const auto adjIt = adjacency.find(current);
+
+						assert(adjIt != adjacency.end() && "ShapeSplitter, the boundary walk left the adjacency.");
+
+						if ( adjIt == adjacency.end() )
+						{
+							break;
+						}
+
+						const auto & adj = adjIt->second;
 						index_data_t best = std::numeric_limits< index_data_t >::max();
 
 						/* Prefer closing the loop if close enough. */

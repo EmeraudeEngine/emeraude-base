@@ -309,3 +309,54 @@ TEST(VertexFactoryShapeBuilder, anEditAfterTheReleaseRebuildsTheConstructionInde
 		}
 	}
 }
+
+/* 2026-10-08 (base item find-boundary-loops-throwing-at): a triangle referring to a vertex past the vertex array (an
+ * inconsistent shape, from a loader or built by hand) made findBoundaryLoops() call a throwing .at() — an abort under
+ * -fno-exceptions — and createIndexedVertexBuffer() abort the same way (or read the vertex colors out of bounds). Both
+ * refuse it now; indicesInRange() tells it. */
+TEST(VertexFactoryShape, anInconsistentShapeIsRefusedNotAborted)
+{
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8, 4);
+
+	ASSERT_TRUE(shape.indicesInRange());
+
+	const auto vertexCount = static_cast< uint32_t >(shape.vertices().size());
+
+	shape.triangles().emplace_back(0U, 1U, vertexCount + 5U);
+
+	EXPECT_FALSE(shape.indicesInRange());
+
+	{
+		const ShapeProcessor< float, uint32_t > processor{shape};
+
+		EXPECT_TRUE(processor.findBoundaryLoops().empty());
+		EXPECT_FALSE(processor.hasBoundaryLoops());
+	}
+
+	std::vector< float > vertexBuffer{1.0F};
+	std::vector< uint32_t > indexBuffer{1U};
+
+	EXPECT_EQ(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal), 0U);
+	EXPECT_TRUE(vertexBuffer.empty());
+	EXPECT_TRUE(indexBuffer.empty());
+}
+
+/* A vertex color index past the color array is refused when the colors are requested (it was read out of bounds). */
+TEST(VertexFactoryShape, aVertexColorIndexOutOfRangeIsRefused)
+{
+	auto shape = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F);
+
+	ASSERT_FALSE(shape.vertexColors().empty());
+	ASSERT_TRUE(shape.indicesInRange(true));
+
+	shape.triangles().front().setVertexColorIndex(0, static_cast< uint32_t >(shape.vertexColors().size()) + 3U);
+
+	EXPECT_TRUE(shape.indicesInRange(false));
+	EXPECT_FALSE(shape.indicesInRange(true));
+
+	std::vector< float > vertexBuffer;
+	std::vector< uint32_t > indexBuffer;
+
+	EXPECT_EQ(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal, TextureCoordinatesType::None, VertexColorType::RGBA), 0U);
+	EXPECT_GT(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal), 0U);
+}

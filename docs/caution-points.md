@@ -655,6 +655,22 @@ makes `decimate()` return an EMPTY shape (`isCancelled()` tells it from a failur
 `TaskHandle` (engine item `jobs-owned-by-their-starter`). ⚠️ The stop latency is bounded by the DEALLOCATION of the
 stages' node-based containers, 0.74 s on 2.24 M triangles (item `task-handle-and-stop-token`).
 
+### ⚠️ No `.at()` in the base: an inconsistent shape is REFUSED, a construction invariant is `find()` + Debug `assert` (2026-10-08, FIXED)
+
+`.at()` throws `std::out_of_range`, an abort under `-fno-exceptions` (Ave Robustus: no throwing std call). The 21 calls of
+`src/` are gone (only `src/Testing` and `StaticVector`'s own non-throwing `at()` remain):
+- **In range by construction** (a bounded loop, a check just above): plain `[]` with the bound stated —
+  `FileFormatTarga` (the header is a list of `{field, bytes}` walked by range-for), `TextProcessor::write()`, the PNG
+  row pointers, the OBJ face corners (`extractFaceIndices()` guarantees ≥ 3 indices).
+- **From data**: a triangle referring to a vertex (or a vertex color) that does not exist. `Shape::indicesInRange()` tells
+  it; `createIndexedVertexBuffer()` refuses (0, empty buffers — the engine's `IndexedVertexResource` already treats 0 as
+  a failed upload; the vertex colors were read OUT OF BOUNDS there), `ShapeProcessor::findBoundaryLoops()` refuses
+  (no loop), `operator<<` prints "OUT OF RANGE". `findBoundaryLoops()`'s canonical map became a dense vector.
+- **Internal invariants** (the boundary walks of `ShapeProcessor` / `ShapeSplitter`, the UV charts' `globalToLocal`):
+  `find()`, an `assert` in Debug, a defined degradation in Release (the walk stops, the candidate or the triangle is
+  skipped — as a degenerate triangle already is).
+Tests: `VertexFactoryShape.anInconsistentShapeIsRefusedNotAborted`, `aVertexColorIndexOutOfRangeIsRefused`.
+
 ### ⚠️⚠️ The computed tangent frame was backwards on every MIRRORED UV island — tangent AND handedness (2026-10-07, FIXED)
 
 `Math::Vector::tangent()` normalises without dividing by the UV determinant r = Δu1·Δv2 − Δu2·Δv1: it answers

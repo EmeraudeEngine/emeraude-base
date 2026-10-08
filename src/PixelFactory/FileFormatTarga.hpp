@@ -70,27 +70,11 @@ namespace EmEn::Base::PixelFactory
 
 				Header fileHeader{};
 
-				std::array< void *, 12 > ptr = {
-					&fileHeader.idCharCount,
-					&fileHeader.colorMapType,
-					&fileHeader.imageTypeCode,
-					&fileHeader.colorMapOrigin,
-					&fileHeader.colorMapLength,
-					&fileHeader.colorMapEntrySize,
-					&fileHeader.xOrigin,
-					&fileHeader.yOrigin,
-					&fileHeader.width,
-					&fileHeader.height,
-					&fileHeader.imagePixelSize,
-					&fileHeader.imageDescriptorByte
-				};
-
-				std::array< uint32_t, 12 > size = {1, 1, 1, 2, 2, 1, 2, 2, 2, 2, 1, 1};
 
 				/* Read the TARGA header, field by field. */
-				for ( auto i = 0U; i < 12; i++ )
+				for ( const auto & field : FileFormatTarga::headerFields(fileHeader) )
 				{
-					if ( !stream.read(ptr.at(i), size.at(i)) )
+					if ( !stream.read(field.data, field.bytes) )
 					{
 						Logging::error("PixelFactory::FileFormatTarga", "readStream(), unable to read the Targa header !");
 
@@ -361,22 +345,6 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				std::array< void *, 12 > ptr = {
-					&fileHeader.idCharCount,
-					&fileHeader.colorMapType,
-					&fileHeader.imageTypeCode,
-					&fileHeader.colorMapOrigin,
-					&fileHeader.colorMapLength,
-					&fileHeader.colorMapEntrySize,
-					&fileHeader.xOrigin,
-					&fileHeader.yOrigin,
-					&fileHeader.width,
-					&fileHeader.height,
-					&fileHeader.imagePixelSize,
-					&fileHeader.imageDescriptorByte
-				};
-
-				std::array< uint32_t, 12 > size = {1, 1, 1, 2, 2, 1, 2, 2, 2, 2, 1, 1};
 
 				if constexpr ( PixelFactoryDebugEnabled )
 				{
@@ -397,9 +365,9 @@ namespace EmEn::Base::PixelFactory
 				}
 
 				/* Write the Targa header, field by field. */
-				for ( auto i = 0U; i < 12; i++ )
+				for ( const auto & field : FileFormatTarga::headerFields(fileHeader) )
 				{
-					if ( !stream.write(ptr.at(i), size.at(i)) )
+					if ( !stream.write(field.data, field.bytes) )
 					{
 						std::cerr << "FileFormatTarga::writeStream(), unable to write the Targa header !" "\n";
 
@@ -604,5 +572,38 @@ namespace EmEn::Base::PixelFactory
 				uint8_t imagePixelSize = 0;
 				uint8_t imageDescriptorByte = 0;
 			};
+
+			/** @brief One header field: where it lives and how many bytes the file stores for it. */
+			struct HeaderField
+			{
+				void * data;
+				uint32_t bytes;
+			};
+
+			/**
+			 * @brief Returns the 12 header fields in file order (the file stores them packed, field by field).
+			 * @param header A writable reference to the header.
+			 * @return std::array< HeaderField, 12 >
+			 */
+			[[nodiscard]]
+			static
+			std::array< HeaderField, 12 >
+			headerFields (Header & header) noexcept
+			{
+				return {{
+					{&header.idCharCount, 1},
+					{&header.colorMapType, 1},
+					{&header.imageTypeCode, 1},
+					{&header.colorMapOrigin, 2},
+					{&header.colorMapLength, 2},
+					{&header.colorMapEntrySize, 1},
+					{&header.xOrigin, 2},
+					{&header.yOrigin, 2},
+					{&header.width, 2},
+					{&header.height, 2},
+					{&header.imagePixelSize, 1},
+					{&header.imageDescriptorByte, 1}
+				}};
+			}
 	};
 }
