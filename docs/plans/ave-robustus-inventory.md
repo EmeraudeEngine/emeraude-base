@@ -61,7 +61,7 @@ These emerged from the audit and matter for sequencing:
 | `download(uri,file)` | `Network.cpp:57` | Synchronous; **no TLS**, **redirects unhandled** (`continue`s), needs Content-Length, resolves by scheme name | A | HTTPS / redirecting / chunked URL works or fails cleanly |
 | `hasInternetConnexion()` (**removed 2026-08-27** with `Network.cpp`) | `Network.cpp:46` | DNS-resolve only (no connect); ASIO failure → `std::abort()` | A | captive portal not reported "connected"; resolver failure returns false, not abort |
 | Exception-free operation | `asio_throw_exception.hpp` | ASIO throw path → `std::abort()` (process death) | A | internal ASIO error returns an error, never aborts |
-| `URL` class | `URL.hpp` | `@deprecated` thin shim over URI, inherits all fragility | A | — |
+| `URL` class | `URL.hpp` | `@deprecated` thin shim over URI — FOLDED into URI and deleted 2026-10-08 (`URI::isURL()`) | A | — |
 
 ### Module: vertex
 - **Target/kind/deps:** `emeraude::base::vertex` — OBJECT, no ext deps. Status TODO. ~22k LOC, header-only (1 `.cpp`).

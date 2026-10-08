@@ -148,7 +148,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Reserves room for the expected content.
 			 * @param segmentCount The expected number of segments.
 			 * @param leafCount The expected number of leaves.
-			 * @return void
 			 */
 			void
 			reserve (size_t segmentCount, size_t leafCount) noexcept
@@ -181,7 +180,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Appends a leaf attachment.
 			 * @param leaf A reference to the leaf attachment.
-			 * @return void
 			 */
 			void
 			addLeaf (const TreeLeafAttachment< vertex_data_t > & leaf) noexcept
@@ -338,7 +336,6 @@ namespace EmEn::Base::VertexFactory
 			 * that makes long bare chains needs its own taper on top.
 			 * @param tipRadius The radius of a branch tip.
 			 * @param exponent Murray's exponent; 2 is da Vinci's rule, 2.49 is the measured average.
-			 * @return void
 			 */
 			void
 			computeRadiiFromPipeModel (vertex_data_t tipRadius, vertex_data_t exponent = static_cast< vertex_data_t >(2.49)) noexcept
@@ -411,7 +408,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Clears the skeleton.
-			 * @return void
 			 */
 			void
 			clear () noexcept
@@ -428,7 +424,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Extends the bounding box with one segment, radius included.
 			 * @param segment A reference to the segment.
-			 * @return void
 			 */
 			void
 			mergeSegmentBounds (const TreeSegment< vertex_data_t > & segment) noexcept
@@ -447,7 +442,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Recomputes the bounding box from scratch.
-			 * @return void
 			 */
 			void
 			rebuildBounds () noexcept

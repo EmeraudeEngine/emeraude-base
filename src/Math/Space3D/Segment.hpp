@@ -112,7 +112,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the starting point of the segment.
 			 * @param point A reference to a point.
-			 * @return void
 			 */
 			void
 			setStart (const Point< precision_t > & point) noexcept
@@ -123,7 +122,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the ending point of the segment.
 			 * @param point A reference to a point.
-			 * @return void
 			 */
 			void
 			setEnd (const Point< precision_t > & point) noexcept
@@ -221,7 +219,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Reset the segment to null value.
-			 * @return void
 			 */
 			void
 			reset () noexcept

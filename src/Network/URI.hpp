@@ -85,7 +85,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the scheme of the URI.
 			 * @param scheme A reference to a string.
-			 * @return void
 			 */
 			void
 			setScheme (const std::string & scheme) noexcept
@@ -98,7 +97,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the URI domain.
 			 * @param uriDomain A reference to an URIDomain.
-			 * @return void
 			 */
 			void
 			setURIDomain (const URIDomain & uriDomain) noexcept
@@ -109,7 +107,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the path of the URI.
 			 * @param path A reference to a filesystem path.
-			 * @return void
 			 */
 			void
 			setPath (const std::filesystem::path & path) noexcept
@@ -120,7 +117,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the query of the URI.
 			 * @param query A reference to a query.
-			 * @return void
 			 */
 			void
 			setQuery (const Query & query) noexcept
@@ -131,7 +127,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the fragment of the URI.
 			 * @param fragment A reference to a string.
-			 * @return void
 			 */
 			void
 			setFragment (const std::string & fragment) noexcept
@@ -230,6 +225,21 @@ namespace EmEn::Base::Network
 				}
 
 				return false;
+			}
+
+			/**
+			 * @brief Returns whether a string parses as a URI with both a scheme and a host — a URL a client can reach.
+			 * @note The former Network::URL::isURL() (URL was folded into URI on 2026-10-08). Equivalent to
+			 * `!URI{path}.empty()`.
+			 * @param path The string to test.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			isURL (const std::string & path) noexcept
+			{
+				return !URI{path}.empty();
 			}
 
 			/**

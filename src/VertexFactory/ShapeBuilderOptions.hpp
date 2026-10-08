@@ -129,7 +129,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Uses a global normal vector.
 			 * @note This will disable the normals automatic generation.
 			 * @param normal A reference to vector 3.
-			 * @return void
 			 */
 			void
 			enableGlobalNormal (const Math::Vector< 3, vertex_data_t > & normal) noexcept
@@ -166,7 +165,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Enables the normal generation from position.
 			 * @note This will disable the global normal.
-			 * @return void
 			 */
 			void
 			enableNormalsGeneration () noexcept
@@ -189,7 +187,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Enables the texture coordinates generation from position.
-			 * @return void
 			 */
 			void
 			enableTextureCoordinatesGeneration () noexcept
@@ -213,7 +210,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Use a global vertex color.
 			 * @note This will disable the vertex colors automatic generation.
 			 * @param vertexColor A reference to vector 4.
-			 * @return void
 			 */
 			void
 			enableGlobalVertexColor (const Math::Vector< 4, vertex_data_t > & vertexColor) noexcept
@@ -229,7 +225,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Use a global vertex color.
 			 * @note This will disable the vertex colors automatic generation.
 			 * @param vertexColor A reference to a color.
-			 * @return void
 			 */
 			void
 			enableGlobalVertexColor (const PixelFactory::Color< float > & vertexColor) noexcept
@@ -262,7 +257,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Enables the vertex color generation from position.
 			 * @note This will disable the global vertex color.
-			 * @return void
 			 */
 			void
 			enableVertexColorsGeneration () noexcept
@@ -286,7 +280,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets uniform texture coordinates state.
 			 * @param state The state.
-			 * @return void
 			 */
 			void
 			setUniformTextureCoordinates (bool state) noexcept
@@ -299,7 +292,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param xMultiplier The multiplication factor on the X axis.
 			 * @param yMultiplier The multiplication factor on the Y axis. Default Same as X.
 			 * @param zMultiplier The multiplication factor on the Z axis. Default Same as Z.
-			 * @return void
 			 */
 			void
 			setTextureCoordinatesMultiplier (vertex_data_t xMultiplier, vertex_data_t yMultiplier = 0, vertex_data_t zMultiplier = 0) noexcept
@@ -312,7 +304,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets texture coordinates multipliers.
 			 * @param multiplier A reference to a vector.
-			 * @return void
 			 */
 			void
 			setTextureCoordinatesMultiplier (const Math::Vector< 2, vertex_data_t > & multiplier) noexcept
@@ -323,7 +314,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets texture coordinates multipliers.
 			 * @param multiplier A reference to a vector.
-			 * @return void
 			 */
 			void
 			setTextureCoordinatesMultiplier (const Math::Vector< 3, vertex_data_t > & multiplier) noexcept
@@ -347,7 +337,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param xMultiplier The multiplication factor on the X axis.
 			 * @param yMultiplier The multiplication factor on the Y axis. Default Same as X.
 			 * @param zMultiplier The multiplication factor on the Z axis. Default Same as X.
-			 * @return void
 			 */
 			void
 			setCapTextureCoordinatesMultiplier (vertex_data_t xMultiplier, vertex_data_t yMultiplier = 0, vertex_data_t zMultiplier = 0) noexcept
@@ -360,7 +349,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets cap texture coordinates multipliers.
 			 * @param multiplier A reference to a vector.
-			 * @return void
 			 */
 			void
 			setCapTextureCoordinatesMultiplier (const Math::Vector< 2, vertex_data_t > & multiplier) noexcept
@@ -371,7 +359,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets cap texture coordinates multipliers.
 			 * @param multiplier A reference to a vector.
-			 * @return void
 			 */
 			void
 			setCapTextureCoordinatesMultiplier (const Math::Vector< 3, vertex_data_t > & multiplier) noexcept
@@ -393,7 +380,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Enables the data economy.
 			 * @param state The state.
-			 * @return void
 			 */
 			void
 			enableDataEconomy (bool state) noexcept
@@ -415,7 +401,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the center of the shape at bottom.
 			 * @param state The state.
-			 * @return void
 			 */
 			void
 			setCenterAtBottom (bool state) noexcept
@@ -437,7 +422,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Enables or disables the geometry flipping at the end of the generation.
 			 * @param state The state.
-			 * @return void
 			 */
 			void
 			enableGeometryFlipping (bool state) noexcept
@@ -458,7 +442,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Resets the construction.
-			 * @return void
 			 */
 			void
 			reset () noexcept

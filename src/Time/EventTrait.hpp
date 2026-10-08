@@ -236,7 +236,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Restarts all previously active timers.
-			 * @return void
 			 */
 			void
 			startTimers () noexcept
@@ -252,7 +251,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Pauses every active timers.
-			 * @return void
 			 */
 			void
 			stopTimers () noexcept
@@ -267,7 +265,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Pauses every active timers.
-			 * @return void
 			 */
 			void
 			pauseTimers () noexcept
@@ -282,7 +279,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Restarts all previously active timers.
-			 * @return void
 			 */
 			void
 			resumeTimers () noexcept
@@ -316,7 +312,6 @@ namespace EmEn::Base::Time
 			 * never fires again), its thread ends when the callback returns, and the trait joins it later from another
 			 * thread (the next create / destroy, or its destructor). A self-join used to abort.
 			 * @param timerID The ID of your timer.
-			 * @return void
 			 */
 			void
 			destroyTimer (TimerID timerID) noexcept
@@ -343,7 +338,6 @@ namespace EmEn::Base::Time
 			 * @brief This function kill every timer.
 			 * @note Same contract as destroyTimer(): the timers are joined outside the lock, and the caller's own timer
 			 * (a callback calling it) is retired instead of self-joined.
-			 * @return void
 			 */
 			void
 			destroyTimers () noexcept
@@ -416,7 +410,6 @@ namespace EmEn::Base::Time
 			/**
 			 * @brief Resets a timer.
 			 * @param timerID The timer ID.
-			 * @return void
 			 */
 			void
 			resetTimer (TimerID timerID) noexcept
@@ -434,7 +427,6 @@ namespace EmEn::Base::Time
 			 * @brief Retires an event destroyed from its own callback: its thread is asked to end, and it is kept until
 			 * another thread joins it. Call it under m_eventsAccess.
 			 * @param event The event's node, not empty.
-			 * @return void
 			 */
 			void
 			retire (EventNode event) noexcept
@@ -448,7 +440,6 @@ namespace EmEn::Base::Time
 			 * @brief Moves out the retired events the calling thread may join (not its own). Call it under m_eventsAccess,
 			 * and let the output die after releasing it.
 			 * @param reaped The output.
-			 * @return void
 			 */
 			void
 			takeRetiredEvents (std::vector< EventNode > & reaped) noexcept

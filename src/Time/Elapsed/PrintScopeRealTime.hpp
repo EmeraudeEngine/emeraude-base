@@ -42,9 +42,9 @@ namespace EmEn::Base::Time::Elapsed
 	 * @brief Print in the console the duration in wall clock time of a specific scope.
 	 * @note The internal precision is set to nanoseconds.
 	 * @tparam precision_t The desired precision of time to report. Default milliseconds.
-	 * @tparam clock_t The type of clock used. Default std::chrono::high_resolution_clock.
+	 * @tparam clock_t The type of clock used. Default std::chrono::steady_clock (monotonic: an interval never goes backwards).
 	 */
-	template< std::uint8_t precision_t = static_cast< std::uint8_t >(Precision::Milliseconds), typename clock_t = std::chrono::high_resolution_clock >
+	template< std::uint8_t precision_t = static_cast< std::uint8_t >(Precision::Milliseconds), typename clock_t = std::chrono::steady_clock >
 	class PrintScopeRealTime final
 	{
 		public:
@@ -128,9 +128,9 @@ namespace EmEn::Base::Time::Elapsed
 	 * @brief Print in the console the duration in wall clock time of a specific scope.
 	 * @note The internal precision is set to nanoseconds.
 	 * @tparam precision_t The desired precision of time to report. Default milliseconds.
-	 * @tparam clock_t The type of clock used. Default std::chrono::high_resolution_clock.
+	 * @tparam clock_t The type of clock used. Default std::chrono::steady_clock (monotonic: an interval never goes backwards).
 	 */
-	template< std::uint8_t precision_t = static_cast< std::uint8_t >(Precision::Milliseconds), typename clock_t = std::chrono::high_resolution_clock >
+	template< std::uint8_t precision_t = static_cast< std::uint8_t >(Precision::Milliseconds), typename clock_t = std::chrono::steady_clock >
 	class PrintScopeRealTimeThreshold final
 	{
 		public:

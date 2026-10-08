@@ -39,9 +39,10 @@ namespace EmEn::Base::Time::Statistics
 	/**
 	 * @brief A chrono to get the duration in wall clock time between two tops.
 	 * @extends EmEn::Base::Time::Statistics::Abstract The interface for statistics.
-	 * @tparam clockType The type of clock used. Default std::chrono::high_resolution_clock.
+	 * @tparam clockType The type of clock used. Default std::chrono::steady_clock: an interval needs a MONOTONIC clock
+	 * (libstdc++'s high_resolution_clock, the former default, is system_clock, which NTP can move backwards).
 	 */
-	template< typename clockType = std::chrono::high_resolution_clock >
+	template< typename clockType = std::chrono::steady_clock >
 	class RealTime final : public Abstract
 	{
 		public:
@@ -68,17 +69,25 @@ namespace EmEn::Base::Time::Statistics
 			void
 			stop () noexcept override
 			{
-				/* Increment executions count. */
-				m_currentExecutionsPerSecond++;
-
 				/* Gets the current time. */
 				const auto now = clockType::now();
 
 				/* Gets the duration of the execution. */
 				const auto duration = std::chrono::duration_cast< std::chrono::milliseconds >(now - m_startTime).count();
 
+				/* NOTE: A clock that is not monotonic (a caller's choice) can go backwards: a negative duration is not a
+				 * measurement — converted to uint64_t it would poison the averages. The execution is not counted, as
+				 * CPUTime::stop() does. */
+				if ( duration < 0 )
+				{
+					return;
+				}
+
+				/* Increment executions count. */
+				m_currentExecutionsPerSecond++;
+
 				/* Insert duration for average statistics. */
-				this->insertDuration(duration);
+				this->insertDuration(static_cast< uint64_t >(duration));
 
 				/* Checks if a second passed using real elapsed time. */
 				const auto elapsed = std::chrono::duration_cast< std::chrono::milliseconds >(now - m_lastEPSTime).count();

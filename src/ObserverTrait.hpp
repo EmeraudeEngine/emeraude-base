@@ -110,14 +110,12 @@ namespace EmEn::Base
 			/**
 			 * @brief Observes an observable.
 			 * @param observable The pointer of the observable.
-			 * @return void
 			 */
 			void observe (ObservableTrait * observable) noexcept;
 
 			/**
 			 * @brief Removes an observable.
 			 * @param observable The pointer of the observable.
-			 * @return void
 			 */
 			void forget (ObservableTrait * observable) noexcept;
 

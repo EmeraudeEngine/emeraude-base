@@ -105,7 +105,6 @@ namespace EmEn::Base::VertexFactory
 			 * (Resources::AbstractServiceProvider::cancelBackgroundWork()): a decimation of a large mesh lasts seconds,
 			 * and a shutdown waited for every running one (2026-10-08).
 			 * @param flag A pointer to the flag, nullptr for none (the default).
-			 * @return void
 			 */
 			void
 			setCancellationFlag (const std::atomic_bool * flag) noexcept
@@ -757,7 +756,7 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto & srcTri = m_source.triangles()[triIdx];
 
-						for ( int i = 0; i < 3; ++i )
+						for ( index_data_t i = 0; i < 3; ++i )
 						{
 							if ( triangles[triIdx].v[i] == static_cast< index_data_t >(v) )
 							{
@@ -880,7 +879,7 @@ namespace EmEn::Base::VertexFactory
 			[[nodiscard]]
 			static
 			bool
-			checkLinkCondition (index_data_t v0, index_data_t v1, const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles) noexcept
+			checkLinkCondition (index_data_t v0, index_data_t v1, const std::vector< VertexData > & vertices, [[maybe_unused]] const std::vector< TriangleData > & triangles) noexcept
 			{
 				/* Count shared neighbors (the "link" of the edge). */
 				size_t sharedCount = 0;
@@ -1377,7 +1376,7 @@ namespace EmEn::Base::VertexFactory
 					/* Insert into all grid cells that the triangle's AABB overlaps. */
 					auto triMin = p0, triMax = p0;
 
-					for ( int axis = 0; axis < 3; ++axis )
+					for ( size_t axis = 0; axis < 3; ++axis )
 					{
 						triMin[axis] = std::min({p0[axis], p1[axis], p2[axis]});
 						triMax[axis] = std::max({p0[axis], p1[axis], p2[axis]});

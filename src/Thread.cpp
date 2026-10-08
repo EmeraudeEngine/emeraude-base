@@ -80,7 +80,6 @@ namespace
 	 * then touch the task the waiter may already have deleted. The wait lasts the few instructions start() runs after
 	 * the system call.
 	 * @param published The task's publication flag.
-	 * @return void
 	 */
 	void
 	waitUntilSet (const std::atomic_bool & published) noexcept

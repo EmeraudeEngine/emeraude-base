@@ -297,7 +297,6 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Destroys children.
-			 * @return void
 			 */
 			void
 			destroyChildren () noexcept

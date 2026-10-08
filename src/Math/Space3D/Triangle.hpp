@@ -115,7 +115,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the first point of the triangle.
 			 * @param point A reference to a point.
-			 * @return void
 			 */
 			void
 			setPointA (const Point< precision_t > & point) noexcept
@@ -136,7 +135,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the second point of the triangle.
 			 * @param point A reference to a point.
-			 * @return void
 			 */
 			void
 			setPointB (const Point< precision_t > & point) noexcept
@@ -157,7 +155,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the third point of the triangle.
 			 * @param point A reference to a point.
-			 * @return void
 			 */
 			void
 			setPointC (const Point< precision_t > & point) noexcept
@@ -177,7 +174,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Reset the triangle to null value.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -189,7 +185,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Flips the triangle by swapping the first and the second points.
-			 * @return void
 			 */
 			void
 			flip () noexcept
@@ -200,7 +195,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Cycles the point in the triangle.
 			 * @note Point A becomes the B, old B becomes the C, old C becomes the A.
-			 * @return void
 			 */
 			void
 			cycle () noexcept

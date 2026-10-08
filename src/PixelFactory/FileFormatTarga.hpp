@@ -222,7 +222,7 @@ namespace EmEn::Base::PixelFactory
 				/* Load data. */
 				if ( RLE )
 				{
-					const auto bytesPerPixel = fileHeader.imagePixelSize / 8;
+					const auto bytesPerPixel = static_cast< size_t >(fileHeader.imagePixelSize / 8);
 					const auto totalPixels = static_cast< size_t >(fileHeader.width) * static_cast< size_t >(fileHeader.height);
 					auto & pixmapData = pixmap.data();
 					size_t pixelIndex = 0;
@@ -347,10 +347,18 @@ namespace EmEn::Base::PixelFactory
 						break;
 
 					case ChannelMode::GrayscaleAlpha :
-					default:
 						std::cerr << "FileFormatTarga::writeStream(), unhandled color channel format to write a Targa image." "\n";
 
 						return false;
+				}
+
+				/* An out-of-range channel mode (cast from data) reaches no case above and leaves the
+				 * type at 0, which is TGA's "no image data". */
+				if ( fileHeader.imageTypeCode == 0 )
+				{
+					std::cerr << "FileFormatTarga::writeStream(), unhandled color channel format to write a Targa image." "\n";
+
+					return false;
 				}
 
 				std::array< void *, 12 > ptr = {

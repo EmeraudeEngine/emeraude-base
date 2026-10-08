@@ -147,7 +147,6 @@ namespace EmEn::Base::Debug
 			/**
 			 * @brief Sets a value.
 			 * @param value The value.
-			 * @return void
 			 */
 			void
 			value (int value)

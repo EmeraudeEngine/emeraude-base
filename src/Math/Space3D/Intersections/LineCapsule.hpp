@@ -49,7 +49,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	lineSphereIntersectionParams (const Point< precision_t > & lineOrigin, const Vector< 3, precision_t > & lineDirection, const Point< precision_t > & sphereCenter, precision_t radiusSq, precision_t & t1, precision_t & t2) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -83,7 +83,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Line< precision_t > & line, const Capsule< precision_t > & capsule) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -171,7 +171,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Line< precision_t > & line, const Capsule< precision_t > & capsule, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -325,7 +325,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Line< precision_t > &, const Capsule< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Capsule< precision_t > & capsule, const Line< precision_t > & line) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -335,7 +335,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Line< precision_t > &, const Capsule< precision_t > &, Point< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Capsule< precision_t > & capsule, const Line< precision_t > & line, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{

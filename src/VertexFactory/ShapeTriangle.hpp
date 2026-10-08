@@ -68,7 +68,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the surface tangent.
 			 * @param tangent A reference to a vector.
-			 * @return void
 			 */
 			void
 			setSurfaceTangent (const Math::Vector< 3, vertex_data_t > & tangent) noexcept
@@ -79,7 +78,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the handedness of the surface tangent frame: +1, or -1 on a mirrored UV island.
 			 * @param handedness The handedness, +1 or -1.
-			 * @return void
 			 */
 			void
 			setSurfaceTangentHandedness (vertex_data_t handedness) noexcept
@@ -90,7 +88,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the surface normal.
 			 * @param normal A reference to a vector.
-			 * @return void
 			 */
 			void
 			setSurfaceNormal (const Math::Vector< 3, vertex_data_t > & normal) noexcept
@@ -102,7 +99,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Sets vertex index to one vertex of the triangle.
 			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
 			 * @param geometryVertexIndex The vertex index from the geometry data.
-			 * @return void
 			 */
 			void
 			setVertexIndex (index_data_t triangleVertexIndex, index_data_t geometryVertexIndex) noexcept
@@ -114,7 +110,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Sets vertex index to one vertex of the triangle.
 			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
 			 * @param colorListIndex The color index from the geometry data.
-			 * @return void
 			 */
 			void
 			setVertexColorIndex (index_data_t triangleVertexIndex, index_data_t colorListIndex) noexcept
@@ -126,7 +121,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Sets edge index to one vertex of the triangle.
 			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
 			 * @param edgeListIndex The edge index from the geometry data.
-			 * @return void
 			 */
 			void
 			setEdgeIndex (index_data_t triangleVertexIndex, index_data_t edgeListIndex) noexcept
@@ -216,7 +210,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Flips the triangle front-facing.
-			 * @return void
 			 */
 			void
 			flip () noexcept
@@ -235,7 +228,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note Companion of a mirror transformation (e.g. Shape::flipYAxis()) which already
 			 * produced the correct mirrored normal and tangent: only the front-face orientation
 			 * is left to restore. flip() would negate the vectors a second time.
-			 * @return void
 			 */
 			void
 			reverseWinding () noexcept
@@ -246,7 +238,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Flips the Y-Axis of tangent, normal and binormal vectors.
-			 * @return void
 			 */
 			void
 			flipYAxis () noexcept

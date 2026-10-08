@@ -1952,7 +1952,7 @@ TYPED_TEST(MathSpace3D, CollisionSphereMTVMagnitudeCorrectness)
 	ASSERT_TRUE(isColliding(sphere1, sphere2, mtv));
 
 	// MTV length should represent overlap: radii_sum - distance = 10 - 8 = 2
-	ASSERT_NEAR(mtv.length(), TypeParam{2}, TypeParam{1e-3});
+	ASSERT_NEAR(mtv.length(), TypeParam{2}, static_cast< TypeParam >(1e-3));
 }
 
 TYPED_TEST(MathSpace3D, CollisionTetrahedronMTVSymmetry)
@@ -2123,7 +2123,7 @@ TYPED_TEST(MathSpace3D, CapsuleGetVolume)
 	const Capsule< TypeParam > capsule{{0, 0, 0}, {0, 4, 0}, static_cast< TypeParam >(1.0)};
 	const TypeParam expectedVolume = static_cast< TypeParam >(16.0 / 3.0) * std::numbers::pi_v< TypeParam >;
 
-	ASSERT_NEAR(capsule.getVolume(), expectedVolume, TypeParam{1e-3});
+	ASSERT_NEAR(capsule.getVolume(), expectedVolume, static_cast< TypeParam >(1e-3));
 }
 
 TYPED_TEST(MathSpace3D, CapsuleReset)
@@ -2515,7 +2515,7 @@ TYPED_TEST(MathSpace3D, IntersectionLineCapsuleWithIntersectionPoint)
 	// Intersection should be on the capsule surface
 	const auto closestOnAxis = capsule.closestPointOnAxis(intersection);
 	const auto distance = Point< TypeParam >::distance(intersection, closestOnAxis);
-	ASSERT_NEAR(distance, capsule.radius(), TypeParam{1e-3});
+	ASSERT_NEAR(distance, capsule.radius(), static_cast< TypeParam >(1e-3));
 }
 
 TYPED_TEST(MathSpace3D, IntersectionLineCapsuleAtHemisphere)
@@ -2606,7 +2606,7 @@ TYPED_TEST(MathSpace3D, CollisionCapsuleCapsuleMTVMagnitude)
 	ASSERT_TRUE(isColliding(capsule1, capsule2, mtv));
 
 	// Distance between axes is 3, sum of radii is 4, so overlap is 1
-	ASSERT_NEAR(mtv.length(), TypeParam{1}, TypeParam{1e-3});
+	ASSERT_NEAR(mtv.length(), TypeParam{1}, static_cast< TypeParam >(1e-3));
 }
 
 TYPED_TEST(MathSpace3D, CollisionCapsuleSphereMTVMagnitude)
@@ -2618,7 +2618,7 @@ TYPED_TEST(MathSpace3D, CollisionCapsuleSphereMTVMagnitude)
 	ASSERT_TRUE(isColliding(capsule, sphere, mtv));
 
 	// Distance from axis to sphere center is 3, sum of radii is 4, so overlap is 1
-	ASSERT_NEAR(mtv.length(), TypeParam{1}, TypeParam{1e-3});
+	ASSERT_NEAR(mtv.length(), TypeParam{1}, static_cast< TypeParam >(1e-3));
 }
 
 TYPED_TEST(MathSpace3D, CollisionCapsuleCapsuleExactlyTouching)

@@ -245,7 +245,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Sets the left (X-) coordinate of the rectangle, keeping its width.
 			 * @param value A X-axis coordinate.
-			 * @return void
 			 */
 			void
 			setLeft (precision_t value) noexcept
@@ -261,7 +260,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @note This will modify the rectangle width.
 			 * @warning The right coordinate must be greater than the left coordinate, otherwise the method will ignore the new value.
 			 * @param value A X-axis coordinate.
-			 * @return void
 			 */
 			void
 			setRight (precision_t value) noexcept
@@ -275,7 +273,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Sets the top (Y-) coordinate of the rectangle, keeping its height.
 			 * @param value A Y-axis coordinate.
-			 * @return void
 			 */
 			void
 			setTop (precision_t value) noexcept
@@ -291,7 +288,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @note This will modify the rectangle height.
 			 * @warning The bottom coordinate must be greater than the top coordinate, otherwise the method will ignore the new value.
 			 * @param value A Y-axis coordinate.
-			 * @return void
 			 */
 			void
 			setBottom (precision_t value) noexcept
@@ -305,7 +301,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Sets the top-left coordinate of the rectangle, keeping its dimensions.
 			 * @param position A reference to a vector.
-			 * @return void
 			 */
 			void
 			setPosition (const Point< precision_t > & position) noexcept
@@ -324,7 +319,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @note The corners are sorted, so the argument order does not matter.
 			 * @param firstCorner A reference to a corner point.
 			 * @param secondCorner A reference to the opposite corner point.
-			 * @return void
 			 */
 			void
 			set (const Point< precision_t > & firstCorner, const Point< precision_t > & secondCorner) noexcept
@@ -339,7 +333,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @brief Sets the width of the rectangle from the left coordinate.
 			 * @warning The value must be positive, otherwise the method will ignore the new value.
 			 * @param value An X-axis size.
-			 * @return void
 			 */
 			void
 			setWidth (precision_t value) noexcept
@@ -354,7 +347,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @brief Sets the height of the rectangle from the top coordinate.
 			 * @warning The value must be positive, otherwise the method will ignore the new value.
 			 * @param value A Y-axis size.
-			 * @return void
 			 */
 			void
 			setHeight (precision_t value) noexcept
@@ -369,7 +361,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @brief Moves the rectangle top-left coordinate by a distance in X and Y.
 			 * @param x A distance on X axis.
 			 * @param y A distance on Y axis.
-			 * @return void
 			 */
 			void
 			move (precision_t x, precision_t y) noexcept
@@ -384,7 +375,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @brief Modifies the width with a value to add or remove.
 			 * @note The result will always be positive or 0.
 			 * @param value The width difference.
-			 * @return void
 			 */
 			void
 			modifyWidthBy (precision_t value) noexcept
@@ -403,7 +393,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @brief Modifies the height with a value to add or remove.
 			 * @note The result will always be positive or 0.
 			 * @param value The height difference.
-			 * @return void
 			 */
 			void
 			modifyHeightBy (precision_t value) noexcept
@@ -678,7 +667,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @note Mirrors EmEn::Base::Math::Space3D::AACuboid::reset(). After this call, isValid() returns
 			 * false and the first merge() with a point or a valid rectangle initializes the bounds. This is
 			 * the idiomatic way to build a tight bounding rectangle from a set of points.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -707,7 +695,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Extends the surface of this rectangle to enclose another one.
 			 * @param rectangle A reference to another rectangle.
-			 * @return void
 			 */
 			void
 			merge (const AARectangle< precision_t > & rectangle) noexcept
@@ -734,7 +721,6 @@ namespace EmEn::Base::Math::Space2D
 			 * @brief Extends the surface to enclose a point.
 			 * @note To build a bounding rectangle from scratch, call reset() first then merge() each point.
 			 * @param point A reference to a point.
-			 * @return void
 			 */
 			void
 			merge (const Point< precision_t > & point) noexcept
@@ -746,7 +732,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Extends the surface to enclose a value on the X axis.
 			 * @param value The coordinate on X.
-			 * @return void
 			 */
 			void
 			mergeX (precision_t value) noexcept
@@ -765,7 +750,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Extends the surface to enclose a value on the Y axis.
 			 * @param value The coordinate on Y.
-			 * @return void
 			 */
 			void
 			mergeY (precision_t value) noexcept

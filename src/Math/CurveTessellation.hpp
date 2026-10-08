@@ -110,7 +110,6 @@ namespace EmEn::Base::Math::CurveTessellation
 	 * @param tolerance The chord tolerance (> 0).
 	 * @param polyline The polyline to append to.
 	 * @param depth The current subdivision depth.
-	 * @return void
 	 */
 	template< std::floating_point precision_t >
 	void
@@ -234,17 +233,18 @@ namespace EmEn::Base::Math::CurveTessellation
 
 					appendCubic(p0, p0 + (control - p0) * TwoThirds, p3 + (control - p3) * TwoThirds, p3, tolerance, result);
 				}
-					break;
+					continue;
 
 				case CurveType::BezierCubic :
 					appendCubic(p0, p0 + from.handleOut(), p3 + to.handleIn(), p3, tolerance, result);
-					break;
+					continue;
 
 				case CurveType::None :
-				default :
-					result.emplace_back(p3);
 					break;
 			}
+
+			/* NOTE: A straight segment: CurveType::None, or an out-of-range value (a cast integer). */
+			result.emplace_back(p3);
 		}
 
 		return result;

@@ -202,27 +202,30 @@ namespace EmEn::Base::PixelFactory
 				const auto deltaX = pointB[Math::X] - pointA[Math::X];
 				const auto deltaY = std::abs(pointB[Math::Y] - pointA[Math::Y]);
 
-				auto error = static_cast< float >(deltaX) / 2.0F;
+				const auto deltaXF = static_cast< float >(deltaX);
+				const auto deltaYF = static_cast< float >(deltaY);
+				auto error = deltaXF / 2.0F;
 				const auto yStep = (pointA[Math::Y] < pointB[Math::Y] ) ? 1 : -1;
 				auto y = pointA[Math::Y];
 
 				for ( auto x = pointA[Math::X]; x <= pointB[Math::X]; ++x )
 				{
+					/* blendFreePixel() takes signed coordinates and discards the ones outside the pixmap. */
 					if ( steep )
 					{
-						m_target.blendFreePixel(static_cast< dimension_t >(y), static_cast< dimension_t >(x), color, mode);
+						m_target.blendFreePixel(static_cast< int32_t >(y), static_cast< int32_t >(x), color, mode);
 					}
 					else
 					{
-						m_target.blendFreePixel(static_cast< dimension_t >(x), static_cast< dimension_t >(y), color, mode);
+						m_target.blendFreePixel(static_cast< int32_t >(x), static_cast< int32_t >(y), color, mode);
 					}
 
-					error -= deltaY;
+					error -= deltaYF;
 
 					if ( error < 0 )
 					{
 						y += yStep;
-						error += deltaX;
+						error += deltaXF;
 					}
 				}
 
@@ -431,9 +434,11 @@ namespace EmEn::Base::PixelFactory
 					const auto rowSize = m_target.pitch();
 					const auto xShift = xDirection * static_cast< int32_t >(m_target.colorCount());
 
-					/* NOTE: Defines chunk sizes to move. */
-					const auto xLimit = rowSize - std::abs(xShift);
-					const auto yLimit = m_target.height() - std::abs(yDirection);
+					/* NOTE: Defines chunk sizes to move. Both magnitudes were checked against the
+					 * pixmap dimensions just above, so the differences cannot wrap. */
+					const auto xLimit = rowSize - static_cast< uint32_t >(std::abs(xShift));
+					const auto rowShift = static_cast< dimension_t >(std::abs(yDirection));
+					const auto yLimit = m_target.height() - rowShift;
 
 					size_t src = 0;
 					size_t dst = 0;
@@ -443,11 +448,11 @@ namespace EmEn::Base::PixelFactory
 						if ( yDirection > 0 )
 						{
 							src = rowIndex;
-							dst = (rowIndex + yDirection) * rowSize;
+							dst = (rowIndex + rowShift) * rowSize;
 						}
 						else
 						{
-							src = rowIndex - yDirection;
+							src = rowIndex + rowShift;
 							dst = rowIndex  * rowSize;
 						}
 
@@ -504,8 +509,8 @@ namespace EmEn::Base::PixelFactory
 				const auto heightS = static_cast< int32_t >(m_target.height());
 
 				/* NOTE: Remove the shifting round trip. */
-				xDirection = xDirection < 0 ? xDirection % -widthS : xDirection % widthS;
-				yDirection = yDirection < 0 ? yDirection % -heightS : yDirection % heightS;
+				xDirection %= widthS;
+				yDirection %= heightS;
 
 				/* NOTE: Complete shift in both directions. */
 				if ( xDirection == 0 && yDirection == 0 )
@@ -513,16 +518,28 @@ namespace EmEn::Base::PixelFactory
 					return true;
 				}
 
+				/* NOTE: Pixels wrap around, so a negative shift is the complementary positive one.
+				 * Both directions now lie in [0, dimension[. */
+				if ( xDirection < 0 )
+				{
+					xDirection += widthS;
+				}
+
+				if ( yDirection < 0 )
+				{
+					yDirection += heightS;
+				}
+
 				this->prepareSwapBuffer();
 
 				const auto rowSize = m_target.pitch();
-				const auto xShift = xDirection * m_target.colorCount();
+				const auto xShift = static_cast< uint32_t >(xDirection) * m_target.colorCount();
 
 				/* NOTE: Defines chunk sizes to move. */
 				const auto rowCopySizeA = rowSize - xShift;
 				const auto rowCopySizeB = rowSize - rowCopySizeA;
 
-				size_t dstRowIndex = std::abs(yDirection);
+				auto dstRowIndex = static_cast< size_t >(yDirection);
 
 				for ( size_t rowIndex = 0; rowIndex < m_target.height(); rowIndex++ )
 				{
@@ -582,15 +599,23 @@ namespace EmEn::Base::PixelFactory
 				this->prepareSwapBuffer();
 
 				const auto rowSize = m_target.pitch();
-				const auto bufferSize = (m_target.height() - std::abs(distance)) * rowSize;
+				/* NOTE: 64-bit magnitude: std::abs() of INT32_MIN overflows an int32_t. */
+				const auto rowShift = static_cast< uint64_t >(std::abs(static_cast< int64_t >(distance)));
 
-				if ( distance > 0 )
+				/* NOTE: A distance of the whole height or more moves every row out of the area: nothing
+				 * is copied, as Processor::move() does. The remaining height would wrap below zero. */
+				if ( rowShift < m_target.height() )
 				{
-					std::memcpy(m_swapBuffer.data() + (distance * rowSize), m_target.rowPointer(0UL), bufferSize);
-				}
-				else
-				{
-					std::memcpy(m_swapBuffer.data(), m_target.rowPointer(std::abs(distance)), bufferSize);
+					const auto bufferSize = static_cast< size_t >(m_target.height() - rowShift) * rowSize;
+
+					if ( distance > 0 )
+					{
+						std::memcpy(m_swapBuffer.data() + (static_cast< size_t >(rowShift) * rowSize), m_target.rowPointer(0UL), bufferSize);
+					}
+					else
+					{
+						std::memcpy(m_swapBuffer.data(), m_target.rowPointer(static_cast< size_t >(rowShift)), bufferSize);
+					}
 				}
 
 				m_target.markEverythingUpdated();
@@ -1966,7 +1991,7 @@ namespace EmEn::Base::PixelFactory
 							dataDst[index+1] = dataSrc[index+1];
 							dataDst[index+2] = dataSrc[index];
 						}
-						break;
+						return output;
 
 					case ChannelMode::RGBA :
 						if ( swapAlpha )
@@ -1993,18 +2018,16 @@ namespace EmEn::Base::PixelFactory
 								dataDst[index+3] = dataSrc[index+3];
 							}
 						}
-						break;
+						return output;
 
 					case ChannelMode::Grayscale :
 					case ChannelMode::GrayscaleAlpha :
 						/* NOTE: should never happen */
 						return source;
-
-					default:
-						return {};
 				}
 
-				return output;
+				/* An out-of-range channel mode (cast from data) reaches no case above. */
+				return {};
 			}
 
 			/**
@@ -2214,9 +2237,6 @@ namespace EmEn::Base::PixelFactory
 					case ChannelMode::RGBA :
 						channelIndex = static_cast< size_t >(channel);
 						break;
-
-					default:
-						break;
 				}
 
 				Pixmap< pixel_data_t, dimension_t > output{source.width(), source.height(), ChannelMode::Grayscale};
@@ -2389,7 +2409,7 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				if ( clip.isOutside(pixmap.width(), pixmap.height()) )
+				if ( clip.isOutside(static_cast< rectangle_data_t >(pixmap.width()), static_cast< rectangle_data_t >(pixmap.height())) )
 				{
 					if constexpr ( IsDebug )
 					{
@@ -2435,7 +2455,7 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				if ( clip.isOutside(pixmap.width(), pixmap.height()) )
+				if ( clip.isOutside(static_cast< rectangle_data_t >(pixmap.width()), static_cast< rectangle_data_t >(pixmap.height())) )
 				{
 					if constexpr ( IsDebug )
 					{
@@ -2462,6 +2482,8 @@ namespace EmEn::Base::PixelFactory
 			{
 				const auto width = static_cast< int32_t >(m_target.width());
 				const auto height = static_cast< int32_t >(m_target.height());
+				const auto widthF = static_cast< float >(width);
+				const auto heightF = static_cast< float >(height);
 
 				/* NOTE: If the first point is outside the pixmap from left side or bottom. */
 				if ( pointA[Math::X] < 0 || pointA[Math::Y] < 0 )
@@ -2470,7 +2492,7 @@ namespace EmEn::Base::PixelFactory
 
 					auto intersect = Math::Space2D::isIntersecting(
 						0.0F, 0.0F,
-						0.0F, height - 1.0F,
+						0.0F, heightF - 1.0F,
 						static_cast< float >(pointA[Math::X]), static_cast< float >(pointA[Math::Y]),
 						static_cast< float >(pointB[Math::X]), static_cast< float >(pointB[Math::Y]),
 						intersectionPoint
@@ -2492,7 +2514,7 @@ namespace EmEn::Base::PixelFactory
 
 					intersect = Math::Space2D::isIntersecting(
 						0.0F, 0.0F,
-						width - 1.0F, 0.0F,
+						widthF - 1.0F, 0.0F,
 						static_cast< float >(pointA[Math::X]), static_cast< float >(pointA[Math::Y]),
 						static_cast< float >(pointB[Math::X]), static_cast< float >(pointB[Math::Y]),
 						intersectionPoint
@@ -2521,8 +2543,8 @@ namespace EmEn::Base::PixelFactory
 					Math::Vector< 2, float > intersectionPoint;
 
 					auto intersect = Math::Space2D::isIntersecting(
-						0.0F, height - 1.0F,
-						width - 1.0F, height - 1.0F,
+						0.0F, heightF - 1.0F,
+						widthF - 1.0F, heightF - 1.0F,
 						static_cast< float >(pointA[Math::X]), static_cast< float >(pointA[Math::Y]),
 						static_cast< float >(pointB[Math::X]), static_cast< float >(pointB[Math::Y]),
 						intersectionPoint
@@ -2543,8 +2565,8 @@ namespace EmEn::Base::PixelFactory
 					}
 
 					intersect = Math::Space2D::isIntersecting(
-						width - 1.0F, 0.0F,
-						width - 1.0F, height - 1.0F,
+						widthF - 1.0F, 0.0F,
+						widthF - 1.0F, heightF - 1.0F,
 						static_cast< float >(pointA[Math::X]), static_cast< float >(pointA[Math::Y]),
 						static_cast< float >(pointB[Math::X]), static_cast< float >(pointB[Math::Y]),
 						intersectionPoint
@@ -2572,7 +2594,6 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Prepares the swap buffer for copy operations.
-			 * @return void
 			 */
 			void
 			prepareSwapBuffer () noexcept
@@ -2616,7 +2637,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param height The new height.
 			 * @param target A writable reference to a pixmap.
 			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
-			 * @return void
 			 */
 			static
 			void
@@ -2667,9 +2687,6 @@ namespace EmEn::Base::PixelFactory
 								targetData[dstIndex++] = sourceData[sourceIndex+2];
 								targetData[dstIndex++] = sourceData[sourceIndex+3];
 								break;
-
-							default:
-								break;
 						}
 					}
 				};
@@ -2695,7 +2712,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param height The new height.
 			 * @param target A writable reference to a pixmap.
 			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
-			 * @return void
 			 */
 			static
 			void
@@ -2763,9 +2779,6 @@ namespace EmEn::Base::PixelFactory
 								targetData[dstIndex++] = Processor::bilinearFiltering(sourceData[srcIndexA+2], sourceData[srcIndexB+2], sourceData[srcIndexC+2], sourceData[srcIndexD+2], xFactor, yFactor);
 								targetData[dstIndex++] = Processor::bilinearFiltering(sourceData[srcIndexA+3], sourceData[srcIndexB+3], sourceData[srcIndexC+3], sourceData[srcIndexD+3], xFactor, yFactor);
 								break;
-
-							default:
-								break;
 						}
 					}
 				};
@@ -2813,7 +2826,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param height The new height.
 			 * @param target A writable reference to a pixmap.
 			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
-			 * @return void
 			 */
 			static
 			void
@@ -2855,7 +2867,9 @@ namespace EmEn::Base::PixelFactory
 							for ( int i = 0; i < 4; ++i )
 							{
 								const int currentX = xFloor - 1 + i;
-								const auto color = source.safePixel(currentX, currentY);
+								/* NOTE: A negative coordinate (border tap) wraps far past the pixmap, where
+								 * safePixel() answers its out-of-bounds Black, as for a tap past the far edge. */
+								const auto color = source.safePixel(static_cast< dimension_t >(currentX), static_cast< dimension_t >(currentY));
 								auto & tap = taps[(static_cast< size_t >(j) * 4) + static_cast< size_t >(i)];
 
 								switch ( source.channelMode() )
@@ -2881,9 +2895,6 @@ namespace EmEn::Base::PixelFactory
 										tap[2] = color.blue();
 										tap[3] = color.alpha();
 										break;
-
-									default :
-										break;
 								}
 							}
 						}
@@ -2894,9 +2905,9 @@ namespace EmEn::Base::PixelFactory
 						{
 							std::array< float, 4 > intermediate{0.0F, 0.0F, 0.0F, 0.0F};
 
-							for ( int j = 0; j < 4; ++j )
+							for ( size_t j = 0; j < 4; ++j )
 							{
-								const auto rowBase = static_cast< size_t >(j) * 4;
+								const auto rowBase = j * 4;
 
 								intermediate[j] = Math::cubicInterpolationCatmullRom(
 									taps[rowBase][channel], taps[rowBase + 1][channel],
@@ -2929,9 +2940,6 @@ namespace EmEn::Base::PixelFactory
 								targetData[dstIndex++] = Processor::clampValue(interpolatedValues[2]);
 								targetData[dstIndex++] = Processor::clampValue(interpolatedValues[3]);
 								break;
-
-							default:
-								break;
 						}
 					}
 				};
@@ -2951,13 +2959,13 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Used during linear resize.
-			 * @param bottomLeft
-			 * @param bottomRight
-			 * @param topLeft
-			 * @param topRight
-			 * @param xFactor
-			 * @param yFactor
-			 * @return precision_t
+			 * @param bottomLeft The bottom-left sample.
+			 * @param bottomRight The bottom-right sample.
+			 * @param topLeft The top-left sample.
+			 * @param topRight The top-right sample.
+			 * @param xFactor The horizontal interpolation factor, in [0, 1].
+			 * @param yFactor The vertical interpolation factor, in [0, 1].
+			 * @return pixel_data_t
 			 */
 			[[nodiscard]]
 			static
@@ -2975,7 +2983,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Mirrors the pixmap in X-Axis.
 			 * @param source A reference to the input pixmap.
 			 * @param output A reference to the output pixmap.
-			 * @return void
 			 */
 			static
 			void
@@ -3068,7 +3075,7 @@ namespace EmEn::Base::PixelFactory
 
 							data[component] = baseData[invertedComponent];
 						}
-						break;
+						return true;
 
 					case ChannelMode::GrayscaleAlpha :
 						for ( size_t component = 0; component < componentCount; component += stride )
@@ -3078,7 +3085,7 @@ namespace EmEn::Base::PixelFactory
 							data[component] = baseData[invertedComponent];
 							data[component+1] = baseData[invertedComponent+1];
 						}
-						break;
+						return true;
 
 					case ChannelMode::RGB :
 						for ( size_t component = 0; component < componentCount; component += stride )
@@ -3089,7 +3096,7 @@ namespace EmEn::Base::PixelFactory
 							data[component+1] = baseData[invertedComponent+1];
 							data[component+2] = baseData[invertedComponent+2];
 						}
-						break;
+						return true;
 
 					case ChannelMode::RGBA :
 						for ( size_t component = 0; component < componentCount; component += stride )
@@ -3101,13 +3108,12 @@ namespace EmEn::Base::PixelFactory
 							data[component+2] = baseData[invertedComponent+2];
 							data[component+3] = baseData[invertedComponent+3];
 						}
-						break;
+						return true;
 
-					default:
-						return false;
 				}
 
-				return true;
+				/* An out-of-range channel mode (cast from data) reaches no case above. */
+				return false;
 			}
 
 			Pixmap< pixel_data_t, dimension_t > & m_target;

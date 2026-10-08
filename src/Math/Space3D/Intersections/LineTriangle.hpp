@@ -46,7 +46,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Line< precision_t > & line, const Triangle< precision_t > & triangle) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -108,7 +108,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Line< precision_t > & line, const Triangle< precision_t > & triangle, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -175,7 +175,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Line< precision_t > &, Triangle< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Triangle< precision_t > & triangle, const Line< precision_t > & line) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -185,7 +185,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Line< precision_t > &, Triangle< precision_t > &, Point< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Triangle< precision_t > & triangle, const Line< precision_t > & line, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{

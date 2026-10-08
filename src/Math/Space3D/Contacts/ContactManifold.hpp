@@ -180,7 +180,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the normal.
 			 * @param normal A reference to a unit vector, from A to B.
-			 * @return void
 			 */
 			constexpr
 			void
@@ -251,7 +250,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Swaps the roles of A and B: the normal is negated, the points stay.
 			 * @note The feature ids keep their value: they identify the same features whatever the order.
-			 * @return void
 			 */
 			constexpr
 			void
@@ -262,7 +260,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Empties the manifold.
-			 * @return void
 			 */
 			void
 			clear () noexcept

@@ -73,6 +73,7 @@ namespace EmEn::Base::PixelFactory
 			char message[JMSG_LENGTH_MAX];
 		};
 
+		[[noreturn]]
 		void
 		errorExit (j_common_ptr cinfo) noexcept
 		{
@@ -254,27 +255,34 @@ namespace EmEn::Base::PixelFactory
 		info.image_width = static_cast< JDIMENSION >(pixmap.width());
 		info.image_height = static_cast< JDIMENSION >(pixmap.height());
 
+		bool channelModeHandled = false;
+
 		switch ( pixmap.channelMode() )
 		{
 			case ChannelMode::RGB :
 			case ChannelMode::RGBA :
 				info.input_components = 3;
 				info.in_color_space = JCS_RGB;
+				channelModeHandled = true;
 				break;
 
 			case ChannelMode::Grayscale :
 			case ChannelMode::GrayscaleAlpha :
 				info.input_components = 1;
 				info.in_color_space = JCS_GRAYSCALE;
+				channelModeHandled = true;
 				break;
+		}
 
-			default:
-				Logging::error("PixelFactory::FileFormatJpeg", "writeStream(), unhandled format !");
+		/* An out-of-range channel mode (cast from data) reaches no case above. */
+		if ( !channelModeHandled )
+		{
+			Logging::error("PixelFactory::FileFormatJpeg", "writeStream(), unhandled format !");
 
-				jpeg_destroy_compress(&info);
-				free(outBuffer);
+			jpeg_destroy_compress(&info);
+			free(outBuffer);
 
-				return false;
+			return false;
 		}
 
 		if constexpr ( PixelFactoryDebugEnabled )

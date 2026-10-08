@@ -154,7 +154,9 @@ namespace EmEn::Base::VertexFactory
 			 * N bytes cannot legitimately describe more than N elements (each is >= 1 byte on disk).
 			 * Rejecting counts above the stream size kills the huge-allocation DoS (std::length_error
 			 * -> std::terminate under -fno-exceptions) on hostile/corrupt input. The goal is solely to
-			 * never crash the engine: on a bad count we cancel the load. Stream position is preserved. */
+			 * never crash the engine: on a bad count we cancel the load. Stream position is preserved.
+			 * A signed count converted to uint64_t makes a negative value huge, so it is refused too: a count
+			 * that PASSED this test lies in [0, stream size] and its static_cast to std::size_t is exact. */
 			static
 			bool
 			exceedsStream (std::istream & file, uint64_t count) noexcept
@@ -284,7 +286,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< mdl_skin_t > skins(header.num_skins);
+				std::vector< mdl_skin_t > skins(static_cast< std::size_t >(header.num_skins));
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_verts)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), texcoord count exceeds the stream size !");
@@ -292,7 +294,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< mdl_texCoord_t > textureCoordinates(header.num_verts);
+				std::vector< mdl_texCoord_t > textureCoordinates(static_cast< std::size_t >(header.num_verts));
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_tris)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), triangle count exceeds the stream size !");
@@ -300,7 +302,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< mdl_triangle_t > triangles(header.num_tris);
+				std::vector< mdl_triangle_t > triangles(static_cast< std::size_t >(header.num_tris));
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_frames)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), frame count exceeds the stream size !");
@@ -308,7 +310,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< mdl_frame_t > frames(header.num_frames);
+				std::vector< mdl_frame_t > frames(static_cast< std::size_t >(header.num_frames));
 
 				for ( auto & skin : skins )
 				{
@@ -330,8 +332,8 @@ namespace EmEn::Base::VertexFactory
 					file.read(reinterpret_cast< char * >(skin.data.data()), static_cast< std::streamsize >(skinSize));
 				}
 
-				file.read(reinterpret_cast< char * >(textureCoordinates.data()), sizeof(mdl_texCoord_t) * header.num_verts);
-				file.read(reinterpret_cast< char * >(triangles.data()), sizeof(mdl_triangle_t) * header.num_tris);
+				file.read(reinterpret_cast< char * >(textureCoordinates.data()), static_cast< std::streamsize >(sizeof(mdl_texCoord_t) * textureCoordinates.size()));
+				file.read(reinterpret_cast< char * >(triangles.data()), static_cast< std::streamsize >(sizeof(mdl_triangle_t) * triangles.size()));
 
 				for ( auto & frame : frames )
 				{
@@ -342,12 +344,12 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 					
-					frame.frame.verts.resize(header.num_verts);
+					frame.frame.verts.resize(static_cast< std::size_t >(header.num_verts));
 					file.read(reinterpret_cast< char * >(&frame.type), sizeof(int));
 					file.read(reinterpret_cast< char * >(&frame.frame.bboxmin), sizeof(mdl_vertex_t));
 					file.read(reinterpret_cast< char * >(&frame.frame.bboxmax), sizeof(mdl_vertex_t));
 					file.read(reinterpret_cast< char * >(frame.frame.name.data()), sizeof(char) * 16);
-					file.read(reinterpret_cast< char * >(frame.frame.verts.data()), sizeof(mdl_vertex_t) * header.num_verts);
+					file.read(reinterpret_cast< char * >(frame.frame.verts.data()), static_cast< std::streamsize >(sizeof(mdl_vertex_t) * frame.frame.verts.size()));
 				}
 
 				if ( header.num_tris <= 0 )
@@ -385,7 +387,7 @@ namespace EmEn::Base::VertexFactory
 					 * inner limb faces and a hollow head). Do not couple it to the transform's determinant. */
 					for ( int vertexIndex = 2; vertexIndex >= 0; vertexIndex-- )
 					{
-						const auto vertexRef = triangles[triangleIndex].vertex[vertexIndex];
+						const auto vertexRef = triangles[triangleIndex].vertex[static_cast< std::size_t >(vertexIndex)];
 
 						/* Index comes straight from the file: bound it against the declared vertex count
 						 * before dereferencing (fuzz_mdx class of bug: OOB read / SEGV on hostile MDL). */
@@ -396,7 +398,9 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 
-						const auto & vertex = frames[frameIndex].frame.verts[vertexRef];
+						/* Range-checked just above: 0 <= vertexRef < num_verts. */
+						const auto vertexTableIndex = static_cast< std::size_t >(vertexRef);
+						const auto & vertex = frames[frameIndex].frame.verts[vertexTableIndex];
 
 						if ( static_cast< std::size_t >(vertex.normalIndex) >= s_anorms.size() )
 						{
@@ -406,7 +410,7 @@ namespace EmEn::Base::VertexFactory
 						}
 
 						const auto & normal = s_anorms[vertex.normalIndex];
-						const auto & textureCoordinate = textureCoordinates[vertexRef];
+						const auto & textureCoordinate = textureCoordinates[vertexTableIndex];
 
 						auto s = static_cast< vertex_data_t >(textureCoordinate.s);
 						auto t = static_cast< vertex_data_t >(textureCoordinate.t);
@@ -495,7 +499,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< md2_texCoord_t > textureCoordinates(header.num_st);
+				std::vector< md2_texCoord_t > textureCoordinates(static_cast< std::size_t >(header.num_st));
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_tris)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), triangle count exceeds the stream size !");
@@ -503,7 +507,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< md2_triangle_t > triangles(header.num_tris);
+				std::vector< md2_triangle_t > triangles(static_cast< std::size_t >(header.num_tris));
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_frames)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), frame count exceeds the stream size !");
@@ -511,13 +515,13 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< md2_frame_t > frames(header.num_frames);
+				std::vector< md2_frame_t > frames(static_cast< std::size_t >(header.num_frames));
 
 				file.seekg(header.offset_st, std::ios::beg);
-				file.read(reinterpret_cast< char * >(textureCoordinates.data()), sizeof(md2_texCoord_t) * header.num_st);
+				file.read(reinterpret_cast< char * >(textureCoordinates.data()), static_cast< std::streamsize >(sizeof(md2_texCoord_t) * textureCoordinates.size()));
 
 				file.seekg(header.offset_tris, std::ios::beg);
-				file.read(reinterpret_cast< char * >(triangles.data()), sizeof(md2_triangle_t) * header.num_tris);
+				file.read(reinterpret_cast< char * >(triangles.data()), static_cast< std::streamsize >(sizeof(md2_triangle_t) * triangles.size()));
 
 				file.seekg(header.offset_frames, std::ios::beg);
 
@@ -530,11 +534,11 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 					
-					frame.verts.resize(header.num_vertices);
+					frame.verts.resize(static_cast< std::size_t >(header.num_vertices));
 					file.read(reinterpret_cast< char * >(&frame.scale), sizeof(md2_vec3_t));
 					file.read(reinterpret_cast< char * >(&frame.translate), sizeof(md2_vec3_t));
 					file.read(reinterpret_cast< char * >(&frame.name), sizeof(char) * 16);
-					file.read(reinterpret_cast< char * >(frame.verts.data()), sizeof(md2_vertex_t) * header.num_vertices);
+					file.read(reinterpret_cast< char * >(frame.verts.data()), static_cast< std::streamsize >(sizeof(md2_vertex_t) * frame.verts.size()));
 				}
 
 				if ( header.num_tris <= 0 )
@@ -571,8 +575,8 @@ namespace EmEn::Base::VertexFactory
 					 * inner limb faces and a hollow head). Do not couple it to the transform's determinant. */
 					for ( int vertexIndex = 2; vertexIndex >= 0; vertexIndex-- )
 					{
-						const auto vertexRef = triangles[triangleIndex].vertex[vertexIndex];
-						const auto texCoordRef = triangles[triangleIndex].st[vertexIndex];
+						const auto vertexRef = triangles[triangleIndex].vertex[static_cast< std::size_t >(vertexIndex)];
+						const auto texCoordRef = triangles[triangleIndex].st[static_cast< std::size_t >(vertexIndex)];
 
 						/* Indices come straight from the file: bound them against the declared table sizes
 						 * before dereferencing (fuzz_mdx: OOB read / SEGV on hostile MD2). */
@@ -706,9 +710,10 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< md3_surface_t > surfaces(header.num_surfaces);
+				const auto surfaceCount = static_cast< std::size_t >(header.num_surfaces);
+				std::vector< md3_surface_t > surfaces(surfaceCount);
 				
-				for ( int surfaceIndex = 0; surfaceIndex < header.num_surfaces; ++surfaceIndex)
+				for ( std::size_t surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex )
 				{
 					file.seekg(currentSurfaceOffset, std::ios::beg);
 					file.read(reinterpret_cast< char * >(&surfaces[surfaceIndex]), sizeof(md3_surface_t));
@@ -751,7 +756,7 @@ namespace EmEn::Base::VertexFactory
 
 				currentSurfaceOffset = header.offset_surfaces;
 
-				for ( int surfaceIndex = 0; surfaceIndex < header.num_surfaces; ++surfaceIndex )
+				for ( std::size_t surfaceIndex = 0; surfaceIndex < surfaceCount; ++surfaceIndex )
 				{
 					const md3_surface_t surf = surfaces[surfaceIndex];
 
@@ -763,7 +768,7 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 					
-					std::vector< md3_triangle_t > tris(surf.num_triangles);
+					std::vector< md3_triangle_t > tris(static_cast< std::size_t >(surf.num_triangles));
 					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(surf.num_verts)) )
 					{
 						Logging::error("VertexFactory::FileFormatMDx", "readStream(), vertex count exceeds the stream size !");
@@ -771,7 +776,7 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 					
-					std::vector< md3_vertex_t > verts(surf.num_verts);
+					std::vector< md3_vertex_t > verts(static_cast< std::size_t >(surf.num_verts));
 					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(surf.num_verts)) )
 					{
 						Logging::error("VertexFactory::FileFormatMDx", "readStream(), texcoord count exceeds the stream size !");
@@ -779,19 +784,19 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 					
-					std::vector< md3_texCoord_t > uvs(surf.num_verts);
+					std::vector< md3_texCoord_t > uvs(static_cast< std::size_t >(surf.num_verts));
 
 					// Triangles
 					file.seekg(currentSurfaceOffset + surf.offset_triangles, std::ios::beg);
-					file.read(reinterpret_cast< char * >(tris.data()), surf.num_triangles * sizeof(md3_triangle_t));
+					file.read(reinterpret_cast< char * >(tris.data()), static_cast< std::streamsize >(tris.size() * sizeof(md3_triangle_t)));
 
 					// Vertices (Frame 0 only for static shape)
 					file.seekg(currentSurfaceOffset + surf.offset_xyzn, std::ios::beg);
-					file.read(reinterpret_cast< char * >(verts.data()), surf.num_verts * sizeof(md3_vertex_t));
+					file.read(reinterpret_cast< char * >(verts.data()), static_cast< std::streamsize >(verts.size() * sizeof(md3_vertex_t)));
 
 					// UVs
 					file.seekg(currentSurfaceOffset + surf.offset_st, std::ios::beg);
-					file.read(reinterpret_cast< char * >(uvs.data()), surf.num_verts * sizeof(md3_texCoord_t));
+					file.read(reinterpret_cast< char * >(uvs.data()), static_cast< std::streamsize >(uvs.size() * sizeof(md3_texCoord_t)));
 
 					// Scale factor for int16 XYZ
 					constexpr float MD3_XYZ_SCALE = 1.0f / 64.0f;
@@ -815,8 +820,10 @@ namespace EmEn::Base::VertexFactory
 								return false;
 							}
 
-							const auto & v = verts[idx];
-							const auto & uv = uvs[idx];
+							/* Range-checked just above: 0 <= idx < num_verts. */
+							const auto vertexTableIndex = static_cast< std::size_t >(idx);
+							const auto & v = verts[vertexTableIndex];
+							const auto & uv = uvs[vertexTableIndex];
 
 							/* Decode Normal from lat/lng encoding. */
 							const float lat = (v.normal[0] * (2 * 3.14159265f) / 255.0f);
@@ -1017,24 +1024,25 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 						
-						joints.resize(numJoints);
-						for ( int i = 0; i < numJoints; ++i )
+						joints.resize(static_cast< std::size_t >(numJoints));
+
+						for ( auto & joint : joints )
 						{
 							std::getline(file, line);
 
 							const size_t startQuote = line.find('"');
 							const size_t endQuote = line.find('"', startQuote + 1);
-							joints[i].name = line.substr(startQuote + 1, endQuote - startQuote - 1);
+							joint.name = line.substr(startQuote + 1, endQuote - startQuote - 1);
 
 							std::stringstream ss(line.substr(endQuote + 1));
 
 							char trash;
 
-							ss >> joints[i].parent >> trash
-							   >> joints[i].pos[0] >> joints[i].pos[1] >> joints[i].pos[2] >> trash >> trash
-							   >> joints[i].orient[0] >> joints[i].orient[1] >> joints[i].orient[2];
+							ss >> joint.parent >> trash
+							   >> joint.pos[0] >> joint.pos[1] >> joint.pos[2] >> trash >> trash
+							   >> joint.orient[0] >> joint.orient[1] >> joint.orient[2];
 
-							computeW(joints[i].orient);
+							computeW(joint.orient);
 						}
 					}
 					else if ( line.find("mesh {") != std::string::npos )
@@ -1060,15 +1068,15 @@ namespace EmEn::Base::VertexFactory
 									return false;
 								}
 								
-								mesh.verts.resize(num);
+								mesh.verts.resize(static_cast< std::size_t >(num));
 
-								for ( int i = 0; i < num; ++i )
+								for ( auto & vert : mesh.verts )
 								{
 									std::getline(file, line);
 									std::stringstream ss(line);
 									std::string temp; char trash;
 
-									ss >> temp >> temp >> trash >> mesh.verts[i].uv[0] >> mesh.verts[i].uv[1] >> trash >> mesh.verts[i].startWeight >> mesh.verts[i].countWeight;
+									ss >> temp >> temp >> trash >> vert.uv[0] >> vert.uv[1] >> trash >> vert.startWeight >> vert.countWeight;
 								}
 							}
 							else if ( line.find("numtris") != std::string::npos )
@@ -1082,15 +1090,15 @@ namespace EmEn::Base::VertexFactory
 									return false;
 								}
 								
-								mesh.tris.resize(num);
+								mesh.tris.resize(static_cast< std::size_t >(num));
 
-								for ( int i = 0; i < num; ++i )
+								for ( auto & tri : mesh.tris )
 								{
 									std::getline(file, line);
 									std::stringstream ss(line);
 									std::string temp;
 
-									ss >> temp >> temp >> mesh.tris[i][0] >> mesh.tris[i][1] >> mesh.tris[i][2];
+									ss >> temp >> temp >> tri[0] >> tri[1] >> tri[2];
 								}
 							}
 							else if ( line.find("numweights") != std::string::npos )
@@ -1103,15 +1111,15 @@ namespace EmEn::Base::VertexFactory
 									return false;
 								}
 								
-								mesh.weights.resize(num);
+								mesh.weights.resize(static_cast< std::size_t >(num));
 
-								for ( int i = 0; i < num; ++i )
+								for ( auto & weight : mesh.weights )
 								{
 									std::getline(file, line);
 									std::stringstream ss(line);
 									std::string temp; char trash;
 
-									ss >> temp >> temp >> mesh.weights[i].jointIndex >> mesh.weights[i].bias >> trash >> mesh.weights[i].pos[0] >> mesh.weights[i].pos[1] >> mesh.weights[i].pos[2];
+									ss >> temp >> temp >> weight.jointIndex >> weight.bias >> trash >> weight.pos[0] >> weight.pos[1] >> weight.pos[2];
 								}
 							}
 						}
@@ -1265,13 +1273,18 @@ namespace EmEn::Base::VertexFactory
 					/* Pass 1: Build all vertices for this sub-mesh. */
 					for ( const auto & vert : mesh.verts )
 					{
+						/* Validated in phase 2: startWeight and countWeight are non-negative and their sum
+						 * stays within mesh.weights; every weight's jointIndex is within joints. */
+						const auto firstWeight = static_cast< std::size_t >(vert.startWeight);
+						const auto weightCount = static_cast< std::size_t >(vert.countWeight);
+
 						/* Calculate bind-pose position in MD5 world space. */
 						std::array< float, 3 > finalPos = {0, 0, 0};
 
-						for ( int w = 0; w < vert.countWeight; ++w )
+						for ( std::size_t w = 0; w < weightCount; ++w )
 						{
-							const auto & weight = mesh.weights[vert.startWeight + w];
-							const auto & joint = joints[weight.jointIndex];
+							const auto & weight = mesh.weights[firstWeight + w];
+							const auto & joint = joints[static_cast< std::size_t >(weight.jointIndex)];
 
 							std::array< float, 3 > rotPos;
 							rotatePoint(joint.orient, weight.pos, rotPos);
@@ -1297,15 +1310,15 @@ namespace EmEn::Base::VertexFactory
 						});
 
 						/* Compute top-4 bone influences sorted by weight (descending). */
-						if ( vert.countWeight <= 4 )
+						if ( weightCount <= 4 )
 						{
-							const int slotCount = std::min(vert.countWeight, 4);
+							const auto slotCount = std::min(weightCount, std::size_t{4});
 							Math::Vector< 4, int32_t > boneIndices{-1, -1, -1, -1};
 							Math::Vector< 4, vertex_data_t > boneWeights{0, 0, 0, 0};
 
-							for ( int w = 0; w < slotCount; ++w )
+							for ( std::size_t w = 0; w < slotCount; ++w )
 							{
-								const auto & weight = mesh.weights[vert.startWeight + w];
+								const auto & weight = mesh.weights[firstWeight + w];
 								boneIndices[w] = weight.jointIndex;
 								boneWeights[w] = static_cast< vertex_data_t >(weight.bias);
 							}
@@ -1327,11 +1340,11 @@ namespace EmEn::Base::VertexFactory
 							 * mesh reaching this branch. It rejected every MD5 model having a vertex with more
 							 * than 4 weights (cyberdemon.md5mesh). exceedsStream() is a pre-READ sanity bound —
 							 * only valid where a count is about to drive a read, as in the parsing phase. */
-							std::vector< WeightEntry > allWeights(vert.countWeight);
+							std::vector< WeightEntry > allWeights(weightCount);
 
-							for ( int w = 0; w < vert.countWeight; ++w )
+							for ( std::size_t w = 0; w < weightCount; ++w )
 							{
-								const auto & weight = mesh.weights[vert.startWeight + w];
+								const auto & weight = mesh.weights[firstWeight + w];
 								allWeights[w] = {weight.jointIndex, weight.bias};
 							}
 
@@ -1340,7 +1353,7 @@ namespace EmEn::Base::VertexFactory
 
 							float totalBias = 0;
 
-							for ( int w = 0; w < 4; ++w )
+							for ( std::size_t w = 0; w < 4; ++w )
 							{
 								totalBias += allWeights[w].bias;
 							}

@@ -35,9 +35,9 @@ namespace EmEn::Base::Time::Elapsed
 	/**
 	 * @brief Gets the duration in wall clock time of a specific scope.
 	 * @note The internal precision is set to nanoseconds.
-	 * @tparam clockType The type of clock used. Default std::chrono::high_resolution_clock.
+	 * @tparam clockType The type of clock used. Default std::chrono::steady_clock (monotonic: an interval never goes backwards).
 	 */
-	template< typename clockType = std::chrono::high_resolution_clock >
+	template< typename clockType = std::chrono::steady_clock >
 	class ScopeRealTime final
 	{
 		public:

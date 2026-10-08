@@ -52,14 +52,12 @@ namespace EmEn::Base::Hash
 			 * @brief Continues a CRC32 computation, processing another message block.
 			 * @param message A pointer to the input data.
 			 * @param length The size of the input data in bytes.
-			 * @return void
 			 */
 			void update (const uint8_t * message, size_t length) noexcept;
 
 			/**
 			 * @brief Finalizes the CRC32 computation and writes the 4-byte digest in big-endian order.
 			 * @param digest A reference to a 4-byte array receiving the result.
-			 * @return void
 			 */
 			void final (std::array< uint8_t, 4 > & digest) noexcept;
 
@@ -72,7 +70,6 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief Resets the internal state to start a new computation.
-			 * @return void
 			 */
 			void reset () noexcept;
 

@@ -1109,3 +1109,20 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the one most likely to pass for the wrong reason. `FileFormatHDR` was added (`ceb83c2`) after
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
+
+## The paranoid warning set — what a base-only check does not see (Ave Robustus II, 2026-10-08)
+
+- **A base TEMPLATE header is only judged where it is instantiated.** `TextProcessor`, `Math::linearInterpolation()`
+  with `double`, `Statistics::RealTime< system_clock >` compiled clean in every base TU and failed `-Werror` in the
+  engine, the first place they are instantiated with those types. **Rule:** a base change is verified by the WHOLE
+  cascade build (base, engine, projet-alpha), never by the base alone.
+- **`cmake --build .` does not build `EmeraudeBaseUnitTests`**: build that target explicitly, or the test count stays
+  the old one and a new test "passes" by not existing.
+- **The umbrella's compile OPTIONS did not reach the object modules**: `-fopenmp` sat on `emeraude_base` only, so
+  VertexFactory's `#pragma omp parallel for` loops compiled inside the vertex module were silently serial (found by
+  `-Wunknown-pragmas`). `CMakeLists.txt` now mirrors `INTERFACE_COMPILE_OPTIONS` onto `emeraude_base_flags`, like the
+  definitions and include directories.
+- **`-DMACRO=Off` is not a boolean to the preprocessor**: `JSON_USE_EXCEPTION=Off` evaluated as an undefined identifier
+  (0 by accident) in jsoncpp's `#if`; `-Wundef` caught it. Use `0` / `1`.
+- **Measure an interval with `std::chrono::steady_clock`**: libstdc++'s `high_resolution_clock` IS `system_clock`, which
+  NTP moves backwards; the base timers defaulted to it until 2026-10-08.

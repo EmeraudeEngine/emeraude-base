@@ -71,7 +71,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the skeleton the meshes were skinned from.
 			 * @param skeleton The skeleton.
-			 * @return void
 			 */
 			void
 			setSkeleton (TreeSkeleton< vertex_data_t > && skeleton) noexcept
@@ -93,7 +92,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Appends a level of detail, from the finest to the coarsest.
 			 * @param shape The mesh of that level.
-			 * @return void
 			 */
 			void
 			addLevelOfDetail (Shape< vertex_data_t, index_data_t > && shape) noexcept
@@ -146,7 +144,6 @@ namespace EmEn::Base::VertexFactory
 			 * the engine's job to produce. That is why it is kept apart from the level chain
 			 * instead of being its last rung.
 			 * @param shape The card geometry.
-			 * @return void
 			 */
 			void
 			setImposter (Shape< vertex_data_t, index_data_t > && shape) noexcept
@@ -206,7 +203,6 @@ namespace EmEn::Base::VertexFactory
 			 * a store material of that name, or one built from the images that follow the vegetation convention).
 			 * @param barkMaterial The bark material name.
 			 * @param leafMaterial The leaf material name.
-			 * @return void
 			 */
 			void
 			setMaterialNames (std::string barkMaterial, std::string leafMaterial) noexcept
@@ -239,7 +235,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Clears everything.
-			 * @return void
 			 */
 			void
 			clear () noexcept

@@ -226,8 +226,8 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief BSpline
-			 * @param defaultSegments
-			 * @param defaultCurveType
+			 * @param defaultSegments The number of segments given to every point added, at least 1.
+			 * @param defaultCurveType The curve type given to every point added. Default BezierQuadratic.
 			 */
 			explicit
 			BSpline (size_t defaultSegments, CurveType defaultCurveType = CurveType::BezierQuadratic) noexcept
@@ -240,7 +240,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the default number of segments.
 			 * @param defaultSegments The number of segments.
-			 * @return void
 			 */
 			void
 			setDefaultSegments (size_t defaultSegments) noexcept
@@ -269,7 +268,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the default curve type.
 			 * @param defaultCurveType The curve type.
-			 * @return void
 			 */
 			void
 			setDefaultCurveType (CurveType defaultCurveType) noexcept
@@ -326,8 +324,8 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Synthesize the curve.
-			 * @param callback
-			 * @param constant Default false.
+			 * @param callback The function receiving every sample (time, position); returning false stops the synthesis.
+			 * @param constant True to give every span the same share of time, false to give every segment the same. Default false.
 			 * @return bool
 			 */
 			[[nodiscard]] 
@@ -365,8 +363,9 @@ namespace EmEn::Base::Math
 					 * by segment count against the whole spline. */
 					if ( constant )
 					{
-						timeStep = 1.0F / (m_points.size() - 1);
-						timeStep /= currentPoint.segments();
+						/* NOTE: Point and segment counts stay far below 2^24, exact in a float. */
+						timeStep = 1.0F / static_cast< float >(m_points.size() - 1);
+						timeStep /= static_cast< float >(currentPoint.segments());
 					}
 
 					/* The LAST point never opens a curve: it has no next point, and it is the terminal sample the time
@@ -397,9 +396,6 @@ namespace EmEn::Base::Math
 								{
 									return false;
 								}
-								break;
-
-							default:
 								break;
 						}
 					}
@@ -435,18 +431,18 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief synthesizeLinear
-			 * @param callback
-			 * @param currentPoint
-			 * @param nextPoint
-			 * @param currentTime
-			 * @param timeStep
+			 * @param callback The function receiving every sample (time, position); returning false stops the synthesis.
+			 * @param currentPoint The point opening the span.
+			 * @param nextPoint The point closing the span.
+			 * @param currentTime A writable reference to the running time, advanced by one step per sample.
+			 * @param timeStep The time between two samples.
 			 * @return bool
 			 */
 			bool
 			synthesizeLinear (const Callback & callback, const BSplinePoint< vector_dim_t, vector_precision_t > & currentPoint, const BSplinePoint< vector_dim_t, vector_precision_t > & nextPoint, float & currentTime, float timeStep) const noexcept
 			{
 				/* Time to step along a segment. */
-				const auto factorStep = 1.0F / currentPoint.segments();
+				const auto factorStep = 1.0F / static_cast< float >(currentPoint.segments());
 
 				auto factor = 0.0F;
 
@@ -473,18 +469,18 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief synthesizeQuadratic
-			 * @param callback
-			 * @param currentPoint
-			 * @param nextPoint
-			 * @param currentTime
-			 * @param timeStep
+			 * @param callback The function receiving every sample (time, position); returning false stops the synthesis.
+			 * @param currentPoint The point opening the span.
+			 * @param nextPoint The point closing the span.
+			 * @param currentTime A writable reference to the running time, advanced by one step per sample.
+			 * @param timeStep The time between two samples.
 			 * @return bool
 			 */
 			bool
 			synthesizeQuadratic (const Callback & callback, const BSplinePoint< vector_dim_t, vector_precision_t > & currentPoint, const BSplinePoint< vector_dim_t, vector_precision_t > & nextPoint, float & currentTime, float timeStep) const noexcept
 			{
 				/* Time to step along a segment. */
-				const auto factorStep = 1.0F / currentPoint.segments();
+				const auto factorStep = 1.0F / static_cast< float >(currentPoint.segments());
 
 				auto factor = 0.0F;
 
@@ -508,18 +504,18 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief synthesizeCubic
-			 * @param callback
-			 * @param currentPoint
-			 * @param nextPoint
-			 * @param currentTime
-			 * @param timeStep
+			 * @param callback The function receiving every sample (time, position); returning false stops the synthesis.
+			 * @param currentPoint The point opening the span.
+			 * @param nextPoint The point closing the span.
+			 * @param currentTime A writable reference to the running time, advanced by one step per sample.
+			 * @param timeStep The time between two samples.
 			 * @return bool
 			 */
 			bool
 			synthesizeCubic (const Callback & callback, const BSplinePoint< vector_dim_t, vector_precision_t > & currentPoint, const BSplinePoint< vector_dim_t, vector_precision_t > & nextPoint, float & currentTime, float timeStep) const noexcept
 			{
 				/* Time to step along a segment. */
-				const auto factorStep = 1.0F / currentPoint.segments();
+				const auto factorStep = 1.0F / static_cast< float >(currentPoint.segments());
 
 				auto factor = 0.0F;
 

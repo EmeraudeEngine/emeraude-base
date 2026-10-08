@@ -99,7 +99,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Updates the range with a new value.
 			 * @param value A value to add to the range.
-			 * @return void
 			 */
 			void
 			update (data_t value) noexcept

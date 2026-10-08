@@ -70,85 +70,85 @@ namespace EmEn::Base::VertexFactory
 			 */
 			TreeColonizationGrower () noexcept = default;
 
-			/** @brief Sets how many attraction points fill the crown. @param value The count. @return void */
+			/** @brief Sets how many attraction points fill the crown. @param value The count. */
 			void setAttractorCount (uint32_t value) noexcept { m_attractorCount = value; }
 
 			/** @brief Returns how many attraction points fill the crown. @return uint32_t */
 			[[nodiscard]] uint32_t attractorCount () const noexcept { return m_attractorCount; }
 
-			/** @brief Sets the centre of the ellipsoidal crown. @param value The centre. @return void */
+			/** @brief Sets the centre of the ellipsoidal crown. @param value The centre. */
 			void setCrownCenter (const Math::Vector< 3, vertex_data_t > & value) noexcept { m_crownCenter = value; }
 
 			/** @brief Returns the centre of the ellipsoidal crown. @return const Math::Vector< 3, vertex_data_t > & */
 			[[nodiscard]] const Math::Vector< 3, vertex_data_t > & crownCenter () const noexcept { return m_crownCenter; }
 
-			/** @brief Sets the three radii of the ellipsoidal crown. @param value The radii. @return void */
+			/** @brief Sets the three radii of the ellipsoidal crown. @param value The radii. */
 			void setCrownRadii (const Math::Vector< 3, vertex_data_t > & value) noexcept { m_crownRadii = value; }
 
 			/** @brief Returns the three radii of the ellipsoidal crown. @return const Math::Vector< 3, vertex_data_t > & */
 			[[nodiscard]] const Math::Vector< 3, vertex_data_t > & crownRadii () const noexcept { return m_crownRadii; }
 
-			/** @brief Sets how far a tip can feel an attraction point. @param value The distance. @return void */
+			/** @brief Sets how far a tip can feel an attraction point. @param value The distance. */
 			void setInfluenceRadius (vertex_data_t value) noexcept { m_influenceRadius = std::max(value, static_cast< vertex_data_t >(1e-4)); }
 
 			/** @brief Returns how far a tip can feel an attraction point. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t influenceRadius () const noexcept { return m_influenceRadius; }
 
-			/** @brief Sets how close a tip must get for the point to be consumed. @param value The distance. @return void */
+			/** @brief Sets how close a tip must get for the point to be consumed. @param value The distance. */
 			void setKillDistance (vertex_data_t value) noexcept { m_killDistance = std::max(value, static_cast< vertex_data_t >(1e-4)); }
 
 			/** @brief Returns how close a tip must get for the point to be consumed. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t killDistance () const noexcept { return m_killDistance; }
 
-			/** @brief Sets how far a branch advances per growth step. @param value The length. @return void */
+			/** @brief Sets how far a branch advances per growth step. @param value The length. */
 			void setSegmentLength (vertex_data_t value) noexcept { m_segmentLength = std::max(value, static_cast< vertex_data_t >(1e-4)); }
 
 			/** @brief Returns how far a branch advances per growth step. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t segmentLength () const noexcept { return m_segmentLength; }
 
-			/** @brief Sets the bare height grown before the crown is reached. @param value The height. @return void */
+			/** @brief Sets the bare height grown before the crown is reached. @param value The height. */
 			void setTrunkHeight (vertex_data_t value) noexcept { m_trunkHeight = std::max(value, static_cast< vertex_data_t >(0)); }
 
 			/** @brief Returns the bare height grown before the crown is reached. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t trunkHeight () const noexcept { return m_trunkHeight; }
 
-			/** @brief Sets the direction branches drift toward, gravity or light. @param value The direction. @return void */
+			/** @brief Sets the direction branches drift toward, gravity or light. @param value The direction. */
 			void setTropism (const Math::Vector< 3, vertex_data_t > & value) noexcept { m_tropism = value; }
 
 			/** @brief Returns the direction branches drift toward. @return const Math::Vector< 3, vertex_data_t > & */
 			[[nodiscard]] const Math::Vector< 3, vertex_data_t > & tropism () const noexcept { return m_tropism; }
 
-			/** @brief Sets how strongly the tropism pulls against the attraction points. @param value The weight. @return void */
+			/** @brief Sets how strongly the tropism pulls against the attraction points. @param value The weight. */
 			void setTropismWeight (vertex_data_t value) noexcept { m_tropismWeight = value; }
 
 			/** @brief Returns how strongly the tropism pulls. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t tropismWeight () const noexcept { return m_tropismWeight; }
 
-			/** @brief Sets the growth step ceiling. @param value The count. @return void */
+			/** @brief Sets the growth step ceiling. @param value The count. */
 			void setMaxIterations (uint32_t value) noexcept { m_maxIterations = value; }
 
 			/** @brief Returns the growth step ceiling. @return uint32_t */
 			[[nodiscard]] uint32_t maxIterations () const noexcept { return m_maxIterations; }
 
-			/** @brief Sets the radius of a branch tip, from which the pipe model derives the rest. @param value The radius. @return void */
+			/** @brief Sets the radius of a branch tip, from which the pipe model derives the rest. @param value The radius. */
 			void setTipRadius (vertex_data_t value) noexcept { m_tipRadius = std::max(value, static_cast< vertex_data_t >(1e-5)); }
 
 			/** @brief Returns the radius of a branch tip. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t tipRadius () const noexcept { return m_tipRadius; }
 
-			/** @brief Sets Murray's exponent for the pipe model; 2 is da Vinci's rule. @param value The exponent. @return void */
+			/** @brief Sets Murray's exponent for the pipe model; 2 is da Vinci's rule. @param value The exponent. */
 			void setPipeExponent (vertex_data_t value) noexcept { m_pipeExponent = std::max(value, static_cast< vertex_data_t >(1)); }
 
 			/** @brief Returns Murray's exponent for the pipe model. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t pipeExponent () const noexcept { return m_pipeExponent; }
 
-			/** @brief Sets how many leaves hang at each branch tip. @param value The count. @return void */
+			/** @brief Sets how many leaves hang at each branch tip. @param value The count. */
 			void setLeavesPerTip (uint32_t value) noexcept { m_leavesPerTip = value; }
 
 			/** @brief Returns how many leaves hang at each branch tip. @return uint32_t */
 			[[nodiscard]] uint32_t leavesPerTip () const noexcept { return m_leavesPerTip; }
 
-			/** @brief Sets the size of one leaf. @param value The size. @return void */
+			/** @brief Sets the size of one leaf. @param value The size. */
 			void setLeafScale (vertex_data_t value) noexcept { m_leafScale = std::max(value, static_cast< vertex_data_t >(0)); }
 
 			/** @brief Returns the size of one leaf. @return vertex_data_t */
@@ -242,7 +242,6 @@ namespace EmEn::Base::VertexFactory
 					 * @brief Files a node.
 					 * @param position A reference to the node position.
 					 * @param nodeIndex The index of the node.
-					 * @return void
 					 */
 					void
 					insert (const Math::Vector< 3, vertex_data_t > & position, uint32_t nodeIndex) noexcept
@@ -255,7 +254,6 @@ namespace EmEn::Base::VertexFactory
 					 * @tparam function_t The type of the visitor.
 					 * @param position A reference to the point.
 					 * @param visitor The function to call with each candidate node index.
-					 * @return void
 					 */
 					template< typename function_t >
 					void
@@ -376,7 +374,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param nodes A reference to the node list.
 			 * @param grid A reference to the node grid.
 			 * @param attractors A reference to the attraction points.
-			 * @return void
 			 */
 			void
 			growTrunk (std::vector< Node > & nodes, NodeGrid & grid, const std::vector< Math::Vector< 3, vertex_data_t > > & attractors) const noexcept
@@ -432,7 +429,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param nodes A reference to the node list.
 			 * @param grid A reference to the node grid.
 			 * @param attractors A reference to the attraction points.
-			 * @return void
 			 */
 			void
 			colonize (std::vector< Node > & nodes, NodeGrid & grid, const std::vector< Math::Vector< 3, vertex_data_t > > & attractors) const noexcept
@@ -566,7 +562,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param skeleton A reference to the skeleton to fill.
 			 * @param nodes A reference to the node list.
 			 * @param randomizer A reference to the generator.
-			 * @return void
 			 */
 			void
 			buildSkeleton (TreeSkeleton< vertex_data_t > & skeleton, const std::vector< Node > & nodes, Randomizer< vertex_data_t > & randomizer) const noexcept
@@ -686,7 +681,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param children A reference to the child lists.
 			 * @param segmentOfNode A reference to the segment index of every node.
 			 * @param randomizer A reference to the generator.
-			 * @return void
 			 */
 			void
 			placeLeaves (TreeSkeleton< vertex_data_t > & skeleton, const std::vector< Node > & nodes, const std::vector< std::vector< uint32_t > > & children, const std::vector< uint32_t > & segmentOfNode, Randomizer< vertex_data_t > & randomizer) const noexcept

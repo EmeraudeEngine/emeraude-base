@@ -63,7 +63,6 @@ namespace EmEn::Base::GameTools
 
 			/**
 			 * @brief Shuffles the deck.
-			 * @return void
 			 */
 			void
 			shuffleCardDeck () noexcept
@@ -73,7 +72,6 @@ namespace EmEn::Base::GameTools
 
 			/**
 			 * @brief Shuffles the discarded cards.
-			 * @return void
 			 */
 			void
 			shuffleDiscardedCards () noexcept
@@ -83,7 +81,6 @@ namespace EmEn::Base::GameTools
 
 			/**
 			 * @brief Reconstructs the deck entirely.
-			 * @return void
 			 */
 			void reset () noexcept;
 
@@ -102,7 +99,7 @@ namespace EmEn::Base::GameTools
 			/**
 			 * @brief Picks a card from the discardPile.
 			 * @param hand A reference to a hand smart pointer.
-			 * @param pick From where to pick the card from the deck. Default from top.
+			 * @param where From where to pick the card from the discarded pile. Default from top.
 			 * @return bool
 			 */
 			bool

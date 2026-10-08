@@ -911,7 +911,7 @@ namespace EmEn::Base::VertexFactory
 					const auto & offset = offsets[i];
 					auto & tri = triangles[flat.triIndex];
 
-					for ( int v = 0; v < 3; ++v )
+					for ( index_data_t v = 0; v < 3; ++v )
 					{
 						const auto oldIdx = tri.vertexIndex(v);
 						const auto & srcVertex = vertices[oldIdx];

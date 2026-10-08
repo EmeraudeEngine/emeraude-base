@@ -105,7 +105,6 @@ namespace EmEn::Base::Math
 			 * @brief Describes a POLYLINE.
 			 * @param points The points.
 			 * @param closed Whether the last point joins the first.
-			 * @return void
 			 */
 			void
 			setPolyline (std::span< const Point > points, bool closed = false) noexcept
@@ -118,7 +117,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Describes a piecewise BÉZIER path (its segment counts are ignored: the tessellation is adaptive).
 			 * @param path The anchors, their handles (offsets from the anchor) and a curve type per span.
-			 * @return void
 			 */
 			void
 			setBezierPath (const BSpline< 3, precision_t > & path) noexcept
@@ -139,7 +137,6 @@ namespace EmEn::Base::Math
 			 * @brief Describes a uniform cubic B-SPLINE. An open one starts and ends on its end points.
 			 * @param controlPoints The control points.
 			 * @param closed Whether the curve closes on itself.
-			 * @return void
 			 */
 			void
 			setUniformBSpline (std::span< const Point > controlPoints, bool closed = false) noexcept
@@ -154,7 +151,6 @@ namespace EmEn::Base::Math
 			 * @param points The points.
 			 * @param closed Whether the curve closes on itself.
 			 * @param alpha 0 uniform, 0.5 centripetal (the default: no cusp, no loop), 1 chordal.
-			 * @return void
 			 */
 			void
 			setCatmullRom (std::span< const Point > points, bool closed = false, precision_t alpha = static_cast< precision_t >(0.5)) noexcept
@@ -168,7 +164,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Moves the first point (the first anchor of a Bézier path). Nothing when there is no point.
 			 * @param position The position.
-			 * @return void
 			 */
 			void
 			setFirstPoint (const Point & position) noexcept
@@ -189,7 +184,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Moves the last point (the last anchor of a Bézier path). Nothing when there is no point.
 			 * @param position The position.
-			 * @return void
 			 */
 			void
 			setLastPoint (const Point & position) noexcept
@@ -298,7 +292,6 @@ namespace EmEn::Base::Math
 			 * the path is rebuilt).
 			 * @param anchorIndex The anchor index.
 			 * @param position The new position.
-			 * @return void
 			 */
 			void
 			moveAnchor (size_t anchorIndex, const Point & position) noexcept

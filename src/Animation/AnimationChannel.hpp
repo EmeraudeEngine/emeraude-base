@@ -274,7 +274,7 @@ namespace EmEn::Base::Animation
 				return result;
 			}
 
-			return Math::Quaternion< precision_t >::slerp(previous.value, next.value, factor, precision_t{0.05});
+			return Math::Quaternion< precision_t >::slerp(previous.value, next.value, factor, static_cast< precision_t >(0.05));
 		}
 
 		private:

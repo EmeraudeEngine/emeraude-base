@@ -145,7 +145,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the HTTP version in use.
 			 * @param version The HTTP version enum.
-			 * @return void
 			 */
 			void
 			setVersion (Version version) noexcept
@@ -168,7 +167,6 @@ namespace EmEn::Base::Network
 			 * @brief Adds a new header line.
 			 * @param key The name of the header.
 			 * @param value The value of the header.
-			 * @return void
 			 */
 			void
 			add (const std::string & key, const std::string & value) noexcept
@@ -208,7 +206,7 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Returns the string of an HTTP protocol version.
-			 * @param version
+			 * @param version The HTTP protocol version.
 			 * @return const char *
 			 */
 			[[nodiscard]]

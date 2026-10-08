@@ -61,7 +61,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the tolerance to use.
 			 * @param tolerance The tolerance value.
-			 * @return void
 			 */
 			void
 			setTolerance (data_t tolerance) noexcept
@@ -72,7 +71,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Adds a value to the list.
 			 * @param value A number to average.
-			 * @return void
 			 */
 			void
 			addValue (data_t value) noexcept
@@ -83,7 +81,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Replaces all values.
 			 * @param values An array of values to check.
-			 * @return void
 			 */
 			void
 			setValues (const std::vector< data_t > & values) noexcept
@@ -180,7 +177,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Clears all values except tolerance.
-			 * @return void
 			 */
 			void
 			clear () noexcept

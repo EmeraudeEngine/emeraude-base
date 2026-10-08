@@ -31,11 +31,21 @@ namespace EmEn::Base::Time::Statistics
 	void
 	CPUTime::stop () noexcept
 	{
+		/* Gets the duration. */
+		const auto stopTime = std::clock();
+
+		/* NOTE: std::clock() answers (clock_t)-1 when the processor time is not available, and a 32-bit clock_t
+		 * (Windows) wraps: a negative duration is not a measurement, converted to uint64_t it would poison both the
+		 * averages and the one-second accounting below. The execution is not counted. */
+		if ( stopTime == static_cast< std::clock_t >(-1) || m_startTime == static_cast< std::clock_t >(-1) || stopTime < m_startTime )
+		{
+			return;
+		}
+
+		const auto duration = static_cast< uint64_t >(stopTime - m_startTime);
+
 		/* Increment executions count. */
 		m_currentExecutionsPerSecond++;
-
-		/* Gets the duration. */
-		const auto duration = std::clock() - m_startTime;
 
 		/* Insert duration for average statistics. */
 		if constexpr ( CLOCKS_PER_SEC == 1000 )

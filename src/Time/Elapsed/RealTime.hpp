@@ -38,9 +38,9 @@ namespace EmEn::Base::Time::Elapsed
 	 * @brief Gets the duration in wall clock time between two point in milliseconds.
 	 * @note The internal precision is set to nanoseconds.
 	 * @extends EmEn::Base::Time::Elapsed::Abstract
-	 * @tparam clockType The type of clock used. Default std::chrono::high_resolution_clock.
+	 * @tparam clockType The type of clock used. Default std::chrono::steady_clock (monotonic: an interval never goes backwards).
 	 */
-	template< typename clockType = std::chrono::high_resolution_clock >
+	template< typename clockType = std::chrono::steady_clock >
 	class RealTime final : public Abstract
 	{
 		public:

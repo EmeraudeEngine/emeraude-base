@@ -200,12 +200,22 @@ namespace EmEn::Base::IO
 
 		/* NOTE: Read the file size. */
 		file.seekg(0, std::ifstream::end);
-		const auto bytes = file.tellg();
+		const std::streamoff bytes = file.tellg();
 		file.seekg(0, std::ifstream::beg);
 
-		fileContent.resize(bytes);
+		/* NOTE: tellg() answers -1 on failure: converted to a size, it would request an impossible allocation. */
+		if ( bytes < 0 || !file )
+		{
+			return false;
+		}
 
-		file.read(fileContent.data(), static_cast< std::streamsize >(fileContent.size()));
+		fileContent.resize(static_cast< size_t >(bytes));
+
+		if ( !file.read(fileContent.data(), static_cast< std::streamsize >(fileContent.size())) )
+		{
+			return false;
+		}
+
 		file.close();
 
 		return true;

@@ -94,7 +94,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the target geometry where shape will be merged.
 			 * @param destinationShape A reference to a shape.
-			 * @return void
 			 */
 			void
 			setDestinationShape (Shape< vertex_data_t, index_data_t > & destinationShape) noexcept

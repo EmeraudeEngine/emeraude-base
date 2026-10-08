@@ -323,7 +323,6 @@ namespace EmEn::Base::PortableRandom
 	 * range has at most 2^32 elements, so a 256-entry permutation takes 255 draws).
 	 * @param range The range (random access).
 	 * @param generator A reference to the generator.
-	 * @return void
 	 */
 	template< std::ranges::random_access_range range_t, FullRangeGenerator generator_t >
 	void

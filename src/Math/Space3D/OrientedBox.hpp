@@ -151,7 +151,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the centre.
 			 * @param center A reference to a position.
-			 * @return void
 			 */
 			constexpr
 			void

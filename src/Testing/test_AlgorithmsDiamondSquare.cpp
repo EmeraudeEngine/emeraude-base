@@ -51,7 +51,7 @@ namespace
 		{
 			for ( size_t x = 0; x + step < size; ++x )
 			{
-				sum += std::abs(generator.value(x + step, y) - generator.value(x, y));
+				sum += static_cast< double >(std::abs(generator.value(x + step, y) - generator.value(x, y)));
 				++count;
 			}
 		}
@@ -75,7 +75,7 @@ namespace
 		{
 			for ( size_t x = 1; x + 1 < size; ++x )
 			{
-				sum += std::abs(generator.value(x - 1, y) - 2.0F * generator.value(x, y) + generator.value(x + 1, y));
+				sum += static_cast< double >(std::abs(generator.value(x - 1, y) - 2.0F * generator.value(x, y) + generator.value(x + 1, y)));
 				++count;
 			}
 		}

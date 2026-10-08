@@ -133,7 +133,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Transfer points from the oriented cuboid to a cubic volume.
 			 * @param cuboid A reference to a Cuboid.
-			 * @return void
 			 */
 			void
 			merge (Space3D::AACuboid< data_t > & cuboid) noexcept

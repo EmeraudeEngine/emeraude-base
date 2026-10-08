@@ -64,19 +64,19 @@ namespace EmEn::Base::VertexFactory
 			 */
 			TreeSkinningOptions () noexcept = default;
 
-			/** @brief Sets the ring resolution of the thickest branch. @param value The count. @return void */
+			/** @brief Sets the ring resolution of the thickest branch. @param value The count. */
 			void setRadialSegmentsMax (uint32_t value) noexcept { m_radialSegmentsMax = std::max(3U, value); }
 
 			/** @brief Returns the ring resolution of the thickest branch. @return uint32_t */
 			[[nodiscard]] uint32_t radialSegmentsMax () const noexcept { return m_radialSegmentsMax; }
 
-			/** @brief Sets the ring resolution of the thinnest branch. @param value The count. @return void */
+			/** @brief Sets the ring resolution of the thinnest branch. @param value The count. */
 			void setRadialSegmentsMin (uint32_t value) noexcept { m_radialSegmentsMin = std::max(3U, value); }
 
 			/** @brief Returns the ring resolution of the thinnest branch. @return uint32_t */
 			[[nodiscard]] uint32_t radialSegmentsMin () const noexcept { return m_radialSegmentsMin; }
 
-			/** @brief Sets the edge length a ring aims for; it is what makes the resolution follow the radius. @param value The length. @return void */
+			/** @brief Sets the edge length a ring aims for; it is what makes the resolution follow the radius. @param value The length. */
 			void setTargetEdgeLength (vertex_data_t value) noexcept { m_targetEdgeLength = std::max(value, static_cast< vertex_data_t >(1e-4)); }
 
 			/** @brief Returns the edge length a ring aims for. @return vertex_data_t */
@@ -90,80 +90,79 @@ namespace EmEn::Base::VertexFactory
 			 * reducible without it: its triangle count is set by its topology, not by its radii.
 			 * The first and last stations of a branch are always kept, so it never shortens.
 			 * @param value The stride.
-			 * @return void
 			 */
 			void setAxialStride (uint32_t value) noexcept { m_axialStride = std::max(1U, value); }
 
 			/** @brief Returns how many skeleton segments one ring of the tube spans. @return uint32_t */
 			[[nodiscard]] uint32_t axialStride () const noexcept { return m_axialStride; }
 
-			/** @brief Sets the radius below which a branch is dropped entirely. @param value The radius. @return void */
+			/** @brief Sets the radius below which a branch is dropped entirely. @param value The radius. */
 			void setMinimumRadius (vertex_data_t value) noexcept { m_minimumRadius = std::max(value, static_cast< vertex_data_t >(0)); }
 
 			/** @brief Returns the radius below which a branch is dropped entirely. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t minimumRadius () const noexcept { return m_minimumRadius; }
 
-			/** @brief Sets how many metres of bark one V unit of texture covers. @param value The length. @return void */
+			/** @brief Sets how many metres of bark one V unit of texture covers. @param value The length. */
 			void setBarkTextureLength (vertex_data_t value) noexcept { m_barkTextureLength = std::max(value, static_cast< vertex_data_t >(1e-3)); }
 
 			/** @brief Returns how many metres of bark one V unit of texture covers. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t barkTextureLength () const noexcept { return m_barkTextureLength; }
 
-			/** @brief Sets how many times the bark texture wraps around a branch. @param value The count. @return void */
+			/** @brief Sets how many times the bark texture wraps around a branch. @param value The count. */
 			void setBarkTextureWraps (vertex_data_t value) noexcept { m_barkTextureWraps = std::max(value, static_cast< vertex_data_t >(1e-3)); }
 
 			/** @brief Returns how many times the bark texture wraps around a branch. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t barkTextureWraps () const noexcept { return m_barkTextureWraps; }
 
-			/** @brief Sets how much a branch swells where it leaves its parent. @param value The multiplier, 1 for none. @return void */
+			/** @brief Sets how much a branch swells where it leaves its parent. @param value The multiplier, 1 for none. */
 			void setCollarScale (vertex_data_t value) noexcept { m_collarScale = std::max(value, static_cast< vertex_data_t >(1)); }
 
 			/** @brief Returns how much a branch swells where it leaves its parent. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t collarScale () const noexcept { return m_collarScale; }
 
-			/** @brief Sets how leaves become geometry. @param value The mode. @return void */
+			/** @brief Sets how leaves become geometry. @param value The mode. */
 			void setLeafCardMode (TreeLeafCardMode value) noexcept { m_leafCardMode = value; }
 
 			/** @brief Returns how leaves become geometry. @return TreeLeafCardMode */
 			[[nodiscard]] TreeLeafCardMode leafCardMode () const noexcept { return m_leafCardMode; }
 
-			/** @brief Sets the fraction of leaves kept, the survivors being enlarged to hold the canopy. @param value The fraction in ]0, 1]. @return void */
+			/** @brief Sets the fraction of leaves kept, the survivors being enlarged to hold the canopy. @param value The fraction in ]0, 1]. */
 			void setLeafFraction (vertex_data_t value) noexcept { m_leafFraction = std::clamp(value, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1)); }
 
 			/** @brief Returns the fraction of leaves kept. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t leafFraction () const noexcept { return m_leafFraction; }
 
-			/** @brief Sets how much wider than long a leaf card is. @param value The ratio. @return void */
+			/** @brief Sets how much wider than long a leaf card is. @param value The ratio. */
 			void setLeafAspectRatio (vertex_data_t value) noexcept { m_leafAspectRatio = std::max(value, static_cast< vertex_data_t >(1e-3)); }
 
 			/** @brief Returns how much wider than long a leaf card is. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t leafAspectRatio () const noexcept { return m_leafAspectRatio; }
 
-			/** @brief Sets how dark the densest part of the canopy is baked, 0 disabling the baked occlusion. @param value The strength in [0, 1]. @return void */
+			/** @brief Sets how dark the densest part of the canopy is baked, 0 disabling the baked occlusion. @param value The strength in [0, 1]. */
 			void setAmbientOcclusionStrength (vertex_data_t value) noexcept { m_ambientOcclusionStrength = std::clamp(value, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(1)); }
 
 			/** @brief Returns how dark the densest part of the canopy is baked. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t ambientOcclusionStrength () const noexcept { return m_ambientOcclusionStrength; }
 
-			/** @brief Sets the side of one cell of the occlusion density grid. @param value The length. @return void */
+			/** @brief Sets the side of one cell of the occlusion density grid. @param value The length. */
 			void setOcclusionCellSize (vertex_data_t value) noexcept { m_occlusionCellSize = std::max(value, static_cast< vertex_data_t >(1e-2)); }
 
 			/** @brief Returns the side of one cell of the occlusion density grid. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t occlusionCellSize () const noexcept { return m_occlusionCellSize; }
 
-			/** @brief Sets the exponent shaping the trunk bending weight; above 1 keeps the foot stiffer. @param value The exponent. @return void */
+			/** @brief Sets the exponent shaping the trunk bending weight; above 1 keeps the foot stiffer. @param value The exponent. */
 			void setTrunkBendExponent (vertex_data_t value) noexcept { m_trunkBendExponent = std::max(value, static_cast< vertex_data_t >(1e-3)); }
 
 			/** @brief Returns the exponent shaping the trunk bending weight. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t trunkBendExponent () const noexcept { return m_trunkBendExponent; }
 
-			/** @brief Sets whether the R/G/B/A vertex channels are filled. @param state The state. @return void */
+			/** @brief Sets whether the R/G/B/A vertex channels are filled. @param state The state. */
 			void enableWindChannels (bool state) noexcept { m_windChannelsEnabled = state; }
 
 			/** @brief Returns whether the R/G/B/A vertex channels are filled. @return bool */
 			[[nodiscard]] bool windChannelsEnabled () const noexcept { return m_windChannelsEnabled; }
 
-			/** @brief Sets whether the duplicated vertices are merged after the build. @param state The state. @return void */
+			/** @brief Sets whether the duplicated vertices are merged after the build. @param state The state. */
 			void enableVertexMerge (bool state) noexcept { m_vertexMergeEnabled = state; }
 
 			/** @brief Returns whether the duplicated vertices are merged after the build. @return bool */

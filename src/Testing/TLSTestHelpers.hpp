@@ -207,10 +207,12 @@ namespace EmEn::Base::Testing
 			{
 				char * bytes = nullptr;
 
-				const auto certificateLength = BIO_get_mem_data(certificateBIO, &bytes);
+				/* NOTE: BIO_ctrl(BIO_CTRL_INFO) is what the BIO_get_mem_data() macro expands to, without
+				 * the macro's C-style cast of the out-pointer (the char ** out-pointer is passed as void * explicitly). */
+				const auto certificateLength = BIO_ctrl(certificateBIO, BIO_CTRL_INFO, 0, static_cast< void * >(&bytes));
 				credentials.certificatePEM.assign(bytes, static_cast< size_t >(certificateLength));
 
-				const auto keyLength = BIO_get_mem_data(keyBIO, &bytes);
+				const auto keyLength = BIO_ctrl(keyBIO, BIO_CTRL_INFO, 0, static_cast< void * >(&bytes));
 				credentials.privateKeyPEM.assign(bytes, static_cast< size_t >(keyLength));
 
 				credentials.valid = !credentials.certificatePEM.empty() && !credentials.privateKeyPEM.empty();
@@ -245,7 +247,6 @@ namespace EmEn::Base::Testing
 			 * @brief Makes every session end by dropping the TCP connection WITHOUT a TLS
 			 * close_notify — the truncation-attack signature a client must not accept as a
 			 * clean end of stream.
-			 * @return void
 			 */
 			void
 			setAbortWithoutCloseNotify (bool state) noexcept
@@ -387,7 +388,6 @@ namespace EmEn::Base::Testing
 			 * @param state The state.
 			 * @param closeAfterEachResponse When true, the server still CLOSES each connection after one response,
 			 * WITHOUT announcing it — a server that dropped an idle connection, as seen by a pooled client.
-			 * @return void
 			 */
 			void
 			setKeepAlive (bool state, bool closeAfterEachResponse = false) noexcept
@@ -400,7 +400,6 @@ namespace EmEn::Base::Testing
 			 * @brief Keep-alive mode: whether the server answers the client's close_notify with its own (real servers do,
 			 * or drop the TCP connection). Off = a peer that keeps the connection open and silent.
 			 * @param state The state. Default on.
-			 * @return void
 			 */
 			void
 			setAnswerCloseNotify (bool state) noexcept
@@ -456,7 +455,6 @@ namespace EmEn::Base::Testing
 			/**
 			 * @brief Queues an asynchronous accept; each accepted connection is served
 			 * synchronously in the handler, then the next accept is queued.
-			 * @return void
 			 */
 			void
 			scheduleAccept (asio::ip::tcp::acceptor & acceptor) noexcept
@@ -491,7 +489,6 @@ namespace EmEn::Base::Testing
 			/**
 			 * @brief Serves one accepted connection over TLS (synchronous, sequential).
 			 * @param socket The accepted TCP socket [std::move].
-			 * @return void
 			 */
 			void
 			serveConnection (asio::ip::tcp::socket socket) noexcept
@@ -624,7 +621,6 @@ namespace EmEn::Base::Testing
 			 * @brief Serves a keep-alive connection: request after request until the client closes, an error, or a
 			 * 'Connection: close' response.
 			 * @param stream The connection.
-			 * @return void
 			 */
 			void
 			serveKeepAliveConnection (asio::ssl::stream< asio::ip::tcp::socket > & stream) noexcept

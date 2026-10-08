@@ -52,7 +52,7 @@ namespace EmEn::Base::Math::Space2D
 		intersections.clear();
 
 		const auto vertices = rectangle.points();
-		constexpr precision_t epsilon = precision_t{1e-4};
+		constexpr auto epsilon = static_cast< precision_t >(1e-4);
 
 		for ( size_t index = 0; index < 4; ++index )
 		{

@@ -240,7 +240,6 @@ namespace EmEn::Base::VertexFactory
 			 * computed in world space and brought back into the frame.
 			 * @param frame A reference to the frame to bend.
 			 * @param strength How much of the remaining declination is taken back.
-			 * @return void
 			 */
 			void
 			bendTowardWorldUp (Math::CartesianFrame< vertex_data_t > & frame, vertex_data_t strength) const noexcept
@@ -280,7 +279,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Grows one stem and everything it carries.
 			 * @param state A reference to the growth state.
 			 * @param request A reference to the stem request.
-			 * @return void
 			 */
 			void
 			growStem (GrowthState & state, const StemRequest & request) const noexcept
@@ -408,7 +406,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param remainingSegments How many segments are left of the stem past the fork.
 			 * @param forkRadius The stem radius measured at the fork.
 			 * @param splitError The fork error the stem had accumulated, carried on by the clones.
-			 * @return void
 			 */
 			void
 			growSplit (GrowthState & state, const StemRequest & request, const Math::CartesianFrame< vertex_data_t > & frame, uint32_t forkSegmentIndex, uint32_t splitCount, vertex_data_t remainingLength, uint32_t remainingSegments, vertex_data_t forkRadius, vertex_data_t splitError) const noexcept
@@ -547,7 +544,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param request A reference to the parent stem request.
 			 * @param stemSegments A reference to the segment indexes of the parent stem.
 			 * @param builtLength How much of the stem was actually built, a fork can cut it short.
-			 * @return void
 			 */
 			void
 			growChildren (GrowthState & state, const StemRequest & request, const std::vector< uint32_t > & stemSegments, vertex_data_t builtLength) const noexcept
@@ -653,7 +649,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param state A reference to the growth state.
 			 * @param stemSegments A reference to the segment indexes of the stem.
 			 * @param builtLength How much of the stem was actually built, a fork can cut it short.
-			 * @return void
 			 */
 			void
 			placeLeaves (GrowthState & state, const std::vector< uint32_t > & stemSegments, vertex_data_t builtLength) const noexcept

@@ -212,7 +212,7 @@ namespace EmEn::Base::Algorithms
 
 			/**
 			 * @brief Performs a fade.
-			 * @param t
+			 * @param t The fractional coordinate inside the lattice cell, in [0, 1].
 			 * @return number_t
 			 */
 			[[nodiscard]]

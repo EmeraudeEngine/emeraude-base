@@ -90,7 +90,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets a rectangle where to write the text onto the pixmap.
 			 * @param rectangle A reference to a rectangle.
-			 * @return void
 			 */
 			void
 			setRectangle (const Math::Space2D::AARectangle< int32_t > & rectangle) noexcept
@@ -115,7 +114,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Sets a font to write on the pixmap.
 			 * @param font A pointer to a font.
 			 * @param fontSize The size in the font.
-			 * @return void
 			 */
 			void
 			setFont (const Font< pixel_data_t > & font, uint32_t fontSize) noexcept
@@ -128,7 +126,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the font color.
 			 * @param color A reference to a color.
-			 * @return void
 			 */
 			void
 			setFontColor (const Color< float > & color) noexcept
@@ -139,7 +136,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Set the mode to print characters on the pixmap.
 			 * @param mode The draw pixel mode.
-			 * @return void
 			 */
 			void
 			setDrawMode (DrawPixelMode mode) noexcept
@@ -161,7 +157,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Set space between lines.
 			 * @param lineSpace The space.
-			 * @return void
 			 */
 			void
 			setLineSpace (dimension_t lineSpace) noexcept
@@ -282,24 +277,25 @@ namespace EmEn::Base::PixelFactory
 			bool
 			blitCharacter (char ASCIICode, dimension_t column, dimension_t row) noexcept
 			{
-				const auto & glyph = m_selectedFont->glyph(ASCIICode);
+				/* NOTE: The glyph table is indexed by the BYTE value (a char above 127 is negative where char is signed). */
+				const auto & glyph = m_selectedFont->glyph(static_cast< uint8_t >(ASCIICode));
 
-				/* Compute the final area on the pixmap. */
-				const auto glyphArea = glyph.rectangle(
-					m_rectangle.left() + (column * m_selectedFont->widestChar()),
-					m_rectangle.top() + (row * m_textMetrics.lineHeight)
-				);
+				/* Compute the glyph origin on the pixmap. It stays SIGNED: the text area may start left of or above the
+				 * pixmap, and blendFreePixel() clips. The column and row offsets are bounded by the area size
+				 * (updateMetrics()), so they fit an int32_t. */
+				const auto originX = m_rectangle.left() + static_cast< int32_t >(column * m_selectedFont->widestChar());
+				const auto originY = m_rectangle.top() + static_cast< int32_t >(row * m_textMetrics.lineHeight);
 
 				/* NOTE: Use blendFreePixel for bounds-safe pixel operations during resize transitions. */
-				for ( dimension_t coordX = 0; coordX < glyphArea.width(); ++coordX )
+				for ( dimension_t coordX = 0; coordX < glyph.width(); ++coordX )
 				{
-					for ( dimension_t coordY = 0; coordY < glyphArea.height(); ++coordY )
+					for ( dimension_t coordY = 0; coordY < glyph.height(); ++coordY )
 					{
 						if constexpr ( std::is_floating_point_v< pixel_data_t > )
 						{
 							m_pixmap->blendFreePixel(
-								static_cast< int32_t >(glyphArea.offsetX() + coordX),
-								static_cast< int32_t >(glyphArea.offsetY() + coordY),
+								originX + static_cast< int32_t >(coordX),
+								originY + static_cast< int32_t >(coordY),
 								m_fontColor,
 								m_mode,
 								glyph.pixelElement(coordX, coordY, Channel::Red)
@@ -310,8 +306,8 @@ namespace EmEn::Base::PixelFactory
 							const auto value = static_cast< float >(glyph.pixelElement(coordX, coordY, Channel::Red)) / static_cast< float >(std::numeric_limits< pixel_data_t >::max());
 
 							m_pixmap->blendFreePixel(
-								static_cast< int32_t >(glyphArea.left() + coordX),
-								static_cast< int32_t >(glyphArea.top() + coordY),
+								originX + static_cast< int32_t >(coordX),
+								originY + static_cast< int32_t >(coordY),
 								m_fontColor,
 								m_mode,
 								value
@@ -325,7 +321,6 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Computes line height and line available on the pixmap.
-			 * @return void
 			 */
 			void
 			updateMetrics () noexcept
@@ -336,8 +331,15 @@ namespace EmEn::Base::PixelFactory
 				}
 
 				m_textMetrics.lineHeight = m_selectedFont->height() + m_textMetrics.lineSpace;
-				m_textMetrics.maxColumns = static_cast< dimension_t >(std::floor(m_rectangle.width() / m_selectedFont->widestChar()));
-				m_textMetrics.maxRows = static_cast< dimension_t >(std::floor(m_rectangle.height() / m_textMetrics.lineHeight));
+
+				/* NOTE: AARectangle::width() / height() are never negative. A font without width or a zero line height
+				 * fits no character (it used to divide by zero). Integer division already rounds down. */
+				const auto areaWidth = static_cast< dimension_t >(m_rectangle.width());
+				const auto areaHeight = static_cast< dimension_t >(m_rectangle.height());
+				const auto charWidth = m_selectedFont->widestChar();
+
+				m_textMetrics.maxColumns = charWidth > 0 ? areaWidth / charWidth : 0;
+				m_textMetrics.maxRows = m_textMetrics.lineHeight > 0 ? areaHeight / m_textMetrics.lineHeight : 0;
 			}
 
 			Pixmap< pixel_data_t > * m_pixmap{nullptr};

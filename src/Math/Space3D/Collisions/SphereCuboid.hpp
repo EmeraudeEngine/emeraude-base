@@ -129,14 +129,14 @@ namespace EmEn::Base::Math::Space3D
 			/* NOTE: We are looking for the smallest push. */
 			precision_t minOverlap = overlaps[0];
 
-			int minIndex = 0;
+			size_t minIndex = 0;
 
-			for ( int i = 1; i < 6; ++i )
+			for ( size_t overlapIndex = 1; overlapIndex < overlaps.size(); ++overlapIndex )
 			{
-				if ( overlaps[i] < minOverlap )
+				if ( overlaps[overlapIndex] < minOverlap )
 				{
-					minOverlap = overlaps[i];
-					minIndex = i;
+					minOverlap = overlaps[overlapIndex];
+					minIndex = overlapIndex;
 				}
 			}
 			

@@ -121,7 +121,6 @@ namespace EmEn::Base::Time
 			/**
 			 * @brief Modifies the interval duration.
 			 * @param granularity The interval duration respecting the period_t template argument.
-			 * @return void
 			 */
 			void
 			setGranularity (rep_t granularity) noexcept
@@ -134,7 +133,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Resets the timer.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -158,7 +156,6 @@ namespace EmEn::Base::Time
 			/**
 			 * @brief Sets the timer ID to identify on callback.
 			 * @param timerID A unsigned integer.
-			 * @return void
 			 */
 			void
 			setTimerID (TimerID timerID) noexcept
@@ -267,7 +264,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Stops the timer of the event.
-			 * @return void
 			 */
 			void
 			stop () noexcept
@@ -284,7 +280,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Pauses the timer of the event.
-			 * @return void
 			 */
 			void
 			pause () noexcept
@@ -302,7 +297,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Resumes the timer of the event.
-			 * @return void
 			 */
 			void
 			resume () noexcept
@@ -363,7 +357,6 @@ namespace EmEn::Base::Time
 			/**
 			 * @brief Asks the timer thread to end once its current callback returns, without joining it (the destructor
 			 * does, from another thread). Used when a callback destroys its own timer (EventTrait::destroyTimer()).
-			 * @return void
 			 */
 			void
 			requestExit () noexcept
@@ -392,7 +385,6 @@ namespace EmEn::Base::Time
 
 			/**
 			 * @brief Thread task.
-			 * @return void
 			 */
 			void
 			process ()

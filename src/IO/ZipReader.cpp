@@ -328,7 +328,8 @@ namespace EmEn::Base::IO
 
 		for ( zip_int64_t index = 0; index < entryCount; index++)
 		{
-			if ( zip_stat_index(m_zip.get(), index, 0, &stat ) == 0 )
+			/* NOTE: index is in [0, entryCount[, never negative. */
+			if ( zip_stat_index(m_zip.get(), static_cast< zip_uint64_t >(index), 0, &stat ) == 0 )
 			{
 				m_entryNames.emplace_back(stat.name);
 			}

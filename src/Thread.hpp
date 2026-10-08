@@ -123,13 +123,11 @@ namespace EmEn::Base
 			/**
 			 * @brief Waits for the thread to end. Nothing happens on an idle object.
 			 * @note From the thread itself, the join is refused: traced, and the thread is detached instead.
-			 * @return void
 			 */
 			void join () noexcept;
 
 			/**
 			 * @brief Lets the thread run on its own: this object no longer owns it.
-			 * @return void
 			 */
 			void detach () noexcept;
 
@@ -143,7 +141,6 @@ namespace EmEn::Base
 			/**
 			 * @brief TEST SEAM: makes the next start() calls of the process fail as if the system had refused them.
 			 * @param count How many starts fail.
-			 * @return void
 			 */
 			static void failNextStartsForTesting (uint32_t count) noexcept;
 
@@ -151,7 +148,6 @@ namespace EmEn::Base
 			 * @brief TEST SEAM: makes the next start() of the process wait after the system started the thread and
 			 * before it records it — the window in which the new thread must not observe this object yet.
 			 * @param milliseconds The delay.
-			 * @return void
 			 */
 			static void delayNextPublicationForTesting (uint32_t milliseconds) noexcept;
 

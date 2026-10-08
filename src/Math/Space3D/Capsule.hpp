@@ -143,7 +143,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the central axis.
 			 * @param axis The new axis segment.
-			 * @return void
 			 */
 			void
 			setAxis (const Segment< precision_t > & axis) noexcept
@@ -176,7 +175,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the start point of the axis.
 			 * @param point The new start point.
-			 * @return void
 			 */
 			void
 			setStartPoint (const Point< precision_t > & point) noexcept
@@ -187,7 +185,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the end point of the axis.
 			 * @param point The new end point.
-			 * @return void
 			 */
 			void
 			setEndPoint (const Point< precision_t > & point) noexcept
@@ -220,7 +217,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the radius.
 			 * @param radius The new radius (absolute value taken).
-			 * @return void
 			 */
 			void
 			setRadius (precision_t radius) noexcept
@@ -282,7 +278,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Resets the capsule to default state (invalid).
-			 * @return void
 			 */
 			void
 			reset () noexcept

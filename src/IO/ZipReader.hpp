@@ -60,7 +60,6 @@ namespace EmEn::Base::IO
 			/**
 			 * @brief Changes the zip archive filepath.
 			 * @param filepath A reference to a path.
-			 * @return void
 			 */
 			void
 			setFilepath (const std::filesystem::path & filepath) noexcept
@@ -78,7 +77,6 @@ namespace EmEn::Base::IO
 
 			/**
 			 * @brief Closes the archive and release LibZip resources.
-			 * @return void
 			 */
 			void close () noexcept;
 
@@ -161,7 +159,6 @@ namespace EmEn::Base::IO
 
 			/**
 			 * @brief Read the information about the archive to get entries.
-			 * @return void
 			 */
 			void readArchive () noexcept;
 

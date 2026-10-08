@@ -47,7 +47,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sends the FIN, arms the deadline and starts draining.
 			 * @param timeout The deadline.
-			 * @return void
 			 */
 			void
 			start (std::chrono::milliseconds timeout) noexcept
@@ -85,7 +84,6 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Closes the socket now.
-			 * @return void
 			 */
 			void
 			finish () noexcept

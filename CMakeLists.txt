@@ -41,7 +41,7 @@ endif ()
 # Idealist by default, relaxable: warnings-as-errors ON unless explicitly disabled.
 option(EMERAUDE_DISABLE_EXCEPTIONS "Disable C++ exceptions (Default On)." On)
 option(EMERAUDE_DISABLE_RTTI "Disable RTTI (Default Off)." Off)
-option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable warnings-as-errors (Default Off)." Off)
+option(EMERAUDE_DISABLE_PARANOID_COMPILATION "Disable the paranoid compilation: the full warning set and warnings-as-errors (Default Off)." Off)
 option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point (Default Off)." Off)
 option(EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION "Raise the Release optimisation one notch: -O3 instead of -O2 (GCC/Clang), /Ob3 instead of /Ob2 (MSVC) (Default Off)." Off)
 option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual Studio (Default Off)." Off)
@@ -216,6 +216,97 @@ endif ()
 # variables. Consumers (emeraude-engine, …) apply EMERAUDE_COMPILE_DEFINITIONS /
 # EMERAUDE_COMPILE_OPTIONS to their own targets; to diverge, override them in CMake.
 
+# The paranoid warning set (Ave Robustus II, owner decision 2026-10-08: "every adequate flag under the PARANOID
+# option"). Every configuration, both GCC and Clang; a finding is FIXED, never silenced. The flags left out on
+# purpose, and why, are listed in projet-alpha docs/plans/ave-robustus-ii.md § 6.1 (e.g. -Wuseless-cast: a cast that
+# is needed on macOS / Windows type sizes is "useless" on Linux; -Wswitch-enum: it demands every VkFormat).
+if ( NOT EMERAUDE_DISABLE_PARANOID_COMPILATION AND NOT MSVC )
+	set(EMERAUDE_PARANOID_WARNINGS
+		-Wall																		# Common warnings
+		-Wextra																		# Extra warnings (unused parameters included: [[maybe_unused]] per site)
+		-Wpedantic																	# Strict ISO C++
+		-Wconversion																# Implicit conversions that may change a value
+		-Wsign-conversion															# Implicit signed <-> unsigned conversions
+		-Wdouble-promotion															# float silently promoted to double
+		-Wshadow																	# A declaration hides another one
+		-Wold-style-cast															# C-style casts
+		-Wcast-align																# Casts that increase the required alignment
+		-Wcast-qual																	# Casts that drop const / volatile
+		-Wformat=2																	# Format strings, non-literal ones included
+		-Wimplicit-fallthrough														# A switch case falling through without [[fallthrough]]
+		-Wnon-virtual-dtor															# A polymorphic class without a virtual destructor
+		-Woverloaded-virtual														# A function hiding a base virtual
+		-Wsuggest-override															# An override without the keyword
+		-Wundef																		# An undefined macro evaluated in #if
+		-Wextra-semi																# Stray semicolons
+		-Wzero-as-null-pointer-constant												# 0 / NULL as a null pointer
+		-Wmissing-declarations														# A global function without a previous declaration (internal linkage forgotten)
+		-Wredundant-decls															# A declaration repeated in the same scope
+		-Wdeprecated																# Deprecated C++ constructs
+		$<$<CXX_COMPILER_ID:GNU>:-Wduplicated-cond>									# GCC: the same condition twice in an if / else-if chain
+		$<$<CXX_COMPILER_ID:GNU>:-Wduplicated-branches>								# GCC: two identical branches
+		$<$<CXX_COMPILER_ID:GNU>:-Wlogical-op>										# GCC: suspicious logical operators
+		$<$<CXX_COMPILER_ID:GNU>:-Wdangling-reference>								# GCC: a reference bound to a temporary that dies
+		$<$<CXX_COMPILER_ID:GNU>:-Wmismatched-tags>									# GCC: struct / class key mismatch (MSVC mangles them differently)
+		$<$<CXX_COMPILER_ID:GNU>:-Wsuggest-attribute=noreturn>						# GCC: a function that never returns without [[noreturn]]
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wnull-dereference>					# Clang: a null pointer dereference (GCC's -O2 version reports libstdc++ / asio inlined code: left out)
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wthread-safety>						# Clang: thread-safety analysis (GUARDED_BY / REQUIRES)
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wcomma>								# Clang: a misused comma operator
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wunreachable-code-aggressive>		# Clang: unreachable code
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wshadow-all>							# Clang: every form of shadowing
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wloop-analysis>						# Clang: suspicious loops
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wmissing-noreturn>					# Clang: a function that never returns without [[noreturn]]
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wnewline-eof>						# Clang: a file without a final newline
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wdocumentation>						# Clang: Doxygen comments that contradict the declaration
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wunused-member-function>				# Clang: an unused private / local member function
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wunused-template>					# Clang: an unused internal template
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wmissing-prototypes>					# Clang: a global function without a previous declaration
+		$<$<CXX_COMPILER_ID:Clang,AppleClang>:-Wcovered-switch-default>				# Clang: a default in a switch that lists every enumerator (decision D14)
+		-Werror																		# Treat warnings as errors
+	)
+elseif ( NOT EMERAUDE_DISABLE_PARANOID_COMPILATION AND MSVC )
+	# MSVC counterpart (on top of /W4): standards conformance, and the off-by-default warnings that match the
+	# GCC / Clang set (list after the cpp-best-practices compiler-warnings guide). The four silencers of the relaxed
+	# mode (/wd4100, /wd4127, /wd4702, /wd4996) are NOT applied in paranoid mode — see EMERAUDE_RELAXED_MSVC_SILENCERS.
+	set(EMERAUDE_PARANOID_WARNINGS
+		/permissive-																# Standards conformance (two-phase lookup, no non-standard extensions)
+		/w14242																		# 'identifier': conversion, possible loss of data
+		/w14254																		# 'operator': conversion, possible loss of data (bit fields)
+		/w14263																		# A member function does not override any base virtual
+		/w14265																		# A class with virtual functions has a non-virtual destructor
+		/w14287																		# Unsigned / negative constant mismatch
+		/we4289																		# A loop control variable used outside the loop
+		/w14296																		# An expression that is always true / false
+		/w14311																		# Pointer truncation
+		/w14545																		# Expression before comma evaluates to a function missing an argument list
+		/w14546																		# Function call before comma missing an argument list
+		/w14547																		# Operator before comma has no effect
+		/w14549																		# Operator before comma has no effect (did you intend…)
+		/w14555																		# An expression with no effect
+		/w14619																		# #pragma warning: an unknown warning number
+		/w14640																		# A thread-unsafe local static initialization
+		/w14826																		# A sign-extending conversion
+		/w14905																		# A wide string literal cast to LPSTR
+		/w14906																		# A string literal cast to LPWSTR
+		/w14928																		# An illegal copy-initialization
+		/WX																			# Treat warnings as errors
+	)
+	set(EMERAUDE_RELAXED_MSVC_SILENCERS "")
+else ()
+	set(EMERAUDE_PARANOID_WARNINGS
+		$<$<AND:$<CONFIG:Debug>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-Wall>				# Enable all common warnings
+		$<$<AND:$<CONFIG:Debug>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-Wextra>			# Enable extra warnings
+		$<$<AND:$<CONFIG:Debug>,$<NOT:$<CXX_COMPILER_ID:MSVC>>>:-Wpedantic>			# Enforce strict ISO C++ compliance
+	)
+	# The relaxed mode keeps the historical MSVC silencers.
+	set(EMERAUDE_RELAXED_MSVC_SILENCERS
+		/wd4100																		# Ignore "unreferenced formal parameter"
+		/wd4127																		# Ignore "conditional expression is constant"
+		/wd4702																		# Ignore "unreachable code"
+		/wd4996																		# Ignore "function or variable may be unsafe"
+	)
+endif ()
+
 if ( MSVC )
 	set(EMERAUDE_COMPILE_DEFINITIONS
 		$<$<CONFIG:Debug>:DEBUG>											# Declares DEBUG macro
@@ -242,16 +333,13 @@ if ( MSVC )
 		/MP 																# Multi-processor compilation
 		/Gy 																# Enable function-level linking
 		/W4																	# Warning level 4 (high)
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:/WX>		# Treat warnings as errors
-		/wd4100 															# Ignore "unreferenced formal parameter"
-		/wd4127 															# Ignore "conditional expression is constant"
+		${EMERAUDE_PARANOID_WARNINGS}										# The paranoid warning set (see above), /WX included
+		${EMERAUDE_RELAXED_MSVC_SILENCERS}									# Relaxed mode only (see above)
 		/wd4251																# Ignore "class member needs dll-interface" — the whole cascade (DLL + consumers) is built with the same toolchain/CRT, and emeraude-base is deliberately duplicated (static copy in the DLL and in the executables), so std:: members crossing the EMEN_API boundary are safe by construction. See emeraude-engine/docs/windows-export-api.md.
 		/wd4275																# Ignore "non dll-interface base for dll-interface class" — same rationale: EMEN_API classes may derive from emeraude-base traits that stay unexported by design (decision "2b": no EMERAUDE_BASE_API, consumers keep their static base copy). See emeraude-engine/docs/windows-export-api.md.
 		/wd4324 															# Ignore "structure was padded due to alignment specifier"
 		/wd4481 															# Ignore "nonstandard extension used: override"
 		/wd4512																# Ignore "assignment operator could not be generated"
-		/wd4702 															# Ignore "unreachable code"
-		/wd4996																# Ignore "function or variable may be unsafe"
 		/bigobj																# Remove the COFF object format limitation
 		CACHE STRING "Project-wide compile options (Windows)." FORCE
 	)
@@ -266,21 +354,16 @@ elseif ( APPLE )
 		$<IF:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>,-fno-exceptions,-fexceptions>	# C++ exception handling
 		$<$<CONFIG:Debug>:-O0>														# No optimization
 		$<$<CONFIG:Debug>:-g>														# Generate debug information
-		$<$<CONFIG:Debug>:-Wall>													# Enable all common warnings
-		$<$<CONFIG:Debug>:-Wextra>													# Enable extra warnings
-		$<$<CONFIG:Debug>:-Wpedantic>												# Enforce strict ISO C++ compliance
 		$<$<CONFIG:Debug>:-fno-omit-frame-pointer>									# Keep frame pointer for better stack traces
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION}>,-O3,-O2>> # Optimize for speed (-O3 adds vectorisation and loop unrolling, at the cost of code size)
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>> # Enable fast floating-point optimizations # FIXME: This flag makes unit tests fail.
 		$<$<CONFIG:Release>:-fdata-sections>										# Place each data item in its own section
 		$<$<CONFIG:Release>:-ffunction-sections>									# Place each function in its own section
 		$<$<CONFIG:Release>:-fstack-protector-strong>								# Stack buffer overflow protection
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror>			# Treat warnings as errors
+		${EMERAUDE_PARANOID_WARNINGS}												# The paranoid warning set (see above)
 		-Wformat 																	# Check format string arguments
 		-Wformat-security															# Warn about format string vulnerabilities
 		-Wno-unknown-pragmas														# Ignore unknown pragma directives
-		-Wno-unused-parameter														# Ignore unused function parameters
-		-Wno-unused-private-field													# Ignore unused private fields
 		-Wno-nullability-extension													# Ignore nullability extension warnings
 		-Wno-nullability-completeness												# Ignore incomplete nullability annotations
 		-Wno-gnu-zero-variadic-macro-arguments										# Ignore GNU variadic macro extension
@@ -305,20 +388,15 @@ elseif ( UNIX )
 		$<IF:$<BOOL:${EMERAUDE_DISABLE_EXCEPTIONS}>,-fno-exceptions,-fexceptions> 	# C++ exception handling
 		$<$<CONFIG:Debug>:-O0> 														# No optimization
 		$<$<CONFIG:Debug>:-g> 														# Generate debug information
-		$<$<CONFIG:Debug>:-Wall> 													# Enable all common warnings
-		$<$<CONFIG:Debug>:-Wextra> 													# Enable extra warnings
-		$<$<CONFIG:Debug>:-Wpedantic> 												# Enforce strict ISO C++ compliance
 		$<$<CONFIG:Debug>:-fno-omit-frame-pointer> 									# Keep frame pointer for better stack traces
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION}>,-O3,-O2>> # Optimize for speed (-O3 adds vectorisation and loop unrolling, at the cost of code size)
 		$<$<CONFIG:Release>:$<IF:$<BOOL:${EMERAUDE_ENABLE_FP_OPTIMIZATION}>,-ffast-math,-fno-fast-math>> # Enable fast floating-point optimizations # FIXME: This flag makes unit tests fail.
 		$<$<CONFIG:Release>:-fdata-sections> 										# Place each data item in its own section
 		$<$<CONFIG:Release>:-ffunction-sections> 									# Place each function in its own section
 		$<$<CONFIG:Release>:-fstack-protector-strong> 								# Stack buffer overflow protection
-		$<$<NOT:$<BOOL:${EMERAUDE_DISABLE_PARANOID_COMPILATION}>>:-Werror> 			# Treat warnings as errors
+		${EMERAUDE_PARANOID_WARNINGS} 												# The paranoid warning set (see above)
 		-Wformat 																	# Check format string arguments
 		-Wformat-security 															# Warn about format string vulnerabilities
-		-Wno-unknown-pragmas 														# Ignore unknown pragma directives
-		-Wno-unused-parameter 														# Ignore unused function parameters
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
@@ -494,6 +572,16 @@ if ( _EMERAUDE_BASE_DEP_DEFS )
 	target_compile_definitions(emeraude_base_flags INTERFACE ${_EMERAUDE_BASE_DEP_DEFS})
 endif ()
 unset(_EMERAUDE_BASE_DEP_DEFS)
+
+# Same reasoning for the compile OPTIONS a Setup script attaches to the umbrella: SetupOpenMP's -fopenmp never
+# reached the modules, so VertexFactory's `#pragma omp parallel for` loops compiled inside the vertex module
+# (ShapeSimplifier, TreeGenerator, …) were silently serial — found by -Wunknown-pragmas when the paranoid warning
+# set was turned on (Ave Robustus II, 2026-10-08).
+get_target_property(_EMERAUDE_BASE_DEP_OPTIONS emeraude_base INTERFACE_COMPILE_OPTIONS)
+if ( _EMERAUDE_BASE_DEP_OPTIONS )
+	target_compile_options(emeraude_base_flags INTERFACE ${_EMERAUDE_BASE_DEP_OPTIONS})
+endif ()
+unset(_EMERAUDE_BASE_DEP_OPTIONS)
 
 # Same reasoning for the include directories a Setup script attaches to the umbrella: a module that
 # needs a third-party header must see it while it COMPILES, and a module inherits from

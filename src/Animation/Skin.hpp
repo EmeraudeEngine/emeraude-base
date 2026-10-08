@@ -151,7 +151,6 @@ namespace EmEn::Base::Animation
 			 * node's transform back out. This is that correction: the inverse of the mesh node's world transform times
 			 * the world transform of the common ancestor of the mesh and the skeleton.
 			 * @param rootTransform The transform, in the space of the node that holds the skinned mesh.
-			 * @return void
 			 */
 			void
 			setRootTransform (const Matrix< 4, precision_t > & rootTransform) noexcept

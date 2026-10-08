@@ -77,7 +77,6 @@ namespace EmEn::Base::Network
 			 * @brief Closes a socket gracefully (or at once, beyond the lingering cap).
 			 * @pre Called on the thread running the socket's io_context; no operation of the caller is pending on it.
 			 * @param socket The socket, taken.
-			 * @return void
 			 */
 			void close (asio::ip::tcp::socket socket) noexcept;
 
@@ -85,14 +84,12 @@ namespace EmEn::Base::Network
 			 * @brief Closes a shared socket gracefully (or at once, beyond the lingering cap).
 			 * @pre As close(asio::ip::tcp::socket): the other owners only read is_open() from now on.
 			 * @param socket The socket. Null is ignored.
-			 * @return void
 			 */
 			void close (const std::shared_ptr< asio::ip::tcp::socket > & socket) noexcept;
 
 			/**
 			 * @brief Closes every lingering socket at once (the server stops).
 			 * @pre Called on the thread running the sockets' io_context.
-			 * @return void
 			 */
 			void abortAll () noexcept;
 
@@ -111,7 +108,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Forgets the finished lingering sockets: closed ones count no more, even while a handler (the cancelled
 			 * deadline's, the aborted read's) still holds them.
-			 * @return void
 			 */
 			void prune () noexcept;
 

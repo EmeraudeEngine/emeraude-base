@@ -52,10 +52,10 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Constructs a grid quad.
-			 * @param topLeftIndex
-			 * @param bottomLeftIndex
-			 * @param topRightIndex
-			 * @param bottomRightIndex
+			 * @param topLeftIndex The grid point index of the top-left corner.
+			 * @param bottomLeftIndex The grid point index of the bottom-left corner.
+			 * @param topRightIndex The grid point index of the top-right corner.
+			 * @param bottomRightIndex The grid point index of the bottom-right corner.
 			 */
 			GridQuad (index_data_t topLeftIndex, index_data_t bottomLeftIndex, index_data_t topRightIndex, index_data_t bottomRightIndex) noexcept
 				: m_topLeftIndex(topLeftIndex),
@@ -80,7 +80,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the quad top left to vertex index.
 			 * @param index The vertex index from the geometry data.
-			 * @return void
 			 */
 			void
 			setTopLeftIndex (index_data_t index) noexcept
@@ -91,7 +90,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the quad bottom left to vertex index.
 			 * @param index The vertex index from the geometry data.
-			 * @return void
 			 */
 			void
 			setBottomLeftIndex (index_data_t index) noexcept
@@ -102,7 +100,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the quad top right to vertex index.
 			 * @param index The vertex index from the geometry data.
-			 * @return void
 			 */
 			void
 			setTopRightIndex (index_data_t index) noexcept
@@ -113,7 +110,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the quad bottom right to vertex index.
 			 * @param index The vertex index from the geometry data.
-			 * @return void
 			 */
 			void
 			setBottomRightIndex (index_data_t index) noexcept

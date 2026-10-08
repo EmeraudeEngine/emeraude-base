@@ -165,7 +165,8 @@ namespace EmEn::Base::Compression::LZMA
 					return false;
 				}
 
-				m_stream.avail_in = input.gcount();
+				/* NOTE: gcount() is in [0, inbuf.size()] after a read that is not bad(). */
+				m_stream.avail_in = static_cast< size_t >(input.gcount());
 
 				if ( input.eof() )
 				{

@@ -6,7 +6,8 @@ message("Enabling JsonCpp library from local precompiled source ...")
 
 # NOTE: Headers are already included via ${EMERAUDE_EXT_LIBS_PATH}/include in the main CMakeLists.txt
 
-target_compile_definitions(${TARGET_BINARY_FOR_SETUP} PUBLIC JSON_USE_EXCEPTION=Off)
+# NOTE: 0, not "Off": jsoncpp tests it with #if, where "Off" is an undefined identifier (-Wundef).
+target_compile_definitions(${TARGET_BINARY_FOR_SETUP} PUBLIC JSON_USE_EXCEPTION=0)
 
 if ( MSVC )
 	target_link_libraries(${TARGET_BINARY_FOR_SETUP} PUBLIC

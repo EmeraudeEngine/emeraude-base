@@ -170,7 +170,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Shuts the TLS session down (close_notify) and closes the socket.
 			 * @note Best-effort: the socket is closed even when the TLS shutdown fails.
-			 * @return void
 			 */
 			void disconnect () noexcept;
 
@@ -218,7 +217,6 @@ namespace EmEn::Base::Network
 			 * @note On timeout the socket is closed, which completes the pending
 			 * operation with asio::error::operation_aborted.
 			 * @param timeout The time budget for the pending operation.
-			 * @return void
 			 */
 			void runWithTimeout (std::chrono::milliseconds timeout) noexcept;
 

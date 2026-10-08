@@ -702,7 +702,7 @@ namespace EmEn::Base
 				return count;
 			}
 
-#if __cpp_exceptions
+#ifdef __cpp_exceptions
 			/**
 			 * @brief Adds a task and returns a std::future for retrieving its result.
 			 *

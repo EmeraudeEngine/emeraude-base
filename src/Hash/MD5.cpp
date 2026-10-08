@@ -62,10 +62,10 @@ namespace EmEn::Base::Hash
 	{
 		for ( size_t i = 0, j = 0; j < length; i++, j += 4 )
 		{
-			output[j] = input[i] & 0xff;
-			output[j+1] = (input[i] >> 8) & 0xff;
-			output[j+2] = (input[i] >> 16) & 0xff;
-			output[j+3] = (input[i] >> 24) & 0xff;
+			output[j] = static_cast< uint8_t >(input[i] & 0xff);
+			output[j+1] = static_cast< uint8_t >((input[i] >> 8) & 0xff);
+			output[j+2] = static_cast< uint8_t >((input[i] >> 16) & 0xff);
+			output[j+3] = static_cast< uint8_t >((input[i] >> 24) & 0xff);
 		}
 	}
 

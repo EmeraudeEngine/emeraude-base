@@ -141,19 +141,16 @@ namespace EmEn::Base::Time::Statistics
 
 			/**
 			 * @brief Prints statistics in the console.
-			 * @return void
 			 */
 			void print () const noexcept;
 
 			/**
 			 * @brief Starts a measurement.
-			 * @return void
 			 */
 			virtual void start () noexcept = 0;
 
 			/**
 			 * @brief Stops the measurement.
-			 * @return void
 			 */
 			virtual void stop () noexcept = 0;
 
@@ -175,7 +172,6 @@ namespace EmEn::Base::Time::Statistics
 			/**
 			 * @brief Increments the index.
 			 * @param index A reference to an index.
-			 * @return void
 			 */
 			void incrementIndex (size_t & index) const noexcept;
 
@@ -190,14 +186,12 @@ namespace EmEn::Base::Time::Statistics
 			/**
 			 * @brief Inserts a duration.
 			 * @param duration The duration in milliseconds.
-			 * @return void
 			 */
 			void insertDuration (uint64_t duration) noexcept;
 
 			/**
 			 * @brief Inserts an execution count per seconds.
 			 * @param count The amount of execution.
-			 * @return void
 			 */
 			void insertEPS (uint32_t count) noexcept;
 

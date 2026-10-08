@@ -133,7 +133,6 @@ namespace EmEn::Base
 			 * @brief Enables a flag.
 			 * @warning Out of bound flag index will silently do nothing.
 			 * @param flag The flag index.
-			 * @return void
 			 */
 			void
 			enableFlag (size_t flag) noexcept
@@ -148,7 +147,6 @@ namespace EmEn::Base
 			 * @brief Toggles a flag state.
 			 * @warning Out of bound flag index will silently do nothing.
 			 * @param flag The flag index.
-			 * @return void
 			 */
 			void
 			toggleFlag (size_t flag) noexcept
@@ -163,7 +161,6 @@ namespace EmEn::Base
 			 * @brief Disables a flag.
 			 * @warning Out of bound flag index will silently do nothing.
 			 * @param flag The flag index.
-			 * @return void
 			 */
 			void
 			disableFlag (size_t flag) noexcept
@@ -179,7 +176,6 @@ namespace EmEn::Base
 			 * @warning Out of bound flag index will silently do nothing.
 			 * @param flag The flag index.
 			 * @param state The flag state.
-			 * @return void
 			 */
 			void
 			setFlag (size_t flag, bool state) noexcept
@@ -192,7 +188,6 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Resets all flag to false.
-			 * @return void
 			 */
 			void
 			resetFlags () noexcept

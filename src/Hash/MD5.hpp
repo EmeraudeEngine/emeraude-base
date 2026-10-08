@@ -51,22 +51,19 @@ namespace EmEn::Base::Hash
 			/**
 			 * @brief MD5 block processLogics operation. Continues an MD5 message-digest
 			 * operation, processing another message block.
-			 * @param message
-			 * @param length
-			 * @return void
+			 * @param message A pointer to the message bytes.
+			 * @param length The number of bytes in the message.
 			 */
 			void update (const uint8_t * message, size_t length) noexcept;
 
 			/**
 			 * @brief finalize
-			 * @param digest
-			 * @return void
+			 * @param digest A writable reference to the 16-byte digest.
 			 */
 			void final (std::array< uint8_t, 16 > & digest) noexcept;
 
 			/**
 			 * @brief reset
-			 * @return void
 			 */
 			void reset () noexcept;
 
@@ -81,34 +78,31 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief Applies MD5 algo on a block
-			 * @param block
-			 * @return void
+			 * @param block A pointer to a 64-byte block.
 			 */
 			void transform (const uint8_t * block) noexcept;
 
 			/**
-			 * @brief Encodes input (uint8_t) into output (uint32_t). Assumes len is a multiple of 4.
-			 * @param output
-			 * @param input
-			 * @param length
-			 * @return void
+			 * @brief Decodes input (uint8_t) into output (uint32_t), little-endian. Assumes length is a multiple of 4.
+			 * @param output A pointer to the words written (length / 4 of them).
+			 * @param input A pointer to the bytes read.
+			 * @param length The number of bytes.
 			 */
 			static void decode (uint32_t * output, const uint8_t * input, size_t length) noexcept;
 
 			/**
-			 * @brief Encodes input (uint32_t) into output (uint8_t). Assumes len is a multiple of 4.
-			 * @param output
-			 * @param input
-			 * @param length
-			 * @return void
+			 * @brief Encodes input (uint32_t) into output (uint8_t), little-endian. Assumes length is a multiple of 4.
+			 * @param output A pointer to the bytes written.
+			 * @param input A pointer to the words read (length / 4 of them).
+			 * @param length The number of bytes.
 			 */
 			static void encode (uint8_t * output, const uint32_t * input, size_t length) noexcept;
 
 			/**
 			 * @brief F
-			 * @param x
-			 * @param y
-			 * @param z
+			 * @param x The first 32-bit word.
+			 * @param y The second 32-bit word.
+			 * @param z The third 32-bit word.
 			 * @return uint32_t
 			 */
 			static
@@ -120,9 +114,9 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief G
-			 * @param x
-			 * @param y
-			 * @param z
+			 * @param x The first 32-bit word.
+			 * @param y The second 32-bit word.
+			 * @param z The third 32-bit word.
 			 * @return uint32_t
 			 */
 			static
@@ -134,9 +128,9 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief H
-			 * @param x
-			 * @param y
-			 * @param z
+			 * @param x The first 32-bit word.
+			 * @param y The second 32-bit word.
+			 * @param z The third 32-bit word.
 			 * @return uint32_t
 			 */
 			static
@@ -148,9 +142,9 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief I
-			 * @param x
-			 * @param y
-			 * @param z
+			 * @param x The first 32-bit word.
+			 * @param y The second 32-bit word.
+			 * @param z The third 32-bit word.
 			 * @return uint32_t
 			 */
 			static
@@ -162,8 +156,8 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief rotate_left
-			 * @param x
-			 * @param n
+			 * @param x The 32-bit word to rotate.
+			 * @param n The number of bits to rotate by, in [1, 31].
 			 * @return uint32_t
 			 */
 			static
@@ -175,14 +169,13 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief FF
-			 * @param a
-			 * @param b
-			 * @param c
-			 * @param d
-			 * @param x
-			 * @param s
-			 * @param ac
-			 * @return void
+			 * @param a A writable reference to the state word updated by this step.
+			 * @param b The second state word.
+			 * @param c The third state word.
+			 * @param d The fourth state word.
+			 * @param x The message word of this step.
+			 * @param s The rotation amount of this step.
+			 * @param ac The additive constant of this step.
 			 */
 			static
 			void
@@ -193,14 +186,13 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief GG
-			 * @param a
-			 * @param b
-			 * @param c
-			 * @param d
-			 * @param x
-			 * @param s
-			 * @param ac
-			 * @return void
+			 * @param a A writable reference to the state word updated by this step.
+			 * @param b The second state word.
+			 * @param c The third state word.
+			 * @param d The fourth state word.
+			 * @param x The message word of this step.
+			 * @param s The rotation amount of this step.
+			 * @param ac The additive constant of this step.
 			 */
 			static
 			void
@@ -211,14 +203,13 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief HH
-			 * @param a
-			 * @param b
-			 * @param c
-			 * @param d
-			 * @param x
-			 * @param s
-			 * @param ac
-			 * @return void
+			 * @param a A writable reference to the state word updated by this step.
+			 * @param b The second state word.
+			 * @param c The third state word.
+			 * @param d The fourth state word.
+			 * @param x The message word of this step.
+			 * @param s The rotation amount of this step.
+			 * @param ac The additive constant of this step.
 			 */
 			static
 			void
@@ -229,14 +220,13 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief II
-			 * @param a
-			 * @param b
-			 * @param c
-			 * @param d
-			 * @param x
-			 * @param s
-			 * @param ac
-			 * @return void
+			 * @param a A writable reference to the state word updated by this step.
+			 * @param b The second state word.
+			 * @param c The third state word.
+			 * @param d The fourth state word.
+			 * @param x The message word of this step.
+			 * @param s The rotation amount of this step.
+			 * @param ac The additive constant of this step.
 			 */
 			static
 			void

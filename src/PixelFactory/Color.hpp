@@ -542,7 +542,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the red component.
 			 * @param value The component value.
-			 * @return void
 			 */
 			void
 			setRed (data_t value) noexcept
@@ -554,7 +553,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Sets the red component.
 			 * @tparam input_t The type of unsigned integer data. Default uint8_t.
 			 * @param value The component value.
-			 * @return void
 			 */
 			template< typename input_t = uint8_t >
 			void
@@ -566,7 +564,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the green component.
 			 * @param value The component value.
-			 * @return void
 			 */
 			void
 			setGreen (data_t value) noexcept
@@ -578,7 +575,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Sets the green component.
 			 * @tparam input_t The type of unsigned integer data. Default uint8_t.
 			 * @param value The component value.
-			 * @return void
 			 */
 			template< typename input_t = uint8_t >
 			void
@@ -590,7 +586,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the blue component.
 			 * @param value The component value.
-			 * @return void
 			 */
 			void
 			setBlue (data_t value) noexcept
@@ -602,7 +597,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Sets the blue component.
 			 * @tparam input_t The type of unsigned integer data. Default uint8_t.
 			 * @param value The component value.
-			 * @return void
 			 */
 			template< typename input_t = uint8_t >
 			void
@@ -614,7 +608,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the alpha component.
 			 * @param value The component value.
-			 * @return void
 			 */
 			void
 			setAlpha (data_t value) noexcept
@@ -626,7 +619,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Sets the alpha component.
 			 * @tparam input_t The type of unsigned integer data. Default uint8_t.
 			 * @param value The component value.
-			 * @return void
 			 */
 			template< typename input_t = uint8_t >
 			void
@@ -640,7 +632,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param redValue The red component value.
 			 * @param greenValue The blue component value.
 			 * @param blueValue The green component value.
-			 * @return void
 			 */
 			void
 			setRGB (data_t redValue, data_t greenValue, data_t blueValue) noexcept
@@ -656,7 +647,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param redValue The red component value.
 			 * @param greenValue The blue component value.
 			 * @param blueValue The green component value.
-			 * @return void
 			 */
 			template< typename input_t = uint8_t >
 			void
@@ -673,7 +663,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param greenValue The blue component value.
 			 * @param blueValue The green component value.
 			 * @param alphaValue The alpha component value.
-			 * @return void
 			 */
 			void
 			setRGBA (data_t redValue, data_t greenValue, data_t blueValue, data_t alphaValue) noexcept
@@ -691,7 +680,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param greenValue The blue component value.
 			 * @param blueValue The green component value.
 			 * @param alphaValue The alpha component value.
-			 * @return void
 			 */
 			template< typename input_t = uint8_t >
 			void
@@ -706,7 +694,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the color hue from the HSV model.
 			 * @param degree The angle of color. The angle will be rounded to 360.
-			 * @return void
 			 */
 			void
 			setHue (data_t degree) noexcept
@@ -717,7 +704,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the color hue from the HSV model.
 			 * @param degree The angle of color. The angle will be rounded to 360.
-			 * @return void
 			 */
 			void
 			setHue (unsigned int degree) noexcept
@@ -728,7 +714,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the saturation value from the HSV model.
 			 * @param saturation The color saturation. Will be clamped between 0 and 100.
-			 * @return void
 			 */
 			void
 			setSaturation (data_t saturation) noexcept
@@ -739,7 +724,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the saturation value from the HSV model.
 			 * @param saturation The color saturation. Will be clamped between 0 and 100.
-			 * @return void
 			 */
 			void
 			setSaturation (unsigned int saturation) noexcept
@@ -757,7 +741,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the color value from the HSV model.
 			 * @param value The color value. Will be clamped between 0 and 100.
-			 * @return void
 			 */
 			void
 			setValue (data_t value) noexcept
@@ -768,7 +751,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Sets the color value from the HSV model.
 			 * @param value The color value. Will be clamped between 0 and 100.
-			 * @return void
 			 */
 			void
 			setValue (unsigned int value) noexcept
@@ -1470,13 +1452,13 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Performs a bi-linear interpolation between two colors.
-			 * @param bottomLeft
-			 * @param bottomRight
-			 * @param topLeft
-			 * @param topRight
-			 * @param factorX
-			 * @param factorY
+			 * @brief Performs a bi-linear interpolation between four colors.
+			 * @param bottomLeft A reference to the color at the bottom-left corner.
+			 * @param bottomRight A reference to the color at the bottom-right corner.
+			 * @param topLeft A reference to the color at the top-left corner.
+			 * @param topRight A reference to the color at the top-right corner.
+			 * @param factorX The horizontal interpolation factor, in [0, 1].
+			 * @param factorY The vertical interpolation factor, in [0, 1].
 			 * @return Color
 			 */
 			[[nodiscard]]
@@ -1492,13 +1474,13 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Performs a bi-cosine interpolation between two colors.
-			 * @param bottomLeft
-			 * @param bottomRight
-			 * @param topLeft
-			 * @param topRight
-			 * @param factorX
-			 * @param factorY
+			 * @brief Performs a bi-cosine interpolation between four colors.
+			 * @param bottomLeft A reference to the color at the bottom-left corner.
+			 * @param bottomRight A reference to the color at the bottom-right corner.
+			 * @param topLeft A reference to the color at the top-left corner.
+			 * @param topRight A reference to the color at the top-right corner.
+			 * @param factorX The horizontal interpolation factor, in [0, 1].
+			 * @param factorY The vertical interpolation factor, in [0, 1].
 			 * @return Color
 			 */
 			[[nodiscard]]
@@ -1517,7 +1499,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Copies the vector data inside a C-Array of float.
 			 * @warning  The target must provide enough space.
 			 * @param target The array targets to fill the color.
-			 * @return void
 			 */
 			void
 			copy (data_t * target) const noexcept
@@ -1606,7 +1587,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param hue The hue value from 0 to 360.
 			 * @param saturation The saturation value from 0 to 100.
 			 * @param value The intensity value from 0 to 100.
-			 * @return void
 			 */
 			void
 			updateFromHSV (data_t hue, data_t saturation, data_t value) noexcept

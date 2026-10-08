@@ -833,7 +833,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Resets matrix to identity.
-			 * @return void
 			 */
 			constexpr
 			void
@@ -909,7 +908,6 @@ namespace EmEn::Base::Math
 			 * @param row The index of the row.
 			 * @param x The first value.
 			 * @param y The second value.
-			 * @return void
 			 */
 			void
 			setRow (size_t row, precision_t x, precision_t y) noexcept
@@ -927,7 +925,6 @@ namespace EmEn::Base::Math
 			 * @param x The first value.
 			 * @param y The second value.
 			 * @param z The third value.
-			 * @return void
 			 */
 			void
 			setRow (size_t row, precision_t x, precision_t y, precision_t z) noexcept
@@ -947,7 +944,6 @@ namespace EmEn::Base::Math
 			 * @param y The second value.
 			 * @param z The third value.
 			 * @param w The fourth value.
-			 * @return void
 			 */
 			void
 			setRow (size_t row, precision_t x, precision_t y, precision_t z, precision_t w) noexcept
@@ -965,7 +961,6 @@ namespace EmEn::Base::Math
 			 * @brief Sets values to a matrix row with a vector.
 			 * @param row The index of the row.
 			 * @param vector A reference to a vector.
-			 * @return void
 			 */
 			void
 			setRow (size_t row, const Vector< dim_t, precision_t > & vector) noexcept
@@ -1004,7 +999,6 @@ namespace EmEn::Base::Math
 			 * @param col The index of the col.
 			 * @param x The first value.
 			 * @param y The second value.
-			 * @return void
 			 */
 			void
 			setColumn (size_t col, precision_t x, precision_t y) noexcept
@@ -1024,7 +1018,6 @@ namespace EmEn::Base::Math
 			 * @param x The first value.
 			 * @param y The second value.
 			 * @param z The third value.
-			 * @return void
 			 */
 			void
 			setColumn (size_t col, precision_t x, precision_t y, precision_t z) noexcept
@@ -1046,7 +1039,6 @@ namespace EmEn::Base::Math
 			 * @param y The second value.
 			 * @param z The third value.
 			 * @param w The fourth value.
-			 * @return void
 			 */
 			void
 			setColumn (size_t col, precision_t x, precision_t y, precision_t z, precision_t w) noexcept
@@ -1066,7 +1058,6 @@ namespace EmEn::Base::Math
 			 * @brief Sets a matrix column from a vector.
 			 * @param col The index of the column.
 			 * @param vector A reference to a vector.
-			 * @return void
 			 */
 			void
 			setColumn (size_t col, const Vector< dim_t, precision_t > & vector) noexcept
@@ -1431,7 +1422,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Clears the rotation component of the matrix.
-			 * @return void
 			 */
 			void
 			clearRotation () noexcept
@@ -1471,7 +1461,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Clears the translation component of the matrix.
-			 * @return void
 			 */
 			void
 			clearTranslation () noexcept

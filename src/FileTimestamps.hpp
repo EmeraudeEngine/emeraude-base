@@ -270,7 +270,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Fetches file timestamps from the filesystem.
 			 * @note This method is called automatically by accessor methods (lazy fetching).
-			 * @return void
 			 */
 			void fetchInfo () noexcept;
 

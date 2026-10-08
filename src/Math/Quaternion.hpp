@@ -80,10 +80,10 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Constructs a quaternion from values.
-			 * @param x
-			 * @param y
-			 * @param z
-			 * @param w
+			 * @param x The X component of the vector (imaginary) part.
+			 * @param y The Y component of the vector (imaginary) part.
+			 * @param z The Z component of the vector (imaginary) part.
+			 * @param w The scalar (real) part.
 			 */
 			constexpr 
 			Quaternion (precision_t x, precision_t y, precision_t z, precision_t w) noexcept
@@ -116,7 +116,7 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Constructs a quaternion from vector 3.
 			 * @param vector A reference to a vector.
-			 * @param real
+			 * @param real The scalar (real) part.
 			 */
 			explicit constexpr 
 			Quaternion (const Vector< 3, precision_t > & vector, precision_t real) noexcept
@@ -515,10 +515,9 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Sets the complex part of the quaternion.
-			 * @param x
-			 * @param y
-			 * @param z
-			 * @return void
+			 * @param x The X component of the vector (imaginary) part.
+			 * @param y The Y component of the vector (imaginary) part.
+			 * @param z The Z component of the vector (imaginary) part.
 			 */
 			void
 			setComplex (precision_t x, precision_t y, precision_t z) noexcept
@@ -531,7 +530,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the complex part of the quaternion.
 			 * @param vector a reference to vector.
-			 * @return void
 			 */
 			void
 			setComplex (const Vector< 3, precision_t > & vector) noexcept
@@ -544,7 +542,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the real part of the quaternion.
 			 * @param value A scalar.
-			 * @return void
 			 */
 			void
 			setReal (precision_t value) noexcept
@@ -575,7 +572,6 @@ namespace EmEn::Base::Math
 			 * @brief Sets the data of the quaternion.
 			 * @param complex a reference to vector.
 			 * @param real A scalar.
-			 * @return void
 			 */
 			void
 			set (const Vector< 3, precision_t > & complex, precision_t real) noexcept
@@ -589,7 +585,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the data of the quaternion.
 			 * @param vector a reference to vector.
-			 * @return void
 			 */
 			void
 			set (const Vector< 4, precision_t > & vector) noexcept
@@ -605,7 +600,6 @@ namespace EmEn::Base::Math
 			 * @param x Angle on X-axis expressed in radians.
 			 * @param y Angle on Y-axis expressed in radians.
 			 * @param z Angle on Z-axis expressed in radians.
-			 * @return void
 			 */
 			void
 			setFromEulerAngles (precision_t x, precision_t y, precision_t z)
@@ -638,7 +632,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the quaternion data from euler's angles (ZYX Tait-Bryan).
 			 * @param vector A reference to a vector of angles X/Y/Z expressed in radians.
-			 * @return void
 			 */
 			void
 			setFromEulerAngles (const Vector< 3, precision_t > & vector)
@@ -1026,7 +1019,6 @@ namespace EmEn::Base::Math
 			 * @brief Fills an angle around an axis (unit vector)
 			 * @param angle An angle expressed in radians.
 			 * @param axis A reference to a vector.
-			 * @return void
 			 */
 			void
 			toAngleAxis (precision_t & angle, Vector< 3, precision_t > & axis) const
@@ -1070,7 +1062,6 @@ namespace EmEn::Base::Math
 			 * @brief Sets quaternion to represent a rotation from one vector to another.
 			 * @param from A reference to vector.
 			 * @param to A reference to vector.
-			 * @return void
 			 */
 			void
 			rotationFromTo (const Vector< 3, precision_t > & from, const Vector< 3, precision_t > & to)
@@ -1176,7 +1167,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets quaternion to be same as rotation by scaled axis w.
 			 * @param scaledAxis A reference to a vector.
-			 * @return void
 			 */
 			void
 			setFromScaledAxis (const Vector< 3, precision_t > & scaledAxis)
@@ -1337,7 +1327,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Copies the quaternion data insided a C-Array of precision_t.
 			 * @warning The target must provide enough space.
-			 * @return void
 			 */
 			void
 			copy (precision_t * target) const noexcept

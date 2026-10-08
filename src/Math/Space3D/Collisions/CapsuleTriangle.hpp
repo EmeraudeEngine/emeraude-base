@@ -122,7 +122,6 @@ namespace EmEn::Base::Math::Space3D
 	 * @param triangle The triangle.
 	 * @param closestOnAxis Output: closest point on capsule axis.
 	 * @param closestOnTriangle Output: closest point on triangle.
-	 * @return void
 	 */
 	template< typename precision_t = float >
 	void

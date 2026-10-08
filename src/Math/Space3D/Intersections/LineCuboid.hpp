@@ -46,7 +46,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Line< precision_t > & line, const AACuboid< precision_t > & cuboid) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -114,7 +114,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Line< precision_t > & line, const AACuboid< precision_t > & cuboid, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -181,7 +181,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Line< precision_t > &, AACuboid Triangle< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const AACuboid< precision_t > & cuboid, const Line< precision_t > & line) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -191,7 +191,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Line< precision_t > &, AACuboid Triangle< precision_t > &, Point< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const AACuboid< precision_t > & cuboid, const Line< precision_t > & line, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{

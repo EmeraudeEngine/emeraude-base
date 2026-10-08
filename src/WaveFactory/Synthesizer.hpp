@@ -377,12 +377,11 @@ namespace EmEn::Base::WaveFactory
 
 					case InstrumentFamily::Percussive:
 					case InstrumentFamily::SoundFX:
-					default:
-					{
-						/* Default: Simple sine using fast LUT. */
-						return fastSin(phase);
-					}
+						break;
 				}
+
+				/* NOTE: Percussive, SoundFX, or an out-of-range value (a cast integer): simple sine using fast LUT. */
+				return fastSin(phase);
 			}
 
 			/**

@@ -221,11 +221,11 @@ TEST(ThreadPoolTask, StdFunction)
 	EXPECT_EQ(value, 99);
 }
 
-TEST(ThreadPoolTask, ConstructorNoexceptSpecification)
+/* NOTE: The callables below are only ever named inside unevaluated operands (static_assert / noexcept):
+ * none of their members is odr-used. A named namespace gives them external linkage, so the compiler does
+ * not report those members as unused, as it does for a local or anonymous-namespace class. */
+namespace TaskNoexceptProbes
 {
-	/* Small, nothrow-constructible rvalue lambda: small-buffer path, noexcept. */
-	static_assert(noexcept(ThreadPool::Task{[] { }}));
-
 	/* Callable with a throwing copy constructor but a noexcept move constructor:
 	 * constructing from an LVALUE copies, so the specification must be false.
 	 * (Regression: the spec used to test is_nothrow_move_constructible only,
@@ -242,11 +242,6 @@ TEST(ThreadPoolTask, ConstructorNoexceptSpecification)
 		void operator() () const noexcept { }
 	};
 
-	static_assert(!noexcept(ThreadPool::Task{std::declval< ThrowingCopy & >()}));
-
-	/* The same callable moved in takes the nothrow move: noexcept again. */
-	static_assert(noexcept(ThreadPool::Task{std::declval< ThrowingCopy >()}));
-
 	/* Callable larger than the small buffer: heap path, never noexcept. */
 	struct BigCallable
 	{
@@ -254,7 +249,23 @@ TEST(ThreadPoolTask, ConstructorNoexceptSpecification)
 
 		void operator() () const noexcept { }
 	};
+}
 
+TEST(ThreadPoolTask, ConstructorNoexceptSpecification)
+{
+	using TaskNoexceptProbes::ThrowingCopy;
+	using TaskNoexceptProbes::BigCallable;
+
+	/* Small, nothrow-constructible rvalue lambda: small-buffer path, noexcept. */
+	static_assert(noexcept(ThreadPool::Task{[] { }}));
+
+	/* ThrowingCopy from an LVALUE copies: the specification must be false. */
+	static_assert(!noexcept(ThreadPool::Task{std::declval< ThrowingCopy & >()}));
+
+	/* The same callable moved in takes the nothrow move: noexcept again. */
+	static_assert(noexcept(ThreadPool::Task{std::declval< ThrowingCopy >()}));
+
+	/* BigCallable exceeds the small buffer: heap path, never noexcept. */
 	static_assert(!noexcept(ThreadPool::Task{std::declval< BigCallable >()}));
 
 	SUCCEED();
@@ -396,7 +407,7 @@ TEST(ThreadPool, EnqueueStdFunction)
  * enqueueWithResult tests (only available with exceptions enabled)
  * ============================================================================ */
 
-#if __cpp_exceptions
+#ifdef __cpp_exceptions
 TEST(ThreadPool, EnqueueWithResultInt)
 {
 	ThreadPool pool(2);
@@ -1240,7 +1251,7 @@ TEST(ThreadPool, ConcurrentEnqueue)
 	EXPECT_EQ(totalExecuted.load(), tasksPerThread * numEnqueueThreads);
 }
 
-#if __cpp_exceptions
+#ifdef __cpp_exceptions
 TEST(ThreadPool, ConcurrentEnqueueWithResult)
 {
 	ThreadPool pool(4);
@@ -1492,7 +1503,7 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 	/* Sequential timing baseline. */
 	std::chrono::microseconds sequentialDuration{};
 	{
-		const auto start = std::chrono::high_resolution_clock::now();
+		const auto start = std::chrono::steady_clock::now();
 
 		for ( size_t iteration = 0; iteration < iterationCount; ++iteration )
 		{
@@ -1502,7 +1513,7 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 			executeOperations(processor);
 		}
 
-		sequentialDuration = std::chrono::duration_cast< std::chrono::microseconds >(std::chrono::high_resolution_clock::now() - start);
+		sequentialDuration = std::chrono::duration_cast< std::chrono::microseconds >(std::chrono::steady_clock::now() - start);
 	}
 
 	/* Parallel execution. Each iteration writes its own slot in `differs` (no data race);
@@ -1510,7 +1521,7 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 	std::vector< char > differs(iterationCount, 0);
 	std::chrono::microseconds parallelDuration{};
 	{
-		const auto start = std::chrono::high_resolution_clock::now();
+		const auto start = std::chrono::steady_clock::now();
 
 		pool.parallelFor(size_t{0}, iterationCount, [&] (size_t index) {
 			Pixmap< uint8_t > image{imageWidth, imageHeight};
@@ -1521,7 +1532,7 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 			differs[index] = image.data() == referenceData ? char{0} : char{1};
 		});
 
-		parallelDuration = std::chrono::duration_cast< std::chrono::microseconds >(std::chrono::high_resolution_clock::now() - start);
+		parallelDuration = std::chrono::duration_cast< std::chrono::microseconds >(std::chrono::steady_clock::now() - start);
 	}
 
 	/* CORRECTNESS (hard): every parallel iteration matches the sequential reference. */

@@ -101,10 +101,10 @@ namespace EmEn::Base::VertexFactory
 				return ratio <= static_cast< vertex_data_t >(0.7) ?
 					Half + Half * ratio / static_cast< vertex_data_t >(0.7) :
 					Half + Half * (One - ratio) / static_cast< vertex_data_t >(0.3);
-
-			default:
-				return One;
 		}
+
+		/* An out-of-range value (cast from data): the neutral full-length ratio. */
+		return One;
 	}
 
 	/**
@@ -170,97 +170,97 @@ namespace EmEn::Base::VertexFactory
 			 */
 			TreeLevelParameters () noexcept = default;
 
-			/** @brief Sets the number of stems of this level carried by ONE parent stem. Unused on level 0. @param value The count. @return void */
+			/** @brief Sets the number of stems of this level carried by ONE parent stem. Unused on level 0. @param value The count. */
 			void setBranches (uint32_t value) noexcept { m_branches = value; }
 
 			/** @brief Returns the number of stems of this level carried by ONE parent stem. @return uint32_t */
 			[[nodiscard]] uint32_t branches () const noexcept { return m_branches; }
 
-			/** @brief Sets the length, relative to the parent stem. @param value The ratio. @return void */
+			/** @brief Sets the length, relative to the parent stem. @param value The ratio. */
 			void setLength (vertex_data_t value) noexcept { m_length = value; }
 
 			/** @brief Returns the length, relative to the parent stem. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t length () const noexcept { return m_length; }
 
-			/** @brief Sets the random spread of the length. @param value The spread. @return void */
+			/** @brief Sets the random spread of the length. @param value The spread. */
 			void setLengthVariation (vertex_data_t value) noexcept { m_lengthVariation = value; }
 
 			/** @brief Returns the random spread of the length. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t lengthVariation () const noexcept { return m_lengthVariation; }
 
-			/** @brief Sets the taper, 0 cylinder, 1 cone, 2 rounded end. @param value The taper. @return void */
+			/** @brief Sets the taper, 0 cylinder, 1 cone, 2 rounded end. @param value The taper. */
 			void setTaper (vertex_data_t value) noexcept { m_taper = value; }
 
 			/** @brief Returns the taper. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t taper () const noexcept { return m_taper; }
 
-			/** @brief Sets how many segments a stem of this level is cut into (nCurveRes). @param value The count. @return void */
+			/** @brief Sets how many segments a stem of this level is cut into (nCurveRes). @param value The count. */
 			void setSegmentCount (uint32_t value) noexcept { m_segmentCount = std::max(1U, value); }
 
 			/** @brief Returns how many segments a stem of this level is cut into. @return uint32_t */
 			[[nodiscard]] uint32_t segmentCount () const noexcept { return m_segmentCount; }
 
-			/** @brief Sets the total curvature of a stem, in degrees. @param value The angle. @return void */
+			/** @brief Sets the total curvature of a stem, in degrees. @param value The angle. */
 			void setCurve (vertex_data_t value) noexcept { m_curve = value; }
 
 			/** @brief Returns the total curvature of a stem, in degrees. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t curve () const noexcept { return m_curve; }
 
-			/** @brief Sets the curvature of the second half of a stem, in degrees, for an S shape. @param value The angle. @return void */
+			/** @brief Sets the curvature of the second half of a stem, in degrees, for an S shape. @param value The angle. */
 			void setCurveBack (vertex_data_t value) noexcept { m_curveBack = value; }
 
 			/** @brief Returns the curvature of the second half of a stem, in degrees. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t curveBack () const noexcept { return m_curveBack; }
 
-			/** @brief Sets the random spread of the curvature, in degrees. @param value The angle. @return void */
+			/** @brief Sets the random spread of the curvature, in degrees. @param value The angle. */
 			void setCurveVariation (vertex_data_t value) noexcept { m_curveVariation = value; }
 
 			/** @brief Returns the random spread of the curvature, in degrees. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t curveVariation () const noexcept { return m_curveVariation; }
 
-			/** @brief Sets the angle away from the parent axis, in degrees. @param value The angle. @return void */
+			/** @brief Sets the angle away from the parent axis, in degrees. @param value The angle. */
 			void setDownAngle (vertex_data_t value) noexcept { m_downAngle = value; }
 
 			/** @brief Returns the angle away from the parent axis, in degrees. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t downAngle () const noexcept { return m_downAngle; }
 
-			/** @brief Sets the spread of the down angle; NEGATIVE makes it vary with the position along the parent. @param value The angle. @return void */
+			/** @brief Sets the spread of the down angle; NEGATIVE makes it vary with the position along the parent. @param value The angle. */
 			void setDownAngleVariation (vertex_data_t value) noexcept { m_downAngleVariation = value; }
 
 			/** @brief Returns the spread of the down angle. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t downAngleVariation () const noexcept { return m_downAngleVariation; }
 
-			/** @brief Sets the spin around the parent axis between two successive children, in degrees; NEGATIVE alternates sides. @param value The angle. @return void */
+			/** @brief Sets the spin around the parent axis between two successive children, in degrees; NEGATIVE alternates sides. @param value The angle. */
 			void setRotate (vertex_data_t value) noexcept { m_rotate = value; }
 
 			/** @brief Returns the spin around the parent axis between two successive children. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t rotate () const noexcept { return m_rotate; }
 
-			/** @brief Sets the random spread of the spin, in degrees. @param value The angle. @return void */
+			/** @brief Sets the random spread of the spin, in degrees. @param value The angle. */
 			void setRotateVariation (vertex_data_t value) noexcept { m_rotateVariation = value; }
 
 			/** @brief Returns the random spread of the spin, in degrees. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t rotateVariation () const noexcept { return m_rotateVariation; }
 
-			/** @brief Sets how many times a segment forks, fractional (nSegSplits). @param value The count. @return void */
+			/** @brief Sets how many times a segment forks, fractional (nSegSplits). @param value The count. */
 			void setSegmentSplits (vertex_data_t value) noexcept { m_segmentSplits = std::max(static_cast< vertex_data_t >(0), value); }
 
 			/** @brief Returns how many times a segment forks. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t segmentSplits () const noexcept { return m_segmentSplits; }
 
-			/** @brief Sets how many times the FIRST segment of the trunk forks (nBaseSplits). @param value The count. @return void */
+			/** @brief Sets how many times the FIRST segment of the trunk forks (nBaseSplits). @param value The count. */
 			void setBaseSplits (uint32_t value) noexcept { m_baseSplits = value; }
 
 			/** @brief Returns how many times the first segment of the trunk forks. @return uint32_t */
 			[[nodiscard]] uint32_t baseSplits () const noexcept { return m_baseSplits; }
 
-			/** @brief Sets the angle a fork opens by, in degrees. @param value The angle. @return void */
+			/** @brief Sets the angle a fork opens by, in degrees. @param value The angle. */
 			void setSplitAngle (vertex_data_t value) noexcept { m_splitAngle = value; }
 
 			/** @brief Returns the angle a fork opens by, in degrees. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t splitAngle () const noexcept { return m_splitAngle; }
 
-			/** @brief Sets the random spread of the fork angle, in degrees. @param value The angle. @return void */
+			/** @brief Sets the random spread of the fork angle, in degrees. @param value The angle. */
 			void setSplitAngleVariation (vertex_data_t value) noexcept { m_splitAngleVariation = value; }
 
 			/** @brief Returns the random spread of the fork angle, in degrees. @return vertex_data_t */
@@ -331,79 +331,79 @@ namespace EmEn::Base::VertexFactory
 				return m_levels[std::min(levelIndex, MaxLevels - 1U)];
 			}
 
-			/** @brief Sets the crown envelope. @param value The shape. @return void */
+			/** @brief Sets the crown envelope. @param value The shape. */
 			void setShape (TreeCrownShape value) noexcept { m_shape = value; }
 
 			/** @brief Returns the crown envelope. @return TreeCrownShape */
 			[[nodiscard]] TreeCrownShape shape () const noexcept { return m_shape; }
 
-			/** @brief Sets how many branching levels are grown, 1 to MaxLevels. @param value The count. @return void */
+			/** @brief Sets how many branching levels are grown, 1 to MaxLevels. @param value The count. */
 			void setLevels (uint32_t value) noexcept { m_levelCount = std::clamp(value, 1U, MaxLevels); }
 
 			/** @brief Returns how many branching levels are grown. @return uint32_t */
 			[[nodiscard]] uint32_t levels () const noexcept { return m_levelCount; }
 
-			/** @brief Sets the height of the tree. @param value The height. @return void */
+			/** @brief Sets the height of the tree. @param value The height. */
 			void setScale (vertex_data_t value) noexcept { m_scale = value; }
 
 			/** @brief Returns the height of the tree. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t scale () const noexcept { return m_scale; }
 
-			/** @brief Sets the random spread of the height. @param value The spread. @return void */
+			/** @brief Sets the random spread of the height. @param value The spread. */
 			void setScaleVariation (vertex_data_t value) noexcept { m_scaleVariation = value; }
 
 			/** @brief Returns the random spread of the height. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t scaleVariation () const noexcept { return m_scaleVariation; }
 
-			/** @brief Sets the bare fraction at the foot of the trunk, in [0, 1[. @param value The fraction. @return void */
+			/** @brief Sets the bare fraction at the foot of the trunk, in [0, 1[. @param value The fraction. */
 			void setBaseSize (vertex_data_t value) noexcept { m_baseSize = std::clamp(value, static_cast< vertex_data_t >(0), static_cast< vertex_data_t >(0.95)); }
 
 			/** @brief Returns the bare fraction at the foot of the trunk. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t baseSize () const noexcept { return m_baseSize; }
 
-			/** @brief Sets the trunk radius as a fraction of the trunk length. @param value The ratio. @return void */
+			/** @brief Sets the trunk radius as a fraction of the trunk length. @param value The ratio. */
 			void setRatio (vertex_data_t value) noexcept { m_ratio = value; }
 
 			/** @brief Returns the trunk radius as a fraction of the trunk length. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t ratio () const noexcept { return m_ratio; }
 
-			/** @brief Sets how fast a child stem thins relative to its parent. @param value The exponent. @return void */
+			/** @brief Sets how fast a child stem thins relative to its parent. @param value The exponent. */
 			void setRatioPower (vertex_data_t value) noexcept { m_ratioPower = value; }
 
 			/** @brief Returns how fast a child stem thins relative to its parent. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t ratioPower () const noexcept { return m_ratioPower; }
 
-			/** @brief Sets how much the trunk widens at its foot. @param value The flare. @return void */
+			/** @brief Sets how much the trunk widens at its foot. @param value The flare. */
 			void setFlare (vertex_data_t value) noexcept { m_flare = value; }
 
 			/** @brief Returns how much the trunk widens at its foot. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t flare () const noexcept { return m_flare; }
 
-			/** @brief Sets how strongly branches bend back toward the sky. @param value The strength. @return void */
+			/** @brief Sets how strongly branches bend back toward the sky. @param value The strength. */
 			void setAttractionUp (vertex_data_t value) noexcept { m_attractionUp = value; }
 
 			/** @brief Returns how strongly branches bend back toward the sky. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t attractionUp () const noexcept { return m_attractionUp; }
 
-			/** @brief Sets how many leaves a stem of the deepest level carries. @param value The count. @return void */
+			/** @brief Sets how many leaves a stem of the deepest level carries. @param value The count. */
 			void setLeaves (uint32_t value) noexcept { m_leaves = value; }
 
 			/** @brief Returns how many leaves a stem of the deepest level carries. @return uint32_t */
 			[[nodiscard]] uint32_t leaves () const noexcept { return m_leaves; }
 
-			/** @brief Sets the size of one leaf. @param value The size. @return void */
+			/** @brief Sets the size of one leaf. @param value The size. */
 			void setLeafScale (vertex_data_t value) noexcept { m_leafScale = value; }
 
 			/** @brief Returns the size of one leaf. @return vertex_data_t */
 			[[nodiscard]] vertex_data_t leafScale () const noexcept { return m_leafScale; }
 
-			/** @brief Sets how many lobes the trunk cross-section has; read by the skinning phase. @param value The count. @return void */
+			/** @brief Sets how many lobes the trunk cross-section has; read by the skinning phase. @param value The count. */
 			void setLobes (uint32_t value) noexcept { m_lobes = value; }
 
 			/** @brief Returns how many lobes the trunk cross-section has. @return uint32_t */
 			[[nodiscard]] uint32_t lobes () const noexcept { return m_lobes; }
 
-			/** @brief Sets how deep the trunk lobes cut; read by the skinning phase. @param value The depth. @return void */
+			/** @brief Sets how deep the trunk lobes cut; read by the skinning phase. @param value The depth. */
 			void setLobeDepth (vertex_data_t value) noexcept { m_lobeDepth = value; }
 
 			/** @brief Returns how deep the trunk lobes cut. @return vertex_data_t */

@@ -41,7 +41,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Segment< precision_t > & segment, const Capsule< precision_t > & capsule) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -145,7 +145,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	segmentSphereIntersectionParam (const Point< precision_t > & segStart, const Vector< 3, precision_t > & segDir, precision_t segLengthSq, const Point< precision_t > & sphereCenter, precision_t radiusSq, precision_t & t) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -202,7 +202,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Segment< precision_t > & segment, const Capsule< precision_t > & capsule, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -368,7 +368,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Segment< precision_t > &, const Capsule< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Capsule< precision_t > & capsule, const Segment< precision_t > & segment) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -378,7 +378,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Segment< precision_t > &, const Capsule< precision_t > &, Point< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Capsule< precision_t > & capsule, const Segment< precision_t > & segment, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{

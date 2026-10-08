@@ -107,7 +107,6 @@ namespace EmEn::Base::VertexFactory
 			 * one exists (a JSON in `Materials/`), otherwise a bark built from the images `<name>-color_a`,
 			 * `<name>-normal`, `<name>-roughness`. Empty: the caller's material, else the default one.
 			 * @param name The material name, e.g. "Vegetals/palm_bark".
-			 * @return void
 			 */
 			void
 			setBarkMaterial (std::string name) noexcept
@@ -133,7 +132,6 @@ namespace EmEn::Base::VertexFactory
 			 * the card's width/length must be the IMAGE's (skinningOptions().setLeafAspectRatio()): 1 for a square
 			 * image, 0.5 for the 1024 x 2048 pine twig. The presets set it.
 			 * @param name The material name, e.g. "Vegetals/leaf003".
-			 * @return void
 			 */
 			void
 			setLeafMaterial (std::string name) noexcept
@@ -155,7 +153,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets which model grows the skeleton.
 			 * @param type The model.
-			 * @return void
 			 */
 			void
 			setGrowerType (GrowerType type) noexcept
@@ -225,7 +222,6 @@ namespace EmEn::Base::VertexFactory
 			 * the opposite. See TreeGrowthCurve. The age acts on a copy at generate(): the parameters keep describing
 			 * the reference tree.
 			 * @param years The age. Negative values mean zero.
-			 * @return void
 			 */
 			void
 			setAge (float years) noexcept
@@ -247,7 +243,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets how the species grows with age. The presets set theirs.
 			 * @param curve A reference to the growth curve.
-			 * @return void
 			 */
 			void
 			setGrowthCurve (const TreeGrowthCurve< float > & curve) noexcept
@@ -292,7 +287,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets how many levels of detail are skinned, 1 meaning the finest alone.
 			 * @param count The count.
-			 * @return void
 			 */
 			void
 			setLevelOfDetailCount (uint32_t count) noexcept
@@ -314,7 +308,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets whether the crossed-quads card is built.
 			 * @param state The state.
-			 * @return void
 			 */
 			void
 			enableImposter (bool state) noexcept
@@ -336,7 +329,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets how many quads cross each other in the card.
 			 * @param count The count.
-			 * @return void
 			 */
 			void
 			setImposterQuadCount (uint32_t count) noexcept

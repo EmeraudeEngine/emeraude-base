@@ -320,7 +320,7 @@ TYPED_TEST(MathCartesianFrame, ConstructorWithPositionAndScaling)
 
 TYPED_TEST(MathCartesianFrame, ConstructorWithCoordinates)
 {
-	const auto frame = CartesianFrame< TypeParam >{1.0F, 2.0F, 3.0F};
+	const auto frame = CartesianFrame< TypeParam >{static_cast< TypeParam >(1.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(3.0)};
 
 	ASSERT_NEAR(frame.position()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
 	ASSERT_NEAR(frame.position()[Y], static_cast< TypeParam >(2.0), static_cast< TypeParam >(1e-5));

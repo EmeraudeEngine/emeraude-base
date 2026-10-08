@@ -91,7 +91,8 @@ namespace EmEn::Base::GameTools
 			return false;
 		}
 
-		std::vector< size_t >::iterator pickedIterator;
+		/* NOTE: end() marks "not selected": an out-of-range 'where' (a cast integer) selects nothing. */
+		auto pickedIterator = pile.end();
 
 		switch ( where )
 		{
@@ -101,12 +102,16 @@ namespace EmEn::Base::GameTools
 
 			case Where::Bottom :
 				pickedIterator = std::prev(pile.end());
-
 				break;
 
 			case Where::Randomly :
 				pickedIterator = pile.begin() + std::uniform_int_distribution{0, static_cast< int >(pile.size() - 1)}(m_randomEngine);
 				break;
+		}
+
+		if ( pickedIterator == pile.end() )
+		{
+			return false;
 		}
 
 		const auto pickedCard = *pickedIterator;
@@ -149,26 +154,44 @@ namespace EmEn::Base::GameTools
 			return false;
 		}
 
+		/* NOTE: Decide the position in the targeted pile BEFORE the card leaves the hand: an out-of-range
+		 * 'where' (a cast integer) must refuse, not lose the card. */
+		std::ptrdiff_t insertPosition = 0;
+		bool positionKnown = false;
+
+		switch ( where )
+		{
+			case Where::Top :
+				insertPosition = 0;
+				positionKnown = true;
+				break;
+
+			case Where::Bottom :
+				insertPosition = static_cast< std::ptrdiff_t >(pile.size());
+				positionKnown = true;
+				break;
+
+			case Where::Randomly :
+				/* NOTE: An empty pile has a single slot; the distribution needs a non-empty range [0, size - 1]. */
+				if ( !pile.empty() )
+				{
+					insertPosition = std::uniform_int_distribution{0, static_cast< int >(pile.size() - 1)}(m_randomEngine);
+				}
+
+				positionKnown = true;
+				break;
+		}
+
+		if ( !positionKnown )
+		{
+			return false;
+		}
+
 		/* NOTE: Remove it from the hand. */
 		handCards.erase(pickedIterator);
 
 		/* NOTE: Push it to the targeted pile. */
-		switch ( where )
-		{
-			case Where::Top :
-				pile.insert(pile.begin(), card);
-				break;
-
-			case Where::Bottom :
-				pile.push_back(card);
-				break;
-
-			case Where::Randomly :
-				const auto randomPosition = pile.begin() + std::uniform_int_distribution{0, static_cast< int >(pile.size() - 1)}(m_randomEngine);
-
-				pile.insert(randomPosition, card);
-				break;
-		}
+		pile.insert(pile.begin() + insertPosition, card);
 
 		return true;
 	}

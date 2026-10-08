@@ -268,3 +268,35 @@ decision, plan Ave Robustus, engine triad 6c):
   compile database — 89 sites in 19 files before, 6 (the helper) after.
 - Tests: `FastJSON.outOfRangeIntegersAreRefused`, `nonFiniteFloatsAreRefused`, `nonNumericElementsAreRefused`,
   `asValueOnBareNodes`.
+
+## Ownership and lifetime — Ave Robustus II (owner decision, 2026-10-08)
+
+The whole cascade (emeraude-base, emeraude-engine and the applications built on them) follows the C++ Core Guidelines
+and the standard library's own ownership model **scrupulously**, at a mission-critical bar (NASA/JPL Power of Ten,
+JSF AV C++, MISRA C++:2023). It is a base rule for every new addition; existing deviations are being migrated.
+
+1. **RAII for every resource** (R.1) — memory, native handle, lock, registration, thread, asynchronous job. The
+   destructor releases / stops / joins it. No naked `new`/`delete`, no ownership through a raw pointer (R.11, I.11).
+2. **Self-contained lifetime** — a class owns, stops and waits for every effect it starts. It never relies on another
+   object to drain, cancel or order its shutdown: no global cancel flag, no extra pool drain elsewhere, no
+   member-declaration-order luck.
+3. **A deferred lambda never captures a raw `this` (nor `[&]`)** unless its object holds that job's handle and its
+   destructor stops and waits for it; otherwise it captures values, `shared_ptr` or `weak_ptr`.
+4. **Cancellation is `std::stop_source` / `std::stop_token`** (C++20), not a hand-made `std::atomic_bool *`; a long
+   computation checks its token at a bounded interval in every stage.
+5. **Threads follow the `std::jthread` model** (CP.25, CP.26) — stop request + join at destruction, never `detach()`;
+   a self-join is a contract fault (§ 4), never a silent fallback.
+6. **Constructor = valid object, destructor = everything released** (C.41, C.31); rule of zero, else a complete rule
+   of five (C.20, C.21); every member initialized; thread members declared after the state their thread uses.
+7. **Locks only through guards** (CP.20); never notify after releasing a lock the destructor could race.
+8. **A registration is an object** — registering returns a move-only token whose destructor unregisters.
+9. **No accepted undefined behaviour** — a tolerated dead `this`, a timeout-and-abandon or an "unlikely" race is a
+   defect; every failure path exits cleanly, and is tested.
+10. **A `switch` on an enum that lists every enumerator has NO `default:`** (owner decision D14, 2026-10-08), so `-Wswitch`
+    breaks the build when an enumerator is added; what the old default did (a refusal, a safe return) sits AFTER the
+    switch, because a cast can still bring an out-of-range value. This holds for the cascade's enums AND for a
+    third-party enum the switch fully covers (a CEF upgrade adding an enumerator must be reviewed, not defaulted);
+    a switch that does not cover a large external enum (`VkFormat`, `VkResult`) keeps its `default:`.
+
+clang-tidy keeps `cppcoreguidelines-owning-memory`, `-special-member-functions`, `-pro-type-member-init` and
+`-no-malloc` at zero new finding on the touched TUs (`docs/clang-tidy-ledger.md`).

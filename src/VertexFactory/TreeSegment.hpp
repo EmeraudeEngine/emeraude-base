@@ -163,7 +163,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the radius at the start of the segment.
 			 * @param radius The radius.
-			 * @return void
 			 */
 			void
 			setStartRadius (vertex_data_t radius) noexcept
@@ -174,7 +173,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the radius at the end of the segment.
 			 * @param radius The radius.
-			 * @return void
 			 */
 			void
 			setEndRadius (vertex_data_t radius) noexcept
@@ -251,7 +249,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Declares the segment as the end of its branch.
 			 * @param state The state.
-			 * @return void
 			 */
 			void
 			setBranchTip (bool state) noexcept

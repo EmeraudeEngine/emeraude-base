@@ -47,11 +47,6 @@ namespace EmEn::Base::Network
 		constexpr auto Tag{"Network::URIDomain"};
 
 		/**
-		 * @brief Returns whether every character of a string is an ASCII digit.
-		 * @param string The string.
-		 * @return bool
-		 */
-		/**
 		 * @brief Returns whether a decoded host is a legal one: a bracketed IP literal, or a
 		 * hostname made of unreserved DNS characters only.
 		 * @note Refuses CR/LF/NUL/space/'@'/':' — the bytes that turn a host into an injection

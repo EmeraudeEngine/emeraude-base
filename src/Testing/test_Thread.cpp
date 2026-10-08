@@ -135,7 +135,7 @@ TEST(BaseThread, moveOnlyCallablesAndMovesTransferTheThread)
 	auto payload = std::make_unique< int >(7);
 	Thread first;
 
-	ASSERT_TRUE(first.start([&ran, payload = std::move(payload)] { ran = (*payload == 7); }));
+	ASSERT_TRUE(first.start([&ran, ownedPayload = std::move(payload)] { ran = (*ownedPayload == 7); }));
 
 	Thread second{std::move(first)};
 

@@ -26,6 +26,8 @@
 
 /* STL inclusions. */
 #include <cstring>
+#include <sstream>
+#include <string>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
@@ -43,23 +45,26 @@ using namespace EmEn::Base;
 using namespace EmEn::Base::Compression;
 using namespace EmEn::Base::Time::Elapsed;
 
-[[nodiscard]]
-std::string
-createSource (size_t size) noexcept
+namespace
 {
-	std::string source;
+	[[nodiscard]]
+	std::string
+	createSource (size_t size) noexcept
+	{
+		std::string source;
 
-	Randomizer< float > randomizer;
+		Randomizer< float > randomizer;
 
-	const auto coordinates = randomizer.vector(512 * 3 * size, -32000.0F, 32000.0F);
+		const auto coordinates = randomizer.vector(512 * 3 * size, -32000.0F, 32000.0F);
 
-	const auto bytes = coordinates.size() * sizeof(float);
+		const auto bytes = coordinates.size() * sizeof(float);
 
-	source.resize(bytes);
+		source.resize(bytes);
 
-	std::memcpy(source.data(), coordinates.data(), bytes);
+		std::memcpy(source.data(), coordinates.data(), bytes);
 
-	return source;
+		return source;
+	}
 }
 
 TEST(Compression, ZLIBString)
@@ -205,4 +210,47 @@ TEST(Compression, LZMAStringMTDisabled)
 	}
 
 	ASSERT_EQ(source, recovered);
+}
+
+/* Ave Robustus II warning pass (2026-10-08): compressString() passed the LEVEL as the chunk size, so every
+ * string was compressed in 9-byte chunks at the default level, and level 0 asked for 0-byte chunks — a
+ * division by zero in compressStream(). Every level must round-trip. */
+TEST(Compression, ZLIBStringEveryLevelRoundTrips)
+{
+	std::string source;
+
+	for ( size_t index = 0; index < 20000; ++index )
+	{
+		source.push_back(static_cast< char >('a' + ((index * 7U) % 26U)));
+	}
+
+	for ( int level = 0; level <= 9; ++level )
+	{
+		std::string compressed;
+		std::string recovered;
+
+		ASSERT_TRUE(ZLIB::compressString(source, compressed, level)) << "level " << level;
+		ASSERT_TRUE(ZLIB::decompressString(compressed, recovered)) << "level " << level;
+		ASSERT_EQ(source, recovered) << "level " << level;
+	}
+}
+
+/* A zero chunk size is refused instead of dividing by zero. */
+TEST(Compression, ZLIBStreamZeroChunkSizeRefused)
+{
+	std::stringstream sourceStream{std::string(1000, 'x')};
+	std::stringstream targetStream;
+
+	EXPECT_EQ(ZLIB::compressStream(sourceStream, targetStream, 0, 9), 0U);
+}
+
+/* liblzma takes the preset as a uint32_t: a negative level used to wrap into its flag bits. */
+TEST(Compression, LZMAStringLevelOutOfRangeRefused)
+{
+	const std::string source(1000, 'y');
+	std::string compressed;
+
+	EXPECT_FALSE(LZMA::compressString(source, compressed, -1));
+	EXPECT_FALSE(LZMA::compressString(source, compressed, 10));
+	EXPECT_TRUE(LZMA::compressString(source, compressed, 0));
 }

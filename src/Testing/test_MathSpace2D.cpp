@@ -1810,7 +1810,7 @@ TYPED_TEST(MathSpace2D, IntersectionLineRectangleMaximumPoints)
 	const AARectangle< TypeParam > rect{0, 0, 10, 10};
 	StaticVector< Point< TypeParam >, 4 > intersections;
 
-	const int count = isIntersecting(line, rect, intersections);
+	const auto count = static_cast< int >(isIntersecting(line, rect, intersections));
 
 	ASSERT_GE(count, 2);
 	ASSERT_LE(count, 4); // May detect up to 4 points at corners due to numerical precision
@@ -1829,7 +1829,7 @@ TYPED_TEST(MathSpace2D, IntersectionLineTriangleMaximumPoints)
 	const Triangle< TypeParam > triangle{{0, 0}, {10, 0}, {5, 10}};
 	StaticVector< Point< TypeParam >, 4 > intersections;
 
-	const int count = isIntersecting(line, triangle, intersections);
+	const auto count = static_cast< int >(isIntersecting(line, triangle, intersections));
 
 	ASSERT_GE(count, 0);
 	ASSERT_LE(count, 2); // Maximum 2 intersection points
@@ -2035,7 +2035,7 @@ TYPED_TEST(MathSpace2D, IntersectionLineRectangleThroughCornerNumericalStability
 	ASSERT_TRUE(isIntersecting(line, rect));
 
 	StaticVector< Point< TypeParam >, 4 > intersections;
-	const int count = isIntersecting(line, rect, intersections);
+	const auto count = static_cast< int >(isIntersecting(line, rect, intersections));
 
 	// Line through corner may produce 2-3 intersection points due to corner detection on adjacent edges
 	ASSERT_GE(count, 2);
@@ -2108,7 +2108,7 @@ TYPED_TEST(MathSpace2D, IntersectionWithStaticVectorReturn)
 	intersections.clear();
 	ASSERT_EQ(intersections.size(), 0u);
 
-	const int count = isIntersecting(line, rect, intersections);
+	const auto count = static_cast< int >(isIntersecting(line, rect, intersections));
 
 	// Post-condition: StaticVector size matches count
 	ASSERT_EQ(static_cast< size_t >(count), intersections.size());
@@ -2177,7 +2177,7 @@ TYPED_TEST(MathSpace2D, IntersectionLineAtRectangleBoundaryNumerical)
 	ASSERT_TRUE(isIntersecting(line, rect));
 
 	StaticVector< Point< TypeParam >, 4 > intersections;
-	const int count = isIntersecting(line, rect, intersections);
+	const auto count = static_cast< int >(isIntersecting(line, rect, intersections));
 
 	// Vertical line should produce at least 1 intersection, typically 2
 	ASSERT_GE(count, 1);

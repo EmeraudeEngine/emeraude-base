@@ -136,7 +136,6 @@ namespace EmEn::Base
 			 * @brief Sends a notification to every observer.
 			 * @param notificationCode Code of notification.
 			 * @param data The payload (a Base::Any, read back with anyValue()). Default no data.
-			 * @return void
 			 */
 			void notify (int notificationCode, const Any & data = {}) noexcept;
 
@@ -145,7 +144,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Adds an observer to this object.
 			 * @param observer The pointer of the observer.
-			 * @return void
 			 */
 			void
 			addObserver (ObserverTrait * observer) noexcept
@@ -156,7 +154,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Removes an observer from this object.
 			 * @param observer The pointer of the observer.
-			 * @return void
 			 */
 			void
 			removeObserver (ObserverTrait * observer) noexcept

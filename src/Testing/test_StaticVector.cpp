@@ -165,7 +165,7 @@ namespace EmEn::Base
 	{
 		StaticVector< std::string, 5 > s;
 		s.emplace_back("hello");
-		s.emplace_back(5, 'c'); // "ccccc"
+		s.emplace_back(5U, 'c'); // "ccccc"
 
 		ASSERT_EQ(s.size(), 2);
 		ASSERT_EQ(s[0], "hello");

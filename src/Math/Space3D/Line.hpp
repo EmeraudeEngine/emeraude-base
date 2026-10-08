@@ -78,7 +78,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the line origin.
 			 * @param origin A reference to a point.
-			 * @return void
 			 */
 			void
 			setOrigin (const Point< precision_t > & origin) noexcept
@@ -89,7 +88,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the line direction.
 			 * @param direction A reference to a vector.
-			 * @return void
 			 */
 			void
 			setDirection (const Vector< 3, precision_t > & direction) noexcept
@@ -119,7 +117,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Reset the line to null value.
-			 * @return void
 			 */
 			void
 			reset () noexcept

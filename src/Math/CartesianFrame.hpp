@@ -100,7 +100,7 @@ namespace EmEn::Base::Math
 			 * @param zValue The Z value.
 			 */
 			constexpr
-			CartesianFrame (float xValue, float yValue, float zValue) noexcept
+			CartesianFrame (precision_t xValue, precision_t yValue, precision_t zValue) noexcept
 				: m_position(xValue, yValue, zValue)
 			{
 
@@ -201,7 +201,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the world position.
 			 * @param position A reference to a vector.
-			 * @return void
 			 */
 			void
 			setPosition (const Vector< 3, precision_t > & position) noexcept
@@ -214,7 +213,6 @@ namespace EmEn::Base::Math
 			 * @param xValue The X position.
 			 * @param yValue The Y position.
 			 * @param zValue The Z position
-			 * @return void
 			 */
 			void
 			setPosition (precision_t xValue, precision_t yValue, precision_t zValue) noexcept
@@ -227,7 +225,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Set the world X position.
 			 * @param position The value on X Axis.
-			 * @return void
 			 */
 			void
 			setXPosition (precision_t position) noexcept
@@ -238,7 +235,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Set the world Y position.
 			 * @param position The value on Y Axis.
-			 * @return void
 			 */
 			void
 			setYPosition (precision_t position) noexcept
@@ -249,7 +245,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Set the world Z position.
 			 * @param position The value on Z Axis.
-			 * @return void
 			 */
 			void
 			setZPosition (precision_t position) noexcept
@@ -260,8 +255,7 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the backward vector (Z+).
 			 * @note This will re-orient automatically the frame.
-			 * @param forward The vector that holds the desired direction of the frame.
-			 * @return void
+			 * @param backward The vector that holds the desired direction of the frame.
 			 */
 			void
 			setBackwardVector (const Vector< 3, precision_t > & backward) noexcept
@@ -277,7 +271,6 @@ namespace EmEn::Base::Math
 			 * @param xValue The X value.
 			 * @param yValue The Y value.
 			 * @param zValue The Z value.
-			 * @return void
 			 */
 			void
 			setBackwardVector (precision_t xValue, precision_t yValue, precision_t zValue) noexcept
@@ -294,7 +287,6 @@ namespace EmEn::Base::Math
 			 * feeding m_upward. Pass the UP axis, not gravity.
 			 * @param backward A reference to vector for the frame Z+ axis.
 			 * @param upward A reference to vector for the frame Y+ axis.
-			 * @return void
 			 */
 			void
 			setOrientationVectors (const Vector< 3, precision_t > & backward, const Vector< 3, precision_t > & upward) noexcept
@@ -306,7 +298,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets the upward vector (Y+) and the backward vector (Z+) using another cartesian frame.
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			setOrientationVectors (const CartesianFrame< precision_t > & frame) noexcept
@@ -319,7 +310,6 @@ namespace EmEn::Base::Math
 			 * @brief Sets the scaling factor from a vector.
 			 * @tparam vec_dim_t The vector dimension.
 			 * @param factor A reference to a vector.
-			 * @return void
 			 */
 			template< size_t vec_dim_t >
 			void
@@ -333,7 +323,6 @@ namespace EmEn::Base::Math
 			 * @param xFactor The X axis factor value.
 			 * @param yFactor The Y axis factor value.
 			 * @param zFactor The Z axis factor value.
-			 * @return void
 			 */
 			void
 			setScalingFactor (precision_t xFactor, precision_t yFactor, precision_t zFactor) noexcept
@@ -346,7 +335,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets a uniform scaling factor.
 			 * @param factor The uniform factor value.
-			 * @return void
 			 */
 			void
 			setScalingFactor (precision_t factor) noexcept
@@ -359,7 +347,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets an X axis scaling factor.
 			 * @param factor The factor value.
-			 * @return void
 			 */
 			void
 			setScalingXFactor (precision_t factor) noexcept
@@ -370,7 +357,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets a Y axis scaling factor.
 			 * @param factor The factor value.
-			 * @return void
 			 */
 			void
 			setScalingYFactor (precision_t factor) noexcept
@@ -381,7 +367,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Sets a Z axis scaling factor.
 			 * @param factor The factor value.
-			 * @return void
 			 */
 			void
 			setScalingZFactor (precision_t factor) noexcept
@@ -603,7 +588,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Normalizes the frame axes.
-			 * @return void
 			 */
 			void
 			normalize () noexcept
@@ -617,7 +601,6 @@ namespace EmEn::Base::Math
 			 * @note Use this for pointing a camera.
 			 * @param target A position to look at.
 			 * @param flipAxis Flip the Z axis to point forward instead.
-			 * @return void
 			 */
 			void
 			lookAt (const Vector< 3, precision_t > & target, bool flipAxis) noexcept
@@ -638,7 +621,6 @@ namespace EmEn::Base::Math
 			 * @brief Points the backward (Z- axis) toward the target.
 			 * @note Same as CartesianFrame::lookAt() but using a matrix.
 			 * @param target A position to look at.
-			 * @return void
 			 */
 			void
 			lookAtUsingMatrix (const Vector< 3, precision_t > & target) noexcept
@@ -653,7 +635,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new position.
 			 * @param distance A reference to a vector.
 			 * @param local Using local axis.
-			 * @return void
 			 */
 			void
 			translate (const Vector< 3, precision_t > & distance, bool local) noexcept
@@ -674,7 +655,6 @@ namespace EmEn::Base::Math
 			 * @param yDistance The Y value.
 			 * @param zDistance The Z value.
 			 * @param local Using local axis.
-			 * @return void
 			 */
 			void
 			translate (precision_t xDistance, precision_t yDistance, precision_t zDistance, bool local) noexcept
@@ -695,7 +675,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new X position.
 			 * @param distance The X value.
 			 * @param local Using local axis.
-			 * @return void
 			 */
 			void
 			translateX (precision_t distance, bool local) noexcept
@@ -714,7 +693,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new Y position.
 			 * @param distance The Y value.
 			 * @param local Using local axis.
-			 * @return void
 			 */
 			void
 			translateY (precision_t distance, bool local) noexcept
@@ -733,7 +711,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new Z position.
 			 * @param distance The Z value.
 			 * @param local Using local axis.
-			 * @return void
 			 */
 			void
 			translateZ (precision_t distance, bool local) noexcept
@@ -752,7 +729,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new position using axis from another frame.
 			 * @param distance A reference to a vector.
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			translate (const Vector< 3, precision_t > & distance, const CartesianFrame & frame) noexcept
@@ -766,7 +742,6 @@ namespace EmEn::Base::Math
 			 * @param yDistance The Y value.
 			 * @param zDistance The Z value.
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			translate (precision_t xDistance, precision_t yDistance, precision_t zDistance, const CartesianFrame & frame) noexcept
@@ -778,7 +753,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new X position using axis from another frame.
 			 * @param distance The X value.
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			translateX (precision_t distance, const CartesianFrame & frame) noexcept
@@ -790,7 +764,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new Y position using axis from another frame.
 			 * @param distance The Y value.
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			translateY (precision_t distance, const CartesianFrame & frame) noexcept
@@ -802,7 +775,6 @@ namespace EmEn::Base::Math
 			 * @brief Translates the frame into a new Z position using axis from another frame.
 			 * @param distance The Z value.
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			translateZ (precision_t distance, const CartesianFrame & frame) noexcept
@@ -815,7 +787,6 @@ namespace EmEn::Base::Math
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param axis A Vector3 to define the axis.
 			 * @param local Using local axis.
-			 * @return void
 			 */
 			void
 			rotate (precision_t radian, const Vector< 3, precision_t > & axis, bool local) noexcept
@@ -847,7 +818,6 @@ namespace EmEn::Base::Math
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param worldAxis The axis of rotation (in world coordinates should ideally be normalized).
 			 * @param referenceFrame The frame whose origin defines the point around which to rotate.
-			 * @return void
 			 */
 			void
 			rotate (precision_t radian, const Vector< 3, precision_t > & worldAxis, const CartesianFrame & referenceFrame) noexcept
@@ -867,7 +837,6 @@ namespace EmEn::Base::Math
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param local If true, rotates around the local X axis (Right), affecting only orientation.
 			 * If false, rotates around the world X axis, affecting orientation and position relative to the world origin.
-			 * @return void
 			 */
 			void
 			pitch (precision_t radian, bool local) noexcept
@@ -889,7 +858,6 @@ namespace EmEn::Base::Math
 			 * @brief Rotates on X axis (Pitch) using another frame.
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			pitch (precision_t radian, const CartesianFrame & frame) noexcept
@@ -902,7 +870,6 @@ namespace EmEn::Base::Math
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param local If true, rotates around the local Y axis (Downward), affecting only orientation.
 			 * If false, rotates around the world Y axis, affecting orientation and position relative to the world origin.
-			 * @return void
 			 */
 			void
 			yaw (precision_t radian, bool local) noexcept
@@ -923,7 +890,6 @@ namespace EmEn::Base::Math
 			 * @brief Rotates on Y axis (Yaw) using another frame.
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			yaw (precision_t radian, const CartesianFrame & frame) noexcept
@@ -936,7 +902,6 @@ namespace EmEn::Base::Math
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param local If true, rotates around the local Z axis (Backward), affecting only orientation.
 			 * If false, rotates around the world Z axis, affecting orientation and position relative to the world origin.
-			 * @return void
 			 */
 			void
 			roll (precision_t radian, bool local) noexcept
@@ -957,7 +922,6 @@ namespace EmEn::Base::Math
 			 * @brief Rotates on Z axis (Roll) using another frame.
 			 * @param radian The angle expressed in radian. You can use the Math::Radian(degree).
 			 * @param frame A reference to a cartesian frame.
-			 * @return void
 			 */
 			void
 			roll (precision_t radian, const CartesianFrame & frame) noexcept
@@ -1312,7 +1276,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Resets all vectors.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -1324,7 +1287,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Resets the direction vectors.
-			 * @return void
 			 */
 			void
 			resetRotation () noexcept

@@ -226,7 +226,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Copy raw data to vector.
 			 * @param data A pointer to a C-Style containing at least the dimension of the vector.
-			 * @return void
 			 */
 			void
 			copy (std::span< precision_t, dim_t > data) const noexcept
@@ -1560,7 +1559,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Swaps axis.
-			 * @return void
 			 */
 			void
 			swapAxis () noexcept

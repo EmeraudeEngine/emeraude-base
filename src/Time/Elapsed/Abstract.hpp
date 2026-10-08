@@ -115,13 +115,11 @@ namespace EmEn::Base::Time::Elapsed
 
 			/**
 			 * @brief Starts a measurement.
-			 * @return void
 			 */
 			virtual void start () noexcept = 0;
 
 			/**
 			 * @brief Stops the measurement.
-			 * @return void
 			 */
 			virtual void stop () noexcept = 0;
 
@@ -135,7 +133,6 @@ namespace EmEn::Base::Time::Elapsed
 			/**
 			 * @brief Set duration in nanoseconds.
 			 * @param duration The duration in nanoseconds.
-			 * @return void
 			 */
 			void
 			setDuration (uint64_t duration) noexcept

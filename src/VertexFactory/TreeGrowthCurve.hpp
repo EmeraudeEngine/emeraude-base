@@ -124,7 +124,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note Nothing changes at the reference age (or an age of zero), so an un-aged preset is bit-exact.
 			 * @param parameters A writable reference to the parameters, which describe the reference age.
 			 * @param years The age in years. Zero or less means the reference age.
-			 * @return void
 			 */
 			void
 			apply (TreeParameters< vertex_data_t > & parameters, vertex_data_t years) const noexcept
@@ -155,7 +154,6 @@ namespace EmEn::Base::VertexFactory
 			 * from the tip count by itself.
 			 * @param grower A writable reference to the grower, which describes the reference age.
 			 * @param years The age in years. Zero or less means the reference age.
-			 * @return void
 			 */
 			void
 			apply (TreeColonizationGrower< vertex_data_t > & grower, vertex_data_t years) const noexcept

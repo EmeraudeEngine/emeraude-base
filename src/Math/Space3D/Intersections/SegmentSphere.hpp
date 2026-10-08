@@ -41,7 +41,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Segment< precision_t > & segment, const Sphere< precision_t > & sphere) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -84,7 +84,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Segment< precision_t > & segment, const Sphere< precision_t > & sphere, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -158,7 +158,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Segment< precision_t > &, Sphere< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Sphere< precision_t > & sphere, const Segment< precision_t > & segment) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -168,7 +168,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Segment< precision_t > &, Sphere< precision_t > &, Point< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Sphere< precision_t > & sphere, const Segment< precision_t > & segment, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{

@@ -294,12 +294,16 @@ namespace EmEn::Base::Network
 	{
 		/* TLS setup: SNI, chain verification against the context trust store, and identity
 		 * verification. Always enforced. */
-		const auto verifiedHost = unbracket(targetHost);
+		/* NOTE: not const: SSL_ctrl() takes the SNI name as a 'void *' it only reads (it copies it), so a mutable
+		 * buffer is handed over without a const-dropping cast. */
+		auto verifiedHost = unbracket(targetHost);
 		const auto targetIsIP = isIPLiteral(verifiedHost);
 
 		/* RFC 6066 §3: an IP literal must NOT be sent as SNI — some servers reject the
 		 * handshake outright when it is. */
-		if ( !targetIsIP && SSL_set_tlsext_host_name(m_stream.native_handle(), verifiedHost.c_str()) != 1 )
+		/* NOTE: SSL_ctrl() is what OpenSSL's SSL_set_tlsext_host_name() macro expands to, minus its C-style
+		 * '(char *)' cast of a const name. */
+		if ( !targetIsIP && SSL_ctrl(m_stream.native_handle(), SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name, verifiedHost.data()) != 1 )
 		{
 			Logging::error(Tag, "performHandshake(), unable to set the SNI hostname '" + verifiedHost + "' !");
 

@@ -257,7 +257,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Walks the edge groups and keeps the silhouette edges from the current facing flags.
-			 * @return void
 			 */
 			void
 			collectEdges () noexcept

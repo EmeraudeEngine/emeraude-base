@@ -411,7 +411,7 @@ namespace EmEn::Base::VertexFactory
 				{
 					output << "f";
 
-					for ( int index = 0; index < 3; ++index )
+					for ( index_data_t index = 0; index < 3; ++index )
 					{
 						const index_data_t idx = triangle.vertexIndex(index) + 1;
 
@@ -495,19 +495,6 @@ namespace EmEn::Base::VertexFactory
 			using VertexIndexMap = std::unordered_map< VertexKey, index_data_t, VertexKeyHash >;
 
 			/**
-			 * @brief Returns the shape vertex of a face corner, appending it the first time its (v, vt, vn) triple is met.
-			 * @note ⚠️ The whole triple is the key (2026-10-05): the loader used to key a vertex by ONE index (the most
-			 * numerous attribute) and to append a vertex only when the POSITION differed, so a face sharing a position
-			 * with another normal or texture coordinates (a hard edge, a UV seam) inherited the first face's — on
-			 * basic-scenery's temple, 381 triangles a ZERO normal (black) and 4880 corners a foreign one.
-			 * @note The side is the fourth entry (2026-10-07): a corner of a mirror seam is one vertex per side.
-			 * @pre The indices are in range of m_v, m_vt, m_vn, or NoAttribute for vt and vn.
-			 * @param key The 0-based (v, vt, vn) triple and the side.
-			 * @param vertexIndexes A reference to the triples already met.
-			 * @param vertices A reference to the shape vertices.
-			 * @return std::optional< index_data_t > The shape vertex index, or nothing past the index type's capacity.
-			 */
-			/**
 			 * @brief Returns the side of a face triangle's UV mapping: 1 when it is MIRRORED (its UV determinant
 			 * r = Δu1·Δv2 − Δu2·Δv1 is positive, Shape::triangleTangentFrame()), 0 otherwise or without texture coordinates.
 			 * @note A position shared by both sides with the same (vt, vn) sits on a mirror seam; its tangent frames are
@@ -550,6 +537,19 @@ namespace EmEn::Base::VertexFactory
 				return determinant > 0 ? 1 : 0;
 			}
 
+			/**
+			 * @brief Returns the shape vertex of a face corner, appending it the first time its (v, vt, vn) triple is met.
+			 * @note ⚠️ The whole triple is the key (2026-10-05): the loader used to key a vertex by ONE index (the most
+			 * numerous attribute) and to append a vertex only when the POSITION differed, so a face sharing a position
+			 * with another normal or texture coordinates (a hard edge, a UV seam) inherited the first face's — on
+			 * basic-scenery's temple, 381 triangles a ZERO normal (black) and 4880 corners a foreign one.
+			 * @note The side is the fourth entry (2026-10-07): a corner of a mirror seam is one vertex per side.
+			 * @pre The indices are in range of m_v, m_vt, m_vn, or NoAttribute for vt and vn.
+			 * @param key The 0-based (v, vt, vn) triple and the side.
+			 * @param vertexIndexes A reference to the triples already met.
+			 * @param vertices A reference to the shape vertices.
+			 * @return std::optional< index_data_t > The shape vertex index, or nothing past the index type's capacity.
+			 */
 			[[nodiscard]]
 			std::optional< index_data_t >
 			vertexIndexOf (const VertexKey & key, VertexIndexMap & vertexIndexes, std::vector< ShapeVertex< vertex_data_t > > & vertices) const noexcept
@@ -1186,7 +1186,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Parses a "v" line to extract the position.
 			 * @param vLine A reference to a string.
 			 * @param offset The vertex offset.
-			 * @return void
 			 */
 			void
 			extractPositionAttribute (const std::string & vLine, index_data_t offset) noexcept
@@ -1225,7 +1224,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Parses a "vt" line to extract the texture coordinates.
 			 * @param vtLine A reference to a string.
 			 * @param offset The vertex offset.
-			 * @return void
 			 */
 			void
 			extractTextureCoordinatesAttribute (const std::string & vtLine, index_data_t offset) noexcept
@@ -1256,7 +1254,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Parses a "vn" line to extract the normal.
 			 * @param vnLine A reference to a string.
 			 * @param offset The vertex offset.
-			 * @return void
 			 */
 			void
 			extractNormalAttribute (const std::string & vnLine, index_data_t offset) noexcept

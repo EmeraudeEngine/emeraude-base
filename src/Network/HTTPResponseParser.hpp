@@ -92,7 +92,6 @@ namespace EmEn::Base::Network
 			 * @note MUST be called before feeding when the request was a HEAD — the
 			 * response then ends at the header section whatever Content-Length claims
 			 * (RFC 9112 §6.3). 204/304 statuses are handled automatically.
-			 * @return void
 			 */
 			void
 			expectBodilessResponse () noexcept

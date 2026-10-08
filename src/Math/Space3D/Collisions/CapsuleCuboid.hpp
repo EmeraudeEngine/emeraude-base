@@ -84,7 +84,6 @@ namespace EmEn::Base::Math::Space3D
 	 * @param cuboid The AABB.
 	 * @param closestOnAxis Output: closest point on capsule axis.
 	 * @param closestOnCuboid Output: closest point on/in cuboid.
-	 * @return void
 	 */
 	template< typename precision_t = float >
 	void

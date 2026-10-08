@@ -367,8 +367,7 @@ namespace EmEn::Base::Math
 	 * expression that checked only its second half, and vectors and matrices got in through that hole (the engine's
 	 * Sequence.cpp, and this library's CartesianFrame.hpp and Grid.hpp). They are now accepted on purpose, and anything
 	 * else is refused.
-	 * @tparam value_t The interpolated type.
-	 * @tparam scale_t The type of the interpolation factor.
+	 * @note Parameters of the concept: `value_t` is the interpolated type, `scale_t` the type of the interpolation factor.
 	 */
 	template< typename value_t, typename scale_t >
 	concept LinearlyInterpolable = requires (const value_t & operandA, const value_t & operandB, scale_t factor) {

@@ -43,18 +43,21 @@
 
 namespace EmEn::Base::Hash
 {
-	std::string
-	_toString (const uint8_t * data, size_t size, size_t stringSize) noexcept
+	namespace
 	{
-		std::string hash(stringSize, '\0');
-
-		for ( size_t i = 0; i < size; i++ )
+		std::string
+		_toString (const uint8_t * data, size_t size, size_t stringSize) noexcept
 		{
-			//sprintf(&hash[i * 2], "%02x", data[i]);
-			snprintf(&hash[i * 2], 3, "%02x", data[i]);
-		}
+			std::string hash(stringSize, '\0');
 
-		return hash;
+			for ( size_t i = 0; i < size; i++ )
+			{
+				//sprintf(&hash[i * 2], "%02x", data[i]);
+				snprintf(&hash[i * 2], 3, "%02x", data[i]);
+			}
+
+			return hash;
+		}
 	}
 
 	std::string

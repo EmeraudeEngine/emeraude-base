@@ -109,7 +109,6 @@ namespace EmEn::Base
 			 * @param major The major number.
 			 * @param minor The minor number.
 			 * @param revision The revision number.
-			 * @return void
 			 */
 			void
 			set (int major, int minor, int revision) noexcept
@@ -121,8 +120,7 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Sets the major number of the version.
-			 * @param value
-			 * @return void
+			 * @param value The major number.
 			 */
 			void
 			setMajor (int value) noexcept
@@ -132,8 +130,7 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Sets the minor number of the version.
-			 * @param value
-			 * @return void
+			 * @param value The minor number.
 			 */
 			void
 			setMinor (int value) noexcept
@@ -143,8 +140,7 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Sets the revision number of the version.
-			 * @param value
-			 * @return void
+			 * @param value The revision number.
 			 */
 			void
 			setRevision (int value) noexcept

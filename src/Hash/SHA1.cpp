@@ -32,17 +32,17 @@
 #define SHA1_ROTL(x, n) (((x) << (n)) | ((x) >> ((sizeof(x) << 3) - (n))))
 #define SHA1_UNPACK32(x, str)				 \
 {											 \
-	*((str) + 3) = (uint8_t) ((x)	  );	   \
-	*((str) + 2) = (uint8_t) ((x) >>  8);	   \
-	*((str) + 1) = (uint8_t) ((x) >> 16);	   \
-	*((str) + 0) = (uint8_t) ((x) >> 24);	   \
+	*((str) + 3) = static_cast< uint8_t >((x)	  );	   \
+	*((str) + 2) = static_cast< uint8_t >((x) >>  8);	   \
+	*((str) + 1) = static_cast< uint8_t >((x) >> 16);	   \
+	*((str) + 0) = static_cast< uint8_t >((x) >> 24);	   \
 }
 #define SHA1_PACK32(str, x)				   \
 {											 \
-	*(x) =   ((uint32_t) *((str) + 3)	  )	\
-		   | ((uint32_t) *((str) + 2) <<  8)	\
-		   | ((uint32_t) *((str) + 1) << 16)	\
-		   | ((uint32_t) *((str) + 0) << 24);   \
+	*(x) =   (static_cast< uint32_t >(*((str) + 3))	  )	\
+		   | (static_cast< uint32_t >(*((str) + 2)) <<  8)	\
+		   | (static_cast< uint32_t >(*((str) + 1)) << 16)	\
+		   | (static_cast< uint32_t >(*((str) + 0)) << 24);   \
 }
 
 namespace EmEn::Base::Hash
@@ -162,7 +162,7 @@ namespace EmEn::Base::Hash
 	void
 	SHA1::final (std::array< uint8_t, 20 > & digest) noexcept
 	{
-		auto blockSize = 1 + static_cast< int >((SHA1::BlockSize - 9) < (m_length % SHA1::BlockSize));
+		const size_t blockSize = 1U + static_cast< size_t >((SHA1::BlockSize - 9) < (m_length % SHA1::BlockSize));
 		auto len_b = (m_totalLength + m_length) << 3;
 		auto pm_length = blockSize << 6;
 
@@ -179,7 +179,7 @@ namespace EmEn::Base::Hash
 
 		this->transform(m_block.data(), blockSize);
 
-		for ( auto i = 0; i < 5; i++ )
+		for ( size_t i = 0; i < 5; i++ )
 		{
 			SHA1_UNPACK32(m_h[i], &digest[i << 2]);
 		}

@@ -424,7 +424,6 @@ namespace EmEn::Base::VertexFactory
 			 * projection on the parent segment, 0 on the trunk. The phase is the first-order ancestor's, so a whole
 			 * limb — its twigs and its leaves — sways as one, and the trunk (G = 0) needs none.
 			 * @param context A reference to the context.
-			 * @return void
 			 */
 			static
 			void
@@ -562,7 +561,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param builder A reference to the shape builder.
 			 * @param context A reference to the tree context.
 			 * @param branch A reference to the branch.
-			 * @return void
 			 */
 			void
 			emitBranch (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const Branch & branch) const noexcept
@@ -780,7 +778,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param radius The radius of the last ring.
 			 * @param arc The distance from the start of the branch.
 			 * @param wind A reference to the branch's place in the wind hierarchy.
-			 * @return void
 			 */
 			void
 			emitApex (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const std::vector< SkinVertex > & ring, const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & tangent, vertex_data_t radius, vertex_data_t arc, const BranchWind & wind) const noexcept
@@ -860,7 +857,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Emits every leaf card, in the group that is already open.
 			 * @param builder A reference to the shape builder.
 			 * @param context A reference to the tree context.
-			 * @return void
 			 */
 			void
 			emitLeaves (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context) const noexcept
@@ -901,7 +897,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param context A reference to the tree context.
 			 * @param leaf A reference to the leaf attachment.
 			 * @param length The length of the card.
-			 * @return void
 			 */
 			void
 			emitLeafCard (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Context & context, const TreeLeafAttachment< vertex_data_t > & leaf, vertex_data_t length) const noexcept
@@ -977,7 +972,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param wind A reference to the leaf's place in the wind hierarchy.
 			 * @param occlusion The baked occlusion of the leaf.
 			 * @param context A reference to the tree context.
-			 * @return void
 			 */
 			void
 			emitCard (ShapeBuilder< vertex_data_t, index_data_t > & builder, const Math::Vector< 3, vertex_data_t > & origin, const Math::Vector< 3, vertex_data_t > & along, const Math::Vector< 3, vertex_data_t > & across, const Math::Vector< 3, vertex_data_t > & normal, vertex_data_t width, vertex_data_t length, const LeafWind & wind, vertex_data_t occlusion, const Context & context) const noexcept
@@ -1027,7 +1021,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param first A reference to the first vertex.
 			 * @param second A reference to the second vertex.
 			 * @param third A reference to the third vertex.
-			 * @return void
 			 */
 			void
 			emitTriangle (ShapeBuilder< vertex_data_t, index_data_t > & builder, const SkinVertex & first, const SkinVertex & second, const SkinVertex & third) const noexcept

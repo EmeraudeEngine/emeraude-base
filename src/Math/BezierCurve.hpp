@@ -73,7 +73,6 @@ namespace EmEn::Base::Math
 			 * @brief Close the curve by reusing the first point.
 			 * @note Do NOT repeat the first point as the last one: close() already wraps around, and a repeated point turns
 			 * the two segments around it into straight lines meeting at a corner, where the motion slows to a stop.
-			 * @return void
 			 */
 			void
 			close () noexcept

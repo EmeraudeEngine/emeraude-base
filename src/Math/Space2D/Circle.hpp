@@ -108,7 +108,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Sets the position of the circle in space.
 			 * @param position A reference to a point.
-			 * @return void
 			 */
 			void
 			setPosition (const Point< precision_t > & position) noexcept
@@ -119,7 +118,6 @@ namespace EmEn::Base::Math::Space2D
 			/**
 			 * @brief Sets the radius of the circle.
 			 * @param radius The radius in engine metrics.
-			 * @return void
 			 */
 			void
 			setRadius (precision_t radius) noexcept
@@ -162,7 +160,6 @@ namespace EmEn::Base::Math::Space2D
 
 			/**
 			 * @brief Reset the circle to null value.
-			 * @return void
 			 */
 			void
 			reset () noexcept

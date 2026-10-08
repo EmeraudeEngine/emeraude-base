@@ -67,7 +67,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex position.
 			 * @param position A reference to a vector for the position in space.
-			 * @return void
 			 */
 			void
 			setPosition (const Math::Vector< 3, vertex_data_t > & position) noexcept
@@ -78,7 +77,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex position.
 			 * @param position A reference to a vector for the position in space.
-			 * @return void
 			 */
 			void
 			setPosition (const Math::Vector< 4, vertex_data_t > & position) noexcept
@@ -91,7 +89,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex tangent.
 			 * @param tangent A reference to a 3D vector for the tangent.
-			 * @return void
 			 */
 			void
 			setTangent (const Math::Vector< 3, vertex_data_t > & tangent) noexcept
@@ -109,7 +106,6 @@ namespace EmEn::Base::VertexFactory
 			 * `NormalTangentMirrorTest`). glTF's `TANGENT` accessor is a vec4 for exactly this
 			 * reason; so is FBX's and USD's tangent convention.
 			 * @param tangent A reference to a 4D vector for the tangent, W being the handedness.
-			 * @return void
 			 */
 			void
 			setTangent (const Math::Vector< 4, vertex_data_t > & tangent) noexcept
@@ -125,7 +121,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note The sign applied to `cross(normal, tangent)` by biNormal(). +1 leaves the
 			 * cross product untouched, which is the neutral value every generated shape uses.
 			 * @param handedness The handedness, expected to be +1 or -1.
-			 * @return void
 			 */
 			void
 			setTangentHandedness (vertex_data_t handedness) noexcept
@@ -136,7 +131,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex normal.
 			 * @param normal A reference to a 3D vector for the normal.
-			 * @return void
 			 */
 			void
 			setNormal (const Math::Vector< 3, vertex_data_t > & normal) noexcept
@@ -147,7 +141,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex normal.
 			 * @param normal A reference to a 4D vector for the normal.
-			 * @return void
 			 */
 			void
 			setNormal (const Math::Vector< 4, vertex_data_t > & normal) noexcept
@@ -160,7 +153,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex texture coordinates.
 			 * @param textureCoordinates A reference to a 2D vector for the coordinates.
-			 * @return void
 			 */
 			void
 			setTextureCoordinates (const Math::Vector< 2, vertex_data_t > & textureCoordinates) noexcept
@@ -172,7 +164,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex texture coordinates.
 			 * @param textureCoordinates A reference to a 3D vector for the coordinates.
-			 * @return void
 			 */
 			void
 			setTextureCoordinates (const Math::Vector< 3, vertex_data_t > & textureCoordinates) noexcept
@@ -183,7 +174,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the vertex texture coordinates.
 			 * @param textureCoordinates A reference to a 4D vector for the coordinates.
-			 * @return void
 			 */
 			void
 			setTextureCoordinates (const Math::Vector< 4, vertex_data_t > & textureCoordinates) noexcept
@@ -197,7 +187,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Sets the vertex's SECONDARY texture coordinates (glTF's TEXCOORD_1: a second unwrap, typically a baked
 			 * occlusion or a lightmap).
 			 * @param textureCoordinates A reference to a 2D vector for the coordinates.
-			 * @return void
 			 */
 			void
 			setSecondaryTextureCoordinates (const Math::Vector< 2, vertex_data_t > & textureCoordinates) noexcept
@@ -211,7 +200,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param influenceB Index to second influence. Default none.
 			 * @param influenceC Index to third influence. Default none.
 			 * @param influenceD Index to fourth influence. Default none.
-			 * @return void
 			 */
 			void
 			setInfluences (int32_t influenceA, int32_t influenceB = -1, int32_t influenceC = -1, int32_t influenceD = -1) noexcept
@@ -228,7 +216,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param weightB Index to second influence weight. Default none.
 			 * @param weightC Index to third influence weight. Default none.
 			 * @param weightD Index to fourth influence weight. Default none.
-			 * @return void
 			 */
 			void
 			setWeights (vertex_data_t weightA, vertex_data_t weightB = 0, vertex_data_t weightC = 0, vertex_data_t weightD = 0) noexcept
@@ -343,7 +330,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Flip the vertex
-			 * @return void
 			 */
 			void
 			flip () noexcept
@@ -357,7 +343,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note The texture coordinate is deliberately NOT touched here — see flipTextureV().
 			 * Mirroring geometry and mirroring a UV are different intentions, and folding them into
 			 * one call means a caller can never ask for one without the other.
-			 * @return void
 			 */
 			void
 			flipYAxis () noexcept
@@ -370,7 +355,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Negates the V texture coordinate, of both sets (a file format's convention applies to every set).
 			 * @warning This is `-v`, NOT `1 - v`: they agree only under REPEAT wrapping.
-			 * @return void
 			 */
 			void
 			flipTextureV () noexcept

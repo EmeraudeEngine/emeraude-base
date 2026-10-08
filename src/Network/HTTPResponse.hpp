@@ -91,7 +91,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Constructs an HTTP response from raw headers.
 			 * @param rawHeaders A reference to string.
-			 * @return void
 			 */
 			explicit
 			HTTPResponse (const std::string & rawHeaders) noexcept
@@ -123,7 +122,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the HTTP code response.
 			 * @param code The code value.
-			 * @return void
 			 */
 			void
 			setCodeResponse (int code) noexcept
@@ -134,7 +132,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the HTTP text response.
 			 * @param text The code text.
-			 * @return void
 			 */
 			void
 			setTextResponse (const std::string & text) noexcept

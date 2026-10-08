@@ -69,7 +69,6 @@ namespace EmEn::Base::Math
 			 * @brief Adds a point to complete the line.
 			 * @param x X coordinate of the point.
 			 * @param y Y coordinate of the point.
-			 * @return void
 			 */
 			void
 			addPoint (data_t x, data_t y) noexcept
@@ -81,7 +80,6 @@ namespace EmEn::Base::Math
 			/**
 			 * @brief Adds a point to complete the line.
 			 * @param point A reference to a vector.
-			 * @return void
 			 */
 			void
 			addPoint (const Vector< 2, data_t > & point) noexcept
@@ -129,7 +127,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Clears points.
-			 * @return void
 			 */
 			void
 			clear () noexcept

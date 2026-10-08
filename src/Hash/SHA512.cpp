@@ -40,32 +40,32 @@
 #define SHA512_F4(x) (SHA2_ROTR(x, 19) ^ SHA2_ROTR(x, 61) ^ SHA2_SHFR(x,  6))
 #define SHA2_UNPACK32(x, str)				 \
 {											 \
-	*((str) + 3) = (uint8_t) ((x)	  );	   \
-	*((str) + 2) = (uint8_t) ((x) >>  8);	   \
-	*((str) + 1) = (uint8_t) ((x) >> 16);	   \
-	*((str) + 0) = (uint8_t) ((x) >> 24);	   \
+	*((str) + 3) = static_cast< uint8_t >((x)	  );	   \
+	*((str) + 2) = static_cast< uint8_t >((x) >>  8);	   \
+	*((str) + 1) = static_cast< uint8_t >((x) >> 16);	   \
+	*((str) + 0) = static_cast< uint8_t >((x) >> 24);	   \
 }
 #define SHA2_UNPACK64(x, str)				 \
 {											 \
-	*((str) + 7) = (uint8_t) ((x)	  );	   \
-	*((str) + 6) = (uint8_t) ((x) >>  8);	   \
-	*((str) + 5) = (uint8_t) ((x) >> 16);	   \
-	*((str) + 4) = (uint8_t) ((x) >> 24);	   \
-	*((str) + 3) = (uint8_t) ((x) >> 32);	   \
-	*((str) + 2) = (uint8_t) ((x) >> 40);	   \
-	*((str) + 1) = (uint8_t) ((x) >> 48);	   \
-	*((str) + 0) = (uint8_t) ((x) >> 56);	   \
+	*((str) + 7) = static_cast< uint8_t >((x)	  );	   \
+	*((str) + 6) = static_cast< uint8_t >((x) >>  8);	   \
+	*((str) + 5) = static_cast< uint8_t >((x) >> 16);	   \
+	*((str) + 4) = static_cast< uint8_t >((x) >> 24);	   \
+	*((str) + 3) = static_cast< uint8_t >((x) >> 32);	   \
+	*((str) + 2) = static_cast< uint8_t >((x) >> 40);	   \
+	*((str) + 1) = static_cast< uint8_t >((x) >> 48);	   \
+	*((str) + 0) = static_cast< uint8_t >((x) >> 56);	   \
 }
 #define SHA2_PACK64(str, x)				   \
 {											 \
-	*(x) =   ((uint64_t) *((str) + 7)	  )	\
-		   | ((uint64_t) *((str) + 6) <<  8)	\
-		   | ((uint64_t) *((str) + 5) << 16)	\
-		   | ((uint64_t) *((str) + 4) << 24)	\
-		   | ((uint64_t) *((str) + 3) << 32)	\
-		   | ((uint64_t) *((str) + 2) << 40)	\
-		   | ((uint64_t) *((str) + 1) << 48)	\
-		   | ((uint64_t) *((str) + 0) << 56);   \
+	*(x) =   (static_cast< uint64_t >(*((str) + 7))	  )	\
+		   | (static_cast< uint64_t >(*((str) + 6)) <<  8)	\
+		   | (static_cast< uint64_t >(*((str) + 5)) << 16)	\
+		   | (static_cast< uint64_t >(*((str) + 4)) << 24)	\
+		   | (static_cast< uint64_t >(*((str) + 3)) << 32)	\
+		   | (static_cast< uint64_t >(*((str) + 2)) << 40)	\
+		   | (static_cast< uint64_t >(*((str) + 1)) << 48)	\
+		   | (static_cast< uint64_t >(*((str) + 0)) << 56);   \
 }
 
 namespace EmEn::Base::Hash
@@ -210,7 +210,7 @@ namespace EmEn::Base::Hash
 	void
 	SHA512::final (std::array< uint8_t, 64 > & digest) noexcept
 	{
-		auto blockSize = 1 + static_cast< int >((SHA512::BlockSize - 17) < (m_length % SHA512::BlockSize));
+		const size_t blockSize = 1U + static_cast< size_t >((SHA512::BlockSize - 17) < (m_length % SHA512::BlockSize));
 		auto len_b = (m_totalLength + m_length) << 3;
 		auto pm_length = blockSize << 7;
 
@@ -227,7 +227,9 @@ namespace EmEn::Base::Hash
 
 		this->transform(m_block.data(), blockSize);
 
-		for ( auto i = 0; i < 8; i++ )
+		for ( size_t i = 0; i < 8; i++ )
+		{
 			SHA2_UNPACK64(m_h[i], &digest[i << 3]);
+		}
 	}
 }

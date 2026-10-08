@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -141,11 +142,13 @@ namespace EmEn::Base::Animation
 					}
 					else if ( token == "hierarchy" )
 					{
-						hierarchy.resize(numJoints);
+						/* NOTE: The declared counts come from the (untrusted) file: an entry is appended per line
+						 * really READ, never allocated up front from the count (a negative or huge one aborts).
+						 * Phase 2 refuses the clip when the counts and the data disagree. */
+						hierarchy.clear();
 
-						for ( int i = 0; i < numJoints; ++i )
+						for ( int jointIndex = 0; jointIndex < numJoints && std::getline(stream, line); ++jointIndex )
 						{
-							std::getline(stream, line);
 							std::istringstream hs(line);
 
 							std::string name;
@@ -158,8 +161,11 @@ namespace EmEn::Base::Animation
 								name = name.substr(1, name.size() - 2);
 							}
 
-							hs >> hierarchy[i].parent >> hierarchy[i].flags >> hierarchy[i].firstComponent;
-							hierarchy[i].name = std::move(name);
+							HierarchyEntry entry;
+							hs >> entry.parent >> entry.flags >> entry.firstComponent;
+							entry.name = std::move(name);
+
+							hierarchy.push_back(std::move(entry));
 						}
 
 						/* Skip closing brace. */
@@ -167,26 +173,32 @@ namespace EmEn::Base::Animation
 					}
 					else if ( token == "bounds" )
 					{
-						/* Skip bounds block — not needed for animation. */
-						for ( int i = 0; i < numFrames; ++i )
+						/* Skip bounds block — not needed for animation. The read stops at the end of the stream
+						 * whatever the declared frame count. */
+						int skippedFrames = 0;
+
+						while ( skippedFrames < numFrames && std::getline(stream, line) )
 						{
-							std::getline(stream, line);
+							++skippedFrames;
 						}
 
 						std::getline(stream, line);
 					}
 					else if ( token == "baseframe" )
 					{
-						baseframe.resize(numJoints);
+						/* NOTE: Appended per line read, as the hierarchy above. */
+						baseframe.clear();
 
-						for ( int i = 0; i < numJoints; ++i )
+						for ( int jointIndex = 0; jointIndex < numJoints && std::getline(stream, line); ++jointIndex )
 						{
-							std::getline(stream, line);
 							std::istringstream bs(line);
 							char trash;
+							BaseFrameEntry entry;
 
-							bs >> trash >> baseframe[i].pos[0] >> baseframe[i].pos[1] >> baseframe[i].pos[2]
-							   >> trash >> trash >> baseframe[i].orient[0] >> baseframe[i].orient[1] >> baseframe[i].orient[2];
+							bs >> trash >> entry.pos[0] >> entry.pos[1] >> entry.pos[2]
+							   >> trash >> trash >> entry.orient[0] >> entry.orient[1] >> entry.orient[2];
+
+							baseframe.push_back(entry);
 						}
 
 						std::getline(stream, line);
@@ -194,7 +206,13 @@ namespace EmEn::Base::Animation
 					else if ( token == "frame" )
 					{
 						std::vector< float > frameData;
-						frameData.reserve(numAnimatedComponents);
+
+						/* NOTE: A joint animates at most 6 components (6 flag bits): a larger declared count is
+						 * not trusted for the reservation (a negative or huge one would abort). */
+						if ( numAnimatedComponents > 0 && static_cast< size_t >(numAnimatedComponents) <= 6 * hierarchy.size() )
+						{
+							frameData.reserve(static_cast< size_t >(numAnimatedComponents));
+						}
 
 						while ( std::getline(stream, line) )
 						{
@@ -227,6 +245,18 @@ namespace EmEn::Base::Animation
 				if ( hierarchy.empty() || frames.empty() || frameRate <= 0 )
 				{
 					std::cerr << "[MD5AnimParser] Invalid .md5anim data !\n";
+
+					return {};
+				}
+
+				/* NOTE: The declared counts must match what the file really carries: Phase 2 indexes the
+				 * hierarchy, the baseframe and the frames with them. */
+				if ( numJoints < 0 || numFrames < 0 ||
+					hierarchy.size() != static_cast< size_t >(numJoints) ||
+					baseframe.size() != hierarchy.size() ||
+					frames.size() < static_cast< size_t >(numFrames) )
+				{
+					std::cerr << "[MD5AnimParser] The declared joint or frame count does not match the .md5anim data !\n";
 
 					return {};
 				}
@@ -272,8 +302,18 @@ namespace EmEn::Base::Animation
 						float qy = bf.orient[1];
 						float qz = bf.orient[2];
 
-						/* Override with animated components based on flags. */
-						int componentIndex = h.firstComponent;
+						/* Override with animated components based on flags. The file's first component index
+						 * and flags must stay inside this frame's data. */
+						const auto animatedCount = static_cast< size_t >(std::popcount(static_cast< uint32_t >(h.flags) & 63U));
+
+						if ( h.firstComponent < 0 || static_cast< size_t >(h.firstComponent) + animatedCount > frameData.size() )
+						{
+							std::cerr << "[MD5AnimParser] A joint's animated components fall outside frame " << f << " !\n";
+
+							return {};
+						}
+
+						auto componentIndex = static_cast< size_t >(h.firstComponent);
 
 						if ( h.flags & 1  ) { px = frameData[componentIndex++]; }
 						if ( h.flags & 2  ) { py = frameData[componentIndex++]; }

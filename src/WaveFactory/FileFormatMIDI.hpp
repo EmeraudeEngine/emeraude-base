@@ -488,7 +488,7 @@ namespace EmEn::Base::WaveFactory
 							const auto noteNumber = static_cast< uint8_t >(stream.get());
 							stream.get(); /* Velocity (ignored for Note Off). */
 
-							const uint16_t key = (static_cast< uint16_t >(channel) << 8) | noteNumber;
+							const auto key = static_cast< uint16_t >((channel << 8U) | noteNumber);
 							auto iterator = activeNotes.find(key);
 
 							if ( iterator != activeNotes.end() )
@@ -506,7 +506,7 @@ namespace EmEn::Base::WaveFactory
 							const auto noteNumber = static_cast< uint8_t >(stream.get());
 							const auto velocity = static_cast< uint8_t >(stream.get());
 
-							const uint16_t key = (static_cast< uint16_t >(channel) << 8) | noteNumber;
+							const auto key = static_cast< uint16_t >((channel << 8U) | noteNumber);
 
 							if ( velocity == 0 ) [[unlikely]]
 							{

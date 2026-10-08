@@ -47,7 +47,6 @@ namespace EmEn::Base::Logging
 	 * @note Thread-safe. Pass an empty sink (e.g. nullptr) to restore the default cerr sink.
 	 * The engine registers a sink here that forwards into its Tracer.
 	 * @param sink The sink receiving every base diagnostic, or empty to reset.
-	 * @return void
 	 */
 	void setSink (Sink sink) noexcept;
 
@@ -58,25 +57,24 @@ namespace EmEn::Base::Logging
 	 * @param severity The message severity.
 	 * @param tag A short category tag (must outlive the call; usually a string literal).
 	 * @param message The message body.
-	 * @return void
 	 */
 	void log (Severity severity, const char * tag, std::string_view message) noexcept;
 
-	/** @brief Emits a Debug-severity diagnostic. @param tag The category tag. @param message The message body. @return void */
+	/** @brief Emits a Debug-severity diagnostic. @param tag The category tag. @param message The message body. */
 	inline void debug (const char * tag, std::string_view message) noexcept { log(Severity::Debug, tag, message); }
 
-	/** @brief Emits an Info-severity diagnostic. @param tag The category tag. @param message The message body. @return void */
+	/** @brief Emits an Info-severity diagnostic. @param tag The category tag. @param message The message body. */
 	inline void info (const char * tag, std::string_view message) noexcept { log(Severity::Info, tag, message); }
 
-	/** @brief Emits a Success-severity diagnostic. @param tag The category tag. @param message The message body. @return void */
+	/** @brief Emits a Success-severity diagnostic. @param tag The category tag. @param message The message body. */
 	inline void success (const char * tag, std::string_view message) noexcept { log(Severity::Success, tag, message); }
 
-	/** @brief Emits a Warning-severity diagnostic. @param tag The category tag. @param message The message body. @return void */
+	/** @brief Emits a Warning-severity diagnostic. @param tag The category tag. @param message The message body. */
 	inline void warning (const char * tag, std::string_view message) noexcept { log(Severity::Warning, tag, message); }
 
-	/** @brief Emits an Error-severity diagnostic. @param tag The category tag. @param message The message body. @return void */
+	/** @brief Emits an Error-severity diagnostic. @param tag The category tag. @param message The message body. */
 	inline void error (const char * tag, std::string_view message) noexcept { log(Severity::Error, tag, message); }
 
-	/** @brief Emits a Fatal-severity diagnostic. @param tag The category tag. @param message The message body. @return void */
+	/** @brief Emits a Fatal-severity diagnostic. @param tag The category tag. @param message The message body. */
 	inline void fatal (const char * tag, std::string_view message) noexcept { log(Severity::Fatal, tag, message); }
 }

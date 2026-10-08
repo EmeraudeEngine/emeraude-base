@@ -223,13 +223,14 @@ TEST(VertexFactoryGrid, AHalvedTentGridIsTheTentMeanOfItsParent)
 
 			float expected = 0.0F;
 
-			for ( int dy = -1; dy <= 1; ++dy )
+			/* Tap 1 is the parent point (offset 0), taps 0 and 2 its neighbours (offsets -1 and +1). */
+			for ( uint32_t tapY = 0; tapY < 3U; ++tapY )
 			{
-				for ( int dx = -1; dx <= 1; ++dx )
+				for ( uint32_t tapX = 0; tapX < 3U; ++tapX )
 				{
-					const float weight = (dx == 0 ? 2.0F : 1.0F) * (dy == 0 ? 2.0F : 1.0F) / 16.0F;
+					const float weight = (tapX == 1U ? 2.0F : 1.0F) * (tapY == 1U ? 2.0F : 1.0F) / 16.0F;
 
-					expected += weight * grid.getHeightAt((x * 2U) + dx, (y * 2U) + dy);
+					expected += weight * grid.getHeightAt((x * 2U) + tapX - 1U, (y * 2U) + tapY - 1U);
 				}
 			}
 
@@ -264,7 +265,7 @@ TEST(VertexFactoryGrid, AHalvedTentGridIsSmootherThanAPointSampledOne)
 			{
 				const auto h = source.getHeightAt(x, y);
 
-				sum += std::abs(source.getHeightAt(x - 1U, y) - (2.0F * h) + source.getHeightAt(x + 1U, y));
+				sum += static_cast< double >(std::abs(source.getHeightAt(x - 1U, y) - (2.0F * h) + source.getHeightAt(x + 1U, y)));
 				++count;
 			}
 		}

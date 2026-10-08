@@ -35,14 +35,14 @@ namespace EmEn::Base::Math::Space2D
 	/**
 	 * @brief Finds the intersection between two lines using the "Cramer" method.
 	 * @tparam precision_t The data precision. Default float.
-	 * @param ax
-	 * @param ay
-	 * @param bx
-	 * @param by
-	 * @param cx
-	 * @param cy
-	 * @param dx
-	 * @param dy
+	 * @param ax The X coordinate of the point A, on the first line.
+	 * @param ay The Y coordinate of the point A, on the first line.
+	 * @param bx The X coordinate of the point B, on the first line.
+	 * @param by The Y coordinate of the point B, on the first line.
+	 * @param cx The X coordinate of the point C, on the second line.
+	 * @param cy The Y coordinate of the point C, on the second line.
+	 * @param dx The X coordinate of the point D, on the second line.
+	 * @param dy The Y coordinate of the point D, on the second line.
 	 * @param intersection A writable reference to a vector for the intersection if method returns true.
 	 * @return bool
 	 */

@@ -84,10 +84,10 @@ namespace EmEn::Base
 
 			case Severity::Fatal :
 				return FatalString;
-
-			default:
-				return "Unknown";
 		}
+
+		/* NOTE: An out-of-range value (a cast integer). */
+		return "Unknown";
 	}
 
 	/**

@@ -144,7 +144,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the request method.
 			 * @param method The method of the request.
-			 * @return void
 			 */
 			void
 			setMethod (Method method) noexcept
@@ -167,7 +166,6 @@ namespace EmEn::Base::Network
 			 * @brief Sets the request resource.
 			 * @param resource A reference to a URI.
 			 * @param doNotAddHeader Disable the automatic adding of "Host:" header.
-			 * @return void
 			 */
 			void
 			setResource (const URI & resource, bool doNotAddHeader = false) noexcept

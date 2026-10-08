@@ -224,13 +224,6 @@ namespace EmEn::Base::VertexFactory
 				const std::string line;
 				const std::string dummy;
 
-				std::vector< ShapeVertex< vertex_data_t > > vertices;
-				std::vector< ShapeTriangle< vertex_data_t, index_data_t > > triangles;
-
-				/* Reserve some space to avoid too many reallocations. */
-				vertices.reserve(1000);
-				triangles.reserve(500);
-
 				/* Keep track of unique vertices to build indexed geometry */
 				/* Simple approach: Linear search or Map. For speed/simplicity in this context,
 				   we will just duplicate vertices for now or use a basic dedup if necessary.
@@ -246,7 +239,7 @@ namespace EmEn::Base::VertexFactory
 				   Alternatively, we can manually populate.
 				*/
 
-				return geometry.build([&file] (std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
+				return geometry.build([&file] (std::vector< std::pair< index_data_t, index_data_t > > & /*groups*/, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
 					std::string currentLine;
 					std::vector< ShapeVertex< vertex_data_t > > faceVertices;
 					Math::Vector< 3, float > normal;
@@ -357,7 +350,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				return geometry.build([&file, triangleCount] (std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
+				return geometry.build([&file, triangleCount] (std::vector< std::pair< index_data_t, index_data_t > > & /*groups*/, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
 					/* Optimize allocation */
 					vertices.reserve(static_cast< std::size_t >(triangleCount) * 3);
 					triangles.reserve(triangleCount);

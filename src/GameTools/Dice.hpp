@@ -64,7 +64,6 @@ namespace EmEn::Base::GameTools
 
 			/**
 			 * @brief Reset dice random generator.
-			 * @return void
 			 */
 			void
 			reset () noexcept

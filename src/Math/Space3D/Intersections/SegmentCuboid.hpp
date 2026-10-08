@@ -41,7 +41,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Segment< precision_t > & segment, const AACuboid< precision_t > & cuboid) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -55,8 +55,8 @@ namespace EmEn::Base::Math::Space3D
 		const auto & min = cuboid.minimum();
 		const auto & max = cuboid.maximum();
 
-		precision_t tMin = 0.0F;
-		precision_t tMax = 1.0F;
+		precision_t tMin{0};
+		precision_t tMax{1};
 
 		/* NOTE: Iterate over the 3 axes (X, Y, Z). */
 		for ( size_t i = 0; i < 3; ++i )
@@ -106,7 +106,7 @@ namespace EmEn::Base::Math::Space3D
 	 */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const Segment< precision_t > & segment, const AACuboid< precision_t > & cuboid, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -122,8 +122,8 @@ namespace EmEn::Base::Math::Space3D
 		const auto & min = cuboid.minimum();
 		const auto & max = cuboid.maximum();
 
-		precision_t tMin = 0.0F;
-		precision_t tMax = 1.0F;
+		precision_t tMin{0};
+		precision_t tMax{1};
 
 		/* NOTE: Iterate over the 3 axes (X, Y, Z). */
 		for ( size_t i = 0; i < 3; ++i )
@@ -171,7 +171,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Segment< precision_t > &, AACuboid< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const AACuboid< precision_t > & cuboid, const Segment< precision_t > & segment) noexcept requires (std::is_floating_point_v< precision_t >)
 	{
@@ -181,7 +181,7 @@ namespace EmEn::Base::Math::Space3D
 	/** @copydoc EmEn::Base::Math::Space3D::isIntersecting(const Segment< precision_t > &, AACuboid< precision_t > &, Point< precision_t > &) noexcept */
 	template< typename precision_t = float >
 	[[nodiscard]]
-	static
+	inline
 	bool
 	isIntersecting (const AACuboid< precision_t > & cuboid, const Segment< precision_t > & segment, Point< precision_t > & intersection) noexcept requires (std::is_floating_point_v< precision_t >)
 	{

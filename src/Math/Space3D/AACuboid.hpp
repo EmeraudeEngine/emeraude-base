@@ -164,7 +164,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the absolute volume of the cuboid from its center.
 			 * @param value The maximal value in every direction.
-			 * @return void
 			 */
 			void
 			set (precision_t value) noexcept
@@ -182,7 +181,6 @@ namespace EmEn::Base::Math::Space3D
 			 * @brief Sets the volume of the cuboid.
 			 * @param maximum The highest positive XYZ coordinates of the cuboid.
 			 * @param minimum The lowest negative XYZ coordinates of the cuboid.
-			 * @return void
 			 */
 			void
 			set (const Point< precision_t > & maximum, const Point< precision_t > & minimum) noexcept
@@ -525,7 +523,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Reset the cuboid to null value.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -542,7 +539,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Extends the volume of this cuboid with another one.
 			 * @param other A reference to a cuboid.
-			 * @return void
 			 */
 			void
 			merge (const AACuboid & other) noexcept
@@ -598,7 +594,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Extends the volume with a point.
 			 * @param point A reference to a vector.
-			 * @return void
 			 */
 			void
 			merge (const Point< precision_t > & point) noexcept
@@ -613,7 +608,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Extends the volume with a point.
 			 * @param point A reference to a vector.
-			 * @return void
 			 */
 			void
 			merge (const Vector< 4, precision_t > & point) noexcept
@@ -628,7 +622,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Merge a value on X.
 			 * @param value The distance in X.
-			 * @return void
 			 */
 			void
 			mergeX (precision_t value) noexcept
@@ -647,7 +640,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Merge a value on Y.
 			 * @param value The distance in Y.
-			 * @return void
 			 */
 			void
 			mergeY (precision_t value) noexcept
@@ -666,7 +658,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Merge a value on Z.
 			 * @param value The distance in Z.
-			 * @return void
 			 */
 			void
 			mergeZ (precision_t value) noexcept

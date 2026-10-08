@@ -149,7 +149,6 @@ namespace EmEn::Base::WaveFactory
 
 			/**
 			 * @brief Clears the wave data.
-			 * @return void
 			 */
 			void
 			clear () noexcept

@@ -159,7 +159,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Enables a flag.
 			 * @param flagBit The flag bit value.
-			 * @return void
 			 */
 			void
 			enableFlag (data_t flagBit) noexcept
@@ -170,7 +169,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Disables a flag.
 			 * @param flagBit The flag bit value.
-			 * @return void
 			 */
 			void
 			disableFlag (data_t flagBit) noexcept
@@ -181,7 +179,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Toggles a flag state.
 			 * @param flagBit The flag bit value.
-			 * @return void
 			 */
 			void
 			toggleFlag (data_t flagBit) noexcept
@@ -193,7 +190,6 @@ namespace EmEn::Base
 			 * @brief Sets multiple flags in one shot.
 			 * @warning This will erase all previous flags.
 			 * @param flags The flag bits.
-			 * @return void
 			 */
 			void
 			setFlags (data_t flags) noexcept
@@ -204,7 +200,6 @@ namespace EmEn::Base
 			/**
 			 * @brief Resets all flag to zero.
 			 * @note Sames as call FlagTrait::setFlagBits(0).
-			 * @return void
 			 */
 			void
 			resetFlags () noexcept

@@ -60,7 +60,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Replaces the query variables.
 			 * @param variables A reference to a map of variables.
-			 * @return void
 			 */
 			void
 			setVariables (const std::map< std::string, std::string > & variables) noexcept
@@ -72,7 +71,6 @@ namespace EmEn::Base::Network
 			 * @brief Adds a variable to the existing ones.
 			 * @param key A reference to a string for the variable name.
 			 * @param value A reference to a string for the variable value.
-			 * @return void
 			 */
 			void
 			addVariable (const std::string & key, const std::string & value) noexcept

@@ -75,7 +75,9 @@ namespace EmEn::Base::Algorithms
 			 * @param useSameValueForCorner Use the same value for corner.
 			 */
 			DiamondSquare (int32_t seed, bool useSameValueForCorner) noexcept
-				: m_randomizer(seed),
+				/* NOTE: a negative seed wraps modulo 2^32 (well-defined); the Mersenne Twister keeps only the low 32 bits
+				 * of its seed anyway, so every seed gives the same sequence as before. */
+				: m_randomizer(static_cast< uint32_t >(seed)),
 				m_useSameValueForCorner(useSameValueForCorner)
 			{
 
@@ -253,7 +255,6 @@ namespace EmEn::Base::Algorithms
 
 			/**
 			 * @brief Performs the corner step.
-			 * @return void
 			 */
 			void
 			cornerStep () noexcept
@@ -280,10 +281,9 @@ namespace EmEn::Base::Algorithms
 
 			/**
 			 * @brief Performs the diamond step.
-			 * @param size
-			 * @param halfSize
+			 * @param size The side of a tile at this level, in samples.
+			 * @param halfSize Half the tile side: the offset from a tile corner to its centre.
 			 * @param amplitude The displacement amplitude of this level.
-			 * @return void
 			 */
 			void
 			diamondStep (size_t size, size_t halfSize, number_t amplitude) noexcept
@@ -307,10 +307,9 @@ namespace EmEn::Base::Algorithms
 
 			/**
 			 * @brief Performs the square step.
-			 * @param size
-			 * @param halfSize
+			 * @param size The side of a tile at this level, in samples.
+			 * @param halfSize Half the tile side: the offset from a tile corner to the midpoint of its sides.
 			 * @param amplitude The displacement amplitude of this level.
-			 * @return void
 			 */
 			void
 			squareStep (size_t size, size_t halfSize, number_t amplitude) noexcept
@@ -358,8 +357,6 @@ namespace EmEn::Base::Algorithms
 			 *
 			 * This ensures the factor parameter in applyDiamondSquare represents
 			 * the actual maximum height displacement in world units.
-			 *
-			 * @return void
 			 */
 			void
 			normalizeData () noexcept

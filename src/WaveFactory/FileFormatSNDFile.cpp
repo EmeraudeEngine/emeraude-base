@@ -200,8 +200,11 @@ namespace EmEn::Base::WaveFactory
 				 * sharp clicks exactly at those peaks. SFC_SET_CLIPPING is documented to handle this,
 				 * but the effect is not reliable across all codec paths. To be safe, we decode as
 				 * float and perform the conversion + explicit clamp ourselves. sf_info.frames is an
-				 * *estimate* for VBR formats; we trust the actual count returned by sf_readf_float. */
-				std::vector< float > floatBuffer(static_cast< size_t >(soundFileInfos.frames) * soundFileInfos.channels);
+				 * *estimate* for VBR formats; we trust the actual count returned by sf_readf_float.
+				 * The frame and channel counts are proven positive and bounded above (isDataValid). */
+				const auto channelCount = static_cast< size_t >(soundFileInfos.channels);
+
+				std::vector< float > floatBuffer(static_cast< size_t >(soundFileInfos.frames) * channelCount);
 
 				const auto actualRead = sf_readf_float(file, floatBuffer.data(), soundFileInfos.frames);
 
@@ -220,7 +223,7 @@ namespace EmEn::Base::WaveFactory
 					}
 
 					/* Manual float→int16 conversion with hard clipping at ±1.0. */
-					const auto sampleCount = static_cast< size_t >(actualRead) * soundFileInfos.channels;
+					const auto sampleCount = static_cast< size_t >(actualRead) * channelCount;
 					auto * out = wave.data().data();
 
 					for ( size_t i = 0; i < sampleCount; ++i )

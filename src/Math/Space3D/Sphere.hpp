@@ -90,7 +90,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets a position.
 			 * @param position A reference to a position vector.
-			 * @return void
 			 */
 			void
 			setPosition (const Vector< 3, precision_t > & position) noexcept
@@ -112,7 +111,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Sets the radius of the sphere.
 			 * @param radius The radius of the sphere.
-			 * @return void
 			 */
 			void
 			setRadius (precision_t radius) noexcept
@@ -144,7 +142,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Reset the sphere to null value.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -156,7 +153,6 @@ namespace EmEn::Base::Math::Space3D
 			/**
 			 * @brief Extends the volume of this sphere with another one.
 			 * @param other A reference to a sphere.
-			 * @return void
 			 */
 			void
 			merge (const Sphere< precision_t > & other) noexcept
@@ -196,7 +192,7 @@ namespace EmEn::Base::Math::Space3D
 				/* NOTE: The new center is located on the line connecting the old centers.
 				 * It is offset from the center of the 'this' sphere to 'other'. The direction is normalized.
 				 * We handle the case where the distance is almost zero. */
-				const auto direction = centerToCenter / (distance > std::numeric_limits< precision_t >::epsilon() ? distance : 1.0f);
+				const auto direction = centerToCenter / (distance > std::numeric_limits< precision_t >::epsilon() ? distance : static_cast< precision_t >(1));
 				m_position = m_position + direction * (newRadius - m_radius);
 
 				m_radius = newRadius;

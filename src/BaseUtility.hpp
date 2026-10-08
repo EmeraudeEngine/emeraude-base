@@ -43,7 +43,6 @@ namespace EmEn::Base::Utility
 	 * @brief Execute the function a numerous times.
 	 * @param count The number of times.
 	 * @param loopScope A reference to a function.
-	 * @return void
 	 */
 	inline
 	void
@@ -59,7 +58,6 @@ namespace EmEn::Base::Utility
 	 * @brief Execute the function a numerous times.
 	 * @param count The number of times.
 	 * @param loopScope A reference to a function.
-	 * @return void
 	 */
 	inline
 	void

@@ -88,7 +88,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the URI domain base.
 			 * @param base A reference to a string.
-			 * @return void
 			 */
 			void
 			setBase (const std::string & base) noexcept
@@ -100,7 +99,6 @@ namespace EmEn::Base::Network
 			 * @brief Sets the URI domain user credentials.
 			 * @param username A reference to a string.
 			 * @param password A reference to a string.
-			 * @return void
 			 */
 			void
 			setUserinfo (const std::string & username, const std::string & password) noexcept
@@ -117,7 +115,6 @@ namespace EmEn::Base::Network
 			 * @brief Sets the URI domain username.
 			 * @note Separate method from URIDomain::setUserinfo().
 			 * @param username A reference to a string.
-			 * @return void
 			 */
 			void
 			setUsername (const std::string & username) noexcept
@@ -129,7 +126,6 @@ namespace EmEn::Base::Network
 			 * @brief Sets the URI domain user password.
 			 * @note Separate method from URIDomain::setUserinfo().
 			 * @param password A reference to a string.
-			 * @return void
 			 */
 			void
 			setPassword (const std::string & password) noexcept
@@ -140,7 +136,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Replaces the options of the URI domain.
 			 * @param options A reference to a map.
-			 * @return void
 			 */
 			void
 			setOptions (const std::map< std::string, std::string > & options) noexcept
@@ -152,7 +147,6 @@ namespace EmEn::Base::Network
 			 * @brief Adds an option to the URI domain.
 			 * @param name A reference to a string.
 			 * @param value A reference to a string.
-			 * @return void
 			 */
 			void
 			addOption (const std::string & name, const std::string & value) noexcept
@@ -163,7 +157,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the hostname of the URI domain.
 			 * @param hostname A reference to a Hostname.
-			 * @return void
 			 */
 			void
 			setHostname (const Hostname & hostname) noexcept
@@ -174,7 +167,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the port to the URI domain.
 			 * @param port The port number as an unsigned 32-bit integer.
-			 * @return void
 			 */
 			void
 			setPort (uint32_t port) noexcept
@@ -293,7 +285,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Parses the user information (percent-decoded).
 			 * @param string A reference to a string.
-			 * @return void
 			 */
 			void parseUserInfos (const std::string & string) noexcept;
 

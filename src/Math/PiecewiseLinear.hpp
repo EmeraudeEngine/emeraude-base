@@ -77,7 +77,6 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Removes every point.
-			 * @return void
 			 */
 			void
 			clear () noexcept

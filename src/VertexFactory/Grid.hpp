@@ -230,7 +230,7 @@ namespace EmEn::Base::VertexFactory
 
 				/* If we specify the size about the division. */
 				m_quadSquaredSize = cellSize;
-				m_halfSquaredSize = (m_quadSquaredSize * m_squaredQuadCount) * Half;
+				m_halfSquaredSize = (m_quadSquaredSize * static_cast< vertex_data_t >(m_squaredQuadCount)) * Half;
 
 				/* Initialize the bounding box for a flat ground. */
 				m_boundingBox.set({m_halfSquaredSize, 0, m_halfSquaredSize}, {-m_halfSquaredSize, 0, -m_halfSquaredSize});
@@ -306,7 +306,7 @@ namespace EmEn::Base::VertexFactory
 				constexpr auto Half = static_cast< vertex_data_t >(0.5);
 
 				/* If we specify the size about the division. */
-				m_quadSquaredSize = gridSize / m_squaredQuadCount;
+				m_quadSquaredSize = gridSize / static_cast< vertex_data_t >(m_squaredQuadCount);
 				m_halfSquaredSize = gridSize * Half;
 
 				/* Initialize the bounding box for a flat ground. */
@@ -341,7 +341,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param factor The height of a gray of 1, in world units.
 			 * @param mode How the new heights combine with the existing ones (default: Replace).
 			 * @post The bounding box and sphere are recomputed from the heights (they were left stale until 2026-09-22).
-			 * @return void
 			 */
 			template< typename pixel_t >
 			void
@@ -1364,9 +1363,9 @@ namespace EmEn::Base::VertexFactory
 			position (index_data_t positionX, index_data_t positionY) const noexcept
 			{
 				return {
-					(positionX * m_quadSquaredSize) - m_halfSquaredSize + m_worldOffset[0],
+					(static_cast< vertex_data_t >(positionX) * m_quadSquaredSize) - m_halfSquaredSize + m_worldOffset[0],
 					m_pointHeights[this->index(positionX, positionY)],
-					(positionY * m_quadSquaredSize) - m_halfSquaredSize + m_worldOffset[1]
+					(static_cast< vertex_data_t >(positionY) * m_quadSquaredSize) - m_halfSquaredSize + m_worldOffset[1]
 				};
 			}
 
@@ -2350,7 +2349,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param width The width in samples.
 			 * @param height The height in samples.
 			 * @param passes How many passes (sigma grows as the square root).
-			 * @return void
 			 */
 			static
 			void
@@ -2431,7 +2429,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param width The width in samples.
 			 * @param height The height in samples.
 			 * @param halfStep Half a quantization level, in the samples' unit.
-			 * @return void
 			 */
 			static
 			void

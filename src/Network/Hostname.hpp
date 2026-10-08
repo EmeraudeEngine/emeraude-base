@@ -60,7 +60,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the subdomain part of the host.
 			 * @param name The subdomain name.
-			 * @return void
 			 */
 			void
 			setSubdomain (const std::string & name) noexcept
@@ -82,7 +81,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Sets the domain part of the host.
 			 * @param name The domain name.
-			 * @return void
 			 */
 			void
 			setDomain (const std::string & name) noexcept

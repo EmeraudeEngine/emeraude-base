@@ -174,4 +174,83 @@ namespace EmEn::Base::Animation
 		EXPECT_LT(probe[Math::Y], -0.5F);
 		EXPECT_NEAR(probe[Math::Z], 0.0F, 1e-3F);
 	}
+
+	/* Ave Robustus II warning pass (2026-10-08): the declared counts come from an untrusted file.
+	 * A negative or huge numJoints used to resize() the hierarchy from it (an abort without exceptions),
+	 * more frames declared than present and an out-of-range firstComponent read out of bounds. */
+	TEST(MD5AnimParser, negativeJointCountRefused)
+	{
+		std::istringstream stream{
+			"numFrames 1\n"
+			"numJoints -1\n"
+			"frameRate 24\n"
+			"numAnimatedComponents 0\n"
+			"hierarchy {\n"
+			"}\n"
+			"baseframe {\n"
+			"}\n"
+			"frame 0 {\n"
+			"}\n"};
+
+		EXPECT_TRUE(Parser::parseStream(stream, "negative-joints").empty());
+	}
+
+	TEST(MD5AnimParser, hugeJointCountRefused)
+	{
+		std::istringstream stream{
+			"numFrames 1\n"
+			"numJoints 2000000000\n"
+			"frameRate 24\n"
+			"numAnimatedComponents 2000000000\n"
+			"hierarchy {\n"
+			"\"root\" -1 0 0\n"
+			"}\n"
+			"baseframe {\n"
+			"( 0 0 0 ) ( 0 0 0 )\n"
+			"}\n"
+			"frame 0 {\n"
+			"}\n"};
+
+		EXPECT_TRUE(Parser::parseStream(stream, "huge-joints").empty());
+	}
+
+	TEST(MD5AnimParser, moreFramesDeclaredThanPresentRefused)
+	{
+		std::istringstream stream{
+			"numFrames 3\n"
+			"numJoints 1\n"
+			"frameRate 24\n"
+			"numAnimatedComponents 0\n"
+			"hierarchy {\n"
+			"\"root\" -1 0 0\n"
+			"}\n"
+			"baseframe {\n"
+			"( 0 0 0 ) ( 0 0 0 )\n"
+			"}\n"
+			"frame 0 {\n"
+			"}\n"};
+
+		EXPECT_TRUE(Parser::parseStream(stream, "missing-frames").empty());
+	}
+
+	TEST(MD5AnimParser, componentIndexOutsideFrameRefused)
+	{
+		/* flags 63 animates 6 components starting at 1000, in a frame that carries 6. */
+		std::istringstream stream{
+			"numFrames 1\n"
+			"numJoints 1\n"
+			"frameRate 24\n"
+			"numAnimatedComponents 6\n"
+			"hierarchy {\n"
+			"\"root\" -1 63 1000\n"
+			"}\n"
+			"baseframe {\n"
+			"( 0 0 0 ) ( 0 0 0 )\n"
+			"}\n"
+			"frame 0 {\n"
+			"0 0 0 0 0 0\n"
+			"}\n"};
+
+		EXPECT_TRUE(Parser::parseStream(stream, "component-out-of-frame").empty());
+	}
 }

@@ -498,7 +498,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Clears the pixmap data.
 			 * @note Width and height will be reset to zero and the channel mode to RGB.
-			 * @return void
 			 */
 			void
 			clear () noexcept
@@ -1019,7 +1018,6 @@ namespace EmEn::Base::PixelFactory
 			 * @tparam color_data_t The color data type. Default float.
 			 * @param pixelIndex The index of the pixel.
 			 * @param color A reference to the color of the pixel.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1100,7 +1098,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param coordX The X coordinate of the pixel.
 			 * @param coordY The Y coordinate of the pixel.
 			 * @param color A reference to the color of the pixel.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1117,7 +1114,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param coordX The X coordinate of the pixel.
 			 * @param coordY The Y coordinate of the pixel.
 			 * @param color A reference to the color of the pixel.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1140,7 +1136,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param pixelIndex The index of the pixel.
 			 * @param color A reference to a color.
 			 * @param mix The mix scale.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1158,7 +1153,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param coordY The Y coordinate of the pixel.
 			 * @param color A reference to a color.
 			 * @param mix The blending technics.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1178,7 +1172,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param coordY The Y coordinate of the pixel.
 			 * @param color A reference to a color.
 			 * @param mix The blending technics.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1204,7 +1197,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param color A reference to a color.
 			 * @param mode The blending technics.
 			 * @param opacity A global opacity (Ignored with Replace). Default 1.0.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1230,7 +1222,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param color A reference to a color.
 			 * @param mode The blending technics.
 			 * @param opacity A global opacity (Ignored with Replace). Default 1.0.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1260,7 +1251,6 @@ namespace EmEn::Base::PixelFactory
 			 * @param color A reference to a color.
 			 * @param mode The blending technics.
 			 * @param opacity A global opacity (Ignored with Replace). Default 1.0.
-			 * @return void
 			 */
 			template< typename color_data_t = float >
 			void
@@ -1836,10 +1826,10 @@ namespace EmEn::Base::PixelFactory
 								static_cast< pixel_data_t >(std::floor(maxB / limit))
 							);
 						}
-
-					default:
-						return {};
 				}
+
+				/* An out-of-range channel mode (cast from data) reaches no case above. */
+				return {};
 			}
 
 			/**
@@ -1880,7 +1870,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Updates the updated region marker from one pixel.
 			 * @param coordX The X coordinate of the pixel.
 			 * @param coordY The Y coordinate of the pixel.
-			 * @return void
 			 */
 			void
 			markPixelUpdated (dimension_t coordX, dimension_t coordY) noexcept
@@ -1918,7 +1907,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Updates the updated region marker from a rectangle.
 			 * @param rectangle A reference to a rectangle.
-			 * @return void
 			 */
 			void
 			markRectangleUpdated (const Math::Space2D::AARectangle< dimension_t > & rectangle) noexcept
@@ -1931,7 +1919,6 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Updates whole the updated region marker.
-			 * @return void
 			 */
 			void
 			markEverythingUpdated () noexcept
@@ -1947,7 +1934,6 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Reset the updated region marker.
-			 * @return void
 			 */
 			void
 			resetUpdatedRegionMarker () noexcept
@@ -2611,7 +2597,6 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Sets data to zero.
-			 * @return void
 			 */
 			void
 			zeroFill () noexcept
@@ -2679,21 +2664,27 @@ namespace EmEn::Base::PixelFactory
 				}
 
 				size_t bufferSize = 0;
+				bool channelModeHandled = false;
 
 				switch ( m_channelMode )
 				{
 					case ChannelMode::Grayscale :
 					case ChannelMode::GrayscaleAlpha :
 						bufferSize = m_width * m_height;
+						channelModeHandled = true;
 						break;
 
 					case ChannelMode::RGB :
 					case ChannelMode::RGBA :
 						bufferSize = m_width * m_height * 3;
+						channelModeHandled = true;
 						break;
+				}
 
-					default:
-						return false;
+				/* An out-of-range channel mode (cast from data) reaches no case above. */
+				if ( !channelModeHandled )
+				{
+					return false;
 				}
 
 				if constexpr ( std::is_floating_point_v< pixel_data_t > )
@@ -2808,7 +2799,6 @@ namespace EmEn::Base::PixelFactory
 			 * @tparam color_data_t The color data type. Default float.
 			 * @tparam callable_t The callable function type. Signature: bool (Color & pixel).
 			 * @param updatePixel A reference to a function to modify the pixel.
-			 * @return void
 			 */
 			template< typename color_data_t = float, typename callable_t >
 			void
@@ -2836,7 +2826,6 @@ namespace EmEn::Base::PixelFactory
 			 * @tparam color_data_t The color data type. Default float.
 			 * @tparam callable_t The callable function type. Signature: bool (Color & pixel, dimension_t coordX, dimension_t coordY)
 			 * @param updatePixel A reference to a function to modify the pixel.
-			 * @return void
 			 */
 			template< typename color_data_t = float, typename callable_t >
 			void
@@ -2864,7 +2853,6 @@ namespace EmEn::Base::PixelFactory
 			 * @tparam color_data_t The color data type. Default float.
 			 * @tparam callable_t The callable function type. Signature: bool (Color & pixel, dimension_t coordX, dimension_t coordY)
 			 * @param updatePixel A reference to a function to modify the pixel.
-			 * @return void
 			 */
 			template< typename color_data_t = float, typename callable_t >
 			void
@@ -2942,7 +2930,6 @@ namespace EmEn::Base::PixelFactory
 			 * @note Converts between OpenGL and DirectX normal map conventions.
 			 * OpenGL convention: Y+ points up. DirectX convention: Y+ points down.
 			 * The operation is: G = MaxValue - G for each pixel.
-			 * @return void
 			 */
 			void
 			flipNormalMapY () noexcept
@@ -3016,7 +3003,6 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Clamps a pixel index to a valid position in the pixmap.
 			 * @param pixelIndex A pixel index.
-			 * @return void
 			 */
 			void
 			clampPixelIndex (size_t & pixelIndex) const noexcept
@@ -3036,7 +3022,6 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Clamps a pixel index to a valid position in the pixmap.
 			 * @param coordX The pixel position in X.
 			 * @param coordY The pixel position in Y.
-			 * @return void
 			 */
 			void
 			clampPixelCoords (dimension_t & coordX, dimension_t & coordY) const noexcept

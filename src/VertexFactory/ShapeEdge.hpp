@@ -105,7 +105,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Sets the edge index shared with this one.
 			 * @param index The index of the shared edge.
-			 * @return void
 			 */
 			void
 			setSharedIndex (index_data_t index) noexcept

@@ -38,12 +38,21 @@ namespace EmEn::Base::Compression::LZMA
 	compressString (const std::string & input, std::string & output, int level) noexcept
 	{
 		output.clear();
+
+		/* The preset is a liblzma uint32_t: a negative level would wrap into flag bits (LZMA_PRESET_EXTREME…). */
+		if ( level < 0 || level > 9 )
+		{
+			Logging::error("Compression::LZMA", "compressString(), the compression level must be in [0, 9] !");
+
+			return false;
+		}
+
 		output.resize(input.size() + (input.size() >> 2) + 128);
 
 		size_t outPosition = 0;
 
 		const auto outputCode = lzma_easy_buffer_encode(
-			level,
+			static_cast< uint32_t >(level),
 			LZMA_CHECK_CRC32,
 			nullptr,
 			reinterpret_cast< const uint8_t * >(input.data()),

@@ -37,8 +37,8 @@ namespace EmEn::Base::PixelFactory
 {
 	/**
 	 * @brief The gradient pixmap class.
-	 * @tparam scale_data_t
-	 * @tparam color_data_t
+	 * @tparam scale_data_t The precision type of a position along the gradient. Default float.
+	 * @tparam color_data_t The precision type of the color components. Default float.
 	 */
 	template< typename scale_data_t = float, typename color_data_t = float >
 	requires (std::is_floating_point_v< scale_data_t > && std::is_floating_point_v< color_data_t >)

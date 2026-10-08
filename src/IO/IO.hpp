@@ -266,7 +266,6 @@ namespace EmEn::Base::IO
 	 * @brief Logs a failed directory walk (the non-template half of forEachDirectoryEntry()).
 	 * @param path The walked directory.
 	 * @param errorCode The error.
-	 * @return void
 	 */
 	void logDirectoryWalkError (const std::filesystem::path & path, const std::error_code & errorCode) noexcept;
 

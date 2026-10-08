@@ -137,7 +137,7 @@ namespace EmEn::Base::Math::Space3D::SAT
 				normalB.normalize();
 
 				/* Only add if not parallel to normalA. */
-				if ( std::abs(Vector< 3, precision_t >::dotProduct(normalA, normalB)) < (1.0 - std::numeric_limits< precision_t >::epsilon()) )
+				if ( std::abs(Vector< 3, precision_t >::dotProduct(normalA, normalB)) < (static_cast< precision_t >(1) - std::numeric_limits< precision_t >::epsilon()) )
 				{
 					axes.push_back(normalB);
 				}
@@ -152,7 +152,7 @@ namespace EmEn::Base::Math::Space3D::SAT
 		}
 
 		/* Check if triangles are coplanar. */
-		const bool coplanar = std::abs(Vector< 3, precision_t >::dotProduct(normalA, normalB)) > (1.0 - (std::numeric_limits< precision_t >::epsilon() * 10));
+		const bool coplanar = std::abs(Vector< 3, precision_t >::dotProduct(normalA, normalB)) > (static_cast< precision_t >(1) - (std::numeric_limits< precision_t >::epsilon() * static_cast< precision_t >(10)));
 
 		/* Compute edge cross products (3 edges from A × 3 edges from B = 9 axes). */
 		for ( size_t index = 0; index < 3; ++index )

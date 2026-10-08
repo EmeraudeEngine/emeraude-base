@@ -73,7 +73,6 @@ namespace EmEn::Base::Algorithms
 			/**
 			 * @brief
 			 * @param function
-			 * @return void
 			 */
 			void
 			setColorizationMethod (const colorize_fn & function)
@@ -88,7 +87,6 @@ namespace EmEn::Base::Algorithms
 			 * @param minImaginary
 			 * @param maxImaginary
 			 * @param maxIterations
-			 * @return void
 			 */
 			void
 			execute (number_t minReal = -1.5, number_t maxReal = 0.7, number_t minImaginary = -1.0, number_t maxImaginary = 1.0, uint32_t maxIterations = 1000)

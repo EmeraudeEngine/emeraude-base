@@ -1039,7 +1039,6 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 	 * @param vectorB A reference to a vector.
 	 * @param vectorC A reference to a vector.
 	 * @param depth The current depth.
-	 * @return void
 	 */
 	template< typename vertex_data_t = float, typename index_data_t = uint32_t >
 	void
@@ -1352,8 +1351,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			const auto currentRadius = baseRadius + (radiusStep * stackIndexF);
 			const auto nextRadius = baseRadius + (radiusStep * stackIndexPlusOneF);
 
-			const auto currentY = (length / stacks) * stackIndexF;
-			const auto nextY = (length / stacks) * stackIndexPlusOneF;
+			const auto currentY = (length / static_cast< vertex_data_t >(stacks)) * stackIndexF;
+			const auto nextY = (length / static_cast< vertex_data_t >(stacks)) * stackIndexPlusOneF;
 
 			for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex )
 			{
@@ -1611,8 +1610,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		constexpr auto one = static_cast< vertex_data_t >(1);
 		constexpr auto zero = static_cast< vertex_data_t >(0);
 
-		const auto stepSizeRadial = (outerRadius - innerRadius) / stacks;
-		const auto stepSizeSlice = (2 * std::numbers::pi_v< vertex_data_t >) / slices;
+		const auto stepSizeRadial = (outerRadius - innerRadius) / static_cast< vertex_data_t >(stacks);
+		const auto stepSizeSlice = (2 * std::numbers::pi_v< vertex_data_t >) / static_cast< vertex_data_t >(slices);
 		const auto radialScale = one / outerRadius;
 
 		std::array< Math::Vector< 3, vertex_data_t >, 4 > positions{};
@@ -1629,11 +1628,11 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		{
 			for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex )
 			{
-				const auto inner = innerRadius + (stackIndex * stepSizeRadial);
-				const auto outer = innerRadius + ((stackIndex + 1) * stepSizeRadial);
+				const auto inner = innerRadius + (static_cast< vertex_data_t >(stackIndex) * stepSizeRadial);
+				const auto outer = innerRadius + (static_cast< vertex_data_t >(stackIndex + 1) * stepSizeRadial);
 
-				const auto theta = stepSizeSlice * sliceIndex;
-				const auto thetaNext = sliceIndex == slices - 1 ? zero : stepSizeSlice * (sliceIndex + 1);
+				const auto theta = stepSizeSlice * static_cast< vertex_data_t >(sliceIndex);
+				const auto thetaNext = sliceIndex == slices - 1 ? zero : stepSizeSlice * static_cast< vertex_data_t >(sliceIndex + 1);
 
 				const auto cosTheta = std::cos(theta);
 				const auto sinTheta = std::sin(theta);

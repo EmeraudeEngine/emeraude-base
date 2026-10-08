@@ -120,7 +120,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Changes the destination shape.
 			 * @param destinationShape A reference to a shape to build.
-			 * @return void
 			 */
 			void
 			setDestinationShape (Shape< vertex_data_t, index_data_t > & destinationShape) noexcept
@@ -151,7 +150,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Begins the shape construction.
 			 * @param constructionMode The primitive type for construction. Default Triangles.
-			 * @return void
 			 */
 			void
 			beginConstruction (ConstructionMode constructionMode = ConstructionMode::Triangles) noexcept
@@ -185,7 +183,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Declares a new group in the geometry.
-			 * @return void
 			 */
 			void
 			newGroup () noexcept
@@ -205,7 +202,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Creates a new vertex.
 			 * @param position A reference to vector.
-			 * @return void
 			 */
 			void
 			setPosition (const Math::Vector< 3, vertex_data_t > & position) noexcept
@@ -409,7 +405,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Ends the construction of the shape.
-			 * @return void
 			 */
 			void
 			endConstruction () noexcept
@@ -548,7 +543,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Resets the current triangle.
-			 * @return void
 			 */
 			void
 			resetCurrentTriangle () noexcept
@@ -560,7 +554,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Resets the construction.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -586,7 +579,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Adds a new vertex into the incoming triangle.
-			 * @return void
 			 */
 			void
 			newVertexAdded () noexcept
@@ -652,7 +644,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Creates a triangle when sufficient data are available to build one.
-			 * @return void
 			 */
 			void
 			createTriangle () noexcept

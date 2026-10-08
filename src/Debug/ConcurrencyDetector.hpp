@@ -79,7 +79,6 @@ namespace EmEn::Base::Debug
 			/**
 			 * @brief Enters the context and check for concurrency.
 			 * @param location A reference to a source location.
-			 * @return void
 			 */
 			void
 			enter (const std::source_location & location)
@@ -110,7 +109,6 @@ namespace EmEn::Base::Debug
 
 			/**
 			 * @brief Leavers the context and remove the thread ID from the scope detector.
-			 * @return void
 			 */
 			void
 			leave ()

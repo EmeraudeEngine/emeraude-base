@@ -166,7 +166,6 @@ namespace EmEn::Base::Math::Space3D
 
 			/**
 			 * @brief Empties the mesh.
-			 * @return void
 			 */
 			void
 			clear () noexcept
@@ -264,7 +263,6 @@ namespace EmEn::Base::Math::Space3D
 			 * @param minimum The lowest corner of the box.
 			 * @param maximum The highest corner of the box.
 			 * @param function The callable.
-			 * @return void
 			 */
 			template< typename function_t >
 			void

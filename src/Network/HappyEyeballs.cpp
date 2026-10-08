@@ -61,7 +61,6 @@ namespace EmEn::Base::Network
 
 				/**
 				 * @brief Starts the first attempt.
-				 * @return void
 				 */
 				void
 				start () noexcept
@@ -72,7 +71,6 @@ namespace EmEn::Base::Network
 				/**
 				 * @brief Ends the race on a timeout: the timer and every attempt but the winner are closed.
 				 * @note The io_context must then be run until it drains.
-				 * @return void
 				 */
 				void
 				abort () noexcept
@@ -117,7 +115,6 @@ namespace EmEn::Base::Network
 				/**
 				 * @brief Starts the next endpoint's attempt and arms the attempt delay. An endpoint whose socket cannot
 				 * be opened (its family unsupported here) fails at once and the next one is tried.
-				 * @return void
 				 */
 				void
 				startNextAttempt () noexcept
@@ -171,7 +168,6 @@ namespace EmEn::Base::Network
 				 * @brief Completion of one attempt: the first success wins, a failure starts the next attempt at once.
 				 * @param index The attempt's index.
 				 * @param error The connect result.
-				 * @return void
 				 */
 				void
 				onAttemptCompleted (size_t index, const asio::error_code & error) noexcept
@@ -205,7 +201,6 @@ namespace EmEn::Base::Network
 
 				/**
 				 * @brief Cancels the attempt delay and closes every socket but the winner's.
-				 * @return void
 				 */
 				void
 				closeLosers () noexcept

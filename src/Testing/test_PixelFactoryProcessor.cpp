@@ -30,6 +30,9 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <vector>
+#include <span>
+#include <limits>
 
 /* Local inclusions. */
 #include "Constants.hpp"
@@ -1300,3 +1303,62 @@ TEST(PixelFactoryProcessor, downsampleFiltersEveryChannelAndRefusesToEnlarge)
 
 	EXPECT_FALSE(Processor< uint8_t >::downsample(source, 4, 3, target));
 }
+
+namespace
+{
+	/** @brief A 4 x 3 grayscale pixmap whose pixel values are their own index (0 … 11). */
+	Pixmap< uint8_t >
+	indexedPixmap ()
+	{
+		std::array< uint8_t, 12 > data{};
+		uint8_t value = 0;
+
+		for ( auto & element : data )
+		{
+			element = value++;
+		}
+
+		return Pixmap< uint8_t >{4, 3, ChannelMode::Grayscale, std::span< const uint8_t >{data}};
+	}
+
+	/** @brief Shifts a copy of the indexed pixmap and returns its pixels. */
+	std::vector< uint8_t >
+	shiftedPixels (int32_t xDirection, int32_t yDirection)
+	{
+		auto pixmap = indexedPixmap();
+
+		Processor< uint8_t > processor{pixmap};
+
+		EXPECT_TRUE(processor.shift(xDirection, yDirection));
+
+		return {pixmap.data().begin(), pixmap.data().end()};
+	}
+}
+
+/* Ave Robustus II warning pass (2026-10-08): a negative X shift computed an unsigned row chunk of ~4 GB
+ * (memcpy overrun), and a negative Y shift went the POSITIVE way (std::abs). Pixels wrap around, so a
+ * negative shift must equal the complementary positive one. */
+TEST(PixelFactoryProcessor, shiftNegativeEqualsComplement)
+{
+	EXPECT_EQ(shiftedPixels(-1, 0), shiftedPixels(3, 0));
+	EXPECT_EQ(shiftedPixels(0, -1), shiftedPixels(0, 2));
+	EXPECT_EQ(shiftedPixels(-5, -4), shiftedPixels(3, 2));
+	EXPECT_NE(shiftedPixels(0, -1), shiftedPixels(0, 1));
+}
+
+/* A distance of the whole height or more used to wrap the remaining height below zero (memcpy overrun),
+ * and std::abs(INT32_MIN) overflowed. */
+TEST(PixelFactoryProcessor, shiftTextAreaWholeHeightOrMore)
+{
+	for ( const int32_t distance : {3, -3, 1000, -1000, std::numeric_limits< int32_t >::min(), std::numeric_limits< int32_t >::max()} )
+	{
+		auto pixmap = indexedPixmap();
+
+		Processor< uint8_t > processor{pixmap};
+
+		EXPECT_TRUE(processor.shiftTextArea(distance)) << "distance " << distance;
+		EXPECT_EQ(pixmap.width(), 4U);
+		EXPECT_EQ(pixmap.height(), 3U);
+	}
+}
+

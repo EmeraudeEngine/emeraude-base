@@ -315,20 +315,20 @@ namespace EmEn::Base
 				return toTitleCase();
 
 			case CaseStyle::Unknown:
-			default:
-				/* Return concatenated words without formatting. */
-				{
-					std::string result;
-					result.reserve(totalWordLength());
-
-					for ( size_t i = 0; i < m_wordCount; ++i )
-					{
-						result += m_words[i];
-					}
-
-					return result;
-				}
+				break;
 		}
+
+		/* NOTE: CaseStyle::Unknown, or an out-of-range value (a cast integer):
+		 * return concatenated words without formatting. */
+		std::string result;
+		result.reserve(totalWordLength());
+
+		for ( size_t i = 0; i < m_wordCount; ++i )
+		{
+			result += m_words[i];
+		}
+
+		return result;
 	}
 
 	/* Static methods implementation. */
@@ -450,9 +450,11 @@ namespace EmEn::Base
 				return "Title Case";
 
 			case CaseStyle::Unknown:
-			default:
-				return "Unknown";
+				break;
 		}
+
+		/* NOTE: CaseStyle::Unknown, or an out-of-range value (a cast integer). */
+		return "Unknown";
 	}
 
 	/* Private methods implementation. */

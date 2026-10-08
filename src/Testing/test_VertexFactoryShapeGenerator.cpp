@@ -1284,12 +1284,12 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 			const auto & vertex = shape.vertices()[triangle.vertexIndex(corner)];
 			const auto & position = vertex.position();
 
-			sumX += std::abs(position[EmEn::Base::Math::X]);
-			sumY += std::abs(position[EmEn::Base::Math::Y]);
-			sumZ += std::abs(position[EmEn::Base::Math::Z]);
-			squared += static_cast< double >(position[0]) * position[0]
-			         + static_cast< double >(position[1]) * position[1]
-			         + static_cast< double >(position[2]) * position[2];
+			sumX += static_cast< double >(std::abs(position[EmEn::Base::Math::X]));
+			sumY += static_cast< double >(std::abs(position[EmEn::Base::Math::Y]));
+			sumZ += static_cast< double >(std::abs(position[EmEn::Base::Math::Z]));
+			squared += static_cast< double >(position[0]) * static_cast< double >(position[0])
+			         + static_cast< double >(position[1]) * static_cast< double >(position[1])
+			         + static_cast< double >(position[2]) * static_cast< double >(position[2]);
 
 			minY = std::min(minY, position[EmEn::Base::Math::Y]);
 			maxY = std::max(maxY, position[EmEn::Base::Math::Y]);
@@ -1297,11 +1297,11 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 			const auto u = vertex.textureCoordinates()[EmEn::Base::Math::X];
 			const auto v = vertex.textureCoordinates()[EmEn::Base::Math::Y];
 
-			sumU += u;
-			sumV += v;
-			sumU2 += static_cast< double >(u) * u;
-			sumV2 += static_cast< double >(v) * v;
-			sumNormal += std::abs(vertex.normal()[0]) + std::abs(vertex.normal()[1]) + std::abs(vertex.normal()[2]);
+			sumU += static_cast< double >(u);
+			sumV += static_cast< double >(v);
+			sumU2 += static_cast< double >(u) * static_cast< double >(u);
+			sumV2 += static_cast< double >(v) * static_cast< double >(v);
+			sumNormal += static_cast< double >(std::abs(vertex.normal()[0]) + std::abs(vertex.normal()[1]) + std::abs(vertex.normal()[2]));
 			}
 		}
 
@@ -1391,7 +1391,7 @@ TEST(VertexFactoryShapeGenerator, gemVertexColoursAgreeWithGeometry)
 				const auto y = shape.vertices()[triangle.vertexIndex(corner)].position()[EmEn::Base::Math::Y];
 				const auto green = shape.vertexColors()[triangle.vertexColorIndex(corner)][EmEn::Base::Math::Y];
 
-				if ( y > middle ) { greenAbove += green; ++countAbove; } else { greenBelow += green; ++countBelow; }
+				if ( y > middle ) { greenAbove += static_cast< double >(green); ++countAbove; } else { greenBelow += static_cast< double >(green); ++countBelow; }
 			}
 		}
 

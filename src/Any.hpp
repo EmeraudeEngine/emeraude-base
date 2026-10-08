@@ -209,7 +209,6 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Destroys the held value; the object is empty afterwards.
-			 * @return void
 			 */
 			void
 			reset () noexcept
@@ -295,7 +294,6 @@ namespace EmEn::Base
 			 * @param target Copy and Move: the destination (an empty Any). Destroy: the holder of the value.
 			 * @param copySource Copy: the source. nullptr otherwise.
 			 * @param moveSource Move: the source (left empty). nullptr otherwise.
-			 * @return void
 			 */
 			template< typename value_t >
 			static
@@ -342,7 +340,6 @@ namespace EmEn::Base
 			 * @tparam value_t The held type.
 			 * @tparam argument_t The constructor argument's type.
 			 * @param argument The constructor argument.
-			 * @return void
 			 */
 			template< typename value_t, typename argument_t >
 			void

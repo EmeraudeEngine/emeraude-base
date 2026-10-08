@@ -209,7 +209,6 @@ namespace EmEn::Base::Network
 			 * @param contentType The media type.
 			 * @param body The body.
 			 * @param extraHeaders Complete header lines, each ending with CRLF.
-			 * @return void
 			 */
 			void respond (int status, std::string_view contentType, std::string_view body, std::string_view extraHeaders = {}) noexcept;
 
@@ -217,7 +216,6 @@ namespace EmEn::Base::Network
 			 * @brief Answers the request in flight with no body.
 			 * @param status The HTTP status.
 			 * @param extraHeaders Complete header lines, each ending with CRLF.
-			 * @return void
 			 */
 			void respondEmpty (int status, std::string_view extraHeaders = {}) noexcept;
 
@@ -229,7 +227,6 @@ namespace EmEn::Base::Network
 			 * @param filepath The file.
 			 * @param contentType The media type.
 			 * @param extraHeaders Complete header lines, each ending with CRLF.
-			 * @return void
 			 */
 			void respondFile (const std::filesystem::path & filepath, std::string_view contentType, std::string_view extraHeaders = {}) noexcept;
 
@@ -239,33 +236,28 @@ namespace EmEn::Base::Network
 			 * @param extraHeaders Complete header lines, each ending with CRLF.
 			 * @param keepAlivePayload Bytes written after keepAliveSeconds of silence (an SSE comment); empty = none.
 			 * @param keepAliveSeconds The keep-alive period.
-			 * @return void
 			 */
 			void startStream (std::string_view contentType, std::string_view extraHeaders, std::string keepAlivePayload, uint32_t keepAliveSeconds) noexcept;
 
 			/**
 			 * @brief Sends bytes on a stream.
 			 * @param bytes The bytes [std::move].
-			 * @return void
 			 */
 			void sendStream (std::string bytes) noexcept;
 
 			/**
 			 * @brief Writes bytes synchronously, then closes. For the shutdown handler only (the loop is stopping).
 			 * @param bytes The bytes.
-			 * @return void
 			 */
 			void writeNowAndClose (std::string_view bytes) noexcept;
 
 			/**
 			 * @brief Closes the socket and forgets the connection.
-			 * @return void
 			 */
 			void close () noexcept;
 
 			/**
 			 * @brief Starts reading the first request (HTTPServer only).
-			 * @return void
 			 */
 			void start () noexcept;
 
@@ -295,7 +287,6 @@ namespace EmEn::Base::Network
 			/**
 			 * @brief Closes after a final answer: the socket goes to the server's GracefulCloser (FIN, bounded drain), so a
 			 * client still sending (a refused body, a late request) does not get a RST that would discard the answer.
-			 * @return void
 			 */
 			void closeGracefully () noexcept;
 			void finishWith (std::string response) noexcept;
@@ -377,7 +368,6 @@ namespace EmEn::Base::Network
 			 * @brief Stops the server: streams get their last words, every socket closes on the network thread, then
 			 * the thread joins. Bounded: a stuck peer cannot hold it more than 3 seconds. Idempotent.
 			 * @note Never from the network thread.
-			 * @return void
 			 */
 			void stop () noexcept;
 
@@ -425,14 +415,12 @@ namespace EmEn::Base::Network
 			 * @brief Runs a task on the network thread (an answer computed elsewhere). Dropped when not running.
 			 * @note Thread-safe. The caller keeps this server alive while it may still call post().
 			 * @param task The task.
-			 * @return void
 			 */
 			void post (std::function< void () > task) noexcept;
 
 			/**
 			 * @brief Calls a function for every open connection. NETWORK THREAD ONLY.
 			 * @param function The function.
-			 * @return void
 			 */
 			void forEachConnection (const std::function< void (HTTPServerConnection &) > & function) const noexcept;
 

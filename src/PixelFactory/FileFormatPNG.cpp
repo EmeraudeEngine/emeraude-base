@@ -69,6 +69,7 @@ namespace EmEn::Base::PixelFactory
 			std::string errorMessage;
 		};
 
+		[[noreturn]]
 		void
 		pngErrorCallback (png_structp pngPtr, png_const_charp message) noexcept
 		{
@@ -334,7 +335,8 @@ namespace EmEn::Base::PixelFactory
 		}
 
 		const int bitDepth = 8;
-		int colorType = 0;
+		/* NOTE: -1 is no PNG color type (0 is PNG_COLOR_TYPE_GRAY): it marks an unhandled channel mode. */
+		int colorType = -1;
 
 		switch ( pixmap.channelMode() )
 		{
@@ -353,11 +355,14 @@ namespace EmEn::Base::PixelFactory
 			case ChannelMode::RGBA :
 				colorType = PNG_COLOR_TYPE_RGB_ALPHA;
 				break;
+		}
 
-			default:
-				Logging::error("PixelFactory::FileFormatPNG", "writeStream(), invalid color count !");
+		/* An out-of-range channel mode (cast from data) reaches no case above. */
+		if ( colorType < 0 )
+		{
+			Logging::error("PixelFactory::FileFormatPNG", "writeStream(), invalid color count !");
 
-				return false;
+			return false;
 		}
 
 		/* pngErrorCallback longjmps on a fatal libPNG error (a returning handler aborts the process),

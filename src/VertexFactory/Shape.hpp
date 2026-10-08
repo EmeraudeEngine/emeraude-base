@@ -112,7 +112,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Reserves data for geometry construction to avoid multiple re-allocations.
 			 * @param triangleCount The possible number of triangles to reserve.
-			 * @return void
 			 */
 			void
 			reserveData (index_data_t triangleCount) noexcept
@@ -136,7 +135,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vertexColorsCount The possible number of color vertices to reserve.
 			 * @param facesCount The possible number of faces to reserve.
 			 * @param edgesCount The possible number of edges to reserve. Default 0.
-			 * @return void
 			 */
 			void
 			reserveData (index_data_t positionsCount, index_data_t vertexColorsCount, index_data_t facesCount, index_data_t edgesCount = 0) noexcept
@@ -183,7 +181,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vertexColorsCount The possible number of color vertices to reserve.
 			 * @param facesCount The possible number of faces to reserve.
 			 * @param edgesCount The possible number of edges to reserve. Default 0.
-			 * @return void
 			 */
 			void
 			resizeData (index_data_t positionsCount, index_data_t vertexColorsCount, index_data_t facesCount, index_data_t edgesCount = 0) noexcept
@@ -200,7 +197,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Clears geometry data.
-			 * @return void
 			 */
 			void
 			clear () noexcept
@@ -361,7 +357,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Clears all boundary loops.
-			 * @return void
 			 */
 			void
 			clearBoundaryLoops () noexcept
@@ -400,7 +395,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Marks the boundary loops as having been analyzed.
 			 * @note Called automatically by analyzeBoundaryLoops() and by ShapeSplitter.
-			 * @return void
 			 */
 			void
 			setBoundaryLoopsAnalyzed () noexcept
@@ -469,7 +463,6 @@ namespace EmEn::Base::VertexFactory
 			 * the stored data, before its lookup (restoreConstructionIndexes()).
 			 * @note ⚠️ The rebuilt vertex index holds EVERY stored vertex, those saved without merging
 			 * (saveVertex()) included, and uses the merge tolerance current at the rebuild.
-			 * @return void
 			 */
 			void
 			releaseConstructionIndexes () noexcept
@@ -671,7 +664,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Declares that normals are available.
 			 * @note Use this after loading geometry with pre-existing normals.
-			 * @return void
 			 */
 			void
 			declareNormalsAvailable () noexcept
@@ -682,7 +674,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Declares that texture coordinates are available.
 			 * @note Use this after generating UVs externally (e.g., UV unwrapping).
-			 * @return void
 			 */
 			void
 			declareTextureCoordinatesAvailable () noexcept
@@ -725,7 +716,7 @@ namespace EmEn::Base::VertexFactory
 				#pragma omp parallel for default(none) shared(uScale, vScale, wScale, trianglesCount, trianglesRef, verticesRef)
 				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
 				{
-					const auto & triangle = trianglesRef[triangleIndex];
+					const auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
 
 					for ( index_data_t vertexIndex = 0; vertexIndex < 3; ++vertexIndex )
 					{
@@ -769,7 +760,7 @@ namespace EmEn::Base::VertexFactory
 				#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef, invert)
 				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
 				{
-					auto & triangle = trianglesRef[triangleIndex];
+					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
 
 					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
 					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
@@ -817,7 +808,7 @@ namespace EmEn::Base::VertexFactory
 				#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef)
 				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
 				{
-					auto & triangle = trianglesRef[triangleIndex];
+					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
 
 					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
 					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
@@ -858,7 +849,7 @@ namespace EmEn::Base::VertexFactory
 				#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef)
 				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
 				{
-					auto & triangle = trianglesRef[triangleIndex];
+					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
 
 					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
 					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
@@ -923,7 +914,7 @@ namespace EmEn::Base::VertexFactory
 #pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef)
 				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
 				{
-					auto & triangle = trianglesRef[triangleIndex];
+					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
 					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
 					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
 					const auto & vertexC = verticesRef[triangle.vertexIndex(2)];
@@ -1072,7 +1063,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Moves the axis origin to the bottom of the geometry, so the shape
 			 * rests on the Y=0 plane and extends toward +Y.
 			 * @param updateProperties Enable the shape properties update. Default true.
-			 * @return void
 			 */
 			void
 			setCenterAtBottom (bool updateProperties = true)
@@ -1095,7 +1085,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Performs a geometry transformation with a Matrix 4x4.
 			 * @param transform A reference to a matrix.
 			 * @param updateProperties Enable the shape properties to update. Default true.
-			 * @return void
 			 */
 			void
 			transform (const Math::Matrix< 4, vertex_data_t > & transform, bool updateProperties = true) noexcept
@@ -1169,7 +1158,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Removes vertices too close to each other under a tolerance value.
 			 * @param vertexDistanceTolerance The distance below which two vertices will be welded.
-			 * @return void
 			 */
 			[[deprecated("Not working correctly")]]
 			void
@@ -1247,7 +1235,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Removes all vertex color information and replace by a new one.
 			 * @param color The new color.
-			 * @return void
 			 */
 			void
 			setGlobalVertexColor (const Math::Vector< 4, vertex_data_t > & color) noexcept
@@ -1268,7 +1255,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Removes all vertex color information and replace by a new one.
 			 * @param color The new color.
-			 * @return void
 			 */
 			void
 			setGlobalVertexColor (const PixelFactory::Color< vertex_data_t > & color) noexcept
@@ -1278,7 +1264,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Flips the surface of the shape. This will reverse the order of vertices and the normal and tangent vectors of every triangle.
-			 * @return void
 			 */
 			void
 			flipSurface () noexcept
@@ -1299,7 +1284,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note Companion of flipYAxis(): a mirror already yields the correct mirrored normals
 			 * and tangents but reverses the front-face orientation, which this call restores.
 			 * flipSurface() would negate the vectors a second time.
-			 * @return void
 			 */
 			void
 			reverseWinding () noexcept
@@ -1314,7 +1298,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Negates the V texture coordinate of every vertex.
 			 * @note Used to be folded into flipYAxis(); a caller that mirrors geometry does not
 			 * necessarily want its UVs mirrored too.
-			 * @return void
 			 */
 			void
 			flipTextureV () noexcept
@@ -1328,7 +1311,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Flip the Y-Axis of every GEOMETRIC vertex attribute.
 			 * @note Texture coordinates are not touched — see flipTextureV().
-			 * @return void
 			 */
 			void
 			flipYAxis () noexcept
@@ -1804,7 +1786,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Declares a new group.
 			 * @note This function is for building the shape manually.
-			 * @return void
 			 */
 			void
 			newGroup () noexcept
@@ -1924,7 +1905,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note Default 1e-4, the same value ShapeProcessor::deduplicateVertices() uses, so the two
 			 * merge paths of the library speak the same language.
 			 * @param tolerance The cell side. A value of 0 or less is ignored.
-			 * @return void
 			 */
 			void
 			setMergeTolerance (vertex_data_t tolerance) noexcept
@@ -1981,7 +1961,6 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Declares a new triangle.
 			 * @param triangle The triangle object.
-			 * @return void
 			 */
 			void
 			addTriangle (ShapeTriangle< vertex_data_t > & triangle) noexcept
@@ -2014,7 +1993,6 @@ namespace EmEn::Base::VertexFactory
 			 * @note Cheap since addEdge() became a hashed lookup (2026-09-21); it would have been
 			 * unthinkable when pairing meant scanning the whole edge list.
 			 * @note Does nothing on a shape that carries no edge, so a caller need not ask first.
-			 * @return void
 			 */
 			void
 			rebuildEdges () noexcept
@@ -2043,7 +2021,6 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Recomputes the centroid and the bounding box.
-			 * @return void
 			 */
 			void
 			updateProperties () noexcept
@@ -2295,7 +2272,7 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @briefs Checks and computes the vertex element count and returns the size.
+			 * @brief Checks and computes the vertex element count and returns the size.
 			 * @param normalType Set the normal format. Default none.
 			 * @param textureCoordinatesType Set the texture coordinates format. Default none.
 			 * @param vertexColorType Set the vertex color format. Default none.
@@ -2308,7 +2285,7 @@ namespace EmEn::Base::VertexFactory
 			index_data_t
 			getVertexElementCount (NormalType normalType, TextureCoordinatesType textureCoordinatesType, VertexColorType vertexColorType, SkeletalAnimationType skeletalAnimationType, TextureCoordinatesType secondaryTextureCoordinatesType = TextureCoordinatesType::None)
 			{
-				auto vertexElementCount = 3;
+				index_data_t vertexElementCount = 3;
 
 				switch ( secondaryTextureCoordinatesType )
 				{
@@ -2393,7 +2370,6 @@ namespace EmEn::Base::VertexFactory
 						break;
 
 					case SkeletalAnimationType::None :
-					default:
 						break;
 				}
 
@@ -2406,7 +2382,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vector A reference to a vector.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			template< size_t vec_dim_t >
 			static
@@ -2422,7 +2397,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vector A reference to a vector.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			template< size_t vec_dim_t >
 			static
@@ -2439,7 +2413,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vector A reference to a vector.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			template< size_t vec_dim_t >
 			static
@@ -2456,7 +2429,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vector A reference to a vector.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			static
 			void
@@ -2474,7 +2446,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param size The element count wanted.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			static
 			void
@@ -2511,7 +2482,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param size The element count wanted.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			static
 			void
@@ -2552,7 +2522,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param size The element count wanted.
 			 * @param vertexBuffer A reference to the vertex buffer.
 			 * @param offset A reference to an offset.
-			 * @return void
 			 */
 			static
 			void
@@ -2620,7 +2589,6 @@ namespace EmEn::Base::VertexFactory
 				 * @brief Folds one quantised component into a running hash.
 				 * @param seed A reference to the running hash.
 				 * @param value The component.
-				 * @return void
 				 */
 				static
 				void
@@ -2751,7 +2719,6 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Rebuilds the construction-time indexes from the stored data when they were released.
 			 * @note The edge slots are replayed in insertion order: each key keeps its FIRST half-edge, and is
 			 * paired once a second one exists — the state addEdge() left.
-			 * @return void
 			 */
 			void
 			restoreConstructionIndexes () noexcept
@@ -2804,7 +2771,6 @@ namespace EmEn::Base::VertexFactory
 			 * @param vertexColorType The vertex colour format.
 			 * @param skeletalAnimationType The skeletal attributes.
 			 * @param secondaryTextureCoordinatesType The secondary texture coordinates format.
-			 * @return void
 			 */
 			static
 			void

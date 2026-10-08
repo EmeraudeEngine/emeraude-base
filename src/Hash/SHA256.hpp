@@ -50,22 +50,19 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief processLogics
-			 * @param message
-			 * @param length
-			 * @return void
+			 * @param message A pointer to the message bytes.
+			 * @param length The number of bytes in the message.
 			 */
 			void update (const uint8_t * message, size_t length) noexcept;
 
 			/**
 			 * @brief final
-			 * @param digest
-			 * @return void
+			 * @param digest A writable reference to the 32-byte digest.
 			 */
 			void final (std::array< uint8_t, 32 > & digest) noexcept;
 
 			/**
 			 * @brief reset
-			 * @return void
 			 */
 			void reset () noexcept;
 
@@ -77,9 +74,8 @@ namespace EmEn::Base::Hash
 
 			/**
 			 * @brief transform
-			 * @param message
-			 * @param length
-			 * @return void
+			 * @param message A pointer to whole blocks of the message.
+			 * @param length The number of BLOCKS (not bytes) to process.
 			 */
 			void transform (const uint8_t * message, size_t length) noexcept;
 

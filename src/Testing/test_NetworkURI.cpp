@@ -331,3 +331,14 @@ TEST(NetworkURI, resourceReflectsSetPath)
 
 	EXPECT_EQ(uri.resource(), "/moved");
 }
+
+/* URI::isURL() replaced Network::URL::isURL() when URL was folded into URI (2026-10-08): a scheme AND a host. */
+TEST(NetworkURI, isURLNeedsSchemeAndHost)
+{
+	EXPECT_TRUE(URI::isURL("https://example.com/path?query=1"));
+	EXPECT_TRUE(URI::isURL("http://127.0.0.1:17778/mcp"));
+	EXPECT_FALSE(URI::isURL(""));
+	EXPECT_FALSE(URI::isURL("example.com/path"));
+	EXPECT_FALSE(URI::isURL("/an/absolute/path"));
+	EXPECT_FALSE(URI::isURL("not a url at all"));
+}

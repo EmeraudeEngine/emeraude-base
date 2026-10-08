@@ -27,19 +27,23 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstddef>
 #include <sstream>
 
 namespace EmEn::Base::Compression::ZLIB
 {
+	/** @brief The default size, in bytes, of a chunk compressed by step. */
+	constexpr size_t DefaultChunkSize{4096};
+
 	/**
 	 * @brief Compresses a stream using ZLIB.
 	 * @param sourceStream The uncompressed source stream.
 	 * @param targetStream The compressed target stream.
-	 * @param chunkSize The size of chunk to be compressed by step. Default 4096.
+	 * @param chunkSize The size of chunk to be compressed by step, not zero. Default 4096.
 	 * @param level The compression level from 0 to 9. Default 9 (high).
-	 * @return size_t
+	 * @return size_t The total compressed size, 0 on failure.
 	 */
-	size_t compressStream (std::istream & sourceStream, std::ostream & targetStream, size_t chunkSize = 4096, int level = 9) noexcept;
+	size_t compressStream (std::istream & sourceStream, std::ostream & targetStream, size_t chunkSize = DefaultChunkSize, int level = 9) noexcept;
 
 	/**
 	 * @brief Decompresses a stream using ZLIB.

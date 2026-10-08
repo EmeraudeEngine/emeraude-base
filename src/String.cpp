@@ -110,10 +110,10 @@ namespace EmEn::Base::String
 
 				return copy;
 			}
-
-			default:
-				return source;
 		}
+
+		/* NOTE: An out-of-range value (a cast integer). */
+		return source;
 	}
 
 	std::vector< std::string >
@@ -736,9 +736,9 @@ namespace EmEn::Base::String
 		/* Encode the bulk of the input, three bytes at a time into four characters. */
 		while ( i + 2 < size )
 		{
-			const auto b0 = std::to_integer< unsigned char >(data[i]);
-			const auto b1 = std::to_integer< unsigned char >(data[i + 1]);
-			const auto b2 = std::to_integer< unsigned char >(data[i + 2]);
+			const auto b0 = std::to_integer< size_t >(data[i]);
+			const auto b1 = std::to_integer< size_t >(data[i + 1]);
+			const auto b2 = std::to_integer< size_t >(data[i + 2]);
 
 			output += alphabet[b0 >> 2];
 			output += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];
@@ -751,7 +751,7 @@ namespace EmEn::Base::String
 		/* Handle the 1 or 2 trailing bytes with '=' padding. */
 		if ( const auto remaining = size - i; remaining == 1 )
 		{
-			const auto b0 = std::to_integer< unsigned char >(data[i]);
+			const auto b0 = std::to_integer< size_t >(data[i]);
 
 			output += alphabet[b0 >> 2];
 			output += alphabet[(b0 & 0x03) << 4];
@@ -760,8 +760,8 @@ namespace EmEn::Base::String
 		}
 		else if ( remaining == 2 )
 		{
-			const auto b0 = std::to_integer< unsigned char >(data[i]);
-			const auto b1 = std::to_integer< unsigned char >(data[i + 1]);
+			const auto b0 = std::to_integer< size_t >(data[i]);
+			const auto b1 = std::to_integer< size_t >(data[i + 1]);
 
 			output += alphabet[b0 >> 2];
 			output += alphabet[((b0 & 0x03) << 4) | (b1 >> 4)];

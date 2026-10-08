@@ -268,7 +268,6 @@ namespace EmEn::Base::Math::Space3D
 	 * @param segB The second segment.
 	 * @param closestOnA Output: closest point on segment A.
 	 * @param closestOnB Output: closest point on segment B.
-	 * @return void
 	 */
 	template< typename precision_t = float >
 	void

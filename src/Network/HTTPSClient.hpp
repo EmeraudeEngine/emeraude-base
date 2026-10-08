@@ -446,7 +446,6 @@ namespace EmEn::Base::Network
 			 * when its key already holds MaxIdleConnectionsPerKey.
 			 * @param key The key.
 			 * @param connection The connection [std::move].
-			 * @return void
 			 */
 			void keepIdleConnection (const ConnectionKey & key, std::unique_ptr< TLSConnection > connection) const noexcept;
 
