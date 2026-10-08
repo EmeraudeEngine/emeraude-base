@@ -33,6 +33,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "IO/ZipReader.hpp"
 #include "IO/ZipWriter.hpp"
 
@@ -49,7 +50,7 @@ namespace
 	freshTempDir (const char * leaf) noexcept
 	{
 		std::error_code errorCode;
-		auto dir = std::filesystem::temp_directory_path(errorCode) / leaf;
+		auto dir = EmEn::Base::Testing::uniqueTemporaryPath(leaf);
 		std::filesystem::remove_all(dir, errorCode);
 		std::filesystem::create_directories(dir, errorCode);
 

@@ -40,6 +40,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
@@ -144,9 +145,7 @@ namespace EmEn::Base::IO
 		std::filesystem::path
 		tempFile (const char * name) noexcept
 		{
-			std::error_code errorCode;
-
-			return std::filesystem::temp_directory_path(errorCode) / name;
+			return EmEn::Base::Testing::uniqueTemporaryPath(name);
 		}
 
 		void
@@ -392,7 +391,7 @@ TEST(IOFileUtils, permissionsOnRealFile)
 	 * (docs corrected). Here on POSIX: a freshly written file is readable & writable; a missing path
 	 * and the empty path are neither. */
 	std::error_code errorCode;
-	const auto dir = std::filesystem::temp_directory_path(errorCode) / "emeraude_io_perms";
+	const auto dir = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_perms");
 	std::filesystem::remove_all(dir, errorCode);
 	std::filesystem::create_directories(dir, errorCode);
 
@@ -421,7 +420,7 @@ TEST(IOForEachDirectoryEntry, walksFlatAndRecursiveStopsEarlyAndNeverThrows)
 {
 	std::error_code errorCode;
 
-	const auto root = std::filesystem::temp_directory_path(errorCode) / "emeraude_forEachDirectoryEntry";
+	const auto root = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_forEachDirectoryEntry");
 	std::filesystem::remove_all(root, errorCode);
 	ASSERT_TRUE(std::filesystem::create_directories(root / "sub", errorCode));
 
@@ -511,7 +510,7 @@ TEST(IOWindowsExtendedLengthPath, prefixesDriveAndUNCPathsAndLeavesTheRestAlone)
 TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
 {
 	std::error_code errorCode;
-	const auto base = std::filesystem::temp_directory_path(errorCode) / "emeraude-io-long-path-test";
+	const auto base = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-io-long-path-test");
 	std::filesystem::remove_all(base, errorCode);
 
 	/* A short path is handed to the system as it is, on every platform. */

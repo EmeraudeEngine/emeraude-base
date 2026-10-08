@@ -33,6 +33,7 @@
 #include <string>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "Network/TrustStore.hpp"
 #include "Constants.hpp"
 #include "IO/IO.hpp"
@@ -148,7 +149,7 @@ TEST(NetworkTrustStore, missingBundleFileFails)
 
 TEST(NetworkTrustStore, malformedBundleFileFails)
 {
-	const auto malformedFilepath = std::filesystem::temp_directory_path() / "emeraude-base-malformed-bundle.pem";
+	const auto malformedFilepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-malformed-bundle.pem");
 
 	{
 		std::ofstream malformedFile{malformedFilepath, std::ios::trunc};

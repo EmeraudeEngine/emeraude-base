@@ -41,6 +41,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "Constants.hpp"
 #include "IO/MemoryStream.hpp"
 #include "PixelFactory/FileFormatHDR.hpp"
@@ -369,7 +370,7 @@ TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
 TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
 {
 	std::error_code error;
-	const auto directory = std::filesystem::temp_directory_path(error) / "emeraude_font_test";
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_font_test");
 
 	ASSERT_FALSE(error);
 
@@ -421,7 +422,7 @@ namespace
 	writeFontTestFile (const std::string & name, const std::vector< char > & bytes)
 	{
 		std::error_code error;
-		const auto directory = std::filesystem::temp_directory_path(error) / "emeraude_font_test";
+		const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_font_test");
 
 		if ( error || (!std::filesystem::create_directories(directory, error) && error) )
 		{

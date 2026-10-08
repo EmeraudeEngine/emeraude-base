@@ -463,6 +463,17 @@ definition, a ZIP entry name — "Zip Slip") is joined with `IO::confinedPath(ba
 absolute, root-named and `..`-escaping paths (lexical, no system call; a symlink inside the base is not resolved).
 `ZipReader::extract()` refuses such an entry (test `ZipArchive.extractionRefusesEntriesThatLeaveTheDestination`).
 
+### ⚠️ A test's temporary file or directory gets a PER-PROCESS name — `Testing::uniqueTemporaryPath()` (2026-10-08, FIXED)
+
+Two copies of the suite running at once (the macOS peer's 8-copy stress run, two developers, a CI) shared ~25 FIXED
+names in the temporary directory across 9 test files and truncated or deleted each other's files:
+`NetworkHTTPServer.ServesFilesWithRanges` / `CleartextDownloadFromAPrivatePeer` failed 115 and 94 times in 160 on
+macOS; reproduced on Linux (8 copies × 10 repeats of the old binary: every copy failed, 8 to 26 times). `ctest -j`
+never runs one test twice at once, so the normal gate never saw it. `src/Testing/TemporaryPath.hpp`'s
+`uniqueTemporaryPath(leaf)` puts a per-process token before the extension and calls `temp_directory_path()` through
+its `error_code` overload (10 call sites used the THROWING one). After: 8 copies × 10 repeats green, nothing left in
+`/tmp`. **Rule:** a test never names a temporary path itself.
+
 ### ⚠️ Windows cannot delete a file a handle still holds — a test destroys its readers BEFORE its cleanup, and checks it (2026-10-08)
 
 The Windows peer found `emeraude_zip_roundtrip`, `emeraude_zip_directory` and `emeraude_zip_slip` left in `%TEMP%` after

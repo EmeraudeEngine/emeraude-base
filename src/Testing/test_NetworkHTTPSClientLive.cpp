@@ -46,6 +46,7 @@
 #include <system_error>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "emeraude_platform.hpp"
 #include "Network/HTTPSClient.hpp"
 #include "Network/TrustStore.hpp"
@@ -126,7 +127,7 @@ TEST(NetworkHTTPSClientLive, downloadsMrBeanImageToFile)
 	Network::HTTPSClient client{tlsContext};
 
 	std::error_code errorCode;
-	const auto filepath = std::filesystem::temp_directory_path(errorCode) / "emeraude-mr-bean.jpg";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-mr-bean.jpg");
 
 	ASSERT_TRUE(client.download(Network::URI{MrBeanImageURL}, filepath))
 		<< "download failed (non-2xx status, network, DNS, or TLS)." << ExternalResourceHint;

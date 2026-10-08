@@ -40,6 +40,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "Network/HTTPSClient.hpp"
 #include "TLSTestHelpers.hpp"
 
@@ -362,7 +363,7 @@ TEST(NetworkHTTPSClient, downloadStreamsToFile)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-test.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-test.bin");
 
 	ASSERT_TRUE(client.download(serverURI(server, "/big.bin"), filepath));
 
@@ -401,7 +402,7 @@ TEST(NetworkHTTPSClient, downloadReportsProgressWithContentLength)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-progress-test.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-progress-test.bin");
 
 	std::vector< uint64_t > received;
 	std::vector< std::optional< uint64_t > > totals;
@@ -448,7 +449,7 @@ TEST(NetworkHTTPSClient, downloadReportsProgressWithoutTotalWhenChunked)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-progress-chunked-test.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-progress-chunked-test.bin");
 
 	uint64_t lastReceived = 0;
 	bool anyTotalKnown = false;
@@ -481,7 +482,7 @@ TEST(NetworkHTTPSClient, downloadWithoutHookStillWorks)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-nohook-test.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-nohook-test.bin");
 
 	ASSERT_TRUE(client.download(serverURI(server, "/plain"), filepath));
 
@@ -508,7 +509,7 @@ TEST(NetworkHTTPSClient, downloadFailsOnErrorStatus)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-404.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-404.bin");
 
 	EXPECT_FALSE(client.download(serverURI(server, "/missing.bin"), filepath));
 	EXPECT_FALSE(std::filesystem::exists(filepath));
@@ -589,7 +590,7 @@ TEST(NetworkHTTPSClient, truncatedUntilCloseBodyIsRejected)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-truncated-untilclose.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-truncated-untilclose.bin");
 
 	EXPECT_FALSE(client.download(serverURI(server, "/asset.bin"), filepath));
 	EXPECT_FALSE(std::filesystem::exists(filepath));
@@ -637,7 +638,7 @@ TEST(NetworkHTTPSClient, downloadIsCappedByMaxDownloadSize)
 
 	Network::HTTPSClient client{tlsContext, options};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-capped.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-capped.bin");
 
 	EXPECT_FALSE(client.download(serverURI(server, "/big.bin"), filepath));
 	EXPECT_FALSE(std::filesystem::exists(filepath));
@@ -725,7 +726,7 @@ TEST(NetworkHTTPSClient, downloadOfAnEmptyBodyStillReportsProgressOnce)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-download-empty.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-empty.bin");
 
 	size_t calls = 0;
 	uint64_t received = 42;
@@ -762,7 +763,7 @@ TEST(NetworkHTTPSClient, downloadReportsWhyItFailed)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-base-report-test.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-report-test.bin");
 
 	/* A 404 must be distinguishable from a certificate failure and from a timeout. */
 	Network::DownloadReport report;
@@ -823,7 +824,7 @@ TEST(NetworkHTTPSClient, downloadReportsTLSFailureWhenTheCertificateIsRefused)
 
 	Network::HTTPSClient client{tlsContext};
 
-	const auto filepath = std::filesystem::temp_directory_path() / "emeraude-tlsfailure-test.bin";
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-tlsfailure-test.bin");
 
 	std::filesystem::remove(filepath);
 

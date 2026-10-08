@@ -35,6 +35,7 @@
 #include <system_error>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "INIParser.hpp"
 
 namespace EmEn::Base
@@ -45,9 +46,7 @@ namespace EmEn::Base
 		std::filesystem::path
 		tempFile (const char * name) noexcept
 		{
-			std::error_code errorCode;
-
-			return std::filesystem::temp_directory_path(errorCode) / name;
+			return EmEn::Base::Testing::uniqueTemporaryPath(name);
 		}
 
 		void

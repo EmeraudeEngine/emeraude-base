@@ -41,6 +41,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "TemporaryPath.hpp"
 #include "Network/GracefulCloser.hpp"
 #include "Network/HTTPServer.hpp"
 #include "Network/HTTPSClient.hpp"
@@ -245,7 +246,7 @@ namespace
 	patternFile (size_t size)
 	{
 		std::error_code ec;
-		auto filepath = std::filesystem::temp_directory_path(ec) / ("emeraude-httpserver-test-" + std::to_string(size) + ".bin");
+		auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-httpserver-test-" + std::to_string(size) + ".bin");
 		std::string content(size, '\0');
 
 		for ( size_t index = 0; index < size; ++index )
@@ -749,7 +750,7 @@ TEST(NetworkHTTPServer, CleartextDownloadFromAPrivatePeer)
 	constexpr size_t Size{(300 * 1024) + 5};
 	const auto source = patternFile(Size);
 	std::error_code ec;
-	const auto destination = std::filesystem::temp_directory_path(ec) / "emeraude-httpserver-test-download.bin";
+	const auto destination = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-httpserver-test-download.bin");
 
 	auto options = testOptions();
 	options.bearerToken = "peer-token";
