@@ -1112,6 +1112,28 @@ nothing). `move()` / `shiftTextArea()` take `std::abs()` in 64 bits (`std::abs(I
 (the same operations on 8-bit, 16-bit and float pixmaps give the same pixels), `moveVacatesWithEmptyPixels`,
 `moveExtremeDirections`; ASan/UBSan green.
 
+### ⚠️ A TrueType font size is the LINE height; a truncated `.ttf` loads as an INVISIBLE font unless checked (2026-10-08, FIXED)
+
+`Font::readTrueTypeFile()` never rendered a glyph (the copy was commented out), so every `.ttf` was refused, and the
+two TrueType tests were commented out too. Now (owner decision: keep TrueType) each of the 256 cells is rendered:
+- **Size = line height.** The glyph array and `TextProcessor` use one fontSize-high cell per glyph. A NOMINAL (em) size
+  puts the ascenders and descenders of most fonts outside it, so the size is requested with
+  `FT_SIZE_REQUEST_TYPE_REAL_DIM`: ascender − descender = fontSize pixels. Every glyph sits on the baseline (the scaled
+  ascender, rounded up, from the cell top); a negative left bearing shifts the glyph right inside its cell.
+- Cells: Latin-1 codes through the face's Unicode charmap; a control code (C0, DEL, C1) is an empty cell as wide as the
+  space; a code the font lacks shows the font's missing-glyph box (on purpose: a visible hole). `fixedWidth`: every
+  cell as wide as the widest, the glyph centred.
+- **Trust boundary:** the size must be in [1, 1024]; a glyph wider than 8 font sizes is refused; the file is read
+  through `IO::fileGetContents()` (UTF-8 paths) and opened from memory (`FT_New_Memory_Face`, the buffer declared
+  BEFORE the face). ⚠️ FreeType is LENIENT with a truncated file: the face opens and every cut glyph renders EMPTY —
+  measured with the test font cut to a third: the load "succeeded" with blank glyphs. An sfnt font (TrueType,
+  OpenType, a `ttcf` collection) is therefore refused when a table of its directory ends past the end of the file.
+- `TextProcessor(Pixmap &)` read a `Pixmap::area()` that does not exist: the template constructor had never been
+  instantiated (the engine uses `setPixmap()`). It reads `rectangle()` now.
+Tests: `PixelFactoryFont.trueTypeFontRendersItsGlyphs`, `trueTypeGlyphsShareABaseline`, `trueTypeFixedWidthCellsAreEqual`,
+`trueTypeHostileInputsRefused`, and `PixelFactoryTextProcessor.write` with both TrueType blocks back.
+Open: `TextProcessor` lays every font on a fixed grid (item `text-processor-proportional-advance`).
+
 ### `fill(const pixel_data_t * data, size_t size)` — the tiling was wrong four ways
 
 The same byte-vs-element confusion, plus arithmetic bugs, in the Grayscale/RGB branch. All four are

@@ -60,7 +60,7 @@ namespace EmEn::Base::PixelFactory
 			explicit
 			TextProcessor (Pixmap< pixel_data_t > & target) noexcept
 				: m_pixmap(&target),
-				m_rectangle(target.area())
+				m_rectangle(target.rectangle())
 			{
 
 			}

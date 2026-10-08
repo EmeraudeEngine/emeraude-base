@@ -37,13 +37,8 @@ using namespace EmEn::Base;
 using namespace EmEn::Base::PixelFactory;
 using namespace EmEn::Base::Time::Elapsed;
 
-/* NOTE: Only referenced by the commented-out TextProcessor::write() blocks below. */
-[[maybe_unused]] static constexpr auto LoremIpsum =
-	"This is dummy text." "\n"
-	"Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed non risus. Suspendisse lectus tortor, dignissim sit amet, adipiscing nec, ultricies sed, dolor. Cras elementum ultrices diam. Maecenas ligula massa, varius a, semper congue, euismod non, mi. Proin porttitor, orci nec nonummy molestie, enim est eleifend mi, non fermentum diam nisl sit amet erat. Duis semper. Duis arcu massa, scelerisque vitae, consequat in, pretium a, enim. Pellentesque congue. Ut in risus volutpat libero pharetra tempor. Cras vestibulum bibendum augue. Praesent egestas leo in pede. Praesent blandit odio eu enim. Pellentesque sed dui ut augue blandit sodales. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Aliquam nibh. Mauris ac mauris sed pede pellentesque fermentum. Maecenas adipiscing ante non diam sodales hendrerit.\n"
-	"Ut velit mauris, egestas sed, gravida nec, ornare ut, mi. Aenean ut orci vel massa suscipit pulvinar. Nulla sollicitudin. Fusce varius, ligula non tempus aliquam, nunc turpis ullamcorper nibh, in tempus sapien eros vitae ligula. Pellentesque rhoncus nunc et augue. Integer id felis. Curabitur aliquet pellentesque diam. Integer quis metus vitae elit lobortis egestas. Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Morbi vel erat non mauris convallis vehicula. Nulla et sapien. Integer tortor tellus, aliquam faucibus, convallis id, congue eu, quam. Mauris ullamcorper felis vitae erat. Proin feugiat, augue non elementum posuere, metus purus iaculis lectus, et tristique ligula justo vitae magna.\n"
-	"Aliquam convallis sollicitudin purus. Praesent aliquam, enim at fermentum mollis, ligula massa adipiscing nisl, ac euismod nibh nisl eu lectus. Fusce vulputate sem at sapien. Vivamus leo. Aliquam euismod libero eu enim. Nulla nec felis sed leo placerat imperdiet. Aenean suscipit nulla in justo. Suspendisse cursus rutrum augue. Nulla tincidunt tincidunt mi. Curabitur iaculis, lorem vel rhoncus faucibus, felis magna fermentum augue, et ultricies lacus lorem varius purus. Curabitur eu amet.\n";
-
+/* 2026-10-08: both blocks below were commented out: the TrueType font rendered no glyph, and TextProcessor's pixmap
+ * constructor read a Pixmap::area() that does not exist (that template constructor was never instantiated). */
 TEST(PixelFactoryTextProcessor, write)
 {
 	Pixmap< uint8_t > image{1024, 1024, ChannelMode::RGB};
@@ -58,7 +53,7 @@ TEST(PixelFactoryTextProcessor, write)
 		ASSERT_TRUE(image.fill(Processor< uint8_t >::toRGB(pattern)));
 	}
 
-	/*Font< uint8_t > fixedFont;
+	Font< uint8_t > fixedFont;
 
 	EXPECT_TRUE(fixedFont.readFile(TrueTypeFont, 48, true));
 
@@ -69,13 +64,13 @@ TEST(PixelFactoryTextProcessor, write)
 		textProcessor.setFont(fixedFont, 48);
 		textProcessor.setFontColor(DarkRed);
 		textProcessor.setDrawMode(DrawPixelMode::Normal);
-		textProcessor.setArea({32, 32, 1024 - 64, 512 - 64});
+		textProcessor.setRectangle({32, 32, 1024 - 64, 512 - 64});
 		textProcessor.setLineSpace(8);
 
 		EXPECT_TRUE(textProcessor.write(LoremIpsum));
-	}*/
+	}
 
-	/*Font< uint8_t > trueTypeFont;
+	Font< uint8_t > trueTypeFont;
 
 	EXPECT_TRUE(trueTypeFont.readFile(TrueTypeFont, 32, false));
 
@@ -86,11 +81,11 @@ TEST(PixelFactoryTextProcessor, write)
 		textProcessor.setFont(trueTypeFont, 32);
 		textProcessor.setFontColor(Green);
 		textProcessor.setDrawMode(DrawPixelMode::Normal);
-		textProcessor.setArea({64, 64 + 512, 1024 - 128, 512 - 128});
+		textProcessor.setRectangle({64, 64 + 512, 1024 - 128, 512 - 128});
 		textProcessor.setLineSpace(4);
 
 		EXPECT_TRUE(textProcessor.write(LoremIpsum));
-	}*/
+	}
 
 	ASSERT_TRUE(FileIO::write(image, AssetsDirectory / "tmp_textPixmap.png", true));
 }

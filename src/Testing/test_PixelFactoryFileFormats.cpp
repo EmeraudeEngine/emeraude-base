@@ -31,14 +31,17 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
+#include "Constants.hpp"
 #include "IO/MemoryStream.hpp"
 #include "PixelFactory/FileFormatHDR.hpp"
 #include "PixelFactory/FileFormatJpeg.hpp"
@@ -389,6 +392,159 @@ TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
 	EXPECT_FALSE(font.readFile(filepath, 16, false));
 
 	std::filesystem::remove_all(directory, error);
+}
+
+namespace
+{
+	/** @brief Returns the lowest row holding ink in a glyph cell, or -1 for an empty cell. */
+	[[nodiscard]]
+	int32_t
+	lowestInkRow (const PixelFactory::Pixmap< uint8_t > & glyph)
+	{
+		for ( auto row = static_cast< int32_t >(glyph.height()) - 1; row >= 0; --row )
+		{
+			for ( uint32_t column = 0; column < glyph.width(); ++column )
+			{
+				if ( glyph.data()[(static_cast< size_t >(row) * glyph.width()) + column] > 0 )
+				{
+					return row;
+				}
+			}
+		}
+
+		return -1;
+	}
+
+	/** @brief Writes bytes to a file of the test's temporary directory; returns its path (empty on a failure). */
+	[[nodiscard]]
+	std::filesystem::path
+	writeFontTestFile (const std::string & name, const std::vector< char > & bytes)
+	{
+		std::error_code error;
+		const auto directory = std::filesystem::temp_directory_path(error) / "emeraude_font_test";
+
+		if ( error || (!std::filesystem::create_directories(directory, error) && error) )
+		{
+			return {};
+		}
+
+		const auto filepath = directory / name;
+		std::ofstream file{filepath, std::ios::binary | std::ios::trunc};
+
+		if ( !file.is_open() )
+		{
+			return {};
+		}
+
+		file.write(bytes.data(), static_cast< std::streamsize >(bytes.size()));
+
+		return file ? filepath : std::filesystem::path{};
+	}
+}
+
+/* 2026-10-08 (owner decision: TrueType is kept and finished): the glyph callback loaded each glyph and returned an EMPTY
+ * pixmap, so every .ttf was refused. The 256 cells are now rendered: ink where the font has it, none for the space and the
+ * control codes, every cell as high as the font size. */
+TEST(PixelFactoryFont, trueTypeFontRendersItsGlyphs)
+{
+	PixelFactory::Font< uint8_t > font;
+
+	ASSERT_TRUE(font.readFile(TrueTypeFont, 32, false));
+
+	const auto * glyphs = font.glyphs(32);
+
+	ASSERT_NE(glyphs, nullptr);
+	EXPECT_EQ(glyphs->height(), 32U);
+	EXPECT_GT(glyphs->widestChar(), 0U);
+
+	for ( size_t code = 0; code < PixelFactory::ASCIICount; ++code )
+	{
+		const auto & glyph = glyphs->glyph(static_cast< uint8_t >(code));
+
+		ASSERT_TRUE(glyph.isValid()) << "code " << code;
+		EXPECT_EQ(glyph.height(), 32U) << "code " << code;
+	}
+
+	for ( const char character : std::string{"AHgpx09#"} )
+	{
+		EXPECT_GE(lowestInkRow(glyphs->glyph(static_cast< uint8_t >(character))), 0) << "'" << character << "' has no ink";
+	}
+
+	EXPECT_EQ(lowestInkRow(glyphs->glyph(' ')), -1);
+	EXPECT_EQ(lowestInkRow(glyphs->glyph('\n')), -1);
+	EXPECT_EQ(lowestInkRow(glyphs->glyph(127)), -1);
+	EXPECT_GT(glyphs->glyph(' ').width(), 0U);
+}
+
+/* The glyphs of a line sit on ONE baseline: letters without a descender end on the same row, the underscore below it. */
+TEST(PixelFactoryFont, trueTypeGlyphsShareABaseline)
+{
+	PixelFactory::Font< uint8_t > font;
+
+	ASSERT_TRUE(font.readFile(TrueTypeFont, 32, false));
+
+	const auto * glyphs = font.glyphs(32);
+
+	ASSERT_NE(glyphs, nullptr);
+
+	const auto baselineRow = lowestInkRow(glyphs->glyph('A'));
+
+	ASSERT_GT(baselineRow, 0);
+
+	for ( const char character : std::string{"HEx0"} )
+	{
+		EXPECT_EQ(lowestInkRow(glyphs->glyph(static_cast< uint8_t >(character))), baselineRow) << "'" << character << "'";
+	}
+
+	EXPECT_GT(lowestInkRow(glyphs->glyph('_')), baselineRow);
+}
+
+/* fixedWidth: every cell as wide as the widest. */
+TEST(PixelFactoryFont, trueTypeFixedWidthCellsAreEqual)
+{
+	PixelFactory::Font< uint8_t > font;
+
+	ASSERT_TRUE(font.readFile(TrueTypeFont, 24, true));
+
+	const auto * glyphs = font.glyphs(24);
+
+	ASSERT_NE(glyphs, nullptr);
+	EXPECT_TRUE(glyphs->isFixedWidth());
+
+	for ( size_t code = 0; code < PixelFactory::ASCIICount; ++code )
+	{
+		EXPECT_EQ(glyphs->glyph(static_cast< uint8_t >(code)).width(), glyphs->widestChar()) << "code " << code;
+	}
+}
+
+/* Hostile input at the trust boundary: a size out of [1, 1024], an empty file, a truncated font, a missing file. */
+TEST(PixelFactoryFont, trueTypeHostileInputsRefused)
+{
+	PixelFactory::Font< uint8_t > font;
+
+	EXPECT_FALSE(font.readFile(TrueTypeFont, 0, false));
+	EXPECT_FALSE(font.readFile(TrueTypeFont, 1025, false));
+
+	std::ifstream source{TrueTypeFont, std::ios::binary};
+
+	ASSERT_TRUE(source.is_open());
+
+	const std::vector< char > fontBytes{std::istreambuf_iterator< char >{source}, std::istreambuf_iterator< char >{}};
+
+	ASSERT_GT(fontBytes.size(), 1024U);
+
+	const auto emptyFile = writeFontTestFile("empty.ttf", {});
+	const auto truncatedFile = writeFontTestFile("truncated.ttf", {fontBytes.begin(), fontBytes.begin() + static_cast< std::ptrdiff_t >(fontBytes.size() / 3)});
+
+	ASSERT_FALSE(emptyFile.empty());
+	ASSERT_FALSE(truncatedFile.empty());
+
+	EXPECT_FALSE(font.readFile(emptyFile, 16, false));
+	EXPECT_FALSE(font.readFile(truncatedFile, 16, false));
+	EXPECT_FALSE(font.readFile(emptyFile.parent_path() / "missing.ttf", 16, false));
+
+	std::error_code error;
+	std::filesystem::remove_all(emptyFile.parent_path(), error);
 }
 
 namespace

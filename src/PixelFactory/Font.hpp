@@ -539,11 +539,17 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Reads a TrueType font file.
-			 * @param filepath A reference to a filesystem path.
-			 * @param fontSize The desired font size.
+			 * @brief Reads a TrueType (or any FreeType-readable outline) font file into the glyph array of fontSize.
+			 * @note The font size is the LINE height in pixels: the font's ascender minus its descender is scaled to fontSize
+			 * (FreeType FT_SIZE_REQUEST_TYPE_REAL_DIM), so every glyph fits its fontSize-high cell and sits on a common
+			 * baseline. Each of the 256 cells holds the Latin-1 code's glyph, as wide as its advance (fixedWidth: all as
+			 * wide as the widest, the glyph centred); a control code (C0, DEL, C1) is an empty cell as wide as the space; a
+			 * code the font lacks shows the font's missing-glyph box.
+			 * @param filepath A reference to a filesystem path (read through IO, UTF-8 safe).
+			 * @param fontSize The desired font size, in [1, 1024]: anything else is refused.
 			 * @param fixedWidth Enable each glyph to be the same width at the end of the process.
-			 * @return bool
+			 * @return bool False (and a trace) for an unreadable file, a non-font, a refused size, a glyph that does not
+			 * render or a hostile glyph wider than 8 font sizes; nothing is stored then for a failure before the glyphs.
 			 * @note Defined in Font.cpp: FreeType is kept out of this header so a consumer never
 			 * defines FT_* symbols in its own binary, where they would interpose the system FreeType
 			 * used by any library the process loads. See
