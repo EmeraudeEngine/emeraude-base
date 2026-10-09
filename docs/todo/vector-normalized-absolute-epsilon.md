@@ -20,10 +20,14 @@ had a non-zero quadric and 99.9 % of the collapse costs were exactly 0: the QEM 
 engine's automatic LODs of large meshes), and the queue's tie-break chose the collapses.
 
 ## What remains (owner decision 2026-10-09: fix at the ROOT, in Vector)
-- `normalize()` / `normalized()` refuse only a zero, non-finite or denormal length (state the contract; consistent
-  behaviour between the two); tests with tiny valid vectors.
-- Audit the 243 call sites (base 190, engine 44, projet-alpha 9): find those that relied on "short = zero" (a
-  direction between two nearly identical points…) and give them an explicit, scale-aware test.
+- **Base part DONE (2026-10-09):** `computeUnit()` (any non-zero finite vector, any scale), relative degeneracy tests
+  (`isDegenerateCrossProduct()`, `areNearlyParallel()`), `normal()` / `tangent()` exactly zero for a degenerate triangle;
+  SAT, SegmentSegment, the decimator, the 11 gem generators moved to the relative test (caution-points § Math).
+- **Engine / projet-alpha guards** (audit 2026-10-09, sites that relied on "short → zero"): `SphericalPushModifier.cpp`
+  127 / 164 (no distance guard: a body at the centre gets a noise direction), `CartesianFrame::lookAt` callers with
+  target ≈ position (Node, StaticEntity, Particle, the camera), `Scene.physics.cpp:1212` (`rolling.lengthSquared() >
+  0.0F`), Fox `Fox.cpp:603` / Paladin `Paladin.cpp:491` heading (`rotateTowards` with a near-vertical backward vector),
+  and the lights at the origin (`DirectionalLight.cpp` 307…346, `LightSet.cpp:733`: zero direction, a separate bug).
 - Then re-measure the decimator (quality, timing, the three OS' goldens) — item `task-handle-and-stop-token`.
 
 ## References

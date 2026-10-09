@@ -110,7 +110,8 @@ namespace EmEn::Base::Math::Space3D::SAT
 			Vector< 3, precision_t > edge2 = verticesA[2] - verticesA[0];
 			normalA = Vector< 3, precision_t >::crossProduct(edge1, edge2);
 
-			if ( normalA.lengthSquared() > std::numeric_limits< precision_t >::epsilon() )
+			/* NOTE: Relative to the edges (an absolute epsilon dropped every triangle with edges under ~2 cm). */
+			if ( !Vector< 3, precision_t >::isDegenerateCrossProduct(normalA, edge1, edge2) )
 			{
 				normalA.normalize();
 				axes.push_back(normalA);
@@ -132,7 +133,7 @@ namespace EmEn::Base::Math::Space3D::SAT
 			Vector< 3, precision_t > edge2 = verticesB[2] - verticesB[0];
 			normalB = Vector< 3, precision_t >::crossProduct(edge1, edge2);
 
-			if ( normalB.lengthSquared() > std::numeric_limits< precision_t >::epsilon() )
+			if ( !Vector< 3, precision_t >::isDegenerateCrossProduct(normalB, edge1, edge2) )
 			{
 				normalB.normalize();
 
@@ -164,7 +165,7 @@ namespace EmEn::Base::Math::Space3D::SAT
 				Vector< 3, precision_t > edgeB = verticesB[(j + 1) % 3] - verticesB[j];
 				Vector< 3, precision_t > axis = Vector< 3, precision_t >::crossProduct(edgeA, edgeB);
 
-				if ( axis.lengthSquared() > std::numeric_limits< precision_t >::epsilon() )
+				if ( !Vector< 3, precision_t >::isDegenerateCrossProduct(axis, edgeA, edgeB) )
 				{
 					axes.push_back(axis);
 				}
@@ -179,7 +180,7 @@ namespace EmEn::Base::Math::Space3D::SAT
 				Vector< 3, precision_t > edge = verticesA[(index + 1) % 3] - verticesA[index];
 				Vector< 3, precision_t > axis = Vector< 3, precision_t >::crossProduct(normalA, edge);
 
-				if ( axis.lengthSquared() > std::numeric_limits< precision_t >::epsilon() )
+				if ( !Vector< 3, precision_t >::isDegenerateCrossProduct(axis, normalA, edge) )
 				{
 					axes.push_back(axis);
 				}
@@ -190,7 +191,7 @@ namespace EmEn::Base::Math::Space3D::SAT
 				Vector< 3, precision_t > edge = verticesB[(index + 1) % 3] - verticesB[index];
 				Vector< 3, precision_t > axis = Vector< 3, precision_t >::crossProduct(normalB, edge);
 
-				if ( axis.lengthSquared() > std::numeric_limits< precision_t >::epsilon() )
+				if ( !Vector< 3, precision_t >::isDegenerateCrossProduct(axis, normalB, edge) )
 				{
 					axes.push_back(axis);
 				}
@@ -290,7 +291,8 @@ namespace EmEn::Base::Math::Space3D::SAT
 		Vector< 3, precision_t > edge2 = C - A;
 		Vector< 3, precision_t > normal = Vector< 3, precision_t >::crossProduct(edge1, edge2);
 
-		if ( normal.lengthSquared() <= std::numeric_limits< precision_t >::epsilon() )
+		/* NOTE: Relative to the edges: an absolute epsilon refused every triangle with edges under ~2.6 cm. */
+		if ( Vector< 3, precision_t >::isDegenerateCrossProduct(normal, edge1, edge2) )
 		{
 			MTV.reset();
 

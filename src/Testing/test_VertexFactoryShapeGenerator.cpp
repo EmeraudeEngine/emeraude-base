@@ -1336,7 +1336,10 @@ TEST(VertexFactoryShapeGenerator, gemCutsKeepTheirGeometry)
 	measure(ShapeGenerator::generateEmeraldCutGem< float, uint32_t >(), {"emerald", 108, 142.1375F, 90.0000F, 90.7375F, 148.0905F, -0.7500F, 0.2500F, 111.9034F, 136.7632F, 480.4268F, 94.2063F, 112.6996F});
 	measure(ShapeGenerator::generateAsscherCutGem< float, uint32_t >(), {"asscher", 108, 97.7062F, 90.0000F, 97.9312F, 113.1222F, -0.7500F, 0.2500F, 118.4708F, 124.0118F, 483.3290F, 105.5247F, 101.9094F});
 	measure(ShapeGenerator::generateBaguetteCutGem< float, uint32_t >(), {"baguette", 36, 52.8750F, 18.0000F, 17.6250F, 40.0125F, -0.4500F, 0.1500F, 24.4843F, 50.5692F, 143.0502F, 18.0792F, 43.1324F});
-	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 108, 74.3800F, 90.0000F, 75.6800F, 100.1408F, -0.7500F, 0.2500F, 95.8312F, 146.2238F, 440.9015F, 68.8232F, 127.3519F});
+	/* 2026-10-09: sumAbsNormal 440.9015 → 446.9015. Two princess triangles have a cross product under the former absolute
+	 * epsilon of Vector::normalized() (base item vector-normalized-absolute-epsilon): their 6 corners had a ZERO normal,
+	 * which this fingerprint had recorded. They are unit now (+6 exactly); the geometry is unchanged. */
+	measure(ShapeGenerator::generatePrincessCutGem< float, uint32_t >(), {"princess", 108, 74.3800F, 90.0000F, 75.6800F, 100.1408F, -0.7500F, 0.2500F, 95.8312F, 146.2238F, 446.9015F, 68.8232F, 127.3519F});
 	measure(ShapeGenerator::generateTrillionCutGem< float, uint32_t >(), {"trillion", 80, 76.6292F, 52.8000F, 83.5006F, 97.9768F, -0.6000F, 0.2000F, 72.0935F, 104.5209F, 358.7052F, 57.1323F, 85.2410F});
 	measure(ShapeGenerator::generateOvalCutGem< float, uint32_t >(), {"oval", 62, 83.5075F, 34.8703F, 50.3768F, 91.4993F, -0.7172F, 0.2600F, 106.0761F, 73.6062F, 268.0640F, 102.1493F, 49.6606F});
 	measure(ShapeGenerator::generateCushionCutGem< float, uint32_t >(), {"cushion", 62, 88.0344F, 39.0970F, 69.6632F, 118.3826F, -0.8041F, 0.2915F, 106.0761F, 67.1626F, 264.3181F, 102.1493F, 42.1261F});

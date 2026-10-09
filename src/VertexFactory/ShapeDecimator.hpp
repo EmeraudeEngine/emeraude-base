@@ -943,7 +943,10 @@ namespace EmEn::Base::VertexFactory
 					const auto cross = Math::Vector< 3, vertex_data_t >::crossProduct(edge1, edge2);
 					const auto area = cross.length() * static_cast< vertex_data_t >(0.5);
 
-					if ( area < static_cast< vertex_data_t >(1e-10) )
+					/* NOTE: A flat triangle has no plane. RELATIVE to its edges: the absolute area threshold, and above all
+					 * normalized()'s former absolute epsilon, left every triangle under ~1.7e-4 of area without a quadric —
+					 * the QEM was off on fine meshes (base item vector-normalized-absolute-epsilon). */
+					if ( Math::Vector< 3, vertex_data_t >::isDegenerateCrossProduct(cross, edge1, edge2) )
 					{
 						continue;
 					}
@@ -1061,18 +1064,29 @@ namespace EmEn::Base::VertexFactory
 
 						if ( hasA && hasB )
 						{
-							const auto & p0 = vertices[tri.v[0]].position;
-							const auto & p1 = vertices[tri.v[1]].position;
-							const auto & p2 = vertices[tri.v[2]].position;
+							/* NOTE: A degenerate adjacent triangle has no normal (normal() answers zero): look further. */
+							const auto candidate = Math::Vector< 3, vertex_data_t >::normal(vertices[tri.v[0]].position, vertices[tri.v[1]].position, vertices[tri.v[2]].position);
 
-							triNormal = Math::Vector< 3, vertex_data_t >::crossProduct(p1 - p0, p2 - p0).normalized();
+							if ( !candidate.isZero() )
+							{
+								triNormal = candidate;
 
-							break;
+								break;
+							}
 						}
 					}
 
-					/* Perpendicular plane to the boundary edge. */
-					const auto perpNormal = Math::Vector< 3, vertex_data_t >::crossProduct(edgeDir, triNormal).normalized();
+					/* Perpendicular plane to the boundary edge. NOTE: An edge parallel to the normal found (none found, or a
+					 * zero-length edge) defines no plane: no penalty rather than a heavily weighted plane in a random
+					 * orientation. */
+					const auto perpendicular = Math::Vector< 3, vertex_data_t >::crossProduct(edgeDir, triNormal);
+
+					if ( Math::Vector< 3, vertex_data_t >::isDegenerateCrossProduct(perpendicular, edgeDir, triNormal) )
+					{
+						return true;
+					}
+
+					const auto perpNormal = perpendicular.normalized();
 					const auto d = -Math::Vector< 3, vertex_data_t >::dotProduct(perpNormal, posA);
 
 					auto penalty = computePlaneQuadric(perpNormal, d);

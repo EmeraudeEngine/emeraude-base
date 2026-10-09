@@ -59,14 +59,15 @@ degenerate fallback and for the per-face UV tangent frame (deliberately untouche
 move). Deriving it makes the drift **structurally impossible** rather than merely fixed.
 
 > [!CAUTION]
-> **Guard on the normalization RESULT, never on the input length.** `Vector::normalized()` gives up
-> when `lengthSquared()` trips `Utility::isZero()` and returns the **ZERO vector**. A sliver can
-> therefore clear a `length() > 1e-7` test and still come back with no normal at all — worse than an
-> inward one, since it kills lighting outright. Two princess-cut culet slivers did exactly that
-> (`length` 1.25e-4, `lengthSquared` 1.56e-8). A successful normalization has `lengthSquared() == 1`,
-> so testing the **result** against `0.5` is unambiguous and needs no epsilon of its own. The gate
-> uses the same criterion to decide which triangles carry evidence: one the library cannot normalize
-> has no normal to judge.
+> **A triangle is flat when its cross product is degenerate RELATIVELY to its edges**
+> (`Vector::isDegenerateCrossProduct()`, the sine of the edges' angle below 16·ε), never against an
+> absolute length. Until 2026-10-09 `Vector::normalized()` returned the **ZERO vector** for every
+> vector under ~3.5e-4 (an absolute epsilon on the squared length — base item
+> `vector-normalized-absolute-epsilon`): two princess-cut culet slivers (`length` 1.25e-4,
+> `lengthSquared` 1.56e-8) are small but NOT flat, and came back with no normal, which killed their
+> lighting; the generators then guarded on the normalization result (`< 0.5`). They keep their own
+> geometric normal now; only a truly flat triangle falls back to the authored normal, and
+> `Vector::normal()` answers exactly zero for one.
 
 > [!CAUTION]
 > **`Shape::flipYAxis()` does NOT mirror the vertex colours.** It walks `m_vertices` and

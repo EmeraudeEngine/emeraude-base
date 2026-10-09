@@ -483,6 +483,69 @@ TYPED_TEST(MathVector, NormalizedVector)
 	}
 }
 
+/* 2026-10-09 (base item vector-normalized-absolute-epsilon): an ABSOLUTE epsilon on the squared length refused every
+ * vector shorter than ~3.5e-4 (float) — normalized() answered zero, normalize() left it unchanged. The normal of a small
+ * triangle was zero, and the mesh decimator's quadrics with it. Any non-zero finite vector normalizes now, whatever its
+ * scale (a squared length that underflows or overflows included); only a zero or non-finite vector is refused. */
+TYPED_TEST(MathVector, NormalizeAnyScale)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		const auto check = [] (TypeParam scale) {
+			const Vector< 3, TypeParam > source{TypeParam{3} * scale, TypeParam{4} * scale, TypeParam{0}};
+			const auto unit = source.normalized();
+
+			EXPECT_TRUE(nearEqual(unit[X], static_cast< TypeParam >(0.6))) << "scale " << scale << " x " << unit[X];
+			EXPECT_TRUE(nearEqual(unit[Y], static_cast< TypeParam >(0.8))) << "scale " << scale << " y " << unit[Y];
+			EXPECT_EQ(unit[Z], TypeParam{0}) << "scale " << scale;
+
+			auto inPlace = source;
+			inPlace.normalize();
+
+			EXPECT_TRUE(nearEqual(inPlace[X], static_cast< TypeParam >(0.6))) << "scale " << scale;
+			EXPECT_TRUE(nearEqual(inPlace[Y], static_cast< TypeParam >(0.8))) << "scale " << scale;
+		};
+
+		/* Short (the former threshold), tiny (the squared length underflows), huge (it overflows). */
+		check(static_cast< TypeParam >(1e-5));
+		check(static_cast< TypeParam >(1e-25));
+		check(std::numeric_limits< TypeParam >::denorm_min() * TypeParam{8});
+		check(static_cast< TypeParam >(1e30));
+		check(std::numeric_limits< TypeParam >::max() / TypeParam{8});
+
+		/* The unit normal of a triangle of area 1e-6 (its cross product is 2e-6 long). */
+		const Vector< 3, TypeParam > p0{TypeParam{0}, TypeParam{0}, TypeParam{0}};
+		const Vector< 3, TypeParam > p1{static_cast< TypeParam >(2e-3), TypeParam{0}, TypeParam{0}};
+		const Vector< 3, TypeParam > p2{TypeParam{0}, static_cast< TypeParam >(1e-3), TypeParam{0}};
+		const auto normal = Vector< 3, TypeParam >::crossProduct(p1 - p0, p2 - p0).normalized();
+
+		EXPECT_TRUE(nearEqual(normal[Z], TypeParam{1})) << normal[Z];
+	}
+}
+
+/* A zero or non-finite vector is refused: normalized() answers the zero vector, normalize() leaves it unchanged. */
+TYPED_TEST(MathVector, NormalizeRefusesZeroAndNonFinite)
+{
+	if constexpr ( std::is_floating_point_v< TypeParam > )
+	{
+		const Vector< 3, TypeParam > zero{};
+
+		EXPECT_TRUE(zero.normalized().isZero());
+
+		const Vector< 3, TypeParam > notANumber{std::numeric_limits< TypeParam >::quiet_NaN(), TypeParam{1}, TypeParam{0}};
+		const Vector< 3, TypeParam > infinite{std::numeric_limits< TypeParam >::infinity(), TypeParam{1}, TypeParam{0}};
+
+		EXPECT_TRUE(notANumber.normalized().isZero());
+		EXPECT_TRUE(infinite.normalized().isZero());
+
+		auto unchanged = infinite;
+		unchanged.normalize();
+
+		EXPECT_EQ(unchanged[X], std::numeric_limits< TypeParam >::infinity());
+		EXPECT_EQ(unchanged[Y], TypeParam{1});
+	}
+}
+
 // ============================================================================
 // DOT PRODUCT AND CROSS PRODUCT TESTS
 // ============================================================================
@@ -896,4 +959,39 @@ TYPED_TEST(MathVector, Vector3NamedAccessors)
 	ASSERT_EQ(vec.x(), TypeParam{1});
 	ASSERT_EQ(vec.y(), TypeParam{2});
 	ASSERT_EQ(vec.z(), TypeParam{3});
+}
+
+/* 2026-10-09: Vector::normal() answers EXACTLY zero for a degenerate (flat) triangle — relative to its edges — and the
+ * unit normal for a small but valid one; isDegenerateCrossProduct() / areNearlyParallel() are the shared tests. */
+TEST(MathVectorDegeneracy, normalOfSmallAndFlatTriangles)
+{
+	using V3 = Vector< 3, float >;
+
+	for ( const float scale : {1.0F, 1e-3F, 1e-6F} )
+	{
+		const V3 a{0.0F, 0.0F, 0.0F};
+		const V3 b{scale, 0.0F, 0.0F};
+		const V3 c{0.0F, scale, 0.0F};
+
+		const auto valid = V3::normal(a, b, c);
+
+		EXPECT_NEAR(valid.length(), 1.0F, 1e-5F) << "scale " << scale;
+		EXPECT_NEAR(std::abs(valid[Z]), 1.0F, 1e-5F) << "scale " << scale;
+
+		/* Collinear: no normal at all. */
+		const V3 collinear{scale * 2.0F, 0.0F, 0.0F};
+
+		EXPECT_TRUE(V3::normal(a, b, collinear).isZero()) << "scale " << scale;
+		EXPECT_TRUE(V3::isDegenerateCrossProduct(V3::crossProduct(b - a, collinear - a), b - a, collinear - a)) << "scale " << scale;
+		EXPECT_FALSE(V3::isDegenerateCrossProduct(V3::crossProduct(b - a, c - a), b - a, c - a)) << "scale " << scale;
+	}
+
+	/* Coincident points. */
+	EXPECT_TRUE(V3::normal(V3{1.0F, 2.0F, 3.0F}, V3{1.0F, 2.0F, 3.0F}, V3{4.0F, 5.0F, 6.0F}).isZero());
+
+	using V2 = Vector< 2, float >;
+
+	EXPECT_TRUE(V2::areNearlyParallel(V2{1e-5F, 0.0F}, V2{3e-5F, 0.0F}));
+	EXPECT_FALSE(V2::areNearlyParallel(V2{1e-5F, 0.0F}, V2{0.0F, 1e-5F}));
+	EXPECT_TRUE(V2::areNearlyParallel(V2{0.0F, 0.0F}, V2{1.0F, 0.0F}));
 }

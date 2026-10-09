@@ -3492,14 +3492,14 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched.
-			 * ⚠️⚠️ Guard on the normalization RESULT, never on the input length. `normalized()` gives
-			 * up when `lengthSquared()` trips `Utility::isZero()`, so a sliver can pass a
-			 * `length() > 1e-7` test and still come back as the ZERO vector — which is worse than an
-			 * inward normal, since it kills lighting outright. Two princess-cut culet slivers did
-			 * exactly that. A successful normalization has `lengthSquared() == 1`, so testing the
-			 * result against 0.5 is unambiguous and needs no epsilon of its own. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			 * ⚠️⚠️ A triangle is flat when its cross product is degenerate RELATIVELY to its edges
+			 * (Vec3::isDegenerateCrossProduct()), never against an absolute length: normalized()
+			 * used to return ZERO for every cross product under ~3.5e-4 (an absolute epsilon, fixed
+			 * 2026-10-09), which killed the lighting of two princess-cut culet slivers that are
+			 * small but NOT flat. They keep their own geometric normal now; only a truly flat
+			 * (collinear) triangle falls back to the authored normal. */
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -3732,8 +3732,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4026,8 +4026,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4288,8 +4288,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4570,8 +4570,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -4836,8 +4836,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -5070,8 +5070,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -5300,8 +5300,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -5527,8 +5527,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			/* ⚠️⚠️ A FLAT facet's normal IS its own geometric normal — see the identical note on the
 			 * other gem cuts. The authored normal pointed INTO the solid on most facets; the winding
 			 * was correct throughout. Gated by `gemCutsWindAndFaceOutward`. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA); builder.setNormal(normal); builder.setTextureCoordinates(tcA); builder.setVertexColor(volumetricColor(vA)); builder.newVertex();
 			builder.setPosition(vB); builder.setNormal(normal); builder.setTextureCoordinates(tcB); builder.setVertexColor(volumetricColor(vB)); builder.newVertex();
@@ -5734,8 +5734,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);
@@ -5916,8 +5916,8 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 			 * Gated by `gemCutsWindAndFaceOutward`, which references the solid's centroid instead.
 			 * The authored normal survives as the degenerate-triangle fallback, and still drives the
 			 * per-face UV tangent frame, deliberately left untouched. */
-			const auto geometricNormal = Vec3::crossProduct(vB - vA, vC - vA).normalized();
-			const auto normal = geometricNormal.lengthSquared() < static_cast< vertex_data_t >(0.5) ? authoredNormal : geometricNormal;
+			const auto geometricCross = Vec3::crossProduct(vB - vA, vC - vA);
+			const auto normal = Vec3::isDegenerateCrossProduct(geometricCross, vB - vA, vC - vA) ? authoredNormal : geometricCross.normalized();
 
 			builder.setPosition(vA);
 			builder.setNormal(normal);

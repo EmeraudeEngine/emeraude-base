@@ -943,15 +943,21 @@ namespace EmEn::Base::Math
 
 			/**
 			 * @brief Rescales the vector length to unit.
+			 * @note Any non-zero finite vector is normalized, whatever its scale; a zero or non-finite vector is refused and
+			 * left UNCHANGED. Until 2026-10-09 an absolute epsilon on the squared length refused every vector shorter than
+			 * ~3.5e-4 in float (base item vector-normalized-absolute-epsilon): the normal of a small triangle stayed
+			 * unnormalized here, and was zero through normalized().
 			 * @return Vector &
 			 */
 			Vector &
 			normalize () noexcept
 				requires (std::is_floating_point_v< precision_t >)
 			{
-				if ( const auto length = this->lengthSquared(); !Utility::isZero(length) )
+				Vector unit;
+
+				if ( this->computeUnit(unit) )
 				{
-					this->scale(1 / static_cast< precision_t >(std::sqrt(length)));
+					*this = unit;
 				}
 
 				return *this;
@@ -1038,7 +1044,11 @@ namespace EmEn::Base::Math
 			}
 
 			/**
-			 * @brief Rescales the vector length to unit.
+			 * @brief Returns the vector rescaled to unit length.
+			 * @note Any non-zero finite vector is normalized, whatever its scale; a zero or non-finite vector is refused and
+			 * the ZERO vector is returned. Until 2026-10-09 an absolute epsilon on the squared length returned zero for every
+			 * vector shorter than ~3.5e-4 in float: a small triangle's normal was zero, and the mesh decimator's quadrics
+			 * with it (base item vector-normalized-absolute-epsilon).
 			 * @return Vector
 			 */
 			[[nodiscard]]
@@ -1046,12 +1056,70 @@ namespace EmEn::Base::Math
 			normalized () const noexcept
 				requires (std::is_floating_point_v< precision_t >)
 			{
-				if ( const auto length = this->lengthSquared(); !Utility::isZero(length) )
+				Vector unit;
+
+				if ( this->computeUnit(unit) )
 				{
-					return this->scaled(static_cast< precision_t >(1) / std::sqrt(length));
+					return unit;
 				}
 
 				return {};
+			}
+
+			/**
+			 * @brief Computes the unit vector of the same direction.
+			 * @note The common path divides by the length when the squared length is a normal, finite number. Otherwise —
+			 * a zero, a non-finite component, or a squared length that underflows (components below ~1e-19 in float) or
+			 * overflows (above ~1e19) — the vector is first divided by its largest component magnitude, so its squared length
+			 * lies in [1, dim], then normalized: only a zero or non-finite vector is refused.
+			 * @param unit The unit vector (written only on success).
+			 * @return bool False for a zero or non-finite vector.
+			 */
+			[[nodiscard]]
+			bool
+			computeUnit (Vector & unit) const noexcept
+				requires (std::is_floating_point_v< precision_t >)
+			{
+				const auto squared = this->lengthSquared();
+
+				/* NOTE: The comparisons are false for a NaN, which takes the careful path below and is refused there. */
+				if ( squared >= std::numeric_limits< precision_t >::min() && squared <= std::numeric_limits< precision_t >::max() )
+				{
+					unit = this->scaled(static_cast< precision_t >(1) / std::sqrt(squared));
+
+					return true;
+				}
+
+				precision_t largest = 0;
+
+				for ( const auto component : m_data )
+				{
+					const auto magnitude = std::abs(component);
+
+					if ( !std::isfinite(magnitude) )
+					{
+						return false;
+					}
+
+					largest = std::max(largest, magnitude);
+				}
+
+				if ( largest == 0 )
+				{
+					return false;
+				}
+
+				/* NOTE: A DIVISION by the largest magnitude, not a product by its inverse: the inverse of a denormal overflows. */
+				Vector rescaled = *this;
+
+				for ( auto & component : rescaled.m_data )
+				{
+					component /= largest;
+				}
+
+				unit = rescaled.scaled(static_cast< precision_t >(1) / std::sqrt(rescaled.lengthSquared()));
+
+				return true;
 			}
 
 			/**
@@ -1384,14 +1452,79 @@ namespace EmEn::Base::Math
 			 * @param pointA Vertex A position of the triangle.
 			 * @param pointB Vertex B position of the triangle.
 			 * @param pointC Vertex C position of the triangle.
-			 * @return Vector
+			 * @return Vector The unit normal, or the ZERO vector for a degenerate triangle (floating point).
 			 */
 			[[nodiscard]]
 			static
 			Vector
 			normal (const Vector & pointA, const Vector & pointB, const Vector & pointC) noexcept
 			{
-				return Vector::crossProduct(pointA - pointB, pointB - pointC).normalize();
+				const auto edgeAB = pointA - pointB;
+				const auto edgeBC = pointB - pointC;
+				const auto cross = Vector::crossProduct(edgeAB, edgeBC);
+
+				/* NOTE: A DEGENERATE triangle (collinear or coincident points, at the precision of its own edges) has no
+				 * normal: the ZERO vector, exactly, so a sum of normals ignores it and isZero() detects it. A small but valid
+				 * triangle gets its unit normal, whatever its size (base item vector-normalized-absolute-epsilon). */
+				if constexpr ( std::is_floating_point_v< precision_t > )
+				{
+					if ( Vector::isDegenerateCrossProduct(cross, edgeAB, edgeBC) )
+					{
+						return {};
+					}
+				}
+
+				return cross.normalized();
+			}
+
+			/**
+			 * @brief Returns whether a cross product is degenerate RELATIVELY to the two vectors it came from: they are
+			 * parallel (or one is zero) at the precision of their own lengths — |a × b| <= k·ε·|a|·|b|, the sine of their
+			 * angle below k·ε (k = 16: ~1.9e-6 rad in float).
+			 * @note The test every "is this triangle flat?" question uses. An ABSOLUTE threshold on the squared length
+			 * declared every triangle with edges under ~2 cm flat (base item vector-normalized-absolute-epsilon).
+			 * @param cross The cross product of first and second.
+			 * @param first The first vector.
+			 * @param second The second vector.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			isDegenerateCrossProduct (const Vector & cross, const Vector & first, const Vector & second) noexcept
+				requires (dim_t == 3 && std::is_floating_point_v< precision_t >)
+			{
+				constexpr auto VectorParallelSineTolerance = static_cast< precision_t >(16) * std::numeric_limits< precision_t >::epsilon();
+
+				return cross.lengthSquared() <= VectorParallelSineTolerance * VectorParallelSineTolerance * first.lengthSquared() * second.lengthSquared();
+			}
+
+			/**
+			 * @brief Returns whether two vectors are parallel (or one is zero) RELATIVELY to their own lengths:
+			 * |a × b| <= k·ε·|a|·|b| (see isDegenerateCrossProduct()).
+			 * @param first The first vector.
+			 * @param second The second vector.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			areNearlyParallel (const Vector & first, const Vector & second) noexcept
+				requires ((dim_t == 2 || dim_t == 3) && std::is_floating_point_v< precision_t >)
+			{
+				constexpr auto VectorParallelSineTolerance = static_cast< precision_t >(16) * std::numeric_limits< precision_t >::epsilon();
+				const auto limit = VectorParallelSineTolerance * VectorParallelSineTolerance * first.lengthSquared() * second.lengthSquared();
+
+				if constexpr ( dim_t == 2 )
+				{
+					const auto cross = (first[X] * second[Y]) - (first[Y] * second[X]);
+
+					return cross * cross <= limit;
+				}
+				else
+				{
+					return Vector::crossProduct(first, second).lengthSquared() <= limit;
+				}
 			}
 
 			/**
@@ -1412,8 +1545,21 @@ namespace EmEn::Base::Math
 			{
 				const auto tmpA = (pointA - pointB) * (uvC - uvB)[Y];
 				const auto tmpB = (pointB - pointC) * (uvB - uvA)[Y];
+				const auto difference = tmpA - tmpB;
 
-				return (tmpA - tmpB).normalize();
+				/* NOTE: A degenerate mapping (the two terms cancel at the precision of their own size) has no tangent: the
+				 * ZERO vector, exactly, so a sum of tangents ignores it (see normal()). */
+				if constexpr ( std::is_floating_point_v< precision_t > )
+				{
+					constexpr auto VectorTangentCancelTolerance = static_cast< precision_t >(16) * std::numeric_limits< precision_t >::epsilon();
+
+					if ( difference.lengthSquared() <= VectorTangentCancelTolerance * VectorTangentCancelTolerance * std::max(tmpA.lengthSquared(), tmpB.lengthSquared()) )
+					{
+						return {};
+					}
+				}
+
+				return difference.normalized();
 			}
 
 			/**

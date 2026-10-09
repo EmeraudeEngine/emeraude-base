@@ -53,22 +53,22 @@ namespace EmEn::Base::Math::Space2D
 		/* NOTE: The denominator is the 2D cross-product of the direction vectors. If it is zero, the lines are parallel or collinear. */
 		const precision_t denominator = Vector< 2, precision_t >::crossProduct(directionA, directionB);
 
-		/* NOTE: Check for parallel lines (denominator close to zero). */
-		if ( std::abs(denominator) < std::numeric_limits< precision_t >::epsilon() )
+		/* NOTE: Check for parallel lines, RELATIVELY to the segments' lengths (an absolute epsilon declared every pair of
+		 * short segments parallel: base item vector-normalized-absolute-epsilon). */
+		if ( Vector< 2, precision_t >::areNearlyParallel(directionA, directionB) )
 		{
 			/* NOTE: Lines are parallel. Check if they are collinear and overlap. */
 			const auto startDiff = segmentB.startPoint() - segmentA.startPoint();
-			const auto crossCheck = Vector< 2, precision_t >::crossProduct(directionA, startDiff);
 
-			/* NOTE: If not collinear, no intersection. */
-			if ( std::abs(crossCheck) > std::numeric_limits< precision_t >::epsilon() )
+			/* NOTE: If not collinear, no intersection (relative test, as above). */
+			if ( !Vector< 2, precision_t >::areNearlyParallel(directionA, startDiff) )
 			{
 				return false;
 			}
 
 			/* NOTE: Segments are collinear. Check for overlap by projecting onto segment A's direction. */
 			const precision_t lengthSqA = directionA.lengthSquared();
-			if ( lengthSqA < std::numeric_limits< precision_t >::epsilon() )
+			if ( lengthSqA < std::numeric_limits< precision_t >::min() )
 			{
 				/* Segment A is a point */
 				return false;

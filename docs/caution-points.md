@@ -1006,6 +1006,26 @@ fails on the pre-fix source with "an edge still names a vertex the merge removed
 
 ## Math
 
+### ⚠️⚠️ `normalize()` refused every vector under ~3.5e-4 — a "flat triangle" is tested RELATIVELY to its edges (2026-10-09, FIXED)
+
+`Vector::normalize()` / `normalized()` tested `Utility::isZero(lengthSquared())`, an ABSOLUTE epsilon (1.19e-7 in
+float): every valid vector shorter than ~3.45e-4 was refused — `normalized()` answered ZERO, `normalize()` left it
+unchanged (not unit). The normal of every triangle with edges under ~2 cm was zero or not unit: the mesh decimator had
+ZERO quadrics on fine meshes (99.9 % of its collapse costs were 0, the queue's tie-break chose the collapses), the
+small gem facets were black, the collision normals of small triangles were not unit… Now (owner decision: at the root)
+any non-zero finite vector normalizes, at any scale (`computeUnit()`: a squared length that underflows or overflows is
+rescaled by the largest component first); only a zero or non-finite vector is refused.
+**Rule — a degenerate (flat) triangle is a RELATIVE test:** `Vector::isDegenerateCrossProduct(cross, a, b)`
+(|a × b| ≤ 16·ε·|a|·|b|) and `areNearlyParallel(a, b)`; `Vector::normal(A, B, C)` and `Vector::tangent()` answer EXACTLY
+zero for a degenerate triangle (so sums of normals ignore it and `isZero()` detects it). Moved to it: `SAT`'s axes and
+`pointInTriangleWithMTV()` (refused every triangle with edges under ~2.6 cm), `Space2D::SegmentSegment` (declared
+every pair of short segments parallel), the decimator's quadric and boundary planes, the 11 gem generators. Kept on
+purpose: `CartesianFrame::getUprightSpriteModelMatrix()` (a camera at the sprite's vertical, a distance guard with a
+fallback). Audit of the 243 call sites and the engine-side guards: item `vector-normalized-absolute-epsilon`.
+Tests: `MathVector/*.NormalizeAnyScale`, `NormalizeRefusesZeroAndNonFinite`, `MathVectorDegeneracy.*`,
+`MathSpace2DIntersections.shortCrossingSegmentsIntersect`, `VertexFactoryShapeDecimator.aFineMeshIsDecimatedByItsQuadrics`;
+`gemCutsKeepTheirGeometry`'s princess sumAbsNormal +6 (6 corners had a ZERO normal).
+
 ### `BSpline` / `BSplinePoint` constructors clamp 0 segments to 1 (2026-10-08, FIXED)
 
 The setters refused 0 segments but the constructors took it, and `synthesize()` then divided by zero (non-finite

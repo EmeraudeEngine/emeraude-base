@@ -329,6 +329,39 @@ TEST(VertexFactoryShapeDecimator, decimationNeverFoldsTheUVsOver)
 	}
 }
 
+/* 2026-10-09 (base item vector-normalized-absolute-epsilon): on a FINE mesh every quadric was zero — normalized()
+ * returned zero for every triangle normal under ~3.5e-4 — so the QEM was off and the queue's tie-break chose the
+ * collapses. Measured mean distance from the source to the output: 0.0015 (zero quadrics) → 0.00047 (working QEM). */
+TEST(VertexFactoryShapeDecimator, aFineMeshIsDecimatedByItsQuadrics)
+{
+	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 300, 150);
+	const ShapeDecimator< float, uint32_t > decimator{sphere, 0.25F};
+	const auto output = decimator.decimate();
+
+	ASSERT_FALSE(output.triangles().empty());
+
+	/* The output stays on the unit sphere. Measured (Linux): with zero quadrics, 111 output vertices lay farther than 1e-3
+	 * from the radius (mean deviation 8.3e-5); with working quadrics, 1 (mean 5.2e-5). The one left is a UV-seam vertex:
+	 * the seam penalty is not a valid quadric yet (item task-handle-and-stop-token, QEM numerics). */
+	size_t farFromTheSurface = 0;
+	double deviationSum = 0.0;
+
+	for ( const auto & vertex : output.vertices() )
+	{
+		const auto deviation = std::abs(static_cast< double >(vertex.position().length()) - 1.0);
+
+		deviationSum += deviation;
+
+		if ( deviation > 1e-3 )
+		{
+			++farFromTheSurface;
+		}
+	}
+
+	EXPECT_LE(farFromTheSurface, 4U);
+	EXPECT_LT(deviationSum / static_cast< double >(output.vertices().size()), 7e-5);
+}
+
 namespace
 {
 	/** @brief FNV-1a over bytes (a fingerprint, not a security hash). */

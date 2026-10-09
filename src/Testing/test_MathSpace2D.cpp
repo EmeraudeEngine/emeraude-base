@@ -2374,3 +2374,25 @@ TYPED_TEST(AARectangleInt, IntersectionAndSetters)
 	rect.move(5, 5);
 	ASSERT_EQ(rect.left(), TypeParam{5});
 }
+
+/* 2026-10-09 (base item vector-normalized-absolute-epsilon): the parallel test compared the 2D cross product of the
+ * directions with an ABSOLUTE epsilon, so two short crossing segments (directions shorter than ~3.5e-4) were declared
+ * parallel and never intersected. The test is relative to their lengths now. */
+TEST(MathSpace2DIntersections, shortCrossingSegmentsIntersect)
+{
+	for ( const float scale : {1.0F, 1e-3F, 1e-5F} )
+	{
+		const Segment< float > first{Point< float >{-scale, 0.0F}, Point< float >{scale, 0.0F}};
+		const Segment< float > second{Point< float >{0.0F, -scale}, Point< float >{0.0F, scale}};
+		Point< float > crossing;
+
+		EXPECT_TRUE(isIntersecting(first, second, crossing)) << "scale " << scale;
+		EXPECT_NEAR(crossing[X], 0.0F, scale * 1e-4F) << "scale " << scale;
+		EXPECT_NEAR(crossing[Y], 0.0F, scale * 1e-4F) << "scale " << scale;
+
+		/* Parallel, distinct: no intersection at any scale. */
+		const Segment< float > parallel{Point< float >{-scale, scale}, Point< float >{scale, scale}};
+
+		EXPECT_FALSE(isIntersecting(first, parallel)) << "scale " << scale;
+	}
+}
