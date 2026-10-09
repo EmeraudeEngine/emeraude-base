@@ -35,12 +35,9 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
-#include <map>
 #include <memory_resource>
 #include <queue>
 #include <type_traits>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -339,7 +336,7 @@ namespace EmEn::Base::VertexFactory
 						const auto optPos = computeOptimalPosition(combined, vertices[v0].position, vertices[neighbor].position);
 						const auto cost = evaluateQuadric(combined, optPos);
 
-						queue.push({cost, v0, neighbor, optPos, vertices[v0].generation, vertices[neighbor].generation});
+						queue.emplace(cost, v0, neighbor, optPos, vertices[v0].generation, vertices[neighbor].generation);
 					}
 				}
 
@@ -663,16 +660,55 @@ namespace EmEn::Base::VertexFactory
 
 			struct CollapseCandidate
 			{
+				/**
+				 * @brief Constructs a candidate and its tie-break key.
+				 * @param candidateCost The collapse cost.
+				 * @param first The vertex kept.
+				 * @param second The vertex removed.
+				 * @param position The position of the merged vertex.
+				 * @param firstGeneration The kept vertex's generation when queued.
+				 * @param secondGeneration The removed vertex's generation when queued.
+				 */
+				CollapseCandidate (vertex_data_t candidateCost, index_data_t first, index_data_t second, const Math::Vector< 3, vertex_data_t > & position, uint32_t firstGeneration, uint32_t secondGeneration) noexcept
+					: cost{candidateCost},
+					tieBreak{mixHash(((static_cast< uint64_t >(first) << 32U) | static_cast< uint64_t >(second)) ^ mixHash((static_cast< uint64_t >(firstGeneration) << 32U) | static_cast< uint64_t >(secondGeneration)))},
+					v0{first},
+					v1{second},
+					optimalPos{position},
+					genV0{firstGeneration},
+					genV1{secondGeneration}
+				{
+
+				}
+
 				vertex_data_t cost{0};
+				/** @brief A portable hash of (v0, v1, genV0, genV1), computed once (the comparator runs millions of times). */
+				uint64_t tieBreak{0};
 				index_data_t v0{0};
 				index_data_t v1{0};
 				Math::Vector< 3, vertex_data_t > optimalPos;
 				uint32_t genV0{0};
 				uint32_t genV1{0};
 
-				bool operator> (const CollapseCandidate & other) const noexcept
+				/**
+				 * @brief Orders by the cost, then by the tie-break key: the same pop order on every platform.
+				 * @note std::priority_queue breaks ties as its standard library's heap algorithm does: ordered by the cost
+				 * alone, equal-cost candidates (frequent on a symmetric mesh) were collapsed in a different order on each OS
+				 * (2026-10-09, D7: the peers' goldens). A HASH, not the indices: breaking ties by vertex index collapsed the
+				 * low indices first (one region of a sphere) and doubled the error (sphere300 mean 0.0039 → 0.0075). Two
+				 * candidates with equal keys (a 64-bit collision) would be the only order left to the library.
+				 * @param other The other candidate.
+				 * @return bool
+				 */
+				bool
+				operator> (const CollapseCandidate & other) const noexcept
 				{
-					return cost > other.cost;
+					if ( cost != other.cost )
+					{
+						return cost > other.cost;
+					}
+
+					return tieBreak > other.tieBreak;
 				}
 			};
 
@@ -950,9 +986,18 @@ namespace EmEn::Base::VertexFactory
 			{
 				size_t iteration = 0;
 
-				/* Count edge occurrences to find boundaries. */
-				std::unordered_map< uint64_t, size_t > edgeCounts;
-				std::unordered_map< uint64_t, std::array< index_data_t, 2 > > edgeVerts;
+				/* Count edge occurrences to find boundaries (and keep the last orientation seen of each edge).
+				 * NOTE: One flat table (Ave Robustus II D7): the two std::unordered_map it replaces allocated a node per
+				 * edge, and their order (per standard library) drove the order of the penalty sums below. A closed mesh
+				 * has 3F/2 edges (Euler); an open one grows the table past that once. */
+				struct EdgeTally
+				{
+					uint32_t count{0};
+					index_data_t a{0};
+					index_data_t b{0};
+				};
+
+				FlatHashMap< uint64_t, EdgeTally > edges{(triangles.size() * 3) / 2};
 
 				for ( const auto & tri : triangles )
 				{
@@ -965,27 +1010,28 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto a = tri.v[i];
 						const auto b = tri.v[(i + 1) % 3];
-						const auto key = packEdgeKey(a, b);
+						auto & tally = edges[packEdgeKey(a, b)];
 
-						++edgeCounts[key];
-						edgeVerts[key] = {a, b};
+						++tally.count;
+						tally.a = a;
+						tally.b = b;
 					}
 				}
 
-				/* Apply penalty to boundary edges. */
-				for ( const auto & [key, count] : edgeCounts )
-				{
+				/* Apply penalty to boundary edges (in the table's slot order: the same on every platform). */
+				const auto walked = edges.forEachUntil([&] (const uint64_t &, const EdgeTally & tally) {
 					if ( this->checkpoint(iteration) )
 					{
 						return false;
 					}
 
-					if ( count != 1 )
+					if ( tally.count != 1 )
 					{
-						continue;
+						return true;
 					}
 
-					const auto & [a, b] = edgeVerts[key];
+					const auto a = tally.a;
+					const auto b = tally.b;
 					const auto & posA = vertices[a].position;
 					const auto & posB = vertices[b].position;
 
@@ -1038,6 +1084,13 @@ namespace EmEn::Base::VertexFactory
 
 					vertices[a].quadric += penalty;
 					vertices[b].quadric += penalty;
+
+					return true;
+				});
+
+				if ( !walked )
+				{
+					return false;
 				}
 
 				/* Detect UV seam vertices and apply penalties. */
@@ -1423,7 +1476,8 @@ namespace EmEn::Base::VertexFactory
 			bool
 			buildCollapseQueue (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, CollapseQueue & queue) const noexcept
 			{
-				std::unordered_set< uint64_t > processedEdges;
+				/* NOTE: A flat table (D7); only membership is asked, the queue order does not depend on it. */
+				FlatHashMap< uint64_t, bool > processedEdges{(triangles.size() * 3) / 2};
 				size_t iteration = 0;
 
 				for ( size_t t = 0; t < triangles.size(); ++t )
@@ -1439,20 +1493,16 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto a = tri.v[i];
 						const auto b = tri.v[(i + 1) % 3];
-						const auto key = packEdgeKey(a, b);
-
-						if ( processedEdges.contains(key) )
+						if ( !processedEdges.tryEmplace(packEdgeKey(a, b), true).second )
 						{
 							continue;
 						}
-
-						processedEdges.insert(key);
 
 						const auto combined = vertices[a].quadric + vertices[b].quadric;
 						const auto optPos = computeOptimalPosition(combined, vertices[a].position, vertices[b].position);
 						const auto cost = evaluateQuadric(combined, optPos);
 
-						queue.push({cost, a, b, optPos, vertices[a].generation, vertices[b].generation});
+						queue.emplace(cost, a, b, optPos, vertices[a].generation, vertices[b].generation);
 					}
 				}
 
@@ -1474,8 +1524,27 @@ namespace EmEn::Base::VertexFactory
 				 * source order and corner slots, so the source triangle's corner gives the right UV; a corner whose vertex
 				 * was collapsed into another takes, among that vertex's UVs, the one nearest the corner's own. One output
 				 * vertex per (work vertex, UV): the seam is split again. */
-				/* Output vertices keyed by (work vertex, UV index). */
-				std::map< std::pair< index_data_t, size_t >, index_data_t > vertexMap;
+				/* Output vertices keyed by (work vertex, UV index). NOTE: A flat table (D7; it was a std::map, a node per
+				 * output vertex); only lookups, no walk, so the output does not depend on its order. */
+				struct OutputVertexKey
+				{
+					index_data_t vertex{0};
+					size_t uvIndex{0};
+
+					bool operator== (const OutputVertexKey & other) const noexcept = default;
+				};
+
+				struct OutputVertexKeyHash
+				{
+					[[nodiscard]]
+					uint64_t
+					operator() (const OutputVertexKey & key) const noexcept
+					{
+						return mixHash(static_cast< uint64_t >(key.vertex) ^ mixHash(static_cast< uint64_t >(key.uvIndex)));
+					}
+				};
+
+				FlatHashMap< OutputVertexKey, index_data_t, OutputVertexKeyHash > vertexMap{triangles.size()};
 				/* Three per triangle: the output vertex of each corner. */
 				std::vector< index_data_t > outputCorners(triangles.size() * 3);
 				size_t iteration = 0;
@@ -1499,13 +1568,13 @@ namespace EmEn::Base::VertexFactory
 					{
 						const auto slot = (t * 3) + corner;
 						const auto [uvIndex, uv] = cornerUVs.resolve(triangle.srcTriIndex, corner, srcIdx);
-						const auto key = std::make_pair(srcIdx, uvIndex);
+						const OutputVertexKey key{.vertex = srcIdx, .uvIndex = uvIndex};
 
 						++corner;
 
-						if ( const auto known = vertexMap.find(key); known != vertexMap.end() )
+						if ( const auto * known = vertexMap.find(key); known != nullptr )
 						{
-							outputCorners[slot] = known->second;
+							outputCorners[slot] = *known;
 
 							continue;
 						}
@@ -1517,7 +1586,7 @@ namespace EmEn::Base::VertexFactory
 						output.vertices()[dstIdx].setTangent(srcVertex.tangent());
 						output.vertices()[dstIdx].setTangentHandedness(srcVertex.tangentHandedness());
 
-						vertexMap.emplace(key, dstIdx);
+						static_cast< void >(vertexMap.tryEmplace(key, dstIdx));
 						outputCorners[slot] = dstIdx;
 					}
 				}

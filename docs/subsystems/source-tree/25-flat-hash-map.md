@@ -17,7 +17,8 @@ the three OS.
 - `FlatHashMap(expectedCount)` / `reserve()` allocate once: a reserved map never grows. Growth past it rehashes
   (doubling), so an unknown count still works.
 - `tryEmplace(key, value)` → `{value *, inserted}` (the first value is kept), `operator[]`, `find()` → pointer or
-  nullptr, `contains()`, `forEach(function)` in slot order, `size()`, `slotCount()`, `clear()` (keeps the slots).
+  nullptr, `contains()`, `forEach(function)` in slot order, `forEachUntil(function)` (stops when the function returns
+  false: an interruptible walk), `size()`, `slotCount()`, `clear()` (keeps the slots).
 - `PortableHash< key_t >` (the default, integral and enumeration keys) is `mixHash()`, the splitmix64 finalizer
   (Steele, Lea, Flood, OOPSLA 2014; S. Vigna's public-domain constants): the same layout and `forEach()` order on every
   platform. Golden values in `test_FlatHashMap.cpp`.
@@ -32,4 +33,6 @@ the three OS.
   entries at least) — key by index when the key is large.
 
 ### Users
-- `VertexFactory::ShapeDecimator::buildWorkMesh()` (position deduplication of the work mesh).
+- `VertexFactory::ShapeDecimator`: `buildWorkMesh()` (position deduplication of the work mesh), the penalty stage's
+  edge tally, the collapse queue's processed edges, the output vertex map. With the adjacency arena, they took the
+  stop latency of a 2.24 M-triangle decimation from 0.73 s to 25 ms (D7).

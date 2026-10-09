@@ -166,6 +166,38 @@ TEST(FlatHashMap, forEachIsCompleteAndDeterministic)
 	EXPECT_EQ(orderFirst, orderSecond);
 }
 
+/* forEachUntil() stops when the function says so, and reports it. */
+TEST(FlatHashMap, forEachUntilStops)
+{
+	FlatHashMap< uint32_t, uint32_t > map{64};
+
+	for ( uint32_t key = 0; key < 50; ++key )
+	{
+		static_cast< void >(map.tryEmplace(key, key));
+	}
+
+	size_t visited = 0;
+
+	EXPECT_FALSE(map.forEachUntil([&visited] (const uint32_t &, uint32_t &) {
+		++visited;
+
+		return visited < 10;
+	}));
+	EXPECT_EQ(visited, 10U);
+
+	visited = 0;
+
+	EXPECT_TRUE(map.forEachUntil([&visited] (const uint32_t &, uint32_t & value) {
+		++visited;
+		value += 1;
+
+		return true;
+	}));
+	EXPECT_EQ(visited, 50U);
+	ASSERT_NE(map.find(7), nullptr);
+	EXPECT_EQ(*map.find(7), 8U);
+}
+
 TEST(FlatHashMap, customKeyAndClear)
 {
 	FlatHashMap< Point, size_t, PointHash > map{4};

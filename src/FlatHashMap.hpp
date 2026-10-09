@@ -276,6 +276,28 @@ namespace EmEn::Base
 			}
 
 			/**
+			 * @brief Calls function(key, value) for the entries in slot order while it returns true.
+			 * @note For a long walk that must be interruptible (a stop request checked every N entries).
+			 * @tparam function_t A callable taking (const key_t &, value_t &) and returning bool (false stops).
+			 * @param function The function (taken by value, as the standard algorithms do).
+			 * @return bool False when the function stopped the walk.
+			 */
+			template< typename function_t >
+			bool
+			forEachUntil (function_t function)
+			{
+				for ( auto & slot : m_slots )
+				{
+					if ( slot.occupied && !function(std::as_const(slot.key), slot.value) )
+					{
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+			/**
 			 * @brief Returns the number of entries.
 			 * @return size_t
 			 */

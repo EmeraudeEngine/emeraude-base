@@ -43,7 +43,19 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   hollowedCube 82 / 80 / 82). Quality kept or better (source → output distance, mean / max: sphere300 0.0048 / 0.057
   → 0.0039 / 0.032, geodesic 0.0061 / 0.077 → 0.0045 / 0.070, capsule max 0.120 → 0.090, others equal). Full
   decimation 4.65 s → 3.34 s; worst stop latency 0.53 s → 0.20 s (the 700 ms row: the penalty stage's edge maps).
-- **Step 4:** the edge maps (`edgeCounts`, `edgeVerts`, `processedEdges`, `vertexMap`) → `FlatHashMap`.
+- **Step 4 DONE (2026-10-09): D7 REACHED on Linux — worst stop latency 25 ms** (0.73 s before D7). The penalty
+  stage's two edge maps (one `FlatHashMap< uint64_t, EdgeTally >`, walked by `forEachUntil()` with the stop check), the
+  collapse queue's processed-edge set and the output vertex map (a `std::map`) are flat tables; the collapse queue has
+  a TOTAL order (cost, then a portable hash of (v0, v1, generations) computed once per candidate): ordered by the cost
+  alone, std::priority_queue left the ties to each standard library's heap — the peers' goldens of `1adf560` still
+  differed (Windows 4 / 8 identical, macOS 0 / 8; macOS also contracts multiply-adds into FMA on arm64: with
+  `-ffp-contract=off` its hollowedCube matched).
+- ⚠️⚠️ **Found on the way: the QEM was DISABLED on fine meshes** — `Vector::normalized()` returns a ZERO vector below a
+  squared length of FLT_EPSILON, so the normal of any triangle under ~1.7e-4 of area was zero and so was its quadric:
+  on a 400 × 200 sphere 99.9 % of the collapse costs were exactly 0 (the same before D7), and the tie-break chose the
+  collapses. Hence the OS-dependent results and the timings that depend on the tie-break (2.24 M sphere: cost-only
+  ties 2.73 s with libstdc++'s heap, index tie-break 3.9 s, hash 5.4 s). Base item `vector-normalized-absolute-epsilon`
+  (owner: fix at the root). Re-measure the timings and the cross-OS goldens after that fix.
 - **The remaining latency is DEALLOCATION, not computation**: on a stop, the work stops within milliseconds, but the
   return frees the dedup hash map (1.1 M nodes) and two `std::unordered_set` per vertex (1.1 M vertices). Reaching the
   D7 bound (≤ 50 ms) needs flat data structures (CSR adjacency, a sorted / open-addressing dedup) — also a large

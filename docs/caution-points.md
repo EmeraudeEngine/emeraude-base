@@ -666,8 +666,10 @@ makes `decimate()` return an EMPTY shape (`isCancelled()` tells it from a failur
 `VertexFactoryShapeDecimator.aLoweredCancellationFlagChangesNothing`).
 `setCancellationFlag(const std::atomic_bool *)` is TRANSITIONAL (read too) until the engine's LOD jobs own a
 `TaskHandle` (engine item `jobs-owned-by-their-starter`). ⚠️ The stop latency is bounded by the DEALLOCATION of the
-stages' node-based containers, 0.74 s on 2.24 M triangles (item `task-handle-and-stop-token`, D7 rewrite in progress:
-0.20 s after its step 3).
+stages' node-based containers, 0.74 s on 2.24 M triangles — **25 ms since the D7 rewrite** (2026-10-09: a lean work
+mesh, the adjacency in one arena, every hash table a `FlatHashMap`, a total collapse order; item
+`task-handle-and-stop-token`). ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
+item `vector-normalized-absolute-epsilon`).
 ⚠️⚠️ **The decimation is the same on the three OS only since 2026-10-09 (D7 step 3):** it iterated per-vertex
 `std::unordered_set`s, whose order differs per standard library — the same mesh gave three different decimations on
 Linux, macOS and Windows (even triangle counts). Its adjacency lists are now insertion-ordered arrays; never iterate an
