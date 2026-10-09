@@ -50,12 +50,15 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   alone, std::priority_queue left the ties to each standard library's heap — the peers' goldens of `1adf560` still
   differed (Windows 4 / 8 identical, macOS 0 / 8; macOS also contracts multiply-adds into FMA on arm64: with
   `-ffp-contract=off` its hollowedCube matched).
-- ⚠️⚠️ **Found on the way: the QEM was DISABLED on fine meshes** — `Vector::normalized()` returns a ZERO vector below a
-  squared length of FLT_EPSILON, so the normal of any triangle under ~1.7e-4 of area was zero and so was its quadric:
-  on a 400 × 200 sphere 99.9 % of the collapse costs were exactly 0 (the same before D7), and the tie-break chose the
-  collapses. Hence the OS-dependent results and the timings that depend on the tie-break (2.24 M sphere: cost-only
-  ties 2.73 s with libstdc++'s heap, index tie-break 3.9 s, hash 5.4 s). Base item `vector-normalized-absolute-epsilon`
-  (owner: fix at the root). Re-measure the timings and the cross-OS goldens after that fix.
+- ⚠️⚠️ **Found on the way: the QEM was DISABLED on fine meshes** — fixed 2026-10-09: `Vector::normalize()` at any scale
+  (base `83878a5`), then the decimator's numerics (double quadrics, a relative singularity test, a point-quadric seam
+  anchor — caution-points § VertexFactory). Linux, 2.24 M-triangle sphere: full decimation 5.8 s (13.8 s with float
+  quadrics; 5.83 s before D7 — with a QEM that did nothing), worst stop latency 21 ms. The remaining floor (~15-20 ms
+  on Linux / macOS, ~60 ms measured on the former Windows laptop) is NOT the stop-check interval (256 changes nothing):
+  it is the release of the large work structures — revisit on the new Windows machine.
+- **Cross-OS identity:** with `-ffp-contract=off`, macOS matches Linux on every triangle / vertex count (4 / 8 exact
+  fingerprints); the generators' own outputs change with FMA contraction, even on one OS (positions of the torus,
+  geodesic, capsule, cylinder). Bit identity across OS needs an owner decision on `-ffp-contract=off` cascade-wide.
 - **The remaining latency is DEALLOCATION, not computation**: on a stop, the work stops within milliseconds, but the
   return frees the dedup hash map (1.1 M nodes) and two `std::unordered_set` per vertex (1.1 M vertices). Reaching the
   D7 bound (≤ 50 ms) needs flat data structures (CSR adjacency, a sorted / open-addressing dedup) — also a large

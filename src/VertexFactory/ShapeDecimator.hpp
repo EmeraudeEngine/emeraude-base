@@ -219,7 +219,7 @@ namespace EmEn::Base::VertexFactory
 
 				while ( liveTriCount > targetTriCount && !queue.empty() )
 				{
-					if ( ++iteration % CancellationCheckInterval == 0 && this->isCancelled() )
+					if ( ++iteration % CollapseCheckInterval == 0 && this->isCancelled() )
 					{
 						return {};
 					}
@@ -387,6 +387,11 @@ namespace EmEn::Base::VertexFactory
 			 * iteration). */
 			static constexpr size_t CancellationCheckInterval{4096};
 
+			/** @brief The same for the collapse loop, whose iterations are heavy (a collapse runs the topology checks and
+			 * requeues every neighbour): 4096 of them took ~20 ms on Linux and ~60 ms on a Windows laptop — the floor of the
+			 * stop latency (2026-10-09). The check is an atomic load and a stop-token read: cheap at 256. */
+			static constexpr size_t CollapseCheckInterval{256};
+
 			/**
 			 * @brief Counts one iteration of a stage loop and, every CancellationCheckInterval of them, reads the stop
 			 * request.
@@ -406,11 +411,15 @@ namespace EmEn::Base::VertexFactory
 			/* ---- Internal types ---- */
 
 			/**
-			 * @brief Symmetric 4x4 quadric error matrix stored as 10 floats.
+			 * @brief Symmetric 4x4 quadric error matrix stored as 10 DOUBLES.
+			 * @note Double precision is the standard for QEM (Garland & Heckbert, "Surface Simplification Using Quadric
+			 * Error Metrics", SIGGRAPH 1997): the error of a collapse is a small difference of large area-weighted terms. In
+			 * float, on a fine mesh (areas ~1e-4, errors ~1e-12), the cost was rounding noise and the optimal-position
+			 * solve was never reached (2026-10-09).
 			 */
 			struct Quadric
 			{
-				std::array< vertex_data_t, 10 > q{};
+				std::array< double, 10 > q{};
 
 				Quadric & operator+= (const Quadric & other) noexcept
 				{
@@ -669,7 +678,7 @@ namespace EmEn::Base::VertexFactory
 				 * @param firstGeneration The kept vertex's generation when queued.
 				 * @param secondGeneration The removed vertex's generation when queued.
 				 */
-				CollapseCandidate (vertex_data_t candidateCost, index_data_t first, index_data_t second, const Math::Vector< 3, vertex_data_t > & position, uint32_t firstGeneration, uint32_t secondGeneration) noexcept
+				CollapseCandidate (double candidateCost, index_data_t first, index_data_t second, const Math::Vector< 3, vertex_data_t > & position, uint32_t firstGeneration, uint32_t secondGeneration) noexcept
 					: cost{candidateCost},
 					tieBreak{mixHash(((static_cast< uint64_t >(first) << 32U) | static_cast< uint64_t >(second)) ^ mixHash((static_cast< uint64_t >(firstGeneration) << 32U) | static_cast< uint64_t >(secondGeneration)))},
 					v0{first},
@@ -681,7 +690,7 @@ namespace EmEn::Base::VertexFactory
 
 				}
 
-				vertex_data_t cost{0};
+				double cost{0};
 				/** @brief A portable hash of (v0, v1, genV0, genV1), computed once (the comparator runs millions of times). */
 				uint64_t tieBreak{0};
 				index_data_t v0{0};
@@ -908,16 +917,41 @@ namespace EmEn::Base::VertexFactory
 
 			/* ---- Quadric computation ---- */
 
+			/**
+			 * @brief Returns the quadric of a plane (unit normal, through a point), in double.
+			 * @param normal The unit normal.
+			 * @param point A point of the plane.
+			 * @return Quadric
+			 */
 			[[nodiscard]]
 			static
 			Quadric
-			computePlaneQuadric (const Math::Vector< 3, vertex_data_t > & normal, vertex_data_t d) noexcept
+			computePlaneQuadric (const Math::Vector< 3, vertex_data_t > & normal, const Math::Vector< 3, vertex_data_t > & point) noexcept
 			{
-				const auto a = normal[Math::X];
-				const auto b = normal[Math::Y];
-				const auto c = normal[Math::Z];
+				const auto a = static_cast< double >(normal[Math::X]);
+				const auto b = static_cast< double >(normal[Math::Y]);
+				const auto c = static_cast< double >(normal[Math::Z]);
+				const auto d = -((a * static_cast< double >(point[Math::X])) + (b * static_cast< double >(point[Math::Y])) + (c * static_cast< double >(point[Math::Z])));
 
 				return Quadric{{a * a, a * b, a * c, a * d, b * b, b * c, b * d, c * c, c * d, d * d}};
+			}
+
+			/**
+			 * @brief Returns the quadric of the squared distance to a point (three axis planes through it): a valid,
+			 * positive semi-definite way to anchor a vertex.
+			 * @param point The point.
+			 * @return Quadric
+			 */
+			[[nodiscard]]
+			static
+			Quadric
+			computePointQuadric (const Math::Vector< 3, vertex_data_t > & point) noexcept
+			{
+				const auto x = static_cast< double >(point[Math::X]);
+				const auto y = static_cast< double >(point[Math::Y]);
+				const auto z = static_cast< double >(point[Math::Z]);
+
+				return Quadric{{1.0, 0.0, 0.0, -x, 1.0, 0.0, -y, 1.0, -z, (x * x) + (y * y) + (z * z)}};
 			}
 
 			[[nodiscard]]
@@ -951,15 +985,12 @@ namespace EmEn::Base::VertexFactory
 						continue;
 					}
 
-					const auto normal = cross.normalized();
-					const auto d = -Math::Vector< 3, vertex_data_t >::dotProduct(normal, p0);
-
-					auto Q = computePlaneQuadric(normal, d);
+					auto Q = computePlaneQuadric(cross.normalized(), p0);
 
 					/* Weight by triangle area. */
 					for ( auto & val : Q.q )
 					{
-						val *= area;
+						val *= static_cast< double >(area);
 					}
 
 					vertices[tri.v[0]].quadric += Q;
@@ -1086,14 +1117,11 @@ namespace EmEn::Base::VertexFactory
 						return true;
 					}
 
-					const auto perpNormal = perpendicular.normalized();
-					const auto d = -Math::Vector< 3, vertex_data_t >::dotProduct(perpNormal, posA);
-
-					auto penalty = computePlaneQuadric(perpNormal, d);
+					auto penalty = computePlaneQuadric(perpendicular.normalized(), posA);
 
 					for ( auto & val : penalty.q )
 					{
-						val *= m_boundaryPenaltyWeight;
+						val *= static_cast< double >(m_boundaryPenaltyWeight);
 					}
 
 					vertices[a].quadric += penalty;
@@ -1158,12 +1186,15 @@ namespace EmEn::Base::VertexFactory
 
 					if ( isSeam )
 					{
-						/* Add a large penalty to prevent collapsing UV seam vertices. */
-						Quadric penalty{};
+						/* Anchor a UV seam vertex where it is: a weighted POINT quadric (the squared distance to it). It used
+						 * to be all ten coefficients set to the weight — not a valid quadric (not positive semi-definite): its
+						 * optimal position was arbitrary and could throw a seam vertex off the surface (2026-10-09: 0.053
+						 * from a unit sphere). */
+						auto penalty = computePointQuadric(vertices[v].position);
 
 						for ( auto & val : penalty.q )
 						{
-							val = m_boundaryPenaltyWeight;
+							val *= static_cast< double >(m_boundaryPenaltyWeight);
 						}
 
 						vertices[v].quadric += penalty;
@@ -1177,7 +1208,7 @@ namespace EmEn::Base::VertexFactory
 
 			[[nodiscard]]
 			static
-			vertex_data_t
+			double
 			evaluateQuadric (const Quadric & Q, const Math::Vector< 3, vertex_data_t > & v) noexcept
 			{
 				/* Q = [a11 a12 a13 a14]   indices: [0 1 2 3]
@@ -1186,13 +1217,13 @@ namespace EmEn::Base::VertexFactory
 				 *	 [a14 a24 a34 a44]			[3 6 8 9]
 				 *
 				 * v^T Q v = (extended with w=1) */
-				const auto x = v[Math::X];
-				const auto y = v[Math::Y];
-				const auto z = v[Math::Z];
+				const auto x = static_cast< double >(v[Math::X]);
+				const auto y = static_cast< double >(v[Math::Y]);
+				const auto z = static_cast< double >(v[Math::Z]);
 
-				return (Q.q[0] * x * x) + (static_cast< vertex_data_t >(2) * Q.q[1] * x * y) + (static_cast< vertex_data_t >(2) * Q.q[2] * x * z) + (static_cast< vertex_data_t >(2) * Q.q[3] * x)
-					 + (Q.q[4] * y * y) + (static_cast< vertex_data_t >(2) * Q.q[5] * y * z) + (static_cast< vertex_data_t >(2) * Q.q[6] * y)
-					 + (Q.q[7] * z * z) + (static_cast< vertex_data_t >(2) * Q.q[8] * z)
+				return (Q.q[0] * x * x) + (2.0 * Q.q[1] * x * y) + (2.0 * Q.q[2] * x * z) + (2.0 * Q.q[3] * x)
+					 + (Q.q[4] * y * y) + (2.0 * Q.q[5] * y * z) + (2.0 * Q.q[6] * y)
+					 + (Q.q[7] * z * z) + (2.0 * Q.q[8] * z)
 					 + Q.q[9];
 			}
 
@@ -1214,9 +1245,16 @@ namespace EmEn::Base::VertexFactory
 
 				const auto det = (a * (e * h - f * f)) - (b * (b * h - f * c)) + (c * (b * f - e * c));
 
-				if ( std::abs(det) > static_cast< vertex_data_t >(1e-6) )
+				/* NOTE: The singularity test is RELATIVE to the matrix's scale (its trace, the matrix being positive
+				 * semi-definite): det / trace³ is scale-free. An absolute |det| > 1e-6 was never met on a fine mesh (det ~
+				 * area³ ~ 1e-12): the optimal position was never solved, every collapse went to an end or the midpoint, and
+				 * fans grew around a few vertices (32 requeued neighbours per collapse instead of 9, 2026-10-09). */
+				const auto trace = a + e + h;
+				constexpr auto RelativeSingularity = 1e-10;
+
+				if ( trace > 0.0 && std::abs(det) > RelativeSingularity * trace * trace * trace )
 				{
-					const auto invDet = static_cast< vertex_data_t >(1) / det;
+					const auto invDet = 1.0 / det;
 
 					const auto rx = -d, ry = -g, rz = -i;
 
@@ -1224,7 +1262,7 @@ namespace EmEn::Base::VertexFactory
 					const auto y = invDet * (rx * (c * f - b * h) + ry * (a * h - c * c) + rz * (b * c - a * f));
 					const auto z = invDet * (rx * (b * f - c * e) + ry * (b * c - a * f) + rz * (a * e - b * b));
 
-					const Math::Vector< 3, vertex_data_t > solved{x, y, z};
+					const Math::Vector< 3, vertex_data_t > solved{static_cast< vertex_data_t >(x), static_cast< vertex_data_t >(y), static_cast< vertex_data_t >(z)};
 
 					/* Reject the solved position if it lies too far from the edge midpoint.
 					 * A factor of 2× the edge length keeps the result in a reasonable neighborhood. */

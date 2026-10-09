@@ -691,6 +691,21 @@ unordered container where the order drives the result (`FlatHashMap` with `Porta
   skipped — as a degenerate triangle already is).
 Tests: `VertexFactoryShape.anInconsistentShapeIsRefusedNotAborted`, `aVertexColorIndexOutOfRangeIsRefused`.
 
+### ⚠️⚠️ The decimator's QEM numerics: double quadrics, a RELATIVE singularity test, a point-quadric seam anchor (2026-10-09, FIXED)
+
+Once `Vector::normalize()` gave the small triangles their normals back (above), the QEM still could not work on a fine
+mesh: (1) quadrics and costs in FLOAT — a collapse's error is a small difference of large area-weighted terms (areas
+~1e-4, errors ~1e-12): rounding noise, 22 % exact zeros; (2) the optimal-position solve was gated by an ABSOLUTE
+`|det| > 1e-6` — det ~ area³ ~ 1e-12 on a fine mesh, never met: every collapse went to an end point or the midpoint, fans
+grew around a few vertices (32 requeued neighbours per collapse instead of 9) and a 2.24 M-triangle decimation took
+13.8 s; (3) the UV-seam "penalty" set all ten coefficients to the weight — not a valid (positive semi-definite) quadric:
+its optimum was arbitrary and threw a seam vertex 0.053 off a unit sphere. Now: `Quadric` holds doubles (Garland &
+Heckbert, SIGGRAPH 1997), the singularity test is `|det| > 1e-10 · trace³` (scale-free), and a seam vertex is anchored by
+a weighted POINT quadric (squared distance to it). Measured: source → output max distance sphere300 0.035 → 0.00028,
+geodesic 0.078 → 0.0029, capsule 0.112 → 0.011, torus 0.020 → 0.005, hollowedCube output → source 0.455 → 0; the
+2.24 M decimation 13.8 s → 5.8 s; stop latency unchanged (21 ms). Test
+`VertexFactoryShapeDecimator.aFineMeshIsDecimatedByItsQuadrics` (worst radial distance < 1e-3: 9.9e-3 → 1.9e-4).
+
 ### ⚠️⚠️ The computed tangent frame was backwards on every MIRRORED UV island — tangent AND handedness (2026-10-07, FIXED)
 
 `Math::Vector::tangent()` normalises without dividing by the UV determinant r = Δu1·Δv2 − Δu2·Δv1: it answers

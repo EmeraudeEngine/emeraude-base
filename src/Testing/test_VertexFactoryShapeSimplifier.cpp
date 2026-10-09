@@ -340,26 +340,18 @@ TEST(VertexFactoryShapeDecimator, aFineMeshIsDecimatedByItsQuadrics)
 
 	ASSERT_FALSE(output.triangles().empty());
 
-	/* The output stays on the unit sphere. Measured (Linux): with zero quadrics, 111 output vertices lay farther than 1e-3
-	 * from the radius (mean deviation 8.3e-5); with working quadrics, 1 (mean 5.2e-5). The one left is a UV-seam vertex:
-	 * the seam penalty is not a valid quadric yet (item task-handle-and-stop-token, QEM numerics). */
-	size_t farFromTheSurface = 0;
-	double deviationSum = 0.0;
+	/* The output stays on the unit sphere. Measured (Linux), worst distance of an output vertex to the radius: 9.9e-3 with
+	 * zero quadrics (111 vertices beyond 1e-3); 5.3e-2 with float quadrics (a UV-seam vertex thrown off by the invalid
+	 * seam penalty); 1.9e-4 with double quadrics, a relative singularity test and a point-quadric seam anchor
+	 * (2026-10-09). */
+	double worst = 0.0;
 
 	for ( const auto & vertex : output.vertices() )
 	{
-		const auto deviation = std::abs(static_cast< double >(vertex.position().length()) - 1.0);
-
-		deviationSum += deviation;
-
-		if ( deviation > 1e-3 )
-		{
-			++farFromTheSurface;
-		}
+		worst = std::max(worst, std::abs(static_cast< double >(vertex.position().length()) - 1.0));
 	}
 
-	EXPECT_LE(farFromTheSurface, 4U);
-	EXPECT_LT(deviationSum / static_cast< double >(output.vertices().size()), 7e-5);
+	EXPECT_LT(worst, 1e-3);
 }
 
 namespace
