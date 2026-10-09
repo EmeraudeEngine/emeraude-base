@@ -1021,7 +1021,10 @@ zero for a degenerate triangle (so sums of normals ignore it and `isZero()` dete
 `pointInTriangleWithMTV()` (refused every triangle with edges under ~2.6 cm), `Space2D::SegmentSegment` (declared
 every pair of short segments parallel), the decimator's quadric and boundary planes, the 11 gem generators. Kept on
 purpose: `CartesianFrame::getUprightSpriteModelMatrix()` (a camera at the sprite's vertical, a distance guard with a
-fallback). Audit of the 243 call sites and the engine-side guards: item `vector-normalized-absolute-epsilon`.
+fallback). Audit of the 243 call sites (2026-10-09): ~140 safe, ~75 already wrong and fixed by it (small-triangle
+normals), 8 that leaned on "short → zero" — guarded where a UNIT vector is projected (engine wheel `12374f4c`,
+projet-alpha Fox / Paladin `168dd9b1`), judged safe otherwise (a push field's centre, `lookAt` with target ≈
+position). The decimator's remaining QEM numerics: item `task-handle-and-stop-token`.
 Tests: `MathVector/*.NormalizeAnyScale`, `NormalizeRefusesZeroAndNonFinite`, `MathVectorDegeneracy.*`,
 `MathSpace2DIntersections.shortCrossingSegmentsIntersect`, `VertexFactoryShapeDecimator.aFineMeshIsDecimatedByItsQuadrics`;
 `gemCutsKeepTheirGeometry`'s princess sumAbsNormal +6 (6 corners had a ZERO normal).
