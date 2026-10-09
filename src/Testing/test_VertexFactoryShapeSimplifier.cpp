@@ -30,9 +30,11 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <stop_token>
 #include <thread>
+#include <vector>
 #include <cmath>
 
 /* Local inclusions. */
@@ -324,5 +326,100 @@ TEST(VertexFactoryShapeDecimator, decimationNeverFoldsTheUVsOver)
 		}
 
 		EXPECT_EQ(folded, 0U) << folded << " of " << decimated.triangles().size() << " triangles folded over at a ratio of " << ratio;
+	}
+}
+
+namespace
+{
+	/** @brief FNV-1a over bytes (a fingerprint, not a security hash). */
+	[[nodiscard]]
+	uint64_t
+	fingerprintBytes (uint64_t hash, const void * data, size_t size) noexcept
+	{
+		const auto * bytes = static_cast< const unsigned char * >(data);
+
+		for ( size_t index = 0; index < size; ++index )
+		{
+			hash ^= bytes[index];
+			hash *= UINT64_C(1099511628211);
+		}
+
+		return hash;
+	}
+
+	/** @brief A fingerprint of a decimated shape: positions, normals, UVs, tangents, corners and groups, bit for bit. */
+	[[nodiscard]]
+	uint64_t
+	fingerprintShape (const Shape< float, uint32_t > & shape) noexcept
+	{
+		uint64_t hash = UINT64_C(1469598103934665603);
+
+		for ( const auto & vertex : shape.vertices() )
+		{
+			hash = fingerprintBytes(hash, vertex.position().data(), 12);
+			hash = fingerprintBytes(hash, vertex.normal().data(), 12);
+			hash = fingerprintBytes(hash, vertex.textureCoordinates().data(), 12);
+			hash = fingerprintBytes(hash, vertex.tangent().data(), 12);
+		}
+
+		for ( const auto & triangle : shape.triangles() )
+		{
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				const auto index = triangle.vertexIndex(corner);
+
+				hash = fingerprintBytes(hash, &index, sizeof(index));
+			}
+		}
+
+		for ( const auto & group : shape.groups() )
+		{
+			hash = fingerprintBytes(hash, &group, sizeof(group));
+		}
+
+		return hash;
+	}
+}
+
+/* The decimator's golden fingerprints (D7 rewrite, 2026-10-09): a refactor that must not change the output keeps every
+ * line identical; comparing the lines of the three OS tells whether the decimation is the same everywhere. Measurement,
+ * not a gate (the values are platform results) — run it on demand:
+ *   EmeraudeBaseUnitTests --gtest_also_run_disabled_tests --gtest_filter='*DISABLED_PrintGoldenFingerprints' */
+TEST(VertexFactoryShapeDecimator, DISABLED_PrintGoldenFingerprints)
+{
+	struct GoldenCase
+	{
+		const char * name;
+		Shape< float, uint32_t > shape;
+		float ratio;
+		uint32_t normalMapResolution;
+	};
+
+	std::vector< GoldenCase > cases;
+	cases.push_back({"sphere48", ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 48, 24), 0.5F, 0});
+	cases.push_back({"sphere300", ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 300, 150), 0.25F, 0});
+	cases.push_back({"torus", ShapeGenerator::generateTorus< float, uint32_t >(1.0F, 0.4F, 64, 32), 0.3F, 0});
+	cases.push_back({"geodesic", ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, 4), 0.4F, 0});
+	cases.push_back({"hollowedCube", ShapeGenerator::generateHollowedCube< float, uint32_t >(1.0F, 0.2F), 0.5F, 0});
+	cases.push_back({"capsule", ShapeGenerator::generateCapsule< float, uint32_t >(1.0F, 2.0F, 32, 16), 0.3F, 0});
+	cases.push_back({"cylinder", ShapeGenerator::generateCylinder< float, uint32_t >(1.0F, 0.5F, 2.0F, 40, 10, CapUVMapping::PerSegment), 0.5F, 0});
+	cases.push_back({"sphere48-normalmap", ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 48, 24), 0.3F, 64});
+
+	for ( const auto & golden : cases )
+	{
+		const ShapeDecimator< float, uint32_t > decimator{golden.shape, golden.ratio, 1000.0F, golden.normalMapResolution};
+		const auto output = decimator.decimate();
+		uint64_t normalMapHash = 0;
+
+		if ( golden.normalMapResolution > 0 )
+		{
+			const auto & normalMap = decimator.normalMap();
+
+			normalMapHash = fingerprintBytes(UINT64_C(1469598103934665603), normalMap.data().data(), normalMap.data().size());
+		}
+
+		std::cout << "[golden] " << golden.name << " " << output.triangles().size() << " tris " << output.vertices().size() << " verts " << std::hex << fingerprintShape(output) << " nm " << normalMapHash << std::dec << "\n";
+
+		EXPECT_FALSE(output.triangles().empty()) << golden.name;
 	}
 }

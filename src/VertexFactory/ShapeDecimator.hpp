@@ -44,6 +44,7 @@
 #include <vector>
 
 /* Local inclusions for usages. */
+#include "FlatHashMap.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "ThreadPool.hpp"
 #include "Shape.hpp"
@@ -148,18 +149,27 @@ namespace EmEn::Base::VertexFactory
 					return m_source;
 				}
 
-				/* Create a position-only deduped copy for QEM connectivity.
-				 * The original source (m_bakeSource) is preserved for normal map baking. */
-				auto workShape = m_source;
-				ShapeProcessor< vertex_data_t, index_data_t > connProcessor{workShape};
-				connProcessor.deduplicateVertices(false, false, m_stopToken);
+				/* NOTE: An inconsistent source (a triangle past the vertex array) is refused: the work mesh indexes the
+				 * vertices through the triangles. */
+				if ( !m_source.indicesInRange() )
+				{
+					std::cerr << "ShapeDecimator::decimate(), a source triangle refers to a vertex that does not exist !" "\n";
 
-				if ( this->isCancelled() )
+					return {};
+				}
+
+				/* The QEM works on a POSITION-deduplicated connectivity (OBJ-style meshes with per-face vertices would have
+				 * no shared edge). It used to be a full copy of the source, deduplicated in place: on a 2.24 M-triangle mesh
+				 * the copy alone took 0.6 s and could not be interrupted (Ave Robustus II D7). The work mesh holds only
+				 * what the QEM reads: a representative source vertex per position, and the triangles remapped. */
+				WorkMesh work;
+
+				if ( !this->buildWorkMesh(work) )
 				{
 					return {};
 				}
 
-				const auto srcTriCount = workShape.triangles().size();
+				const auto srcTriCount = work.triangleCount();
 				const auto targetTriCount = std::max(size_t{4}, static_cast< size_t >(std::round(static_cast< vertex_data_t >(srcTriCount) * m_ratio)));
 
 				/* Initialize mutable working data. */
@@ -167,14 +177,14 @@ namespace EmEn::Base::VertexFactory
 				std::vector< TriangleData > triangles;
 
 				/* NOTE: Every stage below returns early on a stop request (Ave Robustus II: a bounded stop latency). */
-				if ( !this->initializeData(vertices, triangles, workShape) )
+				if ( !this->initializeData(vertices, triangles, work) )
 				{
 					return {};
 				}
 
 				/* Each corner's UV in its own chart (see CornerUVTable): what the output keeps, and what a collapse must
 				 * not turn over. */
-				const CornerUVTable cornerUVs{m_source, workShape, *this};
+				const CornerUVTable cornerUVs{m_source, work, *this};
 
 				if ( cornerUVs.cancelled() )
 				{
@@ -344,7 +354,7 @@ namespace EmEn::Base::VertexFactory
 					return {};
 				}
 
-				auto output = buildOutputShape(vertices, triangles, workShape, cornerUVs);
+				auto output = buildOutputShape(vertices, triangles, cornerUVs);
 
 				if ( this->isCancelled() )
 				{
@@ -451,6 +461,45 @@ namespace EmEn::Base::VertexFactory
 			};
 
 			/**
+			 * @brief The position-deduplicated connectivity the QEM works on, built from the source WITHOUT copying it:
+			 * the vertices sharing a quantized position become one work vertex, represented by the first of them (the
+			 * same result as ShapeProcessor::deduplicateVertices(false, false) on a copy: same order, same
+			 * representatives, so the same decimation).
+			 */
+			struct WorkMesh final
+			{
+				/** @brief For each work vertex, the source vertex standing for it (the first one at its position). */
+				std::vector< index_data_t > representatives;
+				/** @brief Three per source triangle (same order): the work vertex at each corner. */
+				std::vector< index_data_t > corners;
+
+				/**
+				 * @brief Returns the number of triangles.
+				 * @return size_t
+				 */
+				[[nodiscard]]
+				size_t
+				triangleCount () const noexcept
+				{
+					return corners.size() / 3;
+				}
+
+				/**
+				 * @brief Returns the work vertex at a triangle corner.
+				 * @pre triangle < triangleCount(), slot < 3.
+				 * @param triangle The triangle index.
+				 * @param slot The corner slot, 0 to 2.
+				 * @return index_data_t
+				 */
+				[[nodiscard]]
+				index_data_t
+				corner (size_t triangle, size_t slot) const noexcept
+				{
+					return corners[(triangle * 3) + slot];
+				}
+			};
+
+			/**
 			 * @brief The UV of every triangle corner in its own chart. The work shape is deduplicated by POSITION, so a
 			 * vertex of a UV seam carries several UVs: the source triangle's corner tells which one (the work triangles
 			 * keep the source order and corner slots), and a corner whose vertex was collapsed into another takes, among
@@ -463,25 +512,25 @@ namespace EmEn::Base::VertexFactory
 					/**
 					 * @brief Builds the table.
 					 * @param source The source shape (one vertex per (position, attributes)).
-					 * @param workShape Its position-deduplicated copy (same triangles, same order).
+					 * @param work Its position-deduplicated connectivity (same triangles, same order).
 					 * @param owner The decimator, whose stop request interrupts the build (cancelled() then reports it).
 					 */
-					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const Shape< vertex_data_t, index_data_t > & workShape, const ShapeDecimator & owner) noexcept
+					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const WorkMesh & work, const ShapeDecimator & owner) noexcept
 						: m_source{&source},
-						m_workShape{&workShape},
-						m_valid{source.triangles().size() == workShape.triangles().size()}
+						m_work{&work},
+						m_valid{source.triangles().size() == work.triangleCount()}
 					{
 						if ( !m_valid )
 						{
 							return;
 						}
 
-						m_vertexUVs.resize(workShape.vertices().size());
+						m_vertexUVs.resize(work.representatives.size());
 
-						const auto & workTriangles = workShape.triangles();
+						const auto workTriangleCount = work.triangleCount();
 						size_t iteration = 0;
 
-						for ( size_t t = 0; t < workTriangles.size(); ++t )
+						for ( size_t t = 0; t < workTriangleCount; ++t )
 						{
 							if ( owner.checkpoint(iteration) )
 							{
@@ -494,7 +543,7 @@ namespace EmEn::Base::VertexFactory
 							for ( index_data_t corner = 0; corner < 3; ++corner )
 							{
 								const auto & uv = this->sourceCornerUV(t, corner);
-								auto & known = m_vertexUVs[workTriangles[t].vertexIndex(corner)];
+								auto & known = m_vertexUVs[work.corner(t, corner)];
 
 								if ( std::ranges::none_of(known, [&uv] (const auto & other) { return (other - uv).lengthSquared() <= UVMatchToleranceSquared; }) )
 								{
@@ -518,7 +567,7 @@ namespace EmEn::Base::VertexFactory
 					{
 						if ( !m_valid || vertex >= m_vertexUVs.size() || m_vertexUVs[vertex].empty() )
 						{
-							return {0, m_workShape->vertices()[vertex].textureCoordinates()};
+							return {0, m_source->vertices()[m_work->representatives[vertex]].textureCoordinates()};
 						}
 
 						const auto & wanted = this->sourceCornerUV(triangleIndex, corner);
@@ -562,7 +611,7 @@ namespace EmEn::Base::VertexFactory
 
 					/* Non-owning: the table lives inside decimate(), with both shapes. */
 					const Shape< vertex_data_t, index_data_t > * m_source{nullptr};
-					const Shape< vertex_data_t, index_data_t > * m_workShape{nullptr};
+					const WorkMesh * m_work{nullptr};
 					std::vector< std::vector< Math::Vector< 3, vertex_data_t > > > m_vertexUVs;
 					bool m_valid{false};
 					bool m_cancelled{false};
@@ -585,40 +634,131 @@ namespace EmEn::Base::VertexFactory
 
 			using CollapseQueue = std::priority_queue< CollapseCandidate, std::vector< CollapseCandidate >, std::greater< CollapseCandidate > >;
 
-			/* ---- Initialization ---- */
+			/* ---- Work mesh ---- */
 
+			/** @brief The position quantum of the work mesh: ShapeProcessor's default tolerance (same quantization). */
+			static constexpr vertex_data_t WorkPositionTolerance{static_cast< vertex_data_t >(1e-4)};
+
+			/**
+			 * @brief Builds the position-deduplicated connectivity (see WorkMesh) with ONE flat hash table, interruptible.
+			 * @note Same quantization, same first-occurrence order and same representatives as
+			 * ShapeProcessor::deduplicateVertices(false, false) on a copy of the source, which it replaces: the decimation
+			 * is the same, bit for bit. The table keys are source vertex INDICES, hashed and compared through their quantized
+			 * positions, so a slot is 12 bytes (a 1.1 M-vertex mesh: one 50 MB allocation, one release).
+			 * @param work The work mesh to fill.
+			 * @return bool False when a stop was requested (work is then partial and must not be used).
+			 */
 			[[nodiscard]]
 			bool
-			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const Shape< vertex_data_t, index_data_t > & workShape) const noexcept
+			buildWorkMesh (WorkMesh & work) const noexcept
 			{
+				const auto & srcVerts = m_source.vertices();
+				const auto & srcTris = m_source.triangles();
+				const auto scale = static_cast< vertex_data_t >(1) / WorkPositionTolerance;
+
+				/* The quantized position of each source vertex, computed once (the table hashes and compares them). */
+				std::vector< std::array< int64_t, 3 > > quantized(srcVerts.size());
 				size_t iteration = 0;
 
-				const auto & srcVerts = workShape.vertices();
-				const auto & srcTris = workShape.triangles();
-				const auto & srcGroups = workShape.groups();
-
-				/* Assumes the source shape has been pre-deduped with position-only dedup
-				 * (ShapeProcessor::deduplicateVertices(false, false)) to build proper
-				 * mesh connectivity. Without this, OBJ-style meshes with per-face vertices
-				 * have no shared edges and the QEM cannot operate. */
-				vertices.resize(srcVerts.size());
-
-				for ( size_t i = 0; i < srcVerts.size(); ++i )
+				for ( size_t index = 0; index < srcVerts.size(); ++index )
 				{
 					if ( this->checkpoint(iteration) )
 					{
 						return false;
 					}
 
-					vertices[i].position = srcVerts[i].position();
-					vertices[i].srcIndex = static_cast< index_data_t >(i);
+					const auto & position = srcVerts[index].position();
+
+					quantized[index] = {
+						static_cast< int64_t >(std::round(position[Math::X] * scale)),
+						static_cast< int64_t >(std::round(position[Math::Y] * scale)),
+						static_cast< int64_t >(std::round(position[Math::Z] * scale))
+					};
 				}
 
-				triangles.resize(srcTris.size());
+				const auto hashVertex = [&quantized] (index_data_t vertex) noexcept -> uint64_t {
+					const auto & key = quantized[vertex];
+
+					return mixHash(static_cast< uint64_t >(key[0]) ^ mixHash(static_cast< uint64_t >(key[1]) ^ mixHash(static_cast< uint64_t >(key[2]))));
+				};
+				const auto samePosition = [&quantized] (index_data_t first, index_data_t second) noexcept {
+					return quantized[first] == quantized[second];
+				};
+
+				FlatHashMap< index_data_t, index_data_t, decltype(hashVertex), decltype(samePosition) > firstAtPosition{srcVerts.size(), hashVertex, samePosition};
+				std::vector< index_data_t > workIndexOf(srcVerts.size());
+
+				work.representatives.clear();
+				work.representatives.reserve(srcVerts.size());
+
+				for ( size_t index = 0; index < srcVerts.size(); ++index )
+				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
+					const auto vertex = static_cast< index_data_t >(index);
+					const auto [workIndex, inserted] = firstAtPosition.tryEmplace(vertex, static_cast< index_data_t >(work.representatives.size()));
+
+					if ( inserted )
+					{
+						work.representatives.push_back(vertex);
+					}
+
+					workIndexOf[index] = *workIndex;
+				}
+
+				work.corners.resize(srcTris.size() * 3);
+
+				for ( size_t triangle = 0; triangle < srcTris.size(); ++triangle )
+				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
+					for ( index_data_t slot = 0; slot < 3; ++slot )
+					{
+						work.corners[(triangle * 3) + slot] = workIndexOf[srcTris[triangle].vertexIndex(slot)];
+					}
+				}
+
+				return true;
+			}
+
+			/* ---- Initialization ---- */
+
+			[[nodiscard]]
+			bool
+			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const WorkMesh & work) const noexcept
+			{
+				size_t iteration = 0;
+
+				const auto & srcVerts = m_source.vertices();
+				const auto & srcGroups = m_source.groups();
+				const auto triangleCount = work.triangleCount();
+
+				/* One QEM vertex per work vertex (position-deduplicated: see buildWorkMesh()). srcIndex is the SOURCE vertex
+				 * standing for it, whose attributes the output keeps. */
+				vertices.resize(work.representatives.size());
+
+				for ( size_t i = 0; i < work.representatives.size(); ++i )
+				{
+					if ( this->checkpoint(iteration) )
+					{
+						return false;
+					}
+
+					vertices[i].position = srcVerts[work.representatives[i]].position();
+					vertices[i].srcIndex = work.representatives[i];
+				}
+
+				triangles.resize(triangleCount);
 
 				/* Build a lookup: triangle index → group index.
 				 * Groups store (offset, length) ranges over the triangle array. */
-				std::vector< uint32_t > triGroupMap(srcTris.size(), 0);
+				std::vector< uint32_t > triGroupMap(triangleCount, 0);
 
 				for ( uint32_t g = 0; g < static_cast< uint32_t >(srcGroups.size()); ++g )
 				{
@@ -634,25 +774,23 @@ namespace EmEn::Base::VertexFactory
 
 						const auto triIdx = groupOffset + i;
 
-						if ( triIdx < srcTris.size() )
+						if ( triIdx < triangleCount )
 						{
 							triGroupMap[triIdx] = g;
 						}
 					}
 				}
 
-				for ( size_t t = 0; t < srcTris.size(); ++t )
+				for ( size_t t = 0; t < triangleCount; ++t )
 				{
 					if ( this->checkpoint(iteration) )
 					{
 						return false;
 					}
 
-					const auto & tri = srcTris[t];
-
-					triangles[t].v[0] = tri.vertexIndex(0);
-					triangles[t].v[1] = tri.vertexIndex(1);
-					triangles[t].v[2] = tri.vertexIndex(2);
+					triangles[t].v[0] = work.corner(t, 0);
+					triangles[t].v[1] = work.corner(t, 1);
+					triangles[t].v[2] = work.corner(t, 2);
 					triangles[t].srcTriIndex = t;
 					triangles[t].groupIndex = triGroupMap[t];
 
@@ -1276,7 +1414,7 @@ namespace EmEn::Base::VertexFactory
 
 			[[nodiscard]]
 			Shape< vertex_data_t, index_data_t >
-			buildOutputShape (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, const Shape< vertex_data_t, index_data_t > & workShape, const CornerUVTable & cornerUVs) const noexcept
+			buildOutputShape (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, const CornerUVTable & cornerUVs) const noexcept
 			{
 				Shape< vertex_data_t, index_data_t > output;
 
@@ -1323,7 +1461,7 @@ namespace EmEn::Base::VertexFactory
 							continue;
 						}
 
-						const auto & srcVertex = workShape.vertices()[vertices[srcIdx].srcIndex];
+						const auto & srcVertex = m_source.vertices()[vertices[srcIdx].srcIndex];
 						const auto & newPos = vertices[srcIdx].position;
 
 						const auto dstIdx = output.saveVertex(newPos, srcVertex.normal(), uv);

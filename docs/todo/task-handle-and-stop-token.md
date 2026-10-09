@@ -31,6 +31,15 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
 ## What remains
 - **Owner decision (2026-10-08), D7: REWRITE** — the decimator's work data goes flat (lean work copy: positions + triangles only;
   CSR adjacency; a sorted / open-addressing dedup) to reach the ≤ 50 ms stop bound; step by step, each step A/B-measured.
+- **Steps 1-2 DONE (2026-10-09, Linux i9-14900K, Release):** base `FlatHashMap` (open addressing, one allocation) and a
+  lean WORK MESH (`ShapeDecimator::buildWorkMesh()`: a representative source vertex per quantized position + the
+  remapped corners, no copy of the source). Output BIT-IDENTICAL (8 golden shapes + the 2.24 M-triangle sphere, same
+  hashes); full decimation 5.83 s → 4.65 s (median of 5); stop latency: stops in the first 100 ms 0.61-0.73 s → ≤ 13 ms,
+  worst 0.73 s → 0.53 s (now from the 200 ms row on).
+- **Step 3 (next):** the per-vertex `std::unordered_set` adjacency (`adjacentTris`, `neighbors`: ~18 M nodes on that
+  mesh) → flat sorted arrays. Their iteration order drives the collapse order, so the output CHANGES (and becomes the
+  same on the three OS, which the unordered_set order does not guarantee): validate by a geometric error metric, not
+  by hashes. **Step 4:** the edge maps (`edgeCounts`, `edgeVerts`, `processedEdges`, `vertexMap`) → `FlatHashMap`.
 - **The remaining latency is DEALLOCATION, not computation**: on a stop, the work stops within milliseconds, but the
   return frees the dedup hash map (1.1 M nodes) and two `std::unordered_set` per vertex (1.1 M vertices). Reaching the
   D7 bound (≤ 50 ms) needs flat data structures (CSR adjacency, a sorted / open-addressing dedup) — also a large

@@ -472,7 +472,9 @@ macOS; reproduced on Linux (8 copies × 10 repeats of the old binary: every copy
 never runs one test twice at once, so the normal gate never saw it. `src/Testing/TemporaryPath.hpp`'s
 `uniqueTemporaryPath(leaf)` puts a per-process token before the extension and calls `temp_directory_path()` through
 its `error_code` overload (10 call sites used the THROWING one). After: 8 copies × 10 repeats green, nothing left in
-`/tmp`. **Rule:** a test never names a temporary path itself.
+`/tmp`. **Rule:** a test never names a temporary path itself. Exception, on purpose: the PixelFactory tests' visual
+outputs `resources/assets/tmp_*` (git-ignored) keep fixed names so a human can open them; no test reads one back
+(checked), so a parallel run only overwrites a picture. Validated on the three OS (macOS 8 copies × 20, Windows 4 × 5).
 
 ### ⚠️ Windows cannot delete a file a handle still holds — a test destroys its readers BEFORE its cleanup, and checks it (2026-10-08)
 
