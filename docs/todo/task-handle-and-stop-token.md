@@ -53,9 +53,13 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
 - ⚠️⚠️ **Found on the way: the QEM was DISABLED on fine meshes** — fixed 2026-10-09: `Vector::normalize()` at any scale
   (base `83878a5`), then the decimator's numerics (double quadrics, a relative singularity test, a point-quadric seam
   anchor — caution-points § VertexFactory). Linux, 2.24 M-triangle sphere: full decimation 5.8 s (13.8 s with float
-  quadrics; 5.83 s before D7 — with a QEM that did nothing), worst stop latency 21 ms. The remaining floor (~15-20 ms
-  on Linux / macOS, ~60 ms measured on the former Windows laptop) is NOT the stop-check interval (256 changes nothing):
-  it is the release of the large work structures — revisit on the new Windows machine.
+  quadrics; 5.83 s before D7 — with a QEM that did nothing).
+- **The release floor is gone (2026-10-09):** a stop from 200 ms on cost ~20 ms on Linux and 57-71 ms on the Windows
+  laptop (fb5a162) — NOT the stop-check interval (256 changed nothing) but the release at return, measured: the 1.1 M
+  `VertexData` with their `pmr::vector`s 7.6 ms, the corner UV table's `std::vector` per vertex ~11 ms. Both are now
+  `ArenaList`s (in the decimation's arena, TRIVIALLY destructible: their release is the arena's): the floor is ~1.5 ms;
+  the worst row is now the start (~13-16 ms: allocating and zeroing the work mesh's 50 MB flat table). Worst 16 ms on
+  Linux; to re-measure on Windows.
 - **Cross-OS identity:** with `-ffp-contract=off`, macOS matches Linux on every triangle / vertex count (4 / 8 exact
   fingerprints); the generators' own outputs change with FMA contraction, even on one OS (positions of the torus,
   geodesic, capsule, cylinder). Bit identity across OS needs an owner decision on `-ffp-contract=off` cascade-wide.

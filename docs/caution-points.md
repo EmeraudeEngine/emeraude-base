@@ -668,7 +668,8 @@ makes `decimate()` return an EMPTY shape (`isCancelled()` tells it from a failur
 `TaskHandle` (engine item `jobs-owned-by-their-starter`). ⚠️ The stop latency is bounded by the DEALLOCATION of the
 stages' node-based containers, 0.74 s on 2.24 M triangles — **25 ms since the D7 rewrite** (2026-10-09: a lean work
 mesh, the adjacency in one arena, every hash table a `FlatHashMap`, a total collapse order; item
-`task-handle-and-stop-token`). ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
+`task-handle-and-stop-token`; the per-vertex lists are `ArenaList`s, trivially destructible: a stop no longer pays a
+million destructors — ~20 ms on Linux, ~65 ms on a Windows laptop before). ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
 item `vector-normalized-absolute-epsilon`).
 ⚠️⚠️ **The decimation is the same on the three OS only since 2026-10-09 (D7 step 3):** it iterated per-vertex
 `std::unordered_set`s, whose order differs per standard library — the same mesh gave three different decimations on

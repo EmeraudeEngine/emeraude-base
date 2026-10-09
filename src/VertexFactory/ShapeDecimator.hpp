@@ -33,6 +33,8 @@
 #include <stop_token>
 #include <cmath>
 #include <cstdint>
+#include <memory>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <memory_resource>
@@ -186,7 +188,7 @@ namespace EmEn::Base::VertexFactory
 
 				/* Each corner's UV in its own chart (see CornerUVTable): what the output keeps, and what a collapse must
 				 * not turn over. */
-				const CornerUVTable cornerUVs{m_source, work, *this};
+				const CornerUVTable cornerUVs{m_source, work, *this, &adjacencyArena};
 
 				if ( cornerUVs.cancelled() )
 				{
@@ -317,7 +319,7 @@ namespace EmEn::Base::VertexFactory
 					ShapeDecimator::eraseValue(vertices[v0].neighbors, v1);
 
 					/* Clean up v0's adjacentTris: remove dead triangles (in place, the order kept). */
-					std::erase_if(vertices[v0].adjacentTris, [&triangles] (size_t triIdx) {
+					vertices[v0].adjacentTris.eraseIf([&triangles] (size_t triIdx) {
 						return triangles[triIdx].removed;
 					});
 
@@ -442,6 +444,119 @@ namespace EmEn::Base::VertexFactory
 			};
 
 			/**
+			 * @brief A growable list of trivially copyable values stored in the decimation's arena, itself TRIVIALLY
+			 * destructible: releasing a vector of a million of them is one free (plus the arena's few blocks), not a
+			 * million destructor calls. A std::pmr::vector per vertex cost ~7.6 ms of the stop latency on 1.1 M vertices
+			 * (and a std::vector per vertex in the corner UV table ~11 ms) — ~3 times that on a Windows heap (2026-10-09).
+			 * @note Growth allocates a doubled block from the arena and copies (the old block stays in the monotonic arena:
+			 * at most twice the final size). Insertion order is kept. Move-only: a copy would share the buffer.
+			 * @tparam value_t A trivially copyable, trivially destructible type.
+			 */
+			template< typename value_t >
+			requires (std::is_trivially_copyable_v< value_t > && std::is_trivially_destructible_v< value_t >)
+			class ArenaList final
+			{
+				public:
+
+					/** @brief Constructs an empty list that cannot grow (no arena). */
+					ArenaList () noexcept = default;
+
+					/**
+					 * @brief Constructs an empty list growing in an arena.
+					 * @param arena The arena (outlives the list).
+					 */
+					explicit
+					ArenaList (std::pmr::memory_resource * arena) noexcept
+						: m_arena{arena}
+					{
+
+					}
+
+					ArenaList (const ArenaList &) = delete;
+					ArenaList & operator= (const ArenaList &) = delete;
+					ArenaList (ArenaList &&) noexcept = default;
+					ArenaList & operator= (ArenaList &&) noexcept = default;
+
+					/** @brief Defaulted, hence TRIVIAL: the arena owns the memory (the point of this list). */
+					~ArenaList () = default;
+
+					/**
+					 * @brief Appends a value.
+					 * @pre The list was built with an arena.
+					 * @param value The value.
+					 */
+					void
+					push_back (value_t value) noexcept
+					{
+						if ( m_size == m_capacity )
+						{
+							const auto capacity = m_capacity == 0 ? uint32_t{8} : m_capacity * 2U;
+							auto * grown = static_cast< value_t * >(m_arena->allocate(static_cast< size_t >(capacity) * sizeof(value_t), alignof(value_t)));
+
+							if ( m_size > 0 )
+							{
+								std::memcpy(grown, m_data, static_cast< size_t >(m_size) * sizeof(value_t));
+							}
+
+							m_data = grown;
+							m_capacity = capacity;
+						}
+
+						std::construct_at(m_data + m_size, value);
+						++m_size;
+					}
+
+					/**
+					 * @brief Removes the element at a position, keeping the order of the others.
+					 * @param position A pointer into the list.
+					 */
+					void
+					erase (value_t * position) noexcept
+					{
+						std::copy(position + 1, this->end(), position);
+						--m_size;
+					}
+
+					/**
+					 * @brief Removes the elements a predicate selects, keeping the order of the others.
+					 * @param predicate The predicate.
+					 */
+					template< typename predicate_t >
+					void
+					eraseIf (predicate_t predicate) noexcept
+					{
+						m_size = static_cast< uint32_t >(std::remove_if(this->begin(), this->end(), predicate) - this->begin());
+					}
+
+					[[nodiscard]] value_t * begin () noexcept { return m_data; }
+					[[nodiscard]] value_t * end () noexcept { return m_data + m_size; }
+					[[nodiscard]] const value_t * begin () const noexcept { return m_data; }
+					[[nodiscard]] const value_t * end () const noexcept { return m_data + m_size; }
+					[[nodiscard]] size_t size () const noexcept { return m_size; }
+					[[nodiscard]] bool empty () const noexcept { return m_size == 0; }
+
+					/**
+					 * @brief Returns an element.
+					 * @pre index < size().
+					 * @param index The index.
+					 * @return const value_t &
+					 */
+					[[nodiscard]]
+					const value_t &
+					operator[] (size_t index) const noexcept
+					{
+						return *(m_data + index);
+					}
+
+				private:
+
+					value_t * m_data{nullptr};
+					std::pmr::memory_resource * m_arena{nullptr};
+					uint32_t m_size{0};
+					uint32_t m_capacity{0};
+			};
+
+			/**
 			 * @brief A QEM vertex. Its adjacency lists are kept in INSERTION order, without duplicates, in the decimation's
 			 * arena: the collapse order follows them, so the decimation is the same on every platform (a
 			 * std::unordered_set's order differs per standard library: the three OS gave three different decimations
@@ -463,8 +578,9 @@ namespace EmEn::Base::VertexFactory
 
 				Quadric quadric;
 				Math::Vector< 3, vertex_data_t > position;
-				std::pmr::vector< size_t > adjacentTris;
-				std::pmr::vector< index_data_t > neighbors;
+				/* NOTE: Trivially destructible lists: releasing the vertices is one free (see ArenaList). */
+				ArenaList< size_t > adjacentTris;
+				ArenaList< index_data_t > neighbors;
 				index_data_t srcIndex{0};
 				uint32_t generation{0};
 				bool removed{false};
@@ -478,7 +594,7 @@ namespace EmEn::Base::VertexFactory
 			template< typename value_t >
 			static
 			void
-			insertUnique (std::pmr::vector< value_t > & list, value_t value) noexcept
+			insertUnique (ArenaList< value_t > & list, value_t value) noexcept
 			{
 				if ( std::ranges::find(list, value) == list.end() )
 				{
@@ -494,7 +610,7 @@ namespace EmEn::Base::VertexFactory
 			template< typename value_t >
 			static
 			void
-			eraseValue (std::pmr::vector< value_t > & list, value_t value) noexcept
+			eraseValue (ArenaList< value_t > & list, value_t value) noexcept
 			{
 				if ( const auto found = std::ranges::find(list, value); found != list.end() )
 				{
@@ -564,8 +680,9 @@ namespace EmEn::Base::VertexFactory
 					 * @param source The source shape (one vertex per (position, attributes)).
 					 * @param work Its position-deduplicated connectivity (same triangles, same order).
 					 * @param owner The decimator, whose stop request interrupts the build (cancelled() then reports it).
+					 * @param arena The decimation's arena, for the per-vertex UV lists (outlives the table).
 					 */
-					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const WorkMesh & work, const ShapeDecimator & owner) noexcept
+					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const WorkMesh & work, const ShapeDecimator & owner, std::pmr::memory_resource * arena) noexcept
 						: m_source{&source},
 						m_work{&work},
 						m_valid{source.triangles().size() == work.triangleCount()}
@@ -575,7 +692,13 @@ namespace EmEn::Base::VertexFactory
 							return;
 						}
 
-						m_vertexUVs.resize(work.representatives.size());
+						/* NOTE: One arena-backed list per work vertex: releasing them is the arena's (see ArenaList). */
+						m_vertexUVs.reserve(work.representatives.size());
+
+						for ( size_t vertex = 0; vertex < work.representatives.size(); ++vertex )
+						{
+							m_vertexUVs.emplace_back(arena);
+						}
 
 						const auto workTriangleCount = work.triangleCount();
 						size_t iteration = 0;
@@ -662,7 +785,7 @@ namespace EmEn::Base::VertexFactory
 					/* Non-owning: the table lives inside decimate(), with both shapes. */
 					const Shape< vertex_data_t, index_data_t > * m_source{nullptr};
 					const WorkMesh * m_work{nullptr};
-					std::vector< std::vector< Math::Vector< 3, vertex_data_t > > > m_vertexUVs;
+					std::vector< ArenaList< Math::Vector< 3, vertex_data_t > > > m_vertexUVs;
 					bool m_valid{false};
 					bool m_cancelled{false};
 			};
@@ -722,6 +845,8 @@ namespace EmEn::Base::VertexFactory
 			};
 
 			using CollapseQueue = std::priority_queue< CollapseCandidate, std::vector< CollapseCandidate >, std::greater< CollapseCandidate > >;
+
+			static_assert(std::is_trivially_destructible_v< ArenaList< size_t > >, "ArenaList must stay trivially destructible: its release is the arena's.");
 
 			/* ---- Work mesh ---- */
 
