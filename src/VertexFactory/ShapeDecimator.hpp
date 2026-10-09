@@ -36,6 +36,7 @@
 #include <functional>
 #include <limits>
 #include <map>
+#include <memory_resource>
 #include <queue>
 #include <type_traits>
 #include <unordered_map>
@@ -172,12 +173,16 @@ namespace EmEn::Base::VertexFactory
 				const auto srcTriCount = work.triangleCount();
 				const auto targetTriCount = std::max(size_t{4}, static_cast< size_t >(std::round(static_cast< vertex_data_t >(srcTriCount) * m_ratio)));
 
-				/* Initialize mutable working data. */
+				/* Initialize mutable working data.
+				 * NOTE: The per-vertex adjacency lists live in ONE arena, declared before the vertices so it outlives them:
+				 * their growth never frees, and their release is a few large blocks (they were std::unordered_set: ~18 M
+				 * nodes on a 2.24 M-triangle mesh, whose release held a cancelled decimation 0.2 to 1.35 s). */
+				std::pmr::monotonic_buffer_resource adjacencyArena;
 				std::vector< VertexData > vertices;
 				std::vector< TriangleData > triangles;
 
 				/* NOTE: Every stage below returns early on a stop request (Ave Robustus II: a bounded stop latency). */
-				if ( !this->initializeData(vertices, triangles, work) )
+				if ( !this->initializeData(vertices, triangles, work, adjacencyArena) )
 				{
 					return {};
 				}
@@ -297,7 +302,7 @@ namespace EmEn::Base::VertexFactory
 						}
 
 						/* Add this triangle to v0's adjacency if not already there. */
-						vertices[v0].adjacentTris.insert(triIdx);
+						ShapeDecimator::insertUnique(vertices[v0].adjacentTris, triIdx);
 					}
 
 					/* Merge neighbor sets. */
@@ -305,30 +310,19 @@ namespace EmEn::Base::VertexFactory
 					{
 						if ( neighbor != v0 && !vertices[neighbor].removed )
 						{
-							vertices[v0].neighbors.insert(neighbor);
-							vertices[neighbor].neighbors.erase(v1);
-							vertices[neighbor].neighbors.insert(v0);
+							ShapeDecimator::insertUnique(vertices[v0].neighbors, neighbor);
+							ShapeDecimator::eraseValue(vertices[neighbor].neighbors, v1);
+							ShapeDecimator::insertUnique(vertices[neighbor].neighbors, v0);
 						}
 					}
 
 					/* Remove v0 from its own neighbor list and remove v1. */
-					vertices[v0].neighbors.erase(v1);
-					vertices[v0].adjacentTris.erase(vertices[v0].adjacentTris.end(), vertices[v0].adjacentTris.end());
+					ShapeDecimator::eraseValue(vertices[v0].neighbors, v1);
 
-					/* Clean up v0's adjacentTris: remove dead triangles. */
-					{
-						std::unordered_set< size_t > cleanTris;
-
-						for ( const auto triIdx : vertices[v0].adjacentTris )
-						{
-							if ( !triangles[triIdx].removed )
-							{
-								cleanTris.insert(triIdx);
-							}
-						}
-
-						vertices[v0].adjacentTris = std::move(cleanTris);
-					}
+					/* Clean up v0's adjacentTris: remove dead triangles (in place, the order kept). */
+					std::erase_if(vertices[v0].adjacentTris, [&triangles] (size_t triIdx) {
+						return triangles[triIdx].removed;
+					});
 
 					vertices[v1].removed = true;
 					++vertices[v0].generation;
@@ -441,16 +435,66 @@ namespace EmEn::Base::VertexFactory
 				}
 			};
 
+			/**
+			 * @brief A QEM vertex. Its adjacency lists are kept in INSERTION order, without duplicates, in the decimation's
+			 * arena: the collapse order follows them, so the decimation is the same on every platform (a
+			 * std::unordered_set's order differs per standard library: the three OS gave three different decimations
+			 * until 2026-10-09).
+			 */
 			struct VertexData
 			{
+				/**
+				 * @brief Constructs a vertex whose adjacency lists allocate from an arena.
+				 * @param arena The arena (outlives the vertex).
+				 */
+				explicit
+				VertexData (std::pmr::memory_resource * arena) noexcept
+					: adjacentTris{arena},
+					neighbors{arena}
+				{
+
+				}
+
 				Quadric quadric;
 				Math::Vector< 3, vertex_data_t > position;
-				std::unordered_set< size_t > adjacentTris;
-				std::unordered_set< index_data_t > neighbors;
+				std::pmr::vector< size_t > adjacentTris;
+				std::pmr::vector< index_data_t > neighbors;
 				index_data_t srcIndex{0};
 				uint32_t generation{0};
 				bool removed{false};
 			};
+
+			/**
+			 * @brief Appends a value to an adjacency list unless it is already there (a set in insertion order).
+			 * @param list The list.
+			 * @param value The value.
+			 */
+			template< typename value_t >
+			static
+			void
+			insertUnique (std::pmr::vector< value_t > & list, value_t value) noexcept
+			{
+				if ( std::ranges::find(list, value) == list.end() )
+				{
+					list.push_back(value);
+				}
+			}
+
+			/**
+			 * @brief Removes a value from an adjacency list, keeping the order of the others.
+			 * @param list The list.
+			 * @param value The value.
+			 */
+			template< typename value_t >
+			static
+			void
+			eraseValue (std::pmr::vector< value_t > & list, value_t value) noexcept
+			{
+				if ( const auto found = std::ranges::find(list, value); found != list.end() )
+				{
+					list.erase(found);
+				}
+			}
 
 			struct TriangleData
 			{
@@ -731,7 +775,7 @@ namespace EmEn::Base::VertexFactory
 
 			[[nodiscard]]
 			bool
-			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const WorkMesh & work) const noexcept
+			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const WorkMesh & work, std::pmr::memory_resource & adjacencyArena) const noexcept
 			{
 				size_t iteration = 0;
 
@@ -741,7 +785,8 @@ namespace EmEn::Base::VertexFactory
 
 				/* One QEM vertex per work vertex (position-deduplicated: see buildWorkMesh()). srcIndex is the SOURCE vertex
 				 * standing for it, whose attributes the output keeps. */
-				vertices.resize(work.representatives.size());
+				vertices.clear();
+				vertices.reserve(work.representatives.size());
 
 				for ( size_t i = 0; i < work.representatives.size(); ++i )
 				{
@@ -750,8 +795,10 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 
-					vertices[i].position = srcVerts[work.representatives[i]].position();
-					vertices[i].srcIndex = work.representatives[i];
+					auto & vertex = vertices.emplace_back(&adjacencyArena);
+
+					vertex.position = srcVerts[work.representatives[i]].position();
+					vertex.srcIndex = work.representatives[i];
 				}
 
 				triangles.resize(triangleCount);
@@ -802,17 +849,19 @@ namespace EmEn::Base::VertexFactory
 						continue;
 					}
 
-					for ( int i = 0; i < 3; ++i )
+					/* NOTE: The corners are distinct (a degenerate triangle was skipped above): "another corner" is "a
+					 * different vertex", in corner order. */
+					const std::array< index_data_t, 3 > corners{triangles[t].v[0], triangles[t].v[1], triangles[t].v[2]};
+
+					for ( const auto vIdx : corners )
 					{
-						const auto vIdx = triangles[t].v[i];
+						ShapeDecimator::insertUnique(vertices[vIdx].adjacentTris, t);
 
-						vertices[vIdx].adjacentTris.insert(t);
-
-						for ( int j = 0; j < 3; ++j )
+						for ( const auto other : corners )
 						{
-							if ( i != j )
+							if ( other != vIdx )
 							{
-								vertices[vIdx].neighbors.insert(triangles[t].v[j]);
+								ShapeDecimator::insertUnique(vertices[vIdx].neighbors, other);
 							}
 						}
 					}
@@ -1146,7 +1195,7 @@ namespace EmEn::Base::VertexFactory
 
 				for ( const auto neighbor : vertices[v0].neighbors )
 				{
-					if ( neighbor != v1 && vertices[v1].neighbors.contains(neighbor) )
+					if ( neighbor != v1 && std::ranges::find(vertices[v1].neighbors, neighbor) != vertices[v1].neighbors.end() )
 					{
 						++sharedCount;
 					}

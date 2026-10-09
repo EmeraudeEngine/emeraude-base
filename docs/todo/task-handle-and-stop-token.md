@@ -36,10 +36,14 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   remapped corners, no copy of the source). Output BIT-IDENTICAL (8 golden shapes + the 2.24 M-triangle sphere, same
   hashes); full decimation 5.83 s → 4.65 s (median of 5); stop latency: stops in the first 100 ms 0.61-0.73 s → ≤ 13 ms,
   worst 0.73 s → 0.53 s (now from the 200 ms row on).
-- **Step 3 (next):** the per-vertex `std::unordered_set` adjacency (`adjacentTris`, `neighbors`: ~18 M nodes on that
-  mesh) → flat sorted arrays. Their iteration order drives the collapse order, so the output CHANGES (and becomes the
-  same on the three OS, which the unordered_set order does not guarantee): validate by a geometric error metric, not
-  by hashes. **Step 4:** the edge maps (`edgeCounts`, `edgeVerts`, `processedEdges`, `vertexMap`) → `FlatHashMap`.
+- **Step 3 DONE (2026-10-09):** the per-vertex adjacency (`adjacentTris`, `neighbors`: ~18 M `std::unordered_set`
+  nodes on that mesh) → `std::pmr::vector`s in INSERTION order, in one `monotonic_buffer_resource` arena per
+  decimation. The output changed (the collapse order follows these lists) and is now the same on the three OS — the
+  peers' goldens of `df420dc` showed three different decimations (libstdc++, libc++, MSVC; even triangle counts:
+  hollowedCube 82 / 80 / 82). Quality kept or better (source → output distance, mean / max: sphere300 0.0048 / 0.057
+  → 0.0039 / 0.032, geodesic 0.0061 / 0.077 → 0.0045 / 0.070, capsule max 0.120 → 0.090, others equal). Full
+  decimation 4.65 s → 3.34 s; worst stop latency 0.53 s → 0.20 s (the 700 ms row: the penalty stage's edge maps).
+- **Step 4:** the edge maps (`edgeCounts`, `edgeVerts`, `processedEdges`, `vertexMap`) → `FlatHashMap`.
 - **The remaining latency is DEALLOCATION, not computation**: on a stop, the work stops within milliseconds, but the
   return frees the dedup hash map (1.1 M nodes) and two `std::unordered_set` per vertex (1.1 M vertices). Reaching the
   D7 bound (≤ 50 ms) needs flat data structures (CSR adjacency, a sorted / open-addressing dedup) — also a large
