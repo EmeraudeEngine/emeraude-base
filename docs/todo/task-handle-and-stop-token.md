@@ -59,7 +59,10 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   `VertexData` with their `pmr::vector`s 7.6 ms, the corner UV table's `std::vector` per vertex ~11 ms. Both are now
   `ArenaList`s (in the decimation's arena, TRIVIALLY destructible: their release is the arena's): the floor is ~1.5 ms;
   the worst row is now the start (~13-16 ms: allocating and zeroing the work mesh's 50 MB flat table). Worst 16 ms on
-  Linux; to re-measure on Windows.
+  Linux. macOS peer (M2, AppleClang Release, idle, base `fd9dc5c`, 3 runs): worst **2.5 ms** (2493-2524 us, the start
+  row again), every later row 19-190 us (was ~14.5 ms), a full decimation still 4-6 s; goldens identical to `fb5a162`
+  in the default and the `-ffp-contract=off` builds; 2499 tests green in Release and ASan/UBSan. To re-measure on
+  Windows.
 - **Cross-OS identity:** with `-ffp-contract=off`, macOS matches Linux on every triangle / vertex count (4 / 8 exact
   fingerprints); the generators' own outputs change with FMA contraction, even on one OS (positions of the torus,
   geodesic, capsule, cylinder). Bit identity across OS needs an owner decision on `-ffp-contract=off` cascade-wide.

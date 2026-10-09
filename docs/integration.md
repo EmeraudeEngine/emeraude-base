@@ -97,6 +97,24 @@ not in the include path):
 
 See [`module-map.md`](module-map.md) for every target and its external dependencies.
 
+### A consumer that also links one of the foundation's external libraries
+
+`emeraude::base` is a static library: its `PRIVATE` external dependencies still reach the consumer's
+link line (`$<LINK_ONLY:…>`). When the consumer uses the same library directly (the engine includes
+`meshoptimizer.h` to decode `EXT_meshopt_compression`), it must link the SAME imported target. A
+non-`GLOBAL` imported target exists only in the directory that ran `find_package()`, so a second
+`find_package()` in the consumer's directory creates a second target. CMake cannot merge two
+distinct targets naming one archive, and the library is emitted twice. Apple's ld then reports
+`ld: warning: ignoring duplicate libraries: '…/libmeshoptimizer.a'`. CMake policy `CMP0156` does
+not help, because it de-duplicates link items, not paths.
+
+The rule: a `cmake/Setup*.cmake` script that the consumer runs too imports its targets `GLOBAL`
+(`find_package(… CONFIG REQUIRED GLOBAL …)`, CMake 3.24). The consumer's `find_package()` then
+returns early on the existing target. Applied to `SetupMeshOptimizer.cmake` (2026-10-09, macOS
+arm64 / Xcode 27: the warning gone, one `libmeshoptimizer.a` on the `Emeraude.framework` link
+line). Detector: list the `LINK_LIBRARIES` of a target in `build.ninja` and count the repeated
+`.a` files.
+
 ## 4. find_package (planned)
 
 An installable `EmeraudeBaseConfig.cmake` for `find_package(EmeraudeBase CONFIG)` is
