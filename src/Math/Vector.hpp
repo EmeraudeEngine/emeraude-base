@@ -1218,8 +1218,7 @@ namespace EmEn::Base::Math
 						(lhs.m_data[X] * rhs.m_data[Y]) - (lhs.m_data[Y] * rhs.m_data[X])
 					};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {
 						(lhs.m_data[Y] * rhs.m_data[Z]) - (lhs.m_data[Z] * rhs.m_data[Y]),
@@ -1738,8 +1737,7 @@ namespace EmEn::Base::Math
 				{
 					return {m_data[X], m_data[Y], 0};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {m_data[X], m_data[Y], m_data[Z]};
 				}
@@ -1763,8 +1761,7 @@ namespace EmEn::Base::Math
 				{
 					return {m_data[X], m_data[Y], 0, lastComponent};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {m_data[X], m_data[Y], m_data[Z], lastComponent};
 				}
@@ -1991,13 +1988,11 @@ namespace EmEn::Base::Math
 				{
 					return {Utility::quickRandom(min, max), Utility::quickRandom(min, max)};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {Utility::quickRandom(min, max), Utility::quickRandom(min, max), Utility::quickRandom(min, max)};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {Utility::quickRandom(min, max), Utility::quickRandom(min, max), Utility::quickRandom(min, max), 0};
 				}
@@ -2023,13 +2018,11 @@ namespace EmEn::Base::Math
 				{
 					return {randomizer.value(min, max), randomizer.value(min, max)};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {randomizer.value(min, max), randomizer.value(min, max), randomizer.value(min, max)};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {randomizer.value(min, max), randomizer.value(min, max), randomizer.value(min, max), 0};
 				}
@@ -2338,13 +2331,11 @@ namespace EmEn::Base::Math
 				{
 					return out << "Vector2(" << fixed << setprecision(8) << '[' << setw(16) << obj.m_data[X] << ", " << setw(16) << obj.m_data[Y] << "])";
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return out << "Vector3(" << fixed << setprecision(8) << '[' << setw(16) << obj.m_data[X] << ", " << setw(16) << obj.m_data[Y] << ", " << setw(16) << obj.m_data[Z] << "])";
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return out << "Vector4(" << fixed << setprecision(8) << '[' << setw(16) << obj.m_data[X] << ", " << setw(16) << obj.m_data[Y] << ", " << setw(16) << obj.m_data[Z] << ", " << setw(16) << obj.m_data[W] << "])";
 				}

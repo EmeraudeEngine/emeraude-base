@@ -457,8 +457,7 @@ namespace EmEn::Base::String
 			}
 			return result;
 		}
-
-		if constexpr ( std::is_same_v< number_t, double > )
+		else if constexpr ( std::is_same_v< number_t, double > )
 		{
 			const double result = std::strtod(str, &endptr);
 			if ( endptr == str || errno == ERANGE )
@@ -467,8 +466,7 @@ namespace EmEn::Base::String
 			}
 			return result;
 		}
-
-		if constexpr ( std::is_same_v< number_t, long double > )
+		else if constexpr ( std::is_same_v< number_t, long double > )
 		{
 			const long double result = std::strtold(str, &endptr);
 			if ( endptr == str || errno == ERANGE )
@@ -477,8 +475,7 @@ namespace EmEn::Base::String
 			}
 			return result;
 		}
-
-		if constexpr ( std::is_integral_v< number_t > )
+		else if constexpr ( std::is_integral_v< number_t > )
 		{
 			if constexpr ( std::is_unsigned_v< number_t > )
 			{
@@ -511,8 +508,10 @@ namespace EmEn::Base::String
 				return static_cast< number_t >(result);
 			}
 		}
-
-		return 0;
+		else
+		{
+			return 0;
+		}
 #else
 		/* Modern platforms: use std::from_chars (no exceptions, faster) */
 
@@ -525,31 +524,17 @@ namespace EmEn::Base::String
 		const char * end = start + stringValue.size();
 		number_t result{};
 
-		if constexpr ( std::is_floating_point_v< number_t > )
+		/* NOTE: One call for every arithmetic type (the requires clause): std::from_chars has the integral and the
+		 * floating-point overloads (the latter requires C++17 and good library support). No type dispatch followed
+		 * by a fallback 'return', which is unreachable code for MSVC C4702. */
+		auto [ptr, ec] = std::from_chars(start, end, result);
+
+		if ( ec == std::errc::invalid_argument || ec == std::errc::result_out_of_range )
 		{
-			/* Note: std::from_chars for floats requires C++17 and good library support */
-			auto [ptr, ec] = std::from_chars(start, end, result);
-
-			if ( ec == std::errc::invalid_argument || ec == std::errc::result_out_of_range )
-			{
-				return 0;
-			}
-
-			return result;
-		}
-		else if constexpr ( std::is_integral_v< number_t > )
-		{
-			auto [ptr, ec] = std::from_chars(start, end, result);
-
-			if ( ec == std::errc::invalid_argument || ec == std::errc::result_out_of_range )
-			{
-				return 0;
-			}
-
-			return result;
+			return 0;
 		}
 
-		return 0;
+		return result;
 #endif
 	}
 

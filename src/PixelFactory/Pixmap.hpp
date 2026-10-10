@@ -2699,8 +2699,7 @@ namespace EmEn::Base::PixelFactory
 
 					return this->fill(pixelBuffer);
 				}
-
-				if constexpr ( std::is_integral_v< pixel_data_t > )
+				else if constexpr ( std::is_integral_v< pixel_data_t > )
 				{
 					Randomizer< pixel_data_t > randomizer;
 
@@ -2712,8 +2711,10 @@ namespace EmEn::Base::PixelFactory
 
 					return this->fill(pixelBuffer);
 				}
-
-				return false;
+				else
+				{
+					return false;
+				}
 			}
 
 			/**

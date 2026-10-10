@@ -726,8 +726,7 @@ namespace EmEn::Base::Math
 						(operand[X] * m_data[M2x2Col0Row1]) + (operand[Y] * m_data[M2x2Col1Row1])
 					};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {
 						(operand[X] * m_data[M3x3Col0Row0]) + (operand[Y] * m_data[M3x3Col1Row0]) + (operand[Z] * m_data[M3x3Col2Row0]),
@@ -735,8 +734,7 @@ namespace EmEn::Base::Math
 						(operand[X] * m_data[M3x3Col0Row2]) + (operand[Y] * m_data[M3x3Col1Row2]) + (operand[Z] * m_data[M3x3Col2Row2])
 					};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {
 						(operand[X] * m_data[M4x4Col0Row0]) + (operand[Y] * m_data[M4x4Col1Row0]) + (operand[Z] * m_data[M4x4Col2Row0]) + (operand[W] * m_data[M4x4Col3Row0]),
@@ -745,8 +743,10 @@ namespace EmEn::Base::Math
 						(operand[X] * m_data[M4x4Col0Row3]) + (operand[Y] * m_data[M4x4Col1Row3]) + (operand[Z] * m_data[M4x4Col2Row3]) + (operand[W] * m_data[M4x4Col3Row3])
 					};
 				}
-
-				return {};
+				else
+				{
+					return {};
+				}
 			}
 
 			/**
@@ -1107,18 +1107,18 @@ namespace EmEn::Base::Math
 				{
 					return {m_data[M2x2Col0Row0], m_data[M2x2Col0Row1]};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {m_data[M3x3Col0Row0], m_data[M3x3Col0Row1], m_data[M3x3Col0Row2]};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {m_data[M4x4Col0Row0], m_data[M4x4Col0Row1], m_data[M4x4Col0Row2]};
 				}
-
-				return {};
+				else
+				{
+					return {};
+				}
 			}
 
 			/**
@@ -1133,18 +1133,18 @@ namespace EmEn::Base::Math
 				{
 					return {m_data[M2x2Col1Row0], m_data[M2x2Col1Row1]};
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return {m_data[M3x3Col1Row0], m_data[M3x3Col1Row1], m_data[M3x3Col1Row2]};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {m_data[M4x4Col1Row0], m_data[M4x4Col1Row1], m_data[M4x4Col1Row2]};
 				}
-
-				return {};
+				else
+				{
+					return {};
+				}
 			}
 
 			/**
@@ -1160,13 +1160,14 @@ namespace EmEn::Base::Math
 				{
 					return {m_data[M3x3Col2Row0], m_data[M3x3Col2Row1], m_data[M3x3Col2Row2]};
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return {m_data[M4x4Col2Row0], m_data[M4x4Col2Row1], m_data[M4x4Col2Row2]};
 				}
-
-				return {};
+				else
+				{
+					return {};
+				}
 			}
 
 			/**
@@ -1211,8 +1212,7 @@ namespace EmEn::Base::Math
 				{
 					return (m_data[M2x2Col0Row0] * m_data[M2x2Col1Row1]) - (m_data[M2x2Col1Row0] * m_data[M2x2Col0Row1]);
 				}
-
-				if constexpr ( dim_t == 3 || dim_t == 4 )
+				else if constexpr ( dim_t == 3 || dim_t == 4 )
 				{
 					precision_t determinantValue = 0;
 
@@ -1282,8 +1282,7 @@ namespace EmEn::Base::Math
 				{
 					return (m_data[M2x2Col0Row0] * m_data[M2x2Col1Row1]) - (m_data[M2x2Col1Row0] * m_data[M2x2Col0Row1]);
 				}
-
-				if constexpr ( dim_t == 3 )
+				else if constexpr ( dim_t == 3 )
 				{
 					return
 						(m_data[M3x3Col0Row0] * m_data[M3x3Col1Row1] * m_data[M3x3Col2Row2]) +
@@ -1293,8 +1292,7 @@ namespace EmEn::Base::Math
 						(m_data[M3x3Col1Row0] * m_data[M3x3Col0Row1] * m_data[M3x3Col2Row2]) -
 						(m_data[M3x3Col2Row0] * m_data[M3x3Col1Row1] * m_data[M3x3Col0Row2]);
 				}
-
-				if constexpr ( dim_t == 4 )
+				else if constexpr ( dim_t == 4 )
 				{
 					return
 						(m_data[M4x4Col3Row0] * m_data[M4x4Col2Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col0Row3]) - (m_data[M4x4Col2Row0] * m_data[M4x4Col3Row1] * m_data[M4x4Col1Row2] * m_data[M4x4Col0Row3]) -

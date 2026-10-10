@@ -320,8 +320,10 @@ namespace EmEn::Base::Utility
 		{
 			return value == 0;
 		}
-
-		return std::abs(value) <= epsilon;
+		else
+		{
+			return std::abs(value) <= epsilon;
+		}
 	}
 
 	/**

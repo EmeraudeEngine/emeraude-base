@@ -233,6 +233,17 @@ say nothing about any of them. The fixes, all kept by the cascade's three compil
 - **C4702 after an `if constexpr` that returns.** `Vector::positiveX()` … `negativeZ()` wrote `if constexpr (dim == 2)
   return …; if constexpr (dim == 3) return …; if constexpr (dim == 4) … else return {};` — in the 3D instantiation the
   trailing `else` follows a `return`. **Chain the branches** (`else if constexpr`), never a fall-through after one.
+  ⚠️ **C4702 is a per-CONFIGURATION, per-INSTANTIATION diagnostic** (2026-10-10): the Release pass above left the MSVC
+  **Debug** build broken — `Matrix::operator*(Vector)`, `Matrix::determinant()`, `Vector::crossProduct()`,
+  `quickRandom()`, `operator<<`, `String::toNumber()` here, five engine headers, and `Pixmap`'s random fill that only
+  the unit tests instantiate. A source scan then found the same shape, not yet reported, in `Utility::isZero()`,
+  `Matrix::rightVector()` / `upwardVector()` / `forwardVector()` / `fastDeterminant()`, `Vector::toVector3()` /
+  `toVector4()` / `random()` and the macOS branch of `String::toNumber()`: all chained the same way, the former trailing
+  fallback in the final `else` (a pure rewrite, no exhaustiveness argument needed); the Windows branch of
+  `String::toNumber()`, two identical `from_chars` branches, became one call. A compiler only reports what a TU
+  instantiates: **scan the source** for an `if constexpr` block ending in `return` followed by more code, and build
+  BOTH configurations, tests included, on Windows before calling the MSVC set clean (the engine's share: its
+  `caution-points.md` § Build / Compiler).
 - **C4996, the CRT functions MSVC deprecates** — replaced, never `_CRT_SECURE_NO_WARNINGS`:
   `std::getenv()` → `_dupenv_s()` (an owned copy, freed by a deleter TYPE: taking the address of `std::free` is
   unspecified) on Windows, `std::getenv()` elsewhere (`HTTPSClient.cpp` `readEnvironmentVariable()`);
