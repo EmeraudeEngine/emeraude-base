@@ -344,8 +344,8 @@ clear them: it had never run this path either.
   platform (`close()` dereferenced the mutex the move gave away) — also fixed.
 - **UDP multicast on macOS 15+** needs the *Local Network* privacy entitlement
   (`NSLocalNetworkUsageDescription`): field reports describe multicast working from a terminal and
-  not from a double-clicked bundle. Test a **signed, packaged** binary — see
-  `emeraude-engine/docs/todo/udp-multicast-macos-verification.md`.
+  not from a double-clicked bundle. Test a **signed, packaged** binary — measured 2026-08-28, see
+  `emeraude-engine/docs/subsystems/net/06-hardware-discovery-utilities.md`.
 - **`SO_SNDTIMEO`** on the remote console's accepted sockets takes a `DWORD` of milliseconds on
   Windows and a `timeval` elsewhere; both are written, only the POSIX one has run.
 
@@ -353,4 +353,5 @@ clear them: it had never run this path either.
 
 - `docs/plans/network-tls/README.md` — the design, the closure, the 2026-08-27 hardening table.
 - `emeraude-engine/src/Net/AGENTS.md` — the download manager's contract and its console commands.
-- `emeraude-engine/docs/todo/udp-multicast-macos-verification.md` — the sibling macOS item.
+- `emeraude-engine/docs/subsystems/net/06-hardware-discovery-utilities.md` — multicast/mDNS
+  results on the three OSes, including the macOS *Local Network* gate.
