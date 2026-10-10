@@ -80,6 +80,10 @@ if ( MSVC )
 	# visible (emeraude-base's String.startsOrEndsWith, which registers on Windows alone and made
 	# ctest report 2712 there against 2711 on the two POSIX platforms).
 	add_compile_options(/Zc:__cplusplus)
+
+	# Remove default MSVC flags added by CMake to avoid D9025 warnings (EMERAUDE_COMPILE_OPTIONS sets its own)
+	string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+	string(REPLACE "/Ob2" "" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
 elseif ( NOT CMAKE_BUILD_TYPE )
 	set(CMAKE_BUILD_TYPE Release)
 endif ()
@@ -402,6 +406,19 @@ elseif ( UNIX )
 		CACHE STRING "Project-wide compile options (Linux)." FORCE
 	)
 endif ()
+
+# Third-party sources compiled inside a cascade target (Dear ImGui in the engine): the same code generation, no warning
+# set. A per-source /w or -w on top of the target's /W4 made MSVC print D9025 for every such file.
+set(_emeraude_third_party_options ${EMERAUDE_COMPILE_OPTIONS})
+list(REMOVE_ITEM _emeraude_third_party_options ${EMERAUDE_PARANOID_WARNINGS} ${EMERAUDE_RELAXED_MSVC_SILENCERS} /W4 -Wformat -Wformat-security)
+
+if ( MSVC )
+	list(APPEND _emeraude_third_party_options /w)
+else ()
+	list(APPEND _emeraude_third_party_options -w)
+endif ()
+
+set(EMERAUDE_THIRD_PARTY_COMPILE_OPTIONS ${_emeraude_third_party_options} CACHE STRING "Compile options for third-party sources built inside a cascade target." FORCE)
 
 #######################################################################
 ## Modules

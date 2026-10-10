@@ -73,6 +73,13 @@ Options:
 > The compile-policy options are project-wide (`EMERAUDE_*`) — emeraude-base owns them and
 > propagates them to consumers (engine, projet-alpha).
 
+Two cache variables carry the resulting compiler policy for a consumer's own targets:
+
+| Variable | Meaning |
+|----------|---------|
+| `EMERAUDE_COMPILE_OPTIONS` | The cascade's options: code generation (exceptions, RTTI, optimisation, …) AND the warning set (paranoid by default, `-Werror` / `/WX`). |
+| `EMERAUDE_THIRD_PARTY_COMPILE_OPTIONS` | The same code generation WITHOUT any warning option, plus `-w` (`/w` on MSVC). For vendored sources compiled into a cascade binary: give them their own OBJECT library with these options and link its `$<TARGET_OBJECTS:…>` — never a per-source `-w` / `/w` on top of `/W4` (MSVC D9025 on every file). The engine's Dear ImGui is the reference use (`EmeraudeImGui`). |
+
 ## 3. Link what you need
 
 Two targets exist today:
