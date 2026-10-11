@@ -22,9 +22,14 @@ re-derives it, and is picked up when a consumer appears.
 - The sum of several inertia tensors for a COMPOUND body, each moved by `parallelAxis()` first (P3 derives an entity's
   tensor from its one collision shape).
 - A `Quaternion` from a `Matrix< 3 >` (today only from a `Matrix< 4 >`).
-- Casting a moving `OrientedBox` (the character controller casts a capsule).
 - A fast AABB path for the contact pairs with the SAME output as the unrotated `OrientedBox` they use today — only if
   a measurement shows the oriented path costs (the overlap tests of `Collisions/` already go through it).
+
+## No longer open
+
+- Casting a moving `OrientedBox`: it exists. `castBox()` is in `src/Math/Space3D/Casts/ShapeCast.hpp` (~711), tested in
+  `test_MathSpace3DConvexDistance.cpp` (~296-323), and landed in a4eb68f (2026-10-02, "Space3D: convex distance (GJK)
+  and box casts"), before this item was written.
 
 ## References
 

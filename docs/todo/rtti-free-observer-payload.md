@@ -1,10 +1,11 @@
 ---
 id: rtti-free-observer-payload
 title: RTTI-free foundation — replace the std::any Observer payload, arm ASIO_NO_TYPEID
-status: in-progress
+status: blocked
 priority: low
 scope: src/Observer*, cmake/SetupASIO.cmake, compile policy (EMERAUDE_DISABLE_RTTI)
 opened: 2026-09-08
+blocked-by: [rtti-removal, actor-trait-queries-without-rtti]
 tags: [architecture, cpp, rtti, cascade-wide]
 ---
 
@@ -13,7 +14,7 @@ tags: [architecture, cpp, rtti, cascade-wide]
 ## Why
 
 **Owner goal (2026-09-08):** build the whole cascade without RTTI, the way it already builds
-without exceptions. The knob exists (`EMERAUDE_DISABLE_RTTI`, `CMakeLists.txt:43`, default
+without exceptions. The knob exists (`EMERAUDE_DISABLE_RTTI`, `CMakeLists.txt:53`, default
 `Off` ⇒ `-frtti` / `/GR`) but flipping it does not compile today. emeraude-base is the first
 layer to fix because the Observer contract it owns carries a `std::any` payload that the whole
 cascade consumes:
@@ -33,6 +34,9 @@ The second base-owned blocker is **asio**: it only auto-detects Boost's `BOOST_N
 use `typeid` and the standalone build fails under `-fno-rtti`.
 
 ## What remains
+
+⚠️ **Blocked, and the blockers are in other repositories:** engine `rtti-removal` and projet-alpha
+`actor-trait-queries-without-rtti`. Both remaining tasks below wait on them. The payload part is done (see below).
 
 **Owner decision (2026-10-07): option A.** Done the same day on Linux: `src/Any.hpp` (`Base::Any`, `typeHashOf< T >()`,
 `anyCast< T >()`), `AnyValue.hpp` / `ObservableTrait` / `ObserverTrait` / `test_ObserverPattern.cpp` migrated, new

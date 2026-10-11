@@ -47,6 +47,11 @@ targeted directly. A missing GitHub asset (HTTP 404) is caught by validating the
 payload's ZIP magic, not merely the transport status — so a stale/absent exact-tag asset
 falls through to the floor instead of being extracted as garbage.
 
+⚠️ A release that lacks the floor archive breaks every host whose glibc is not exactly the published tag. **v018**
+(2026-10-10, hwloc 3.0 and LightUSD; `EXTERNAL_DEPENDENCIES_VERSION` since a21ae5a) shipped `glibc2.41` only. The two
+`glibc2.35` zips are owed by ext-deps-generator (its item `hwloc-3-rollout-and-release`), and nothing changes here once
+they are uploaded.
+
 ## 2. Add it to your build
 
 ```cmake

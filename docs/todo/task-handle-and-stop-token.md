@@ -28,9 +28,8 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   **1.52 s → 0.74 s**. Stage timing of a full decimation: copy + dedup 1 288 ms, init 405, corner UV 33, quadrics 22,
   penalties 672, queue 442, collapses 2 148, output 643.
 
-## What remains
-- **Owner decision (2026-10-08), D7: REWRITE** — the decimator's work data goes flat (lean work copy: positions + triangles only;
-  CSR adjacency; a sorted / open-addressing dedup) to reach the ≤ 50 ms stop bound; step by step, each step A/B-measured.
+## Done — D7, the decimator rewrite (owner decision 2026-10-08: flat work data, a stop bound of 50 ms or less)
+
 - **Steps 1-2 DONE (2026-10-09, Linux i9-14900K, Release):** base `FlatHashMap` (open addressing, one allocation) and a
   lean WORK MESH (`ShapeDecimator::buildWorkMesh()`: a representative source vertex per quantized position + the
   remapped corners, no copy of the source). Output BIT-IDENTICAL (8 golden shapes + the 2.24 M-triangle sphere, same
@@ -63,23 +62,20 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   row again), every later row 19-190 us (was ~14.5 ms), a full decimation still 4-6 s; goldens identical to `fb5a162`
   in the default and the `-ffp-contract=off` builds; 2499 tests green in Release and ASan/UBSan. To re-measure on
   Windows.
-- **Cross-OS identity:** with `-ffp-contract=off`, macOS matches Linux on every triangle / vertex count (4 / 8 exact
-  fingerprints); the generators' own outputs change with FMA contraction, even on one OS (positions of the torus,
-  geodesic, capsule, cylinder). Bit identity across OS needs an owner decision on `-ffp-contract=off` cascade-wide.
-- **The remaining latency is DEALLOCATION, not computation**: on a stop, the work stops within milliseconds, but the
-  return frees the dedup hash map (1.1 M nodes) and two `std::unordered_set` per vertex (1.1 M vertices). Reaching the
-  D7 bound (≤ 50 ms) needs flat data structures (CSR adjacency, a sorted / open-addressing dedup) — also a large
-  allocation and speed gain (Allocatus Reduxus). Owner decision: do it, or accept a size-proportional bound.
-- **The first uninterruptible block is the COPY of the source** (`auto workShape = m_source;` at the top of
-  `decimate()`): a stop requested at 0 ms still costs 0.47 s on the macOS peer (M2, 2026-10-08, base `73a319a`; worst
-  0.47 s idle, 0.79 s under a -j8 build). Measured on Linux (i9-14900K, Release, probe outside the suite): copying the
-  2.24 M-triangle sphere (1 122 226 vertices × 92 B, 2 240 000 triangles × 64 B, 6 720 000 edges) takes 0.57-0.61 s,
-  destroying it 0.07 s. The work shape only needs positions + triangles for the connectivity: building it lean (no
-  edges, no attributes) would cut both the latency and ~hundreds of MB of allocation — same owner decision as above
-  (flat data), plus a check before the copy for a stop requested before the start.
-- Windows peer (laptop, MSVC Release, 2026-10-08, base `73a319a`): worst **1.65 s**; stop at 0 ms 1.50 s, shrinking
-  steadily to 0.33 s at 1500 ms (a stop landing inside the copy waits for its end), then 0.68-1.65 s in the later
-  stages; a full decimation takes more than 12 s there. Same probe there: copy 1.28-1.30 s, destroy 0.20 s
-  (Linux ×2.2 and ×2.9) — copy + destroy = 1.48-1.50 s, the whole 0 ms row: the source copy IS that latency.
-- `Base::Thread` with the `std::jthread` model (stop token to the body, request_stop + join in the destructor).
-- `setCancellationFlag()` goes with the engine migration (P2, engine item `jobs-owned-by-their-starter`).
+- History: before D7 the worst stop was 0.73 s on Linux, 0.47 s on the M2 and 1.65 s on the old Windows laptop. Two
+  things made it long: the copy of the source (`auto workShape = m_source;`, gone since steps 1-2) and the
+  deallocation at return (gone with the arena, from the floor step on).
+
+## What remains
+
+- **`Base::Thread` on the `std::jthread` model**: a stop token to the body, then request_stop + join in the
+  destructor. Today it still has `detach()` (`Thread.hpp:134`, `Thread.cpp:269`) and no stop token.
+- **`setCancellationFlag()` goes away** with the engine migration (`ShapeDecimator.hpp:122`; still called by engine
+  `MeshResource.cpp:483` and `MultiLayerMeshResource.cpp:769`). Engine item `jobs-owned-by-their-starter`, which is
+  blocked on this item.
+- **D2 is open**: a task that waits for its own handle is refused and traced today. Should it abort instead?
+- **Re-measure the stop latency on the NEW Windows machine** (`DISABLED_StopLatencyOnALargeMesh`). The last Windows
+  figure, 57-71 ms at fb5a162, came from the dead laptop.
+- **Cross-OS bit identity**: owner decision on `-ffp-contract=off` cascade-wide. With it, macOS matches Linux on
+  every triangle / vertex count (4 / 8 exact fingerprints). The generators' own outputs change with FMA contraction
+  even on one OS (positions of the torus, geodesic, capsule, cylinder).
