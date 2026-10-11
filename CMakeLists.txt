@@ -6,6 +6,13 @@ cmake_policy(SET CMP0091 NEW)
 
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 
+# NOTE: An explicit macOS SDK, set before project(). Without -isysroot (CMake 4 no longer sets one), Apple clang adds a
+# USER -I/usr/local/include, searched before every -isystem: an installed Vulkan SDK's or Homebrew's headers there won
+# over the external dependencies' (measured 2026-10-11: glslang and vulkan headers of a 1.4.357 SDK in /usr/local).
+if ( CMAKE_HOST_APPLE AND NOT CMAKE_OSX_SYSROOT )
+	set(CMAKE_OSX_SYSROOT "macosx" CACHE STRING "The macOS SDK (resolved by xcrun)." FORCE)
+endif ()
+
 #######################################################################
 ## Declare project
 # Foundation library for Emeraude-Engine: base utilities + platform/config headers,
