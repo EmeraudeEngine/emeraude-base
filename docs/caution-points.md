@@ -322,6 +322,19 @@ destructor) joins it from another thread. **Rule:** never destroy an object owni
 thread may take; never destroy it from that thread. Still forbidden: destroying the OWNER of the trait from one of its
 timers' callbacks (the destructor joins every timer thread).
 
+### ⚠️⚠️ A `TimedEvent` slept with `sleep_for()`: destroying or re-timing it waited for the whole interval (2026-10-12, FIXED)
+
+Between two ticks the timer thread called `std::this_thread::sleep_for(remaining)`, which nothing interrupts. Once the
+thread was asleep, `~TimedEvent()` (its `join()`) blocked until the interval ended — an HOUR in
+`TimeEventTrait.fullTimerLifecycle`, whose 1 h timer was always destroyed before its thread reached the sleep, except
+under ThreadSanitizer's slower scheduling (the first TSan run of the suite hung there 40 min). `setGranularity()` and
+`reset()` waited for the old interval too. The wait is `m_condition.wait_for(lock, remaining, predicate)` now: the
+destructor, `stop()`, `pause()`, `setGranularity()` and `reset()` notify it, and the state is `Base::Mutex` +
+`EMEN_GUARDED_BY` (`elapsed()`, `isIntervalElapsed()` and `granularity()` read it unlocked before: a data race).
+Tests `TimeTimedEvent.destroyingASleepingTimerReturnsAtOnce` and `aNewGranularityAppliesToASleepingTimer` (both hung
+past the 20 s `timeout` before; 200 ms now). **Rule:** a thread that waits must wait on something its owner can signal
+(Ave Robustus II: a stop is seen within a bounded latency), never a plain sleep longer than that latency.
+
 ### ⚠️ Process CPU time is in nanoseconds everywhere, but moves by 15.625 ms on Windows (2026-10-07)
 
 `GetProcessTimes()` accounts CPU time per scheduler quantum: every Windows reading of `processCPUTimeNanoseconds()` is

@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <ratio>
 #include <thread>
 #include <utility>
@@ -244,6 +245,49 @@ namespace EmEn::Base::Time
 		EXPECT_TRUE(events.isTimerStarted(timerID));
 
 		events.destroyTimers();
+	}
+
+	/* 2026-10-12, found by the first ThreadSanitizer run of this suite: the timer thread waited for its next tick with
+	 * sleep_for(), which nothing interrupts. Destroying a timer whose thread was already asleep blocked for up to the
+	 * granularity (fullTimerLifecycle hung for its whole hour under TSan's slower scheduling). The wait is a condition
+	 * variable now: the destructor wakes it. */
+	TEST(TimeTimedEvent, destroyingASleepingTimerReturnsAtOnce)
+	{
+		auto event = std::make_unique< TimedEvent<> >([] (TimerID) { return false; }, 3'600'000U /* 1 h */);
+
+		ASSERT_TRUE(event->start());
+
+		/* Leave the thread the time to reach its wait for the next tick. */
+		std::this_thread::sleep_for(std::chrono::milliseconds{200});
+
+		const auto begin = std::chrono::steady_clock::now();
+
+		event.reset();
+
+		EXPECT_LT(std::chrono::steady_clock::now() - begin, std::chrono::seconds{2});
+	}
+
+	/* Same defect: a new granularity (or a reset()) waited for the end of the old interval before it applied. */
+	TEST(TimeTimedEvent, aNewGranularityAppliesToASleepingTimer)
+	{
+		std::atomic_bool fired{false};
+
+		TimedEvent<> event{[&fired] (TimerID) { fired = true; return true; }, 3'600'000U /* 1 h */};
+
+		ASSERT_TRUE(event.start());
+
+		std::this_thread::sleep_for(std::chrono::milliseconds{200});
+
+		event.setGranularity(10U);
+
+		const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+
+		while ( !fired && std::chrono::steady_clock::now() < deadline )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{5});
+		}
+
+		EXPECT_TRUE(fired);
 	}
 
 	namespace

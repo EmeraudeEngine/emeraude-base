@@ -18,8 +18,9 @@ Suite target: **`EmeraudeBaseUnitTests`**, gated by the CMake option
   Never hard-code `./assets/...` in a test — compose paths with `AssetsDirectory`.
 - **Sanitizer gate**: the suite also builds under ASan+UBSan via
   **`EMERAUDE_ENABLE_SANITIZERS`** (Debug, separate build dir). A fix is "proven" when the
-  suite is green in Release AND under the sanitizers. **TSan** (data races — ThreadPool,
-  TimedEvent) is a planned separate mode, incompatible with ASan.
+  suite is green in Release AND under the sanitizers. **TSan** (data races): the separate
+  `EMERAUDE_ENABLE_TSAN` build (exclusive with ASan), run with `OMP_NUM_THREADS=1` — 2510 tests,
+  0 report on 2026-10-12 (procedure: projet-alpha `docs/unit-testing.md` § "ThreadSanitizer").
 - **No CI yet**: both gates are run manually.
 
 ## MANDATORY Test Conventions

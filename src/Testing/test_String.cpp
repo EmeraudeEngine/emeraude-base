@@ -745,4 +745,3 @@ TEST(String, isValidUTF8)
 	ASSERT_FALSE(String::isValidUTF8("\xF4\x90\x80\x80"));
 	ASSERT_FALSE(String::isValidUTF8("\xF5\x80\x80\x80"));
 }
-

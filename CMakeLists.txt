@@ -57,12 +57,21 @@ option(EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION "Raise the Release optimisation o
 option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual Studio (Default Off)." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
+option(EMERAUDE_ENABLE_TSAN "Build with ThreadSanitizer, GCC / Clang only, exclusive with EMERAUDE_ENABLE_SANITIZERS (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
 option(EMERAUDE_USE_STATIC_RUNTIME "Build with the static MSVC runtime (Windows only)." Off)
 option(EMERAUDE_ENABLE_OPENMP "Enable OpenMP (used by VertexFactory)." On)
+
+if ( EMERAUDE_ENABLE_TSAN AND EMERAUDE_ENABLE_SANITIZERS )
+	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN and EMERAUDE_ENABLE_SANITIZERS are exclusive: ThreadSanitizer cannot share a process with AddressSanitizer.")
+endif ()
+
+if ( EMERAUDE_ENABLE_TSAN AND MSVC )
+	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN: MSVC has no ThreadSanitizer (build it on Linux or macOS).")
+endif ()
 
 # Consumed by emeraude_base_config.hpp.in
 option(EMERAUDE_DEBUG_OBSERVER_PATTERN "Debug output for the observer pattern." Off)
@@ -383,6 +392,10 @@ elseif ( APPLE )
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-omit-frame-pointer>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fstack-protector-strong>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-O1>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fno-omit-frame-pointer>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-g>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-O1>
 		CACHE STRING "Project-wide compile options (macOS)." FORCE
 	)
 elseif ( UNIX )
@@ -413,6 +426,10 @@ elseif ( UNIX )
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-omit-frame-pointer>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fstack-protector-strong>
 		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-O1>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fno-omit-frame-pointer>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-g>
+		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-O1>
 		CACHE STRING "Project-wide compile options (Linux)." FORCE
 	)
 endif ()
@@ -467,11 +484,16 @@ target_compile_options(emeraude_base_flags INTERFACE ${EMERAUDE_COMPILE_OPTIONS}
 target_link_options(emeraude_base_flags INTERFACE
 	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
 	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
+	$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
 )
 add_library(emeraude::base::flags ALIAS emeraude_base_flags)
 
 if ( EMERAUDE_ENABLE_SANITIZERS )
 	message(STATUS "[EmeraudeBase] Sanitizers ENABLED: ASan + UBSan (-O1, halt-on-error). Incompatible with _FORTIFY_SOURCE (omitted).")
+endif ()
+
+if ( EMERAUDE_ENABLE_TSAN )
+	message(STATUS "[EmeraudeBase] ThreadSanitizer ENABLED (-O1 -g). Run with TSAN_OPTIONS=halt_on_error=1 for a hard verdict, and OMP_NUM_THREADS=1 (libgomp is not instrumented: its loops would read as races).")
 endif ()
 
 # Per-module sources (no globbing); see cmake/PrepareBaseSourceFiles.cmake
@@ -649,6 +671,15 @@ if ( EMERAUDE_ENABLE_TESTS )
 		foreach ( gtestTarget IN ITEMS gtest gtest_main gmock gmock_main )
 			if ( TARGET ${gtestTarget} )
 				target_compile_options(${gtestTarget} PRIVATE -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
+			endif ()
+		endforeach ()
+	endif ()
+
+	# ThreadSanitizer must see every memory access of the process: gtest's own locks included.
+	if ( EMERAUDE_ENABLE_TSAN )
+		foreach ( gtestTarget IN ITEMS gtest gtest_main gmock gmock_main )
+			if ( TARGET ${gtestTarget} )
+				target_compile_options(${gtestTarget} PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
 			endif ()
 		endforeach ()
 	endif ()

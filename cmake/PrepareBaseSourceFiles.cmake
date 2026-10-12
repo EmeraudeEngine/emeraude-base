@@ -165,6 +165,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkTrustStore.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkURI.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NodeTrait.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Mutex.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ObserverPattern.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Platform.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryColor.cpp

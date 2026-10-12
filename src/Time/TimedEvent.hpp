@@ -31,12 +31,11 @@
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
-#include <mutex>
 #include <ratio>
-#include <thread>
 #include <type_traits>
 
 /* Local inclusions for usages. */
+#include "Mutex.hpp"
 #include "Thread.hpp"
 #include "Types.hpp"
 
@@ -102,7 +101,7 @@ namespace EmEn::Base::Time
 			{
 				/* NOTE: This will causes the while() loop to stop in the thread. */
 				{
-					const std::lock_guard< std::mutex > lock{m_mutex};
+					const MutexLock lock{m_mutex};
 
 					m_isProcessCreated = false;
 					//m_isProcessActive = false;
@@ -125,10 +124,15 @@ namespace EmEn::Base::Time
 			void
 			setGranularity (rep_t granularity) noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_mutex};
+				{
+					const MutexLock lock{m_mutex};
 
-				m_granularity = std::chrono::duration< rep_t, period_t >{granularity};
-				m_previousTime = std::chrono::steady_clock::now();
+					m_granularity = std::chrono::duration< rep_t, period_t >{granularity};
+					m_previousTime = std::chrono::steady_clock::now();
+				}
+
+				/* NOTE: The new interval applies at once: the thread waits for the old one otherwise. */
+				m_condition.notify_one();
 			}
 
 			/**
@@ -137,9 +141,14 @@ namespace EmEn::Base::Time
 			void
 			reset () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_mutex};
+				{
+					const MutexLock lock{m_mutex};
 
-				m_previousTime = std::chrono::steady_clock::now();
+					m_previousTime = std::chrono::steady_clock::now();
+				}
+
+				/* NOTE: The thread waits for the interval measured from the new start. */
+				m_condition.notify_one();
 			}
 
 			/**
@@ -150,6 +159,8 @@ namespace EmEn::Base::Time
 			rep_t
 			granularity () const noexcept
 			{
+				const MutexLock lock{m_mutex};
+
 				return m_granularity.count();
 			}
 
@@ -183,6 +194,8 @@ namespace EmEn::Base::Time
 			rep_t
 			elapsed () noexcept
 			{
+				const MutexLock lock{m_mutex};
+
 				const auto top = std::chrono::steady_clock::now();
 
 				return std::chrono::duration_cast< std::chrono::duration< rep_t, period_t > >(top - m_previousTime).count();
@@ -197,6 +210,8 @@ namespace EmEn::Base::Time
 			bool
 			isIntervalElapsed (rep_t & time) noexcept
 			{
+				const MutexLock lock{m_mutex};
+
 				const auto top = std::chrono::steady_clock::now();
 
 				const auto delta = std::chrono::duration_cast< std::chrono::duration< rep_t, period_t > >(top - m_previousTime).count();
@@ -227,7 +242,7 @@ namespace EmEn::Base::Time
 			bool
 			start () noexcept
 			{
-				const std::scoped_lock lock{m_mutex};
+				const MutexLock lock{m_mutex};
 
 				/* If the process is already active, we do nothing. */
 				if ( m_isProcessActive )
@@ -268,14 +283,18 @@ namespace EmEn::Base::Time
 			void
 			stop () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_mutex};
-
-				if ( !m_isProcessCreated || !m_isProcessActive )
 				{
-					return;
+					const MutexLock lock{m_mutex};
+
+					if ( !m_isProcessCreated || !m_isProcessActive )
+					{
+						return;
+					}
+
+					m_isProcessActive = false;
 				}
 
-				m_isProcessActive = false;
+				m_condition.notify_one();
 			}
 
 			/**
@@ -284,15 +303,19 @@ namespace EmEn::Base::Time
 			void
 			pause () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_mutex};
-
-				if ( !m_isProcessCreated || !m_isProcessActive )
 				{
-					return;
+					const MutexLock lock{m_mutex};
+
+					if ( !m_isProcessCreated || !m_isProcessActive )
+					{
+						return;
+					}
+
+					m_isProcessActive = false;
+					m_isProcessPaused = true;
 				}
 
-				m_isProcessActive = false;
-				m_isProcessPaused = true;
+				m_condition.notify_one();
 			}
 
 			/**
@@ -302,8 +325,8 @@ namespace EmEn::Base::Time
 			resume () noexcept
 			{
 				{
-					const std::lock_guard< std::mutex > lock{m_mutex};
-					
+					const MutexLock lock{m_mutex};
+
 					if ( !m_isProcessPaused )
 					{
 						return;
@@ -311,10 +334,10 @@ namespace EmEn::Base::Time
 
 					m_isProcessActive = true;
 					m_isProcessPaused = false;
-					
+
 					m_previousTime = std::chrono::steady_clock::now();
 				}
-				
+
 				/* NOTE: Wake up the thread. */
 				m_condition.notify_one();
 			}
@@ -349,7 +372,7 @@ namespace EmEn::Base::Time
 			bool
 			isRunningOnThisThread () const noexcept
 			{
-				const std::scoped_lock lock{m_mutex};
+				const MutexLock lock{m_mutex};
 
 				return m_thread.isCurrentThread();
 			}
@@ -362,7 +385,7 @@ namespace EmEn::Base::Time
 			requestExit () noexcept
 			{
 				{
-					const std::scoped_lock lock{m_mutex};
+					const MutexLock lock{m_mutex};
 
 					m_isProcessCreated = false;
 				}
@@ -387,15 +410,14 @@ namespace EmEn::Base::Time
 			 * @brief Thread task.
 			 */
 			void
-			process ()
+			process () noexcept
 			{
-				std::unique_lock< std::mutex > lock{m_mutex};
+				MutexLock lock{m_mutex};
 
 				while ( m_isProcessCreated )
 				{
-					/* NOTE: The thread will sleep until "m_isProcessActive" is true or the timer is destroyed.
-					 * The mutex is automatically released during sleep and reacquired upon waking. */
-					m_condition.wait(lock, [this] {
+					/* NOTE: The thread will sleep until "m_isProcessActive" is true or the timer is destroyed. */
+					m_condition.wait(lock, [this] () EMEN_REQUIRES(m_mutex) {
 						return m_isProcessActive || !m_isProcessCreated;
 					});
 
@@ -405,60 +427,52 @@ namespace EmEn::Base::Time
 						break;
 					}
 
-					/* NOTE: Get a copy to be thread safe. */
 					const auto granularityCopy = m_granularity;
 					const auto previousTimeCopy = m_previousTime;
-
-					/* NOTE: At this point, we are certain that m_isProcessActive is true and the mutex is locked. */
-					lock.unlock();
-
-					rep_t time;
 					const auto top = std::chrono::steady_clock::now();
-					const auto delta = std::chrono::duration_cast<std::chrono::duration<rep_t, period_t>>(top - previousTimeCopy).count();
+					const auto delta = std::chrono::duration_cast< std::chrono::duration< rep_t, period_t > >(top - previousTimeCopy).count();
 					const auto intervalDuration = granularityCopy.count();
-
-					bool intervalElapsed;
 
 					if ( delta < intervalDuration )
 					{
-						time = intervalDuration - delta;
+						/* NOTE: An interruptible wait (2026-10-12): the destructor, stop(), pause(), setGranularity() and
+						 * reset() wake it. A sleep_for() here held the destructor for up to the whole granularity (an hour
+						 * in a test), and a new granularity waited for the end of the old interval. */
+						m_condition.wait_for(lock, std::chrono::duration< rep_t, period_t >{intervalDuration - delta}, [this, granularityCopy, previousTimeCopy] () EMEN_REQUIRES(m_mutex) {
+							return !m_isProcessCreated || !m_isProcessActive || m_granularity != granularityCopy || m_previousTime != previousTimeCopy;
+						});
 
-						intervalElapsed = false;
-					}
-					else
-					{
-						time = delta - intervalDuration;
-
-						intervalElapsed = true;
+						continue;
 					}
 
-					if ( intervalElapsed )
-					{
-						if ( m_function(m_timerId) || m_onlyOnce )
-						{
-							this->stop();
-						}
-						{
-							const std::lock_guard< std::mutex > updateLock(m_mutex);
+					/* Report the time overflow. */
+					const auto overflow = delta - intervalDuration;
 
-							m_previousTime = top - std::chrono::duration<rep_t, period_t>{time};
-						}
-					}
-					else
-					{
-						std::this_thread::sleep_for(std::chrono::duration<rep_t, period_t>{time});
-					}
+					/* NOTE: The callback runs without the lock: it may call this event (stop(), requestExit()). */
+					lock.unlock();
+
+					const bool done = m_function(m_timerId) || m_onlyOnce;
 
 					lock.lock();
+
+					/* NOTE: stop() inline: it takes the lock this thread holds. */
+					if ( done )
+					{
+						m_isProcessActive = false;
+					}
+
+					m_previousTime = top - std::chrono::duration< rep_t, period_t >{overflow};
 				}
 			}
 
-			std::chrono::duration< rep_t, period_t > m_granularity{std::chrono::seconds{1}};
-			std::chrono::time_point< std::chrono::steady_clock > m_previousTime{std::chrono::steady_clock::now()};
+			/* NOTE: The lock of the interval state, Clang-checked (decision D12). The flags below are atomics read without
+			 * it (isStarted(), isPaused()) but written under it, so the waits never miss a change. */
+			mutable Mutex m_mutex;
+			std::condition_variable_any m_condition;
+			std::chrono::duration< rep_t, period_t > m_granularity EMEN_GUARDED_BY(m_mutex){std::chrono::seconds{1}};
+			std::chrono::time_point< std::chrono::steady_clock > m_previousTime EMEN_GUARDED_BY(m_mutex){std::chrono::steady_clock::now()};
 			std::function< bool (TimerID) > m_function;
 			Thread m_thread;
-			mutable std::mutex m_mutex;
-			std::condition_variable m_condition;
 			TimerID m_timerId{0};
 			std::atomic_bool m_isProcessCreated{false};
 			std::atomic_bool m_isProcessActive{false};
