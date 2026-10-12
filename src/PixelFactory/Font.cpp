@@ -230,7 +230,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( !IO::fileGetContents(filepath, fontData) || fontData.empty() || fontData.size() > static_cast< size_t >(std::numeric_limits< FT_Long >::max()) )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << filepath << " cannot be read !" "\n";
+			std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " cannot be read !" "\n";
 
 			return false;
 		}
@@ -258,7 +258,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( FT_New_Memory_Face(library.get(), fontData.data(), static_cast< FT_Long >(fontData.size()), 0, &rawFace) != 0 )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << filepath << " is not a usable font !" "\n";
+				std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " is not a usable font !" "\n";
 
 				return false;
 			}
@@ -268,7 +268,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( FT_IS_SFNT(face.get()) && !sfntTablesInsideFile(fontData) )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << filepath << " is truncated (a table ends past the end of the file) !" "\n";
+			std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " is truncated (a table ends past the end of the file) !" "\n";
 
 			return false;
 		}

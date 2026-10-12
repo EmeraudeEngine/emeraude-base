@@ -58,7 +58,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 	{
 		if ( !IO::fileExists(filepath) )
 		{
-			std::cerr << "[WaveFactory::FileIO] read(), the file '" << filepath << "' doesn't exist !\n";
+			std::cerr << "[WaveFactory::FileIO] read(), the file '" << IO::toU8String(filepath) << "' doesn't exist !\n";
 
 			return false;
 		}
@@ -67,7 +67,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "[WaveFactory::FileIO] read(), unable to open '" << filepath << "' !\n";
+			std::cerr << "[WaveFactory::FileIO] read(), unable to open '" << IO::toU8String(filepath) << "' !\n";
 
 			return false;
 		}
@@ -111,7 +111,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 	{
 		if ( IO::fileExists(filepath) && !overwrite )
 		{
-			std::cerr << "[WaveFactory::FileIO] write(), the file '" << filepath << "' already exists !\n";
+			std::cerr << "[WaveFactory::FileIO] write(), the file '" << IO::toU8String(filepath) << "' already exists !\n";
 
 			return false;
 		}
@@ -136,7 +136,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "[WaveFactory::FileIO] write(), unable to open '" << filepath << "' for writing !\n";
+			std::cerr << "[WaveFactory::FileIO] write(), unable to open '" << IO::toU8String(filepath) << "' for writing !\n";
 
 			return false;
 		}

@@ -30,6 +30,7 @@
 #include <string>
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "Network/PercentEncoding.hpp"
 #include "Network/URI.hpp"
 
@@ -46,7 +47,7 @@ TEST(NetworkURI, parsesAllComponents)
 	EXPECT_EQ(uri.uriDomain().port(), 8443U);
 	EXPECT_EQ(uri.uriDomain().username(), "user");
 	EXPECT_EQ(uri.uriDomain().password(), "pass");
-	EXPECT_EQ(uri.path().generic_string(), "/a/b");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(uri.path()), "/a/b");
 	EXPECT_EQ(uri.fragment(), "frag");
 }
 
@@ -57,7 +58,7 @@ TEST(NetworkURI, normalizesSchemeAndHostToLowercase)
 	EXPECT_EQ(uri.scheme(), "https");
 	EXPECT_EQ(uri.uriDomain().hostname().name(), "example.com");
 	/* Path case is significant and preserved. */
-	EXPECT_EQ(uri.path().generic_string(), "/Path");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(uri.path()), "/Path");
 }
 
 TEST(NetworkURI, parsesIPv6Literal)
@@ -93,7 +94,7 @@ TEST(NetworkURI, decodesPercentEncodingInComponents)
 	const URI uri{"https://example.com/a%20b/c%2Fd?q=hello%20world"};
 
 	/* Stored decoded. */
-	EXPECT_EQ(uri.path().generic_string(), "/a b/c/d");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(uri.path()), "/a b/c/d");
 	EXPECT_EQ(uri.query().variables().at("q"), "hello world");
 }
 
@@ -207,7 +208,7 @@ TEST(NetworkURI, resolvesAbsoluteReferenceUnchanged)
 	const auto resolved = URI::resolve(base, "https://other.example/x");
 
 	EXPECT_EQ(resolved.uriDomain().hostname().name(), "other.example");
-	EXPECT_EQ(resolved.path().generic_string(), "/x");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(resolved.path()), "/x");
 }
 
 /* --- Valid-but-gnarly URIs (must parse without crashing, per "Ave robustus") --- */
@@ -288,12 +289,12 @@ TEST(NetworkURI, rfc3986Section112SchemeDiversity)
 	/* The LDAP case specifically: IPv6 authority + a query that contains '?'. */
 	const URI ldap{"ldap://[2001:db8::7]/c=GB?objectClass?one"};
 	EXPECT_EQ(ldap.uriDomain().hostname().name(), "[2001:db8::7]");
-	EXPECT_EQ(ldap.path().generic_string(), "/c=GB");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(ldap.path()), "/c=GB");
 
 	/* mailto has no authority; the whole address is the (rootless) path. */
 	const URI mailto{"mailto:John.Doe@example.com"};
 	EXPECT_TRUE(mailto.uriDomain().empty());
-	EXPECT_EQ(mailto.path().generic_string(), "John.Doe@example.com");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(mailto.path()), "John.Doe@example.com");
 }
 
 TEST(NetworkURI, deeplyNestedDotSegmentsDoNotUnderflow)
@@ -310,7 +311,7 @@ TEST(NetworkURI, deeplyNestedDotSegmentsDoNotUnderflow)
 
 	const URI uri{evil};
 
-	EXPECT_EQ(uri.path().generic_string(), "/safe");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(uri.path()), "/safe");
 }
 
 TEST(NetworkURI, emptyAndDegenerateInputs)
@@ -319,7 +320,7 @@ TEST(NetworkURI, emptyAndDegenerateInputs)
 	/* A bare path reference: no scheme, no authority — must not crash. */
 	const URI relative{"just/a/path"};
 	EXPECT_TRUE(relative.scheme().empty());
-	EXPECT_EQ(relative.path().generic_string(), "just/a/path");
+	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(relative.path()), "just/a/path");
 }
 
 /* --- setPath still works (used by callers) --- */

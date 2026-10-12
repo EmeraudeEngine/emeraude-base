@@ -139,6 +139,29 @@ TEST(NetworkTrustStore, caBundleFileLoadsFixture)
 	EXPECT_EQ(Network::TrustStore::certificateCount(context), 1U);
 }
 
+/* 2026-10-12 (rule C): a bundle under a directory whose name is outside the ANSI code page. load_verify_file() took a
+ * narrow path, opened by the TLS library with fopen() (the ANSI code page on Windows): the file was never found. */
+TEST(NetworkTrustStore, bundleFileUnderANonASCIIDirectory)
+{
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-\xCE\xA9-\xE6\x97\xA5-bundle");
+	std::error_code error;
+
+	std::filesystem::create_directories(directory, error);
+	ASSERT_FALSE(error) << error.message();
+
+	const auto bundleFilepath = directory / "tls-test-ca.pem";
+
+	std::filesystem::copy_file(AssetsDirectory / "tls-test-ca.pem", bundleFilepath, error);
+	ASSERT_FALSE(error) << error.message();
+
+	asio::ssl::context context{asio::ssl::context::tls_client};
+
+	EXPECT_TRUE(Network::TrustStore::applyCABundleFile(context, bundleFilepath));
+	EXPECT_EQ(Network::TrustStore::certificateCount(context), 1U);
+
+	std::filesystem::remove_all(directory, error);
+}
+
 TEST(NetworkTrustStore, missingBundleFileFails)
 {
 	asio::ssl::context context{asio::ssl::context::tls_client};

@@ -691,6 +691,14 @@ namespace EmEn::Base::String
 		return output;
 	}
 
+	bool
+	isValidUTF8 (std::string_view utf8) noexcept
+	{
+		/* NOTE: The strict decoder replaces every invalid subpart with U+FFFD, so only strict UTF-8 survives the round
+		 * trip byte for byte (a genuine U+FFFD round-trips too). One decoder, one set of rules. */
+		return utf16ToUTF8(utf8ToUTF16(utf8)) == utf8;
+	}
+
 	std::string
 	unicodeToUTF8 (unsigned int unicode) noexcept
 	{

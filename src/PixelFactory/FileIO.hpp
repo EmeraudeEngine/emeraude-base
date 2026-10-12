@@ -62,7 +62,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 	{
 		if ( !IO::fileExists(filepath) )
 		{
-			std::cerr << "PixelFactory::FileIO::read(), the file '" << filepath << "' doesn't exist !" "\n";
+			std::cerr << "PixelFactory::FileIO::read(), the file '" << IO::toU8String(filepath) << "' doesn't exist !" "\n";
 
 			return false;
 		}
@@ -71,7 +71,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "PixelFactory::FileIO::read(), unable to open '" << filepath << "' !" "\n";
+			std::cerr << "PixelFactory::FileIO::read(), unable to open '" << IO::toU8String(filepath) << "' !" "\n";
 
 			return false;
 		}
@@ -165,7 +165,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 		}
 		else
 		{
-			std::cerr << "PixelFactory::FileIO::read(), the file '" << filepath << "' format is not handled !" "\n";
+			std::cerr << "PixelFactory::FileIO::read(), the file '" << IO::toU8String(filepath) << "' format is not handled !" "\n";
 
 			return false;
 		}
@@ -196,7 +196,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 	{
 		if ( IO::fileExists(filepath) && !overwrite )
 		{
-			std::cerr << "PixelFactory::FileIO::write(), the file '" << filepath << "' already exists !" "\n";
+			std::cerr << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' already exists !" "\n";
 
 			return false;
 		}
@@ -205,7 +205,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "PixelFactory::FileIO::write(), unable to open '" << filepath << "' for writing !" "\n";
+			std::cerr << "PixelFactory::FileIO::write(), unable to open '" << IO::toU8String(filepath) << "' for writing !" "\n";
 
 			return false;
 		}
@@ -283,7 +283,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			return fileFormat.writeStream(stream, pixmap, options);
 		}
 
-		std::cerr << "PixelFactory::FileIO::write(), the file '" << filepath << "' format is not handled !" "\n";
+		std::cerr << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' format is not handled !" "\n";
 
 		return false;
 	}

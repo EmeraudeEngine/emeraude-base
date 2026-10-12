@@ -41,6 +41,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "TemporaryPath.hpp"
 #include "Constants.hpp"
 #include "IO/MemoryStream.hpp"
@@ -429,7 +430,7 @@ namespace
 			return {};
 		}
 
-		const auto filepath = directory / name;
+		const auto filepath = directory / IO::u8path(name);
 		std::ofstream file{filepath, std::ios::binary | std::ios::trunc};
 
 		if ( !file.is_open() )

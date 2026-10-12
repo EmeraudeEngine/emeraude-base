@@ -27,6 +27,7 @@
 #include "HTTPRequest.hpp"
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
@@ -86,14 +87,23 @@ namespace EmEn::Base::Network
 	{
 		std::stringstream string;
 
+		/* NOTE: ONE leading slash and the path as is (UTF-8): " /" was written before a path that already starts with one
+		 * ("GET //a/b"), through std's operator<<, which quotes a path. */
+		auto target = IO::toGenericU8String(m_resource.path());
+
+		if ( target.empty() || target.front() != '/' )
+		{
+			target.insert(target.begin(), '/');
+		}
+
 		/* NOTE: HTTP version 0.9 have no header in response. */
 		if ( m_version == Version::HTTP09 )
 		{
-			string << HTTPRequest::method(m_method) << " /" << m_resource.path() << Separator;
+			string << HTTPRequest::method(m_method) << ' ' << target << Separator;
 		}
 		else
 		{
-			string << HTTPRequest::method(m_method) << " /" << m_resource.path() << ' ' << HTTPHeaders::version(m_version) << Separator;
+			string << HTTPRequest::method(m_method) << ' ' << target << ' ' << HTTPHeaders::version(m_version) << Separator;
 		}
 
 		for ( const auto & header : m_headers )

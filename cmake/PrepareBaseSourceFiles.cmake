@@ -124,6 +124,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AnimationSkin.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Any.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_BaseUtility.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_BlobTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Debug.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FastJSON.cpp
@@ -154,6 +155,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathTransformConversions.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHappyEyeballs.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPRequest.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPResponseParser.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPServer.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_NetworkHTTPSClient.cpp

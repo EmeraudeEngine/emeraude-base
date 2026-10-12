@@ -41,6 +41,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "TemporaryPath.hpp"
 #include "Network/GracefulCloser.hpp"
 #include "Network/HTTPServer.hpp"
@@ -434,7 +435,7 @@ TEST(NetworkHTTPServer, ServesFilesWithRanges)
 	ASSERT_TRUE(server.start([&filepath] (const std::shared_ptr< HTTPServerConnection > & connection) {
 		if ( connection->request().path() == "/missing" )
 		{
-			connection->respondFile(filepath.string() + ".absent", "application/octet-stream");
+			connection->respondFile(EmEn::Base::IO::u8path(EmEn::Base::IO::toU8String(filepath) + ".absent"), "application/octet-stream");
 
 			return;
 		}

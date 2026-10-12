@@ -42,6 +42,7 @@
 
 /* Local inclusions. */
 #include "emeraude_platform.hpp"
+#include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 #include "String.hpp"
 #include "URI.hpp"
@@ -1024,7 +1025,7 @@ namespace EmEn::Base::Network
 			{
 				outcome = DownloadOutcome::LocalIO;
 
-				Logging::error(Tag, "performHop(), unable to open '" + filepath.string() + "' for writing.");
+				Logging::error(Tag, "performHop(), unable to open '" + IO::toU8String(filepath) + "' for writing.");
 
 				return std::nullopt;
 			}
@@ -1116,7 +1117,7 @@ namespace EmEn::Base::Network
 					{
 						outcome = DownloadOutcome::LocalIO;
 
-						Logging::error(Tag, "performHop(), unable to write to '" + filepath.string() + "'.");
+						Logging::error(Tag, "performHop(), unable to write to '" + IO::toU8String(filepath) + "'.");
 
 						discardPartialFile();
 
@@ -1181,7 +1182,7 @@ namespace EmEn::Base::Network
 			{
 				outcome = DownloadOutcome::LocalIO;
 
-				Logging::error(Tag, "performHop(), unable to flush '" + filepath.string() + "' (disk full?).");
+				Logging::error(Tag, "performHop(), unable to flush '" + IO::toU8String(filepath) + "' (disk full?).");
 
 				discardPartialFile();
 

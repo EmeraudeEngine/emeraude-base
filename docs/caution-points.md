@@ -467,6 +467,28 @@ gives it back in the caller's form.
 - The resource scan found 9854 resources on Linux, macOS and Windows.
 - The sharing server serves the same 9854 entries, with no empty, absolute or `\\?\` path, and byte-identical files.
 
+### ⚠️⚠️ Windows: a path's narrow conversions are the ANSI code page — `IO::u8path()` in, `IO::toU8String()` out (rule C, 2026-10-12)
+
+`path::string()`, `generic_string()` and std's `operator<<` (ostream, path) convert through the ANSI code page: a
+character outside it THROWS (std::terminate), the others become invalid UTF-8. A path built from a narrow string
+(`path{text}`, `dir / text`, `p = text`, `append(text)`) decodes it as ANSI. Every `std::string` of the cascade is UTF-8:
+`IO::u8path()` in, `IO::toU8String()` / `toGenericU8String()` out (engine `docs/cpp-conventions.md` § "Paths and Text
+Encoding", guarded by the engine's `tools/check-path-encoding.py`). In the base, 2026-10-12:
+- `BlobTrait` has an `operator<< (const std::filesystem::path &)`: UTF-8, quoted as std quotes it (test_BlobTrait: the
+  accented case wrote CP-1252 bytes, the Ω case and a lone surrogate aborted, `0xC0000409`);
+- `String::isValidUTF8()` (the strict decoder's round trip) lets a trust boundary refuse what a third-party API would
+  throw on (MSVC's `char8_t` path conversion);
+- `Network::TrustStore::applyCABundleFile()` ABORTED on a bundle under a non-ASCII directory (`path::string()` handed to
+  `load_verify_file()`, whose TLS library opens a narrow name with `fopen()` anyway): it reads the file through
+  `IO::fileGetContents()` and calls `add_certificate_authority()`, which adds every PEM certificate of the buffer
+  (test `bundleFileUnderANonASCIIDirectory`, aborting before);
+- `Network::HTTPRequest::toString()` wrote `" /" << path` through std's `operator<<`: a quoted path after a second slash
+  (`GET /"/a/b"`); it writes one leading slash and the path as is (tests `NetworkHTTPRequest.requestLine*`: "/a/b", "a/b",
+  "" → `GET /a/b`, `GET /a/b`, `GET /`);
+- `Network::URI` keeps its path UTF-8 both ways; `IO`'s own error logs, the zip reader / writer, the file IO helpers and
+  the tests' `uniqueTemporaryPath()` convert explicitly. The test binary has no UTF-8 manifest: a test proves the
+  conversion itself.
+
 ### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
 
 `base / "/etc/passwd"` is `/etc/passwd`; `base / "../../x"` leaves `base`. Every path written in data (a resource

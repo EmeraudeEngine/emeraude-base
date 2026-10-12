@@ -82,7 +82,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 	{
 		if ( !IO::fileExists(filepath) )
 		{
-			Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + filepath.string() + "\' doesn't exist !");
+			Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + IO::toU8String(filepath) + "\' doesn't exist !");
 
 			return false;
 		}
@@ -91,7 +91,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			Logging::error("VertexFactory::FileIO", std::string{"read(), unable to open \'"} + filepath.string() + "\' !");
+			Logging::error("VertexFactory::FileIO", std::string{"read(), unable to open \'"} + IO::toU8String(filepath) + "\' !");
 
 			return false;
 		}
@@ -126,7 +126,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 			return fileFormat.readStream(stream, result, readOptions);
 		}
 
-		Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + filepath.string() + "\' format is not handled !");
+		Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + IO::toU8String(filepath) + "\' format is not handled !");
 
 		return false;
 	}
@@ -149,7 +149,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 	{
 		if ( IO::fileExists(filepath) && !overwrite )
 		{
-			Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + filepath.string() + "\' already exists !");
+			Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + IO::toU8String(filepath) + "\' already exists !");
 
 			return false;
 		}
@@ -158,7 +158,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			Logging::error("VertexFactory::FileIO", std::string{"write(), unable to open \'"} + filepath.string() + "\' for writing !");
+			Logging::error("VertexFactory::FileIO", std::string{"write(), unable to open \'"} + IO::toU8String(filepath) + "\' for writing !");
 
 			return false;
 		}
@@ -193,7 +193,7 @@ namespace EmEn::Base::VertexFactory::FileIO
 			return fileFormat.writeStream(stream, shape, writeOptions);
 		}
 
-		Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + filepath.string() + "\' format is not handled !");
+		Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + IO::toU8String(filepath) + "\' format is not handled !");
 
 		return false;
 	}

@@ -36,6 +36,9 @@
 #include <string_view>
 #include <system_error>
 
+/* Local inclusions. */
+#include "IO/IO.hpp"
+
 namespace EmEn::Base::Testing
 {
 	/**
@@ -79,8 +82,10 @@ namespace EmEn::Base::Testing
 			directory = std::filesystem::path{"."};
 		}
 
-		const std::filesystem::path leafPath{leaf};
+		/* NOTE: The leaf is UTF-8: IO::u8path() in, IO::toU8String() out (the narrow path conversions are the ANSI code page
+		 * on Windows, and a test may ask for a non-ASCII name on purpose). */
+		const auto leafPath = IO::u8path(std::string{leaf});
 
-		return directory / (leafPath.stem().string() + "-" + processToken + leafPath.extension().string());
+		return directory / IO::u8path(IO::toU8String(leafPath.stem()) + "-" + processToken + IO::toU8String(leafPath.extension()));
 	}
 }

@@ -48,6 +48,7 @@
 #endif
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Network::TrustStore
@@ -137,24 +138,37 @@ namespace EmEn::Base::Network::TrustStore
 	{
 		if ( std::error_code fileError; !std::filesystem::is_regular_file(bundleFilepath, fileError) )
 		{
-			Logging::error(Tag, "applyCABundleFile(), the CA bundle file '" + bundleFilepath.string() + "' does not exist !");
+			Logging::error(Tag, "applyCABundleFile(), the CA bundle file '" + IO::toU8String(bundleFilepath) + "' does not exist !");
+
+			return false;
+		}
+
+		/* NOTE: Read through IO:: (wide on Windows), then handed over in memory. load_verify_file() took a narrow path:
+		 * path::string() is the ANSI code page on Windows, which THROWS on a character outside it (an abort), and the TLS
+		 * library opens what is left with fopen() (rule C, 2026-10-12). add_certificate_authority() adds every PEM
+		 * certificate of the buffer, as a bundle file holds them, and fails on a buffer that holds none. */
+		std::string bundle;
+
+		if ( !IO::fileGetContents(bundleFilepath, bundle) )
+		{
+			Logging::error(Tag, "applyCABundleFile(), unable to read the CA bundle file '" + IO::toU8String(bundleFilepath) + "' !");
 
 			return false;
 		}
 
 		asio::error_code error;
 
-		context.load_verify_file(bundleFilepath.string(), error);
+		context.add_certificate_authority(asio::buffer(bundle), error);
 
 		if ( error )
 		{
-			Logging::error(Tag, "applyCABundleFile(), unable to load the CA bundle file '" + bundleFilepath.string() + "' : " + error.message());
+			Logging::error(Tag, "applyCABundleFile(), unable to load the CA bundle file '" + IO::toU8String(bundleFilepath) + "' : " + error.message());
 
 			return false;
 		}
 
 		#ifdef DEBUG
-		Logging::debug(Tag, "CA bundle file '" + bundleFilepath.string() + "' loaded.");
+		Logging::debug(Tag, "CA bundle file '" + IO::toU8String(bundleFilepath) + "' loaded.");
 		#endif
 
 		return true;

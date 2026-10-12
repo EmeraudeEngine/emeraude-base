@@ -724,3 +724,25 @@ TEST(String, utf16ToUTF8)
 	ASSERT_EQ(String::utf16ToUTF8(String::utf8ToUTF16(text)), text);
 }
 
+/* 2026-10-12 (rule C): the strict check a trust boundary runs before a third-party API that THROWS on invalid UTF-8
+ * (fastgltf's u8path() of a percent-decoded glTF uri on MSVC, an abort). */
+TEST(String, isValidUTF8)
+{
+	ASSERT_TRUE(String::isValidUTF8(""));
+	ASSERT_TRUE(String::isValidUTF8("plain.bin"));
+	ASSERT_TRUE(String::isValidUTF8("J\xC3\xA9r\xC3\xB4me \xCE\xA9 \xE6\x97\xA5 \xF0\x9F\x98\x80"));
+	/* A genuine U+FFFD is valid UTF-8. */
+	ASSERT_TRUE(String::isValidUTF8("\xEF\xBF\xBD"));
+	ASSERT_TRUE(String::isValidUTF8(std::string_view{"a\0b", 3}));
+	/* Invalid: a Latin-1 byte, a lone continuation byte, a truncated sequence, an overlong form, a CESU-8 surrogate,
+	 * a code point past U+10FFFF, F5-FF. */
+	ASSERT_FALSE(String::isValidUTF8("\xFF.bin"));
+	ASSERT_FALSE(String::isValidUTF8("J\xE9r"));
+	ASSERT_FALSE(String::isValidUTF8("\x80"));
+	ASSERT_FALSE(String::isValidUTF8("a\xF0\x9F"));
+	ASSERT_FALSE(String::isValidUTF8("\xC0\xAF"));
+	ASSERT_FALSE(String::isValidUTF8("\xED\xA0\x80"));
+	ASSERT_FALSE(String::isValidUTF8("\xF4\x90\x80\x80"));
+	ASSERT_FALSE(String::isValidUTF8("\xF5\x80\x80\x80"));
+}
+

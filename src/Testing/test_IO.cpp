@@ -521,7 +521,7 @@ TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
 
 	for ( int level = 0; level < 6; ++level )
 	{
-		deep /= std::string(48, static_cast< char >('a' + level));
+		deep /= EmEn::Base::IO::u8path(std::string(48, static_cast< char >('a' + level)));
 	}
 
 	const auto file = deep / "shader-binary.bin";

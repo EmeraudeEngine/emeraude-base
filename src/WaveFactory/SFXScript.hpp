@@ -33,6 +33,7 @@
 
 /* Local inclusions. */
 #include "FastJSON.hpp"
+#include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 #include "Synthesizer.hpp"
 
@@ -107,7 +108,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( !root.has_value() )
 				{
-					Logging::error("SFXScript", std::string{"Failed to parse JSON file: "} + filepath.string());
+					Logging::error("SFXScript", std::string{"Failed to parse JSON file: "} + IO::toU8String(filepath));
 
 					return false;
 				}

@@ -37,6 +37,7 @@
 
 /* Local inclusions. */
 #include "FileIO.hpp"
+#include "IO/IO.hpp"
 #include "Pixmap.hpp"
 #include "Processor.hpp"
 
@@ -230,7 +231,7 @@ namespace EmEn::Base::PixelFactory
 
 						if ( !FileIO::read(filepath, charsMap) )
 						{
-							std::cerr << "[ERROR] Font::readFile(), can't load pixel data from " << filepath << " file !" "\n";
+							std::cerr << "[ERROR] Font::readFile(), can't load pixel data from " << IO::toU8String(filepath) << " file !" "\n";
 
 							return false;
 						}
@@ -242,7 +243,7 @@ namespace EmEn::Base::PixelFactory
 						return this->readTrueTypeFile(filepath, fontSize, fixedWidth);
 
 					case FontType::None :
-						std::cerr << "[ERROR] Font::readFile(), the font file " << filepath << " is not handled !" "\n";
+						std::cerr << "[ERROR] Font::readFile(), the font file " << IO::toU8String(filepath) << " is not handled !" "\n";
 
 					return false;
 				}

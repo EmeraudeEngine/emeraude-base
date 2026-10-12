@@ -33,6 +33,7 @@
 #include <string_view>
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 
 namespace EmEn::Base::FastJSON
@@ -165,7 +166,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if ( !quiet )
 			{
-				Logging::error("FastJSON", "unable to open the file " + filepath.string());
+				Logging::error("FastJSON", "unable to open the file " + IO::toU8String(filepath));
 			}
 
 			return std::nullopt;

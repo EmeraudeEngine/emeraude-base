@@ -188,7 +188,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::renameFile(), unable to rename "} + from.string() + " to " + to.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::renameFile(), unable to rename "} + toU8String(from) + " to " + toU8String(to) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 
 			return false;
 		}
@@ -216,7 +216,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::fileExists(), unable to check the existence of the file "} + filepath.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::fileExists(), unable to check the existence of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 
 			return false;
 		}
@@ -233,7 +233,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::filesize(), unable to get the size of the file "} + filepath.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::filesize(), unable to get the size of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 		}
 
 		return size;
@@ -267,11 +267,11 @@ namespace EmEn::Base::IO
 		{
 			if ( errorCode.value() > 0 ) [[unlikely]]
 			{
-				Logging::error("IO", std::string{"IO::eraseFile(), unable to check the path "} + filepath.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+				Logging::error("IO", std::string{"IO::eraseFile(), unable to check the path "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 			}
 			else
 			{
-				Logging::error("IO", std::string{"IO::eraseFile(), the path "} + filepath.string() + " is not a regular file !");
+				Logging::error("IO", std::string{"IO::eraseFile(), the path "} + toU8String(filepath) + " is not a regular file !");
 			}
 
 			return false;
@@ -281,7 +281,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::eraseFile(), unable to delete the file "} + filepath.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::eraseFile(), unable to delete the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 
 			return false;
 		}
@@ -306,7 +306,7 @@ namespace EmEn::Base::IO
 			/* NOTE: We don't need to print the error message if the directory do not exist. */
 			if ( errorCode.value() != 2 ) [[unlikely]]
 			{
-				Logging::error("IO", std::string{"IO::directoryExists(), unable to check if the path "} + path.string() + " is a directory (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+				Logging::error("IO", std::string{"IO::directoryExists(), unable to check if the path "} + toU8String(path) + " is a directory (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 			}
 
 			return false;
@@ -329,7 +329,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::isDirectoryContentEmpty(), unable to check the content of directory "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::isDirectoryContentEmpty(), unable to check the content of directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 		}
 
 		return result;
@@ -371,7 +371,7 @@ namespace EmEn::Base::IO
 	void
 	logDirectoryWalkError (const std::filesystem::path & path, const std::error_code & errorCode) noexcept
 	{
-		Logging::error("IO", std::string{"IO::forEachDirectoryEntry(), unable to walk the directory "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+		Logging::error("IO", std::string{"IO::forEachDirectoryEntry(), unable to walk the directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 	}
 
 	bool
@@ -397,7 +397,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::createDirectory(), unable to create the path "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::createDirectory(), unable to create the path "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 
 			return false;
 		}
@@ -420,11 +420,11 @@ namespace EmEn::Base::IO
 		{
 			if ( errorCode.value() > 0 ) [[unlikely]]
 			{
-				Logging::error("IO", std::string{"IO::eraseDirectory(), unable to check the path "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+				Logging::error("IO", std::string{"IO::eraseDirectory(), unable to check the path "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 			}
 			else
 			{
-				Logging::error("IO", std::string{"IO::eraseDirectory(), the path "} + path.string() + " is not a directory !");
+				Logging::error("IO", std::string{"IO::eraseDirectory(), the path "} + toU8String(path) + " is not a directory !");
 			}
 
 			return false;
@@ -443,7 +443,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::eraseDirectory(), Unable to delete the directory "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::eraseDirectory(), Unable to delete the directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 
 			return false;
 		}
@@ -482,7 +482,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::exists(), unable to check the existence of the entry "} + path.string() + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::exists(), unable to check the existence of the entry "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 
 			return false;
 		}
@@ -582,7 +582,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::fileGetContents(), unable to read "} + filepath.string() + " file.");
+			Logging::error("IO", std::string{"IO::fileGetContents(), unable to read "} + toU8String(filepath) + " file.");
 
 			return false;
 		}
@@ -592,7 +592,7 @@ namespace EmEn::Base::IO
 
 		if ( bytes < 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::fileGetContents(), unable to get the size of "} + filepath.string() + " file.");
+			Logging::error("IO", std::string{"IO::fileGetContents(), unable to get the size of "} + toU8String(filepath) + " file.");
 
 			return false;
 		}
@@ -605,7 +605,7 @@ namespace EmEn::Base::IO
 
 		if ( !file ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::fileGetContents(), error reading "} + filepath.string() + " file.");
+			Logging::error("IO", std::string{"IO::fileGetContents(), error reading "} + toU8String(filepath) + " file.");
 
 			return false;
 		}
@@ -630,7 +630,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::filePutContents(), unable to write into "} + filepath.string() + " file.");
+			Logging::error("IO", std::string{"IO::filePutContents(), unable to write into "} + toU8String(filepath) + " file.");
 
 			return false;
 		}
@@ -639,7 +639,7 @@ namespace EmEn::Base::IO
 
 		if ( !file ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::filePutContents(), error writing to "} + filepath.string() + " file.");
+			Logging::error("IO", std::string{"IO::filePutContents(), error writing to "} + toU8String(filepath) + " file.");
 
 			return false;
 		}

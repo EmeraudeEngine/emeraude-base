@@ -58,14 +58,14 @@ namespace EmEn::Base::IO
 		/* NOTE: "&&" here used to accept an existing DIRECTORY as a file (the message always said "or"). */
 		if ( !IO::fileExists(path) )
 		{
-			std::cerr << ClassId << " : The path " << path << " is not a regular file or doesn't exists !" "\n";
+			std::cerr << ClassId << " : The path " << toU8String(path) << " is not a regular file or doesn't exists !" "\n";
 
 			return false;
 		}
 
 		if ( ZipWriter::sourceExists(path) )
 		{
-			std::cerr << ClassId << " : The file " << path << " already exists in source !" "\n";
+			std::cerr << ClassId << " : The file " << toU8String(path) << " already exists in source !" "\n";
 
 			return false;
 		}
@@ -81,7 +81,7 @@ namespace EmEn::Base::IO
 		/* NOTE: "&&" here used to accept an existing regular FILE, then walk it (the message always said "or"). */
 		if ( !IO::directoryExists(path) )
 		{
-			std::cerr << ClassId << " : The path " << path << " is not a directory or doesn't exists !" "\n";
+			std::cerr << ClassId << " : The path " << toU8String(path) << " is not a directory or doesn't exists !" "\n";
 
 			return false;
 		}
@@ -98,23 +98,23 @@ namespace EmEn::Base::IO
 
 			if ( ZipWriter::sourceExists(entry.path()) )
 			{
-				std::cerr << ClassId << " : The file " << entry.path() << " already exists in source !" "\n";
+				std::cerr << ClassId << " : The file " << toU8String(entry.path()) << " already exists in source !" "\n";
 
 				duplicate = true;
 
 				return false;
 			}
 
-			const auto relativePath = std::filesystem::relative(IO::toGenericU8String(entry.path()), path, errorCode);
+			const auto relativePath = std::filesystem::relative(entry.path(), path, errorCode);
 
 			if ( errorCode )
 			{
-				std::cerr << ClassId << " : Unable to name the entry " << entry.path() << " relative to " << path << " (" << errorCode.message() << ") !" "\n";
+				std::cerr << ClassId << " : Unable to name the entry " << toU8String(entry.path()) << " relative to " << toU8String(path) << " (" << errorCode.message() << ") !" "\n";
 
 				return true;
 			}
 
-			m_sources.emplace_back(entry.path(), relativePath.generic_string());
+			m_sources.emplace_back(entry.path(), toGenericU8String(relativePath));
 
 			return true;
 		});
@@ -127,14 +127,14 @@ namespace EmEn::Base::IO
 	{
 		if ( IO::exists(m_filepath) )
 		{
-			std::cerr << ClassId << " : The archive file " << m_filepath << " already exists !" "\n";
+			std::cerr << ClassId << " : The archive file " << toU8String(m_filepath) << " already exists !" "\n";
 
 			return false;
 		}
 
 		if ( !this->openArchive() )
 		{
-			std::cerr << ClassId << " : Unable to create the archive " << m_filepath << " !" "\n";
+			std::cerr << ClassId << " : Unable to create the archive " << toU8String(m_filepath) << " !" "\n";
 
 			return false;
 		}
@@ -151,7 +151,7 @@ namespace EmEn::Base::IO
 			/* Read the file content. */
 			if ( !ZipWriter::readSource(filepath, fileBuffers.back()) )
 			{
-				std::cerr << ClassId << " : Unable to open file " << filepath << " !" "\n";
+				std::cerr << ClassId << " : Unable to open file " << toU8String(filepath) << " !" "\n";
 
 				success = false;
 
@@ -255,7 +255,7 @@ namespace EmEn::Base::IO
 #else
 		int errorCode = 0;
 
-		m_zip.reset(zip_open(m_filepath.string().data(), ZIP_CREATE, &errorCode));
+		m_zip.reset(zip_open(toU8String(m_filepath).data(), ZIP_CREATE, &errorCode));
 
 		if ( !m_zip )
 		{

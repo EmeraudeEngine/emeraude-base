@@ -41,6 +41,7 @@
 /* Local inclusions. */
 #include "AnimationChannel.hpp"
 #include "AnimationClip.hpp"
+#include "IO/IO.hpp"
 #include "Math/Matrix.hpp"
 #include "Math/Quaternion.hpp"
 #include "Math/Vector.hpp"
@@ -73,7 +74,7 @@ namespace EmEn::Base::Animation
 
 				if ( !file.is_open() )
 				{
-					std::cerr << "[MD5AnimParser] Failed to open '" << filepath << "' !\n";
+					std::cerr << "[MD5AnimParser] Failed to open '" << IO::toU8String(filepath) << "' !\n";
 
 					return {};
 				}

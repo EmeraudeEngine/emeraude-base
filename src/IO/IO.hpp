@@ -48,6 +48,11 @@
 
 namespace EmEn::Base::IO
 {
+	/* NOTE: Declared first: the inline functions below log their path through it (defined at the end of this file).
+	 * Never path::string() in a log: on Windows that is the ANSI code page, which THROWS on a character outside it. */
+	[[nodiscard]]
+	inline std::string toU8String (const std::filesystem::path & path);
+
 #if IS_WINDOWS
 	constexpr char Separator = '\\';
 #else
@@ -542,7 +547,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetContents: cannot open " + filepath.string());
+			Logging::error("IO", "fileGetContents: cannot open " + toU8String(filepath));
 
 			return false;
 		}
@@ -552,7 +557,7 @@ namespace EmEn::Base::IO
 
 		if ( bytes < 0 ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetContents: cannot read the size of " + filepath.string());
+			Logging::error("IO", "fileGetContents: cannot read the size of " + toU8String(filepath));
 
 			return false;
 		}
@@ -565,7 +570,7 @@ namespace EmEn::Base::IO
 
 		if ( !file ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetContents: read error on " + filepath.string());
+			Logging::error("IO", "fileGetContents: read error on " + toU8String(filepath));
 
 			return false;
 		}
@@ -600,7 +605,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetRange: cannot open " + filepath.string());
+			Logging::error("IO", "fileGetRange: cannot open " + toU8String(filepath));
 
 			return false;
 		}
@@ -609,7 +614,7 @@ namespace EmEn::Base::IO
 
 		if ( fileSize < 0 ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetRange: cannot read the size of " + filepath.string());
+			Logging::error("IO", "fileGetRange: cannot read the size of " + toU8String(filepath));
 
 			return false;
 		}
@@ -619,7 +624,7 @@ namespace EmEn::Base::IO
 		/* NOTE: Overflow-safe: offset <= size and length <= size - offset. */
 		if ( offset > fileBytes || length > fileBytes - offset ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetRange: the range [" + std::to_string(offset) + ", +" + std::to_string(length) + ") is out of " + filepath.string());
+			Logging::error("IO", "fileGetRange: the range [" + std::to_string(offset) + ", +" + std::to_string(length) + ") is out of " + toU8String(filepath));
 
 			return false;
 		}
@@ -636,7 +641,7 @@ namespace EmEn::Base::IO
 
 		if ( !file ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetRange: read error on " + filepath.string());
+			Logging::error("IO", "fileGetRange: read error on " + toU8String(filepath));
 
 			content.clear();
 
@@ -682,7 +687,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() ) [[unlikely]]
 		{
-			Logging::error("IO", "filePutContents: cannot open " + filepath.string() + " for writing");
+			Logging::error("IO", "filePutContents: cannot open " + toU8String(filepath) + " for writing");
 
 			return false;
 		}
@@ -691,7 +696,7 @@ namespace EmEn::Base::IO
 
 		if ( !file ) [[unlikely]]
 		{
-			Logging::error("IO", "filePutContents: write error on " + filepath.string());
+			Logging::error("IO", "filePutContents: write error on " + toU8String(filepath));
 
 			return false;
 		}

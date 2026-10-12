@@ -33,6 +33,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "TemporaryPath.hpp"
 #include "IO/ZipReader.hpp"
 #include "IO/ZipWriter.hpp"
@@ -69,8 +70,8 @@ namespace
 
 		std::filesystem::remove_all(dir, errorCode);
 
-		EXPECT_FALSE(errorCode) << "cannot remove " << dir << ": " << errorCode.message();
-		EXPECT_FALSE(std::filesystem::exists(dir, errorCode)) << dir << " is still there";
+		EXPECT_FALSE(errorCode) << "cannot remove " << EmEn::Base::IO::toU8String(dir) << ": " << errorCode.message();
+		EXPECT_FALSE(std::filesystem::exists(dir, errorCode)) << EmEn::Base::IO::toU8String(dir) << " is still there";
 	}
 
 	void

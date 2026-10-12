@@ -32,6 +32,7 @@
 #include <string>
 
 /* Local inclusions. */
+#include "IO/IO.hpp"
 #include "PercentEncoding.hpp"
 
 namespace EmEn::Base::Network
@@ -189,7 +190,9 @@ namespace EmEn::Base::Network
 			decodedPath = removeDotSegments(decodedPath);
 		}
 
-		m_path = decodedPath;
+		/* NOTE: UTF-8 (the decoded bytes): IO::u8path(), never the narrow path conversion (the ANSI code page on Windows);
+		 * read back through IO::toGenericU8String(). */
+		m_path = IO::u8path(decodedPath);
 
 		/* Query and fragment (both percent-decoded on the way in). */
 		if ( hasQuery )
@@ -288,7 +291,7 @@ namespace EmEn::Base::Network
 			return '/' + referencePath;
 		}
 
-		const auto basePath = m_path.generic_string();
+		const auto basePath = IO::toGenericU8String(m_path);
 		const auto lastSlash = basePath.find_last_of('/');
 
 		if ( lastSlash == std::string::npos )
@@ -312,7 +315,7 @@ namespace EmEn::Base::Network
 		{
 			target.m_scheme = ref.m_scheme;
 			target.m_uriDomain = ref.m_uriDomain;
-			target.m_path = removeDotSegments(ref.m_path.generic_string());
+			target.m_path = IO::u8path(removeDotSegments(IO::toGenericU8String(ref.m_path)));
 			target.m_query = ref.m_query;
 		}
 		else
@@ -322,14 +325,14 @@ namespace EmEn::Base::Network
 			if ( !ref.m_uriDomain.empty() )
 			{
 				target.m_uriDomain = ref.m_uriDomain;
-				target.m_path = removeDotSegments(ref.m_path.generic_string());
+				target.m_path = IO::u8path(removeDotSegments(IO::toGenericU8String(ref.m_path)));
 				target.m_query = ref.m_query;
 			}
 			else
 			{
 				target.m_uriDomain = base.m_uriDomain;
 
-				const auto referencePath = ref.m_path.generic_string();
+				const auto referencePath = IO::toGenericU8String(ref.m_path);
 
 				if ( referencePath.empty() )
 				{
@@ -340,11 +343,11 @@ namespace EmEn::Base::Network
 				{
 					if ( referencePath.front() == '/' )
 					{
-						target.m_path = removeDotSegments(referencePath);
+						target.m_path = IO::u8path(removeDotSegments(referencePath));
 					}
 					else
 					{
-						target.m_path = removeDotSegments(base.mergePath(referencePath));
+						target.m_path = IO::u8path(removeDotSegments(base.mergePath(referencePath)));
 					}
 
 					target.m_query = ref.m_query;
@@ -368,7 +371,7 @@ namespace EmEn::Base::Network
 		}
 		else
 		{
-			string << PercentEncoding::encode(m_path.generic_string(), PercentEncoding::Component::Path);
+			string << PercentEncoding::encode(IO::toGenericU8String(m_path), PercentEncoding::Component::Path);
 		}
 
 		if ( !m_query.empty() )
@@ -394,7 +397,7 @@ namespace EmEn::Base::Network
 			string << "//" << m_uriDomain.host();
 		}
 
-		string << PercentEncoding::encode(m_path.generic_string(), PercentEncoding::Component::Path);
+		string << PercentEncoding::encode(IO::toGenericU8String(m_path), PercentEncoding::Component::Path);
 
 		if ( !m_query.empty() )
 		{
@@ -417,7 +420,7 @@ namespace EmEn::Base::Network
 			out << "//" << obj.m_uriDomain;
 		}
 
-		out << PercentEncoding::encode(obj.m_path.generic_string(), PercentEncoding::Component::Path);
+		out << PercentEncoding::encode(IO::toGenericU8String(obj.m_path), PercentEncoding::Component::Path);
 
 		if ( !obj.m_query.empty() )
 		{

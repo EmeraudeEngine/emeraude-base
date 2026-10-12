@@ -380,6 +380,16 @@ namespace EmEn::Base::String
 	std::string utf16ToUTF8 (std::u16string_view utf16) noexcept;
 
 	/**
+	 * @brief Checks that bytes are strict UTF-8 (RFC 3629, the rules of utf8ToUTF16()).
+	 * @note For a trust boundary that must refuse what a third-party API would THROW on (MSVC's char8_t path
+	 * conversion, an abort with exceptions off). A genuine U+FFFD in the input is valid. Cold path: it allocates.
+	 * @param utf8 The bytes to check (an embedded NUL is valid).
+	 * @return bool
+	 */
+	[[nodiscard]]
+	bool isValidUTF8 (std::string_view utf8) noexcept;
+
+	/**
 	 * @brief Encodes a byte buffer to a standard Base64 string (RFC 4648 alphabet, '=' padding).
 	 * @param data The bytes to encode (read in place: no copy).
 	 * @return std::string

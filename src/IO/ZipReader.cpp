@@ -85,7 +85,7 @@ namespace EmEn::Base::IO
 #else
 		int errorCode = 0;
 
-		auto * archive = zip_open(filepath.string().data(), ZIP_RDONLY | ZIP_CHECKCONS, &errorCode);
+		auto * archive = zip_open(toU8String(filepath).data(), ZIP_RDONLY | ZIP_CHECKCONS, &errorCode);
 
 		if ( archive == nullptr )
 		{
@@ -103,14 +103,14 @@ namespace EmEn::Base::IO
 	{
 		if ( !IO::exists(m_filepath) )
 		{
-			std::cerr << ClassId << " : The archive file " << m_filepath << " doesn't exists !" "\n";
+			std::cerr << ClassId << " : The archive file " << toU8String(m_filepath) << " doesn't exists !" "\n";
 
 			return false;
 		}
 
 		if ( !this->openArchive() )
 		{
-			std::cerr << ClassId << " : Unable to open the archive " << m_filepath << " !" "\n";
+			std::cerr << ClassId << " : Unable to open the archive " << toU8String(m_filepath) << " !" "\n";
 
 			return false;
 		}
@@ -168,11 +168,11 @@ namespace EmEn::Base::IO
 
 		/* NOTE: Complete the final destination. This can hold subdirectories. The entry name comes from the ARCHIVE:
 		 * "../" or an absolute name would write outside the destination ("Zip Slip"). */
-		const auto confined = IO::confinedPath(destinationPath, std::filesystem::path{entryName});
+		const auto confined = IO::confinedPath(destinationPath, u8path(entryName));
 
 		if ( !confined )
 		{
-			std::cerr << ClassId << " : The entry " << entryName << " would be extracted outside " << destinationPath << ", refused !" "\n";
+			std::cerr << ClassId << " : The entry " << entryName << " would be extracted outside " << toU8String(destinationPath) << ", refused !" "\n";
 
 			return false;
 		}
@@ -186,14 +186,14 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::directoryExists(finalDirectory) )
 			{
-				std::cerr << ClassId << " : Unable to use the destination directory " << finalDirectory << " !" "\n";
+				std::cerr << ClassId << " : Unable to use the destination directory " << toU8String(finalDirectory) << " !" "\n";
 
 				return false;
 			}
 
 			if ( IO::exists(filepath) && !overwrite )
 			{
-				std::cerr << ClassId << " : The destination file " << filepath << " already exists !" "\n";
+				std::cerr << ClassId << " : The destination file " << toU8String(filepath) << " already exists !" "\n";
 
 				return false;
 			}
@@ -202,7 +202,7 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::createDirectory(finalDirectory) )
 			{
-				std::cerr << ClassId << " : Unable to create the destination directory " << finalDirectory << " !" "\n";
+				std::cerr << ClassId << " : Unable to create the destination directory " << toU8String(finalDirectory) << " !" "\n";
 
 				return false;
 			}
@@ -212,7 +212,7 @@ namespace EmEn::Base::IO
 
 		if ( !file.is_open() )
 		{
-			std::cerr << ClassId << " : Unable to open the file " << filepath << " for writing !" "\n";
+			std::cerr << ClassId << " : Unable to open the file " << toU8String(filepath) << " for writing !" "\n";
 
 			return false;
 		}
@@ -241,7 +241,7 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::directoryExists(destinationPath) )
 			{
-				std::cerr << ClassId << " : Unable to use the destination directory " << destinationPath << " !" "\n";
+				std::cerr << ClassId << " : Unable to use the destination directory " << toU8String(destinationPath) << " !" "\n";
 
 				return false;
 			}
@@ -250,7 +250,7 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::createDirectory(destinationPath) )
 			{
-				std::cerr << ClassId << " : Unable to create the destination directory " << destinationPath << " !" "\n";
+				std::cerr << ClassId << " : Unable to create the destination directory " << toU8String(destinationPath) << " !" "\n";
 
 				return false;
 			}
@@ -301,7 +301,7 @@ namespace EmEn::Base::IO
 #else
 		int errorCode = 0;
 
-		m_zip.reset(zip_open(m_filepath.string().data(), 0, &errorCode));
+		m_zip.reset(zip_open(toU8String(m_filepath).data(), 0, &errorCode));
 
 		if ( !m_zip )
 		{

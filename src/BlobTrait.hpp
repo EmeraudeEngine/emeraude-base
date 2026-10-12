@@ -27,8 +27,13 @@
 #pragma once
 
 /* STL inclusions. */
+#include <filesystem>
+#include <iomanip>
 #include <sstream>
 #include <string>
+
+/* Local inclusions. */
+#include "IO/IO.hpp"
 
 namespace EmEn::Base
 {
@@ -136,6 +141,23 @@ namespace EmEn::Base
 			operator<< (const void * value)
 			{
 				m_stream << '@' << value;
+
+				return *this;
+			}
+
+			/**
+			 * @brief Adds a filesystem path to the blob content: UTF-8 (IO::toU8String()), quoted as std's operator<<
+			 * quotes it.
+			 * @note Never std's operator<<, which writes path::string(): on Windows the ANSI code page, which THROWS on a
+			 * character outside it (an abort with exceptions off) and writes invalid UTF-8 for the others (rule C,
+			 * 2026-10-12). A std::string argument still takes the template above: only a path is quoted.
+			 * @param value A reference to a path.
+			 * @return BlobTrait &
+			 */
+			BlobTrait &
+			operator<< (const std::filesystem::path & value)
+			{
+				m_stream << std::quoted(IO::toU8String(value));
 
 				return *this;
 			}
