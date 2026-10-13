@@ -18,8 +18,11 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
 ## Done (2026-10-08)
 - `TaskHandle` + `ThreadPool::submit()` (`src/ThreadPool.hpp`): the task receives a `std::stop_token`; the handle's
   destructor / move-assignment requests the stop and waits for that task only; when `wait()` returns, the callable and
-  its captures are destroyed; a task waiting for its own handle is refused and traced (D2 open: abort?). 8 tests
-  (`ThreadPoolTaskHandle.*`), 20 rounds under TSan, 0 report.
+  its captures are destroyed. 8 tests (`ThreadPoolTaskHandle.*`), 20 rounds under TSan, 0 report.
+- **D2 decided and done** (`26128bc`): a task waiting for (or destroying) its own handle is a contract fault —
+  `Logging::fatal()` then `std::abort()` in every build (`src/ThreadPool.cpp:74-81`, `ThreadPool.hpp:63-65`, `:155`);
+  a `Base::Thread` joining itself aborts too. Death tests `ThreadPoolTaskHandleDeathTest.TaskWaitingForItsOwnHandleAborts`,
+  `BaseThreadDeathTest.aThreadJoiningItselfAborts`; `docs/caution-points.md` § A self-join ABORTS.
 - `ShapeDecimator::setStopToken()`: every stage loop checks the stop every 4096 iterations (initialisation, corner UV
   table, quadrics, penalties, collapse queue, collapses, output, orientation check, normal-map bake);
   `ShapeProcessor::deduplicateVertices()` takes an optional `std::stop_token` for its read phase (the shape stays
@@ -71,9 +74,10 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
 - **`Base::Thread` on the `std::jthread` model**: a stop token to the body, then request_stop + join in the
   destructor. Today it still has `detach()` (`Thread.hpp:134`, `Thread.cpp:269`) and no stop token.
 - **`setCancellationFlag()` goes away** with the engine migration (`ShapeDecimator.hpp:122`; still called by engine
-  `MeshResource.cpp:483` and `MultiLayerMeshResource.cpp:769`). Engine item `jobs-owned-by-their-starter`, which is
-  blocked on this item.
-- **D2 is open**: a task that waits for its own handle is refused and traced today. Should it abort instead?
+  `MeshResource.cpp:484` and `MultiLayerMeshResource.cpp:770`): engine item `thread-pool-jobs-owned-through-a-task-handle`, which
+  needs nothing more from this item (`TaskHandle`, `submit()` and `setStopToken()` are done) and is open now (owner,
+  2026-10-13). Only the engine's `Base::Thread` owners (engine item `jobs-owned-by-their-starter`) wait for the
+  `Base::Thread` bullet above.
 - **Re-measure the stop latency on the NEW Windows machine** (`DISABLED_StopLatencyOnALargeMesh`). The last Windows
   figure, 57-71 ms at fb5a162, came from the dead laptop.
 - **Cross-OS bit identity**: owner decision on `-ffp-contract=off` cascade-wide. With it, macOS matches Linux on

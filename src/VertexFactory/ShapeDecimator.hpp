@@ -114,7 +114,7 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief TRANSITIONAL: the engine's former global shutdown flag, still read until its LOD jobs own a TaskHandle
-			 * (Ave Robustus II, phase P2, engine item jobs-owned-by-their-starter) — then this setter goes.
+			 * (Ave Robustus II, phase P2, engine item thread-pool-jobs-owned-through-a-task-handle) — then this setter goes.
 			 * @note Non-owning: the flag must outlive decimate().
 			 * @param flag A pointer to the flag, nullptr for none (the default).
 			 */

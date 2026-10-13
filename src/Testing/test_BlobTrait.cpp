@@ -36,10 +36,10 @@
 #include "BlobTrait.hpp"
 #include "IO/IO.hpp"
 
-/* 2026-10-12 (rule C, engine todo windows-path-string-ansi-pass): a std::filesystem::path streamed into a blob (every
- * Trace* line of the engine) is written as UTF-8, quoted as std's operator<< quotes it. std's operator<< writes
- * path::string(): on Windows the ANSI code page, which THROWS (an abort with exceptions off) on a character outside it
- * and writes invalid UTF-8 for the others. */
+/* 2026-10-12 (rule C, engine docs/cpp-conventions.md § Paths and Text Encoding): a std::filesystem::path streamed
+ * into a blob (every Trace* line of the engine) is written as UTF-8, quoted as std's operator<< quotes it. std's
+ * operator<< writes path::string(): on Windows the ANSI code page, which THROWS (an abort with exceptions off) on a
+ * character outside it and writes invalid UTF-8 for the others. */
 namespace EmEn::Base
 {
 	TEST(BlobTrait, pathKeepsTheQuotedFormat)

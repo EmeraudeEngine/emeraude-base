@@ -400,8 +400,10 @@ uses; `enqueue()` stays for fire-and-forget work capturing values only. A long t
 interval in every stage (`ShapeDecimator::setStopToken()`: every 4096 iterations of every stage loop).
 ⚠️ A task waiting for (or destroying) its OWN handle would never return: a contract fault, aborted (decision D2, below).
 ⚠️ A pool worker waiting for a task still QUEUED behind it can deadlock a small pool, as with any pool wait.
-⚠️ The measured stop latency of a 2.24 M-triangle decimation is 0.74 s worst (was 1.52 s): the work stops within
-milliseconds, the rest is the DEALLOCATION of its node-based containers (item `task-handle-and-stop-token`).
+⚠️ The measured stop latency of a 2.24 M-triangle decimation is 16 ms worst on Linux (2.5 ms on the M2): 1.52 s, then
+0.74 s before the D7 rewrite, where the rest was the DEALLOCATION of its node-based containers; 25 ms after D7 step 4
+(`9fb8f86`), then 16 ms once the per-vertex lists became trivially destructible (`fd9dc5c`) — the worst row is now the
+start (allocating the work mesh). Detail below in § VertexFactory and item `task-handle-and-stop-token`.
 Proof: 8 `ThreadPoolTaskHandle.*` tests, 20 rounds under TSan with 0 report; Release and ASan/UBSan green.
 
 ### ⚠️⚠️ A self-join ABORTS, in every build — never destroy or stop an owner from its own thread (D2, 2026-10-08)
@@ -711,11 +713,14 @@ makes `decimate()` return an EMPTY shape (`isCancelled()` tells it from a failur
 `aRequestedStopTokenStopsTheDecimation`). A lowered flag changes nothing (same triangles, same vertices — test
 `VertexFactoryShapeDecimator.aLoweredCancellationFlagChangesNothing`).
 `setCancellationFlag(const std::atomic_bool *)` is TRANSITIONAL (read too) until the engine's LOD jobs own a
-`TaskHandle` (engine item `jobs-owned-by-their-starter`). ⚠️ The stop latency is bounded by the DEALLOCATION of the
-stages' node-based containers, 0.74 s on 2.24 M triangles — **25 ms since the D7 rewrite** (2026-10-09: a lean work
-mesh, the adjacency in one arena, every hash table a `FlatHashMap`, a total collapse order; item
-`task-handle-and-stop-token`; the per-vertex lists are `ArenaList`s, trivially destructible: a stop no longer pays a
-million destructors — ~20 ms on Linux, ~65 ms on a Windows laptop before). ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
+`TaskHandle` (engine item `thread-pool-jobs-owned-through-a-task-handle`). ⚠️ The stop latency on 2.24 M triangles is **16 ms worst
+on Linux, 2.5 ms on the M2, since `fd9dc5c`** (2026-10-09; Windows to re-measure), and its worst row is now the START
+(allocating and zeroing the work mesh's flat table). History: 0.74 s before D7, bounded by the DEALLOCATION of the
+stages' node-based containers; 25 ms after D7 step 4 (`9fb8f86`: a lean work mesh, the adjacency in one arena, every
+hash table a `FlatHashMap`, a total collapse order); then the per-vertex lists became `ArenaList`s, trivially
+destructible, so a stop no longer pays a million destructors (~20 ms on Linux, ~65 ms on a Windows laptop before
+`fd9dc5c`). Same figures as § *A job that touches an object is `submit()`ted* above; item
+`task-handle-and-stop-token`. ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
 item `vector-normalized-absolute-epsilon`).
 ⚠️⚠️ **The decimation is the same on the three OS only since 2026-10-09 (D7 step 3):** it iterated per-vertex
 `std::unordered_set`s, whose order differs per standard library — the same mesh gave three different decimations on
