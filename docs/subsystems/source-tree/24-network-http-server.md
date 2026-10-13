@@ -79,5 +79,5 @@ private peer (refused without the opt-in, 401 without the token, byte-exact with
 
 ⚠️ The two cap tests (`BoundsConnections`, `RefusalAtTheCapEndsWithAFin`) hold the only slot with an IDLE client: the
 server closes it after `idleTimeoutSeconds`, which frees the slot. They set 30 s, not the 2 s of `testOptions()`: on a
-slow runner (GitHub macOS under the app_kernel ctest, 2026-10-13) 20 refusals took 2.9 s, the holder was closed at
+slow runner (a downstream consumer's GitHub macOS CI ctest, 2026-10-13) 20 refusals took 2.9 s, the holder was closed at
 2 s and the last 6 attempts answered 200. A test that holds a slot outlives every step that needs it.
