@@ -566,6 +566,8 @@ TEST(NetworkHTTPServer, BoundsConnections)
 {
 	auto options = testOptions();
 	options.maxConnections = 1;
+	/* The idle holder must outlive the refused attempt (see RefusalAtTheCapEndsWithAFin). */
+	options.idleTimeoutSeconds = 30;
 
 	HTTPServer server{options};
 
@@ -592,6 +594,10 @@ TEST(NetworkHTTPServer, RefusalAtTheCapEndsWithAFin)
 {
 	auto options = testOptions();
 	options.maxConnections = 1;
+	/* The idle holder must outlive every refused attempt: with the 2 s of testOptions(), the server closed it while a
+	 * slow runner was still refusing (GitHub macOS, 14 of 20 attempts in 2 s, 2026-10-13), and the slot it freed
+	 * answered 200. */
+	options.idleTimeoutSeconds = 30;
 
 	HTTPServer server{options};
 

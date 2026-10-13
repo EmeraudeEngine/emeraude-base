@@ -76,3 +76,8 @@ FAILED before the GracefulCloser, 2026-10-06), the closer itself (`NetworkGracef
 one handler after the client's close, the count is 0 — it was 1, deterministically; `BeyondTheCapClosesAtOnce`),
 the private-address classifier (every range edge), a cleartext download from a
 private peer (refused without the opt-in, 401 without the token, byte-exact with it, a public address refused).
+
+⚠️ The two cap tests (`BoundsConnections`, `RefusalAtTheCapEndsWithAFin`) hold the only slot with an IDLE client: the
+server closes it after `idleTimeoutSeconds`, which frees the slot. They set 30 s, not the 2 s of `testOptions()`: on a
+slow runner (GitHub macOS under the app_kernel ctest, 2026-10-13) 20 refusals took 2.9 s, the holder was closed at
+2 s and the last 6 attempts answered 200. A test that holds a slot outlives every step that needs it.
