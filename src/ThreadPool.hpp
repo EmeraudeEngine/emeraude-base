@@ -53,6 +53,8 @@
 
 namespace EmEn::Base
 {
+	class ThreadPool;
+
 	/**
 	 * @class TaskHandle
 	 * @brief Owns one task submitted with ThreadPool::submit(): the std::jthread model applied to a pool task
@@ -63,11 +65,11 @@ namespace EmEn::Base
 	 * it captured are destroyed. The object that starts a job keeps its handle as a member: its own destruction then
 	 * stops and waits for the job, so nothing else (a global flag, another class's drain) has to.
 	 *
-	 * A task stopped BEFORE it starts never runs (owner decision 2026-10-15, the std::execution semantics: a stop before
-	 * the start completes as "stopped"), and wait() does not wait for it: a wait depends on a RUNNING task only, never on
-	 * the queue, so an owner destroyed on a pool worker cannot deadlock a saturated pool. Such a task's callable is
-	 * destroyed later, on the worker that dequeues it, without being invoked — it must not capture anything whose
-	 * destruction touches its owner.
+	 * A task stopped BEFORE it starts never runs (owner decisions 2026-10-15, the std::execution semantics: a stop before
+	 * the start completes as "stopped"): the stop request REMOVES it from the pool's queue and destroys its callable on
+	 * the stopping thread, without invoking it. So a wait after a stop depends on a RUNNING task only, never on the queue
+	 * (nor on other owners' work queued before it): an owner destroyed on a pool worker cannot deadlock a saturated pool,
+	 * and a shutdown never waits for unrelated queued work.
 	 *
 	 * @note Thread-safe: requestStop(), finished() and wait() may be called from any thread. A task waiting for (or
 	 * destroying) its OWN handle would never return: a contract fault, traced and aborted in every build (owner decision
@@ -84,6 +86,8 @@ namespace EmEn::Base
 				std::mutex mutex;
 				std::condition_variable finishedSignal;
 				std::thread::id runningThread;
+				/** @brief The pool the task was submitted to (set before the task is queued, never changed). */
+				ThreadPool * pool{nullptr};
 				bool started{false};
 				bool finished{false};
 			};
@@ -149,7 +153,12 @@ namespace EmEn::Base
 				return m_state != nullptr;
 			}
 
-			/** @brief Asks the task to stop (its std::stop_token reports it). No effect on an empty handle. */
+			/**
+			 * @brief Asks the task to stop (its std::stop_token reports it); a task still queued is removed from the pool's
+			 * queue and destroyed here, never run. No effect on an empty handle.
+			 * @pre The pool outlives the handle while its task may still be queued (a pool runs its whole queue before it
+			 * is destroyed).
+			 */
 			void requestStop () noexcept;
 
 			/**
@@ -161,8 +170,8 @@ namespace EmEn::Base
 			bool finished () const noexcept;
 
 			/**
-			 * @brief Blocks until the task has finished and its callable is destroyed, or returns at once when the task was
-			 * stopped before it started (it will never run). Returns at once on an empty handle.
+			 * @brief Blocks until the task has finished (or was removed from the queue by a stop) and its callable is
+			 * destroyed. Returns at once on an empty handle.
 			 * @note Without a stop, a task still queued is waited for: from a pool worker, on a saturated pool, that can
 			 * deadlock — an owner STOPS first (reset(), the destructor).
 			 * @pre Not called from the task's own thread (it would never return): a contract fault, aborted (decision D2).
@@ -180,8 +189,8 @@ namespace EmEn::Base
 	/**
 	 * @class TaskRunner
 	 * @brief The callable a ThreadPool runs for ThreadPool::submit(): runs the task with its stop token, destroys it, then
-	 * marks the handle finished. A runner destroyed without running (never the case today: the pool runs every queued
-	 * task before it stops) still marks the handle finished, so no wait() can hang on it.
+	 * marks the handle finished — unless the stop came before the start. A runner destroyed without running (refused by
+	 * the pool, or removed from the queue by a stop) still marks the handle finished, so no wait() can hang on it.
 	 * @tparam function_t The task's callable type, invocable with a std::stop_token.
 	 */
 	template< typename function_t >
@@ -284,10 +293,10 @@ namespace EmEn::Base
 	 * group — never for the rest of the pool; when wait() returns, the callable and the captures of every task that RAN
 	 * are destroyed. Once a stop is requested the group admits no new task (submit() refuses it): the stop is final.
 	 *
-	 * A task stopped BEFORE it starts never runs (owner decision 2026-10-15, as TaskHandle): after a stop, wait() waits
-	 * for the RUNNING tasks only, never for the queue, so an owner destroyed on a pool worker cannot deadlock a saturated
-	 * pool. The callable of a task that never ran is destroyed later, on the worker that dequeues it, without being
-	 * invoked.
+	 * A task stopped BEFORE it starts never runs (owner decisions 2026-10-15, as TaskHandle): the stop request removes the
+	 * group's queued tasks from the pool's queue and destroys their callables on the stopping thread, without invoking
+	 * them. After a stop, wait() waits for the RUNNING tasks only — never for the queue, nor for other owners' work queued
+	 * before the group's.
 	 *
 	 * State of the art: the async scope of C++26 std::execution (P3149, `counting_scope`: a join that waits for the work
 	 * spawned into the scope, a stop request forwarded to it) and the nurseries of N. J. Smith's Trio ("Notes on
@@ -309,39 +318,27 @@ namespace EmEn::Base
 			{
 				/**
 				 * @brief Counts one more task, unless a stop was requested.
-				 * @return bool False when the group is stopping (the task must not run).
+				 * @param threadPool The pool the task goes to: a group serves ONE pool (the first submit sets it).
+				 * @return bool False when the group is stopping or the pool is not the group's (the task must not run).
 				 */
 				[[nodiscard]]
-				bool admit () noexcept;
+				bool admit (ThreadPool & threadPool) noexcept;
 
 				/**
 				 * @brief Lets a dequeued task start, unless a stop was requested (it then never runs).
-				 * @return bool True when the task may run (it counts as running until release()).
+				 * @return bool True when the task may run.
 				 */
 				[[nodiscard]]
 				bool begin () noexcept;
 
-				/**
-				 * @brief Counts one task less (a task that ran, or one that never will); wakes the waiters.
-				 * @param ran Whether begin() let this task run.
-				 */
-				void release (bool ran) noexcept;
-
-				/**
-				 * @brief The waiters' condition: every task finished, or, after a stop, no task running any more.
-				 * @return bool
-				 */
-				[[nodiscard]]
-				bool idle () const noexcept EMEN_REQUIRES(mutex)
-				{
-					return pending == 0 || ( stopping && running == 0 );
-				}
+				/** @brief Counts one task less (a task that ran, or one that never will); the last one wakes the waiters. */
+				void release () noexcept;
 
 				std::stop_source stopSource;
 				mutable Mutex mutex;
 				std::condition_variable_any idleSignal;
+				ThreadPool * pool EMEN_GUARDED_BY(mutex){nullptr};
 				size_t pending EMEN_GUARDED_BY(mutex){0};
-				size_t running EMEN_GUARDED_BY(mutex){0};
 				bool stopping EMEN_GUARDED_BY(mutex){false};
 			};
 
@@ -364,8 +361,10 @@ namespace EmEn::Base
 			TaskGroup & operator= (TaskGroup && other) = delete;
 
 			/**
-			 * @brief Asks every task of the group to stop (their std::stop_token reports it) and refuses any new task.
+			 * @brief Asks every task of the group to stop (their std::stop_token reports it), removes the queued ones from
+			 * the pool's queue (destroyed here, never run) and refuses any new task.
 			 * @note Final: a stopped group never admits a task again.
+			 * @pre The pool outlives the group while one of its tasks may still be queued.
 			 */
 			void requestStop () noexcept;
 
@@ -377,8 +376,7 @@ namespace EmEn::Base
 			bool stopRequested () const noexcept;
 
 			/**
-			 * @brief Returns the number of tasks submitted and not finished yet (queued or running). After a stop, a queued
-			 * task that will never run counts until a worker dequeues and discards it.
+			 * @brief Returns the number of tasks submitted and not finished yet (queued or running).
 			 * @note Stale as soon as it returns when tasks are submitted concurrently.
 			 * @return size_t
 			 */
@@ -386,8 +384,8 @@ namespace EmEn::Base
 			size_t pendingCount () const noexcept;
 
 			/**
-			 * @brief Blocks until every task of the group has finished and its callable is destroyed — after a stop, until
-			 * every RUNNING task has (the queued ones never run). Does not stop them.
+			 * @brief Blocks until every task of the group has finished and its callable is destroyed. Does not stop them;
+			 * after a stop, only the RUNNING tasks are left to wait for (the queued ones were removed).
 			 * @note Without a stop, queued tasks are waited for: from a pool worker, on a saturated pool, that can deadlock
 			 * — an owner STOPS first (the destructor does).
 			 * @pre Not called from one of the group's own tasks (it would never return): a contract fault, aborted
@@ -396,11 +394,8 @@ namespace EmEn::Base
 			void wait () noexcept;
 
 			/**
-			 * @brief Blocks until EVERY task of the group is gone — the queued ones a stop discards included (destroyed by
-			 * the worker that dequeues them, without being invoked). After it returns, no callable of the group exists any
-			 * more: a discarded task's destructor (a "never ran" guard) has run.
-			 * @note For an owner that must know its discarded tasks are gone before it goes on (a service shutting down,
-			 * on the main thread).
+			 * @brief wait(), refused from a pool worker: the strict form for an owner shutting down on the main thread.
+			 * After it returns, no callable of the group exists any more (a discarded task's "never ran" guard has run).
 			 * @pre Not called from a thread-pool worker: it would wait for the queue its own worker serves (a deadlock on
 			 * a saturated pool). A contract fault, traced and aborted in every build.
 			 */
@@ -412,10 +407,12 @@ namespace EmEn::Base
 
 			/**
 			 * @brief Counts a new task for ThreadPool::submit().
-			 * @return std::shared_ptr< State > The state the task holds, or nullptr when the group is stopping.
+			 * @param threadPool The pool the task goes to.
+			 * @return std::shared_ptr< State > The state the task holds, or nullptr when the group is stopping (or serves
+			 * another pool).
 			 */
 			[[nodiscard]]
-			std::shared_ptr< State > admit () noexcept;
+			std::shared_ptr< State > admit (ThreadPool & threadPool) noexcept;
 
 			std::shared_ptr< State > m_state;
 	};
@@ -462,7 +459,8 @@ namespace EmEn::Base
 	 * @class TaskGroupRunner
 	 * @brief The callable a ThreadPool runs for ThreadPool::submit(TaskGroup &, …): runs the task with the group's stop
 	 * token — unless the group stopped before the task started — destroys it, then releases its count. A runner destroyed
-	 * without running (the pool refused it) still releases its count, so no wait() can hang on it.
+	 * without running (refused by the pool, or removed from the queue by a stop) still releases its count, so no wait()
+	 * can hang on it.
 	 * @tparam function_t The task's callable type, invocable with a std::stop_token.
 	 */
 	template< typename function_t >
@@ -511,8 +509,6 @@ namespace EmEn::Base
 					return;
 				}
 
-				m_ran = true;
-
 				/* NOTE: Open while the callable runs AND while its captures are destroyed: a capture whose release destroys
 				 * the group's owner is a task waiting for its own group (D2). */
 				const TaskGroupRunScope scope{m_state.get()};
@@ -535,13 +531,12 @@ namespace EmEn::Base
 					return;
 				}
 
-				m_state->release(m_ran);
+				m_state->release();
 				m_state.reset();
 			}
 
 			std::shared_ptr< TaskGroup::State > m_state;
 			std::optional< function_t > m_function;
-			bool m_ran{false};
 	};
 
 	/**
@@ -771,6 +766,8 @@ namespace EmEn::Base
 							other.m_move = nullptr;
 							other.m_isSmall = false;
 						}
+
+						m_owner = std::exchange(other.m_owner, nullptr);
 					}
 
 					/**
@@ -799,6 +796,8 @@ namespace EmEn::Base
 								other.m_move = nullptr;
 								other.m_isSmall = false;
 							}
+
+							m_owner = std::exchange(other.m_owner, nullptr);
 						}
 
 						return *this;
@@ -873,6 +872,28 @@ namespace EmEn::Base
 					isSmall () const noexcept
 					{
 						return m_isSmall;
+					}
+
+					/**
+					 * @brief Tags the task with the state of the TaskHandle / TaskGroup that owns it: their stop request
+					 * removes it from the queue (ThreadPool::purgeQueued()). nullptr (the default) for an unowned task.
+					 * @param owner The owner's state address, used as an identity only.
+					 */
+					void
+					setOwner (const void * owner) noexcept
+					{
+						m_owner = owner;
+					}
+
+					/**
+					 * @brief Returns the owner tag (setOwner()).
+					 * @return const void *
+					 */
+					[[nodiscard]]
+					const void *
+					owner () const noexcept
+					{
+						return m_owner;
 					}
 
 				private:
@@ -957,6 +978,7 @@ namespace EmEn::Base
 					void (*m_invoke)(Task *){nullptr};
 					void (*m_destroy)(Task *) noexcept {nullptr};
 					void (*m_move)(Task *, Task *) noexcept {nullptr};
+					const void * m_owner{nullptr};
 					bool m_isSmall{false};
 			};
 
@@ -1138,8 +1160,12 @@ namespace EmEn::Base
 			submit (function_t && callable)
 			{
 				auto state = std::make_shared< TaskHandle::State >();
+				state->pool = this;
 
-				if ( !this->enqueueTask(Task{TaskRunner< std::decay_t< function_t > >{state, std::forward< function_t >(callable)}}) )
+				Task task{TaskRunner< std::decay_t< function_t > >{state, std::forward< function_t >(callable)}};
+				task.setOwner(state.get());
+
+				if ( !this->enqueueTask(std::move(task)) )
 				{
 					/* NOTE: The refused runner was destroyed and marked the state finished: nothing to wait for. */
 					return {};
@@ -1165,15 +1191,19 @@ namespace EmEn::Base
 			bool
 			submit (TaskGroup & group, function_t && callable)
 			{
-				auto state = group.admit();
+				auto state = group.admit(*this);
 
 				if ( state == nullptr )
 				{
 					return false;
 				}
 
+				const auto * owner = state.get();
+				Task task{TaskGroupRunner< std::decay_t< function_t > >{std::move(state), std::forward< function_t >(callable)}};
+				task.setOwner(owner);
+
 				/* NOTE: A refused runner is destroyed unrun and releases its count: nothing to wait for. */
-				return this->enqueueTask(Task{TaskGroupRunner< std::decay_t< function_t > >{std::move(state), std::forward< function_t >(callable)}});
+				return this->enqueueTask(std::move(task));
 			}
 
 			/**
@@ -1697,6 +1727,17 @@ namespace EmEn::Base
 					completed = state->completedChunks.load(std::memory_order_acquire);
 				}
 			}
+
+			friend class TaskHandle;
+			friend class TaskGroup;
+
+			/**
+			 * @brief Removes every queued task tagged with this owner (Task::setOwner()) and destroys them on the calling
+			 * thread, outside the pool's lock (their "never ran" guards run here). A task already dequeued is left to its
+			 * worker. Called by TaskHandle / TaskGroup when a stop is requested.
+			 * @param owner The owner's state address.
+			 */
+			void purgeQueued (const void * owner) noexcept;
 
 			/**
 			 * @brief Internal: Enqueues a Task object.

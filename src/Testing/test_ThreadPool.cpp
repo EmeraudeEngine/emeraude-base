@@ -2263,8 +2263,9 @@ TEST(ThreadPoolTaskGroup, WaitForAllReturnsOnceTheDiscardedTasksAreDestroyed)
 
 	group.requestStop();
 
-	/* The worker is still busy: the discarded tasks are queued, their callables alive. */
-	EXPECT_EQ(destroyed.load(), 0);
+	/* The stop removed the queued tasks from the queue and destroyed them HERE, the worker still busy (2026-10-15). */
+	EXPECT_EQ(destroyed.load(), 4);
+	EXPECT_EQ(group.pendingCount(), 0U);
 
 	Thread releaser;
 
@@ -2296,4 +2297,143 @@ TEST(ThreadPoolTaskGroupDeathTest, WaitForAllFromAPoolWorkerAborts)
 		/* The task aborts the process; this sleep is never reached to its end. */
 		std::this_thread::sleep_for(std::chrono::seconds{10});
 	}, "thread-pool worker");
+}
+
+/* The defect found on the macOS M6 (2026-10-15): a group's stop waited for the queued tasks it discarded to be DEQUEUED,
+ * behind other owners' long work (the shutdown waited for the whole automatic-LOD generation). The stop now removes
+ * them from the queue: the wait depends on nothing queued. */
+TEST(ThreadPoolTaskGroup, AStopNeverWaitsForOtherOwnersQueuedWork)
+{
+	ThreadPool pool{1};
+	std::atomic_bool releaseBlocker{false};
+	std::atomic_bool blockerStarted{false};
+
+	auto blocker = pool.submit([&] (const std::stop_token &) {
+		blockerStarted = true;
+
+		for ( int step = 0; step < 10000 && !releaseBlocker.load(); ++step )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+	});
+
+	ASSERT_TRUE(waitForFlag(blockerStarted));
+
+	/* Another owner's long work, queued FIRST and never stopped. */
+	TaskGroup other;
+	std::atomic_int otherRan{0};
+
+	for ( int index = 0; index < 4; ++index )
+	{
+		ASSERT_TRUE(pool.submit(other, [&otherRan] (const std::stop_token &) {
+			std::this_thread::sleep_for(std::chrono::milliseconds{200});
+			++otherRan;
+		}));
+	}
+
+	std::atomic_int mineRan{0};
+	std::chrono::steady_clock::duration stopTime{};
+
+	{
+		TaskGroup mine;
+
+		for ( int index = 0; index < 4; ++index )
+		{
+			ASSERT_TRUE(pool.submit(mine, [&mineRan] (const std::stop_token &) {
+				++mineRan;
+			}));
+		}
+
+		const auto start = std::chrono::steady_clock::now();
+
+		/* Destroyed here: stop + wait, behind 800 ms of the other owner's queued work and the busy blocker. */
+		mine.requestStop();
+		mine.waitForAll();
+
+		stopTime = std::chrono::steady_clock::now() - start;
+	}
+
+	EXPECT_LT(stopTime, std::chrono::milliseconds{100});
+	EXPECT_EQ(mineRan.load(), 0);
+	EXPECT_EQ(otherRan.load(), 0);
+
+	releaseBlocker = true;
+	other.wait();
+	pool.wait();
+
+	/* The other owner's work was neither removed nor reordered. */
+	EXPECT_EQ(otherRan.load(), 4);
+}
+
+TEST(ThreadPoolTaskHandle, DestroyingAQueuedHandleDestroysItsCallableAtOnce)
+{
+	ThreadPool pool{1};
+	std::atomic_bool releaseBlocker{false};
+	std::atomic_bool blockerStarted{false};
+
+	auto blocker = pool.submit([&] (const std::stop_token &) {
+		blockerStarted = true;
+
+		for ( int step = 0; step < 10000 && !releaseBlocker.load(); ++step )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+	});
+
+	ASSERT_TRUE(waitForFlag(blockerStarted));
+
+	auto capture = std::make_shared< int >(3);
+	const std::weak_ptr< int > observer = capture;
+
+	{
+		auto queued = pool.submit([owned = std::move(capture)] (const std::stop_token &) {
+			static_cast< void >(owned);
+		});
+
+		/* Destroyed here, its task queued behind the busy blocker. */
+	}
+
+	/* The stop removed it from the queue: its captures are already gone, the worker still busy. */
+	EXPECT_TRUE(observer.expired());
+	EXPECT_FALSE(blocker.finished());
+
+	releaseBlocker = true;
+	blocker.wait();
+}
+
+/* Regression (ASan, 2026-10-15): stopping a handle whose task RUNS finds nothing of its own in the queue; the first
+ * purge moved every queued task out anyway and returned without putting them back — the queue held empty tasks and the
+ * other owners' work was destroyed unrun. */
+TEST(ThreadPoolTaskHandle, StoppingARunningTaskLeavesTheOthersQueuedWorkAlone)
+{
+	ThreadPool pool{1};
+	std::atomic_bool runningStarted{false};
+
+	auto running = pool.submit([&runningStarted] (const std::stop_token & stopToken) {
+		runningStarted = true;
+
+		for ( int step = 0; step < 10000 && !stopToken.stop_requested(); ++step )
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds{1});
+		}
+	});
+
+	ASSERT_TRUE(waitForFlag(runningStarted));
+
+	std::atomic_int othersRan{0};
+	TaskGroup group;
+
+	for ( int index = 0; index < 3; ++index )
+	{
+		ASSERT_TRUE(pool.enqueue([&othersRan] { ++othersRan; }));
+		ASSERT_TRUE(pool.submit(group, [&othersRan] (const std::stop_token &) { ++othersRan; }));
+	}
+
+	/* Stop + wait: the task runs, nothing of its own is queued. */
+	running.reset();
+
+	group.wait();
+	pool.wait();
+
+	EXPECT_EQ(othersRan.load(), 6);
 }

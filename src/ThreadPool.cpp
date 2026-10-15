@@ -30,6 +30,7 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -42,9 +43,18 @@ namespace EmEn::Base
 	void
 	TaskHandle::requestStop () noexcept
 	{
-		if ( m_state != nullptr )
+		if ( m_state == nullptr )
 		{
-			m_state->stopSource.request_stop();
+			return;
+		}
+
+		m_state->stopSource.request_stop();
+
+		/* NOTE: A task still queued is removed and destroyed here, never run: a wait never depends on the queue (owner
+		 * decision 2026-10-15). A finished task is in no queue (and its pool may be gone). */
+		if ( m_state->pool != nullptr && !this->finished() )
+		{
+			m_state->pool->purgeQueued(m_state.get());
 		}
 	}
 
@@ -58,7 +68,7 @@ namespace EmEn::Base
 
 		const std::scoped_lock lock{m_state->mutex};
 
-		return m_state->finished || ( !m_state->started && m_state->stopSource.stop_requested() );
+		return m_state->finished;
 	}
 
 	void
@@ -80,10 +90,10 @@ namespace EmEn::Base
 			std::abort();
 		}
 
-		/* NOTE: A task stopped before it started will never run: no wait for the queue (owner decision 2026-10-15). The
-		 * runner decides under this lock, after the stop request: it sees the stop too. */
+		/* NOTE: After a stop, the task is either running (it ends), dequeued but not started (its worker discards it), or
+		 * was removed from the queue by requestStop() (finished already): no wait depends on the queue. */
 		m_state->finishedSignal.wait(lock, [this] () {
-			return m_state->finished || ( !m_state->started && m_state->stopSource.stop_requested() );
+			return m_state->finished;
 		});
 	}
 
@@ -157,7 +167,7 @@ namespace EmEn::Base
 	}
 
 	bool
-	TaskGroup::State::admit () noexcept
+	TaskGroup::State::admit (ThreadPool & threadPool) noexcept
 	{
 		const MutexLock lock{mutex};
 
@@ -165,6 +175,15 @@ namespace EmEn::Base
 		{
 			return false;
 		}
+
+		if ( pool != nullptr && pool != &threadPool )
+		{
+			Logging::error("TaskGroup", "submit(), a task group serves one thread pool only: the task is refused !");
+
+			return false;
+		}
+
+		pool = &threadPool;
 
 		++pending;
 
@@ -176,18 +195,11 @@ namespace EmEn::Base
 	{
 		const MutexLock lock{mutex};
 
-		if ( stopping )
-		{
-			return false;
-		}
-
-		++running;
-
-		return true;
+		return !stopping;
 	}
 
 	void
-	TaskGroup::State::release (bool ran) noexcept
+	TaskGroup::State::release () noexcept
 	{
 		bool wake = false;
 
@@ -195,16 +207,10 @@ namespace EmEn::Base
 			const MutexLock lock{mutex};
 
 			assert(pending > 0);
-			assert(!ran || running > 0);
 
 			--pending;
 
-			if ( ran )
-			{
-				--running;
-			}
-
-			wake = this->idle();
+			wake = pending == 0;
 		}
 
 		/* NOTE: After the guard (CP.31): the runner still holds the state, so the waiter cannot destroy it under us. */
@@ -229,19 +235,29 @@ namespace EmEn::Base
 	void
 	TaskGroup::requestStop () noexcept
 	{
+		ThreadPool * pool = nullptr;
+		bool queued = false;
+
 		{
 			const MutexLock lock{m_state->mutex};
 
 			m_state->stopping = true;
-		}
 
-		/* NOTE: A plain wait() in progress re-evaluates: after a stop it waits for the running tasks only. */
-		m_state->idleSignal.notify_all();
+			pool = m_state->pool;
+			queued = m_state->pending > 0;
+		}
 
 		/* NOTE: Outside the guard: request_stop() runs the tasks' std::stop_callback synchronously (a
 		 * condition_variable_any wait registers one), and calling out under a lock is forbidden. A task admitted before
 		 * the flag sees the stop through its token; none is admitted after it. */
 		m_state->stopSource.request_stop();
+
+		/* NOTE: The queued tasks are removed and destroyed here, never run (their guards run on this thread): a wait after
+		 * the stop depends on the running tasks only, never on the queue (owner decision 2026-10-15). */
+		if ( pool != nullptr && queued )
+		{
+			pool->purgeQueued(m_state.get());
+		}
 	}
 
 	bool
@@ -274,7 +290,7 @@ namespace EmEn::Base
 		MutexLock lock{state.mutex};
 
 		state.idleSignal.wait(lock, [&state] () EMEN_REQUIRES(state.mutex) {
-			return state.idle();
+			return state.pending == 0;
 		});
 	}
 
@@ -283,8 +299,8 @@ namespace EmEn::Base
 	{
 		if ( isPoolWorker() || TaskGroupRunScope::runsOnThisThread(m_state.get()) )
 		{
-			/* NOTE: A worker waiting for the queue it serves can deadlock a saturated pool; a task of the group waits for
-			 * itself. Both are CONTRACT FAULTS, aborted in every build (D2, owner decision 2026-10-15). */
+			/* NOTE: A worker waiting (without a stop) for the queue it serves can deadlock a saturated pool; a task of the
+			 * group waits for itself. Both are CONTRACT FAULTS, aborted in every build (D2, owner decision 2026-10-15). */
 			Logging::fatal("TaskGroup", "waitForAll(), contract violation: called from a thread-pool worker (or a task of its own group) ! Aborting.");
 
 			std::abort();
@@ -299,9 +315,9 @@ namespace EmEn::Base
 	}
 
 	std::shared_ptr< TaskGroup::State >
-	TaskGroup::admit () noexcept
+	TaskGroup::admit (ThreadPool & threadPool) noexcept
 	{
-		if ( !m_state->admit() )
+		if ( !m_state->admit(threadPool) )
 		{
 			return nullptr;
 		}
@@ -373,6 +389,54 @@ namespace EmEn::Base
 		{
 			std::cout << "[ThreadPool-debug] Thread pool terminated." "\n";
 		}
+	}
+
+	void
+	ThreadPool::purgeQueued (const void * owner) noexcept
+	{
+		if ( owner == nullptr )
+		{
+			return;
+		}
+
+		std::deque< Task > purged;
+
+		{
+			const std::scoped_lock lock{m_mutex};
+
+			/* NOTE: Nothing of this owner queued (the common case): the queue is left untouched. */
+			if ( std::ranges::none_of(m_tasks, [owner] (const Task & task) { return task.owner() == owner; }) )
+			{
+				return;
+			}
+
+			std::deque< Task > kept;
+
+			/* NOTE: One pass, the queue order kept for the others. Bounded by the queue's size. ⚠️ Every task is MOVED out
+			 * of m_tasks here: the swap below must always follow (an early return left the queue full of empty tasks and
+			 * the real work destroyed unrun — found by ASan, 2026-10-15). */
+			for ( auto & task : m_tasks )
+			{
+				if ( task.owner() == owner )
+				{
+					purged.emplace_back(std::move(task));
+				}
+				else
+				{
+					kept.emplace_back(std::move(task));
+				}
+			}
+
+			m_tasks.swap(kept);
+			m_pendingTasks.fetch_sub(purged.size(), std::memory_order_release);
+		}
+
+		/* NOTE: Destroyed outside the pool's lock: a runner's destructor releases its owner's count and runs the callable's
+		 * destructor (a "never ran" guard may notify, lock, fail a resource). */
+		purged.clear();
+
+		/* NOTE: A ThreadPool::wait() may now see an empty pool. */
+		m_completionCondition.notify_all();
 	}
 
 	bool

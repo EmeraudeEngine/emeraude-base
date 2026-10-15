@@ -398,8 +398,8 @@ possible), any other body is called with no argument. `~Thread()` and the move a
 waits (no stop source leaves the object: only the owner stops its thread). A refused start keeps the previous stop
 state; an idle or moved-from object has none (`stop_possible()` false). A started body ALWAYS runs, even when the stop
 comes before its first instruction (a dedicated thread is not queued): it sees the stop at its first check — unlike a
-`TaskHandle` task stopped before it starts, which never runs: the worker that dequeues it discards it without invoking
-it, and `wait()` does not wait for it (owner decision 2026-10-15; `TaskGroup` the same). `detach()` is GONE: a started
+`TaskHandle` task stopped before it starts, which never runs: the stop request removes it from the pool's queue and
+destroys it on the stopping thread, without invoking it (owner decisions 2026-10-15; `TaskGroup` the same). `detach()` is GONE: a started
 thread always has an owner that stops and joins it (it had no production caller in base, the engine or projet-alpha).
 **Rule:** a thread body that loops or waits takes `const std::stop_token &` and checks it at a bounded interval; a wait
 is `std::condition_variable_any::wait(lock, token, predicate)` — it wakes on the stop with no notify, so neither a
@@ -426,15 +426,23 @@ uses; `enqueue()` stays for fire-and-forget work capturing values only. A long t
 interval in every stage (`ShapeDecimator::setStopToken()`: every 4096 iterations of every stage loop).
 ⚠️ A task waiting for (or destroying) its OWN handle would never return: a contract fault, aborted (decision D2, below).
 ⚠️⚠️ **A task stopped BEFORE it starts never runs (owner decision 2026-10-15, the `std::execution` semantics: a stop
-before the start completes as "stopped").** The worker that dequeues it destroys its callable WITHOUT invoking it, and
-`wait()` does not wait for it: after a stop, a wait depends on a RUNNING task only, never on the queue. Before, an owner
-destroyed on a pool worker (a resource whose last reference a loading task drops) waited for its job still queued
-behind it — with every worker in that state the pool deadlocked for good. Consequences: a task that never runs must
-release in its DESTRUCTOR whatever a waiter expects from it (a "never ran" guard: engine
-`Resources::ServiceAccess::DiscardedTaskGuard`, `ResourceTrait::LocalDataReloadJob`), and that guard runs later, on a
-worker — it may touch only what it holds, never its owner (which may be gone). A `wait()` WITHOUT a stop still waits
-for a queued task: never from a pool worker. Proof: `ThreadPoolTaskHandle.TaskStoppedBeforeStartNeverRuns` and
-`DestroyingAQueuedHandleFromTheOnlyWorkerDoesNotDeadlock` (hung past a 20 s timeout on the previous contract, pass).
+before the start completes as "stopped").** The stop request REMOVES it from the pool's queue
+(`ThreadPool::purgeQueued()`: every pool task carries its owner's state as a tag) and destroys its callable on the
+STOPPING thread, outside the pool's lock, WITHOUT invoking it; a task already dequeued but not started is discarded by
+its worker. So after a stop a wait depends on a RUNNING task only — never on the queue, nor on other owners' work
+queued before it — and when `wait()` returns the callable is destroyed. Two defects this removes: an owner destroyed on
+a pool worker (a resource whose last reference a loading task drops) waited for its job still queued behind it — with
+every worker in that state the pool deadlocked for good; and a first version (2026-10-15, morning) that discarded
+queued tasks only when a worker DEQUEUED them still made a shutdown wait behind other owners' long work (macOS M6:
+the engine's resource stop waited 5.8 s for the whole automatic-LOD generation queued before its discarded loads).
+Consequences: a task that never runs releases in its DESTRUCTOR whatever a waiter expects from it (a "never ran"
+guard: engine `Resources::ServiceAccess::DiscardedTaskGuard`, `ResourceTrait::LocalDataReloadJob`); that guard runs
+on the STOPPING thread (or a worker for a dequeued one) and touches only what it holds. ⚠️ The pool must outlive a
+handle / group while one of its tasks may be queued (`@pre`; a pool runs its whole queue before it dies, and a finished
+task is never purged). A `wait()` WITHOUT a stop still waits for a queued task: never from a pool worker. Proof:
+`ThreadPoolTaskHandle.TaskStoppedBeforeStartNeverRuns`, `DestroyingAQueuedHandleFromTheOnlyWorkerDoesNotDeadlock`
+(hung past a 20 s timeout on the first contract), `DestroyingAQueuedHandleDestroysItsCallableAtOnce` and
+`ThreadPoolTaskGroup.AStopNeverWaitsForOtherOwnersQueuedWork` (11.4 s without the purge, under 100 ms with it).
 ⚠️ The measured stop latency of a 2.24 M-triangle decimation is 16 ms worst on Linux (2.5 ms on the M2): 1.52 s, then
 0.74 s before the D7 rewrite, where the rest was the DEALLOCATION of its node-based containers; 25 ms after D7 step 4
 (`9fb8f86`), then 16 ms once the per-vertex lists became trivially destructible (`fd9dc5c`) — the worst row is now the
@@ -450,18 +458,18 @@ tasks share ONE `std::stop_source`; `~TaskGroup()` = `requestStop()` + `wait()`.
 C++26 `std::execution` (P3149, `counting_scope`) and Trio's nurseries (N. J. Smith, 2018): no task outlives the scope
 that started it. Contract:
 - the stop is FINAL: a stopped group admits nothing more;
-- a task stopped before it starts never runs (as `TaskHandle`); `wait()` after a stop waits for the RUNNING tasks only
-  (deadlock-free from a worker); `pendingCount()` counts a discarded task until a worker dequeues it;
-- `waitForAll()` waits for EVERY task, the discarded ones included (their callable destroyed, their "never ran" guard
-  run): for an owner that must know they are gone before it goes on (a service shutting down on the main thread).
-  From a pool worker it ABORTS in every build (it would wait for the queue it serves) — the worker is marked by a
-  `thread_local` set in `ThreadPool::worker()`;
+- a task stopped before it starts never runs (as `TaskHandle`): `requestStop()` removes the group's queued tasks from
+  the queue (their guards run on the stopping thread); `wait()` then waits for the RUNNING tasks only;
+- a group serves ONE pool (the first `submit()` records it; another pool is refused, traced);
+- `waitForAll()` is `wait()` refused from a pool worker (the strict form for an owner shutting down on the main thread;
+  aborted in every build — the worker is marked by a `thread_local` set in `ThreadPool::worker()`);
 - a task of the group waiting for its own group (or destroying its owner) aborts (D2: a `thread_local` chain of
   `TaskGroupRunScope`s, nested inline runs included);
 - the owner declares the group LAST (destroyed first). State: `Base::Mutex` + annotations (D12), notifications after
   the guard.
-Proof: 10 `ThreadPoolTaskGroup.*` tests (+ 2 death tests); the deadlock test hung on the previous contract; Release
-10 × 83 `ThreadPool*`, ASan/UBSan full suite, TSan 20 × 83 `ThreadPool*`, 0 report; clang `-Wthread-safety` clean.
+Proof: 11 `ThreadPoolTaskGroup.*` tests (+ 2 death tests); the deadlock tests hung on the first contract,
+`AStopNeverWaitsForOtherOwnersQueuedWork` took 11.4 s without the purge; Release full suite 2529; ASan/UBSan and TSan in
+the item `task-handle-and-stop-token`; clang `-Wthread-safety` clean.
 
 ### ⚠️⚠️ A self-join ABORTS, in every build — never destroy or stop an owner from its own thread (D2, 2026-10-08)
 
