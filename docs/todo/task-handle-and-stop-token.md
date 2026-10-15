@@ -83,15 +83,26 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   `aBodyTakingNoTokenStillRunsAndTheDestructorStillJoinsIt`.
 - Proof (macOS M6, AppleClang, paranoid warnings: 0 warning; `-Wdocumentation -Werror` clean): 2513/2513 in Release,
   ASan/UBSan and TSan, 0 report; `BaseThread*` 20 rounds under TSan, 0 report; clang-tidy 21.1.6: 1 fixed, 1 on purpose
-  (ledger). Linux / Windows validation by the peers pending.
+  (ledger). Linux (Linux-PA, the change rebuilt on a673299): GCC Release 0 warning, full suite green, TSan
+  `BaseThread*` + `ThreadPool*` 20 × 83, 0 report. Windows validation pending.
+
+## Done — `TaskGroup`, the stop-before-start contract, `setCancellationFlag()` removed (2026-10-15, Linux)
+
+- Owner decisions 2026-10-15: `TaskGroup` (N tasks owned by one object, one stop source, `~TaskGroup()` = stop +
+  wait; `waitForAll()` for a shutting-down owner on the main thread — aborted from a pool worker); a task stopped
+  before it starts NEVER RUNS (`TaskHandle` and `TaskGroup`): a wait after a stop never depends on the queue, so an
+  owner destroyed on a pool worker can no longer deadlock a saturated pool. `docs/caution-points.md` § Threads.
+- Tests: 10 `ThreadPoolTaskGroup.*` + 2 death tests; `ThreadPoolTaskHandle.TaskStoppedBeforeStartNeverRuns` and
+  `DestroyingAQueuedHandleFromTheOnlyWorkerDoesNotDeadlock` (the deadlock tests HUNG past a 20 s timeout on the
+  previous contract, pass now). Release 10 × 83 `ThreadPool*`; ASan/UBSan and TSan full suite 2522, 0 report.
+- `ShapeDecimator::setCancellationFlag()` is gone (the engine's LOD jobs own a `TaskHandle`, engine item
+  `thread-pool-jobs-owned-through-a-task-handle`); test `aRaisedCancellationFlagStopsTheDecimation` removed,
+  `aLoweredCancellationFlagChangesNothing` became `anUnrequestedStopTokenChangesNothing`.
 
 ## What remains
 
-- **`setCancellationFlag()` goes away** with the engine migration (`ShapeDecimator.hpp:122`; still called by engine
-  `MeshResource.cpp:484` and `MultiLayerMeshResource.cpp:770`): engine item `thread-pool-jobs-owned-through-a-task-handle`, which
-  needs nothing more from this item (`TaskHandle`, `submit()` and `setStopToken()` are done) and is open now (owner,
-  2026-10-13). The engine's `Base::Thread` owners (engine item `jobs-owned-by-their-starter`) can migrate once the
-  `Base::Thread` change above is pushed.
+- The engine's `Base::Thread` owners (engine item `jobs-owned-by-their-starter`) can migrate now: both base halves
+  are pushed.
 - **Re-measure the stop latency on the NEW Windows machine** (`DISABLED_StopLatencyOnALargeMesh`). The last Windows
   figure, 57-71 ms at fb5a162, came from the dead laptop.
 - **Cross-OS bit identity**: owner decision on `-ffp-contract=off` cascade-wide. With it, macOS matches Linux on

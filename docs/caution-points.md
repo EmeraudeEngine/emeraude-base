@@ -425,12 +425,43 @@ its captures are already destroyed (the owner may free what they pointed to). **
 uses; `enqueue()` stays for fire-and-forget work capturing values only. A long task checks its token at a bounded
 interval in every stage (`ShapeDecimator::setStopToken()`: every 4096 iterations of every stage loop).
 ⚠️ A task waiting for (or destroying) its OWN handle would never return: a contract fault, aborted (decision D2, below).
-⚠️ A pool worker waiting for a task still QUEUED behind it can deadlock a small pool, as with any pool wait.
+⚠️⚠️ **A task stopped BEFORE it starts never runs (owner decision 2026-10-15, the `std::execution` semantics: a stop
+before the start completes as "stopped").** The worker that dequeues it destroys its callable WITHOUT invoking it, and
+`wait()` does not wait for it: after a stop, a wait depends on a RUNNING task only, never on the queue. Before, an owner
+destroyed on a pool worker (a resource whose last reference a loading task drops) waited for its job still queued
+behind it — with every worker in that state the pool deadlocked for good. Consequences: a task that never runs must
+release in its DESTRUCTOR whatever a waiter expects from it (a "never ran" guard: engine
+`Resources::ServiceAccess::DiscardedTaskGuard`, `ResourceTrait::LocalDataReloadJob`), and that guard runs later, on a
+worker — it may touch only what it holds, never its owner (which may be gone). A `wait()` WITHOUT a stop still waits
+for a queued task: never from a pool worker. Proof: `ThreadPoolTaskHandle.TaskStoppedBeforeStartNeverRuns` and
+`DestroyingAQueuedHandleFromTheOnlyWorkerDoesNotDeadlock` (hung past a 20 s timeout on the previous contract, pass).
 ⚠️ The measured stop latency of a 2.24 M-triangle decimation is 16 ms worst on Linux (2.5 ms on the M2): 1.52 s, then
 0.74 s before the D7 rewrite, where the rest was the DEALLOCATION of its node-based containers; 25 ms after D7 step 4
 (`9fb8f86`), then 16 ms once the per-vertex lists became trivially destructible (`fd9dc5c`) — the worst row is now the
 start (allocating the work mesh). Detail below in § VertexFactory and item `task-handle-and-stop-token`.
 Proof: 8 `ThreadPoolTaskHandle.*` tests, 20 rounds under TSan with 0 report; Release and ASan/UBSan green.
+
+### ⚠️⚠️ An object running SEVERAL tasks owns them through a `TaskGroup` (Ave Robustus II, 2026-10-15)
+
+A resource container's loads, a network manager's transfers: N tasks at once, one owner. `TaskGroup` (`src/ThreadPool.hpp`,
+owner decision 2026-10-15) is the `TaskHandle` contract for N tasks: `ThreadPool::submit(group, callable)` (returns
+`false` when the group or the pool is stopping — the callable never runs and is destroyed before it returns); the
+tasks share ONE `std::stop_source`; `~TaskGroup()` = `requestStop()` + `wait()`. State of the art: the async scope of
+C++26 `std::execution` (P3149, `counting_scope`) and Trio's nurseries (N. J. Smith, 2018): no task outlives the scope
+that started it. Contract:
+- the stop is FINAL: a stopped group admits nothing more;
+- a task stopped before it starts never runs (as `TaskHandle`); `wait()` after a stop waits for the RUNNING tasks only
+  (deadlock-free from a worker); `pendingCount()` counts a discarded task until a worker dequeues it;
+- `waitForAll()` waits for EVERY task, the discarded ones included (their callable destroyed, their "never ran" guard
+  run): for an owner that must know they are gone before it goes on (a service shutting down on the main thread).
+  From a pool worker it ABORTS in every build (it would wait for the queue it serves) — the worker is marked by a
+  `thread_local` set in `ThreadPool::worker()`;
+- a task of the group waiting for its own group (or destroying its owner) aborts (D2: a `thread_local` chain of
+  `TaskGroupRunScope`s, nested inline runs included);
+- the owner declares the group LAST (destroyed first). State: `Base::Mutex` + annotations (D12), notifications after
+  the guard.
+Proof: 10 `ThreadPoolTaskGroup.*` tests (+ 2 death tests); the deadlock test hung on the previous contract; Release
+10 × 83 `ThreadPool*`, ASan/UBSan full suite, TSan 20 × 83 `ThreadPool*`, 0 report; clang `-Wthread-safety` clean.
 
 ### ⚠️⚠️ A self-join ABORTS, in every build — never destroy or stop an owner from its own thread (D2, 2026-10-08)
 
@@ -736,10 +767,10 @@ every running one. `setStopToken(std::stop_token)` (the token of the job's `Task
 every `CancellationCheckInterval` (4096) iterations of EVERY stage loop (deduplication read phase, initialisation,
 corner UV table, quadrics, penalties, collapse queue, collapses, output, orientation check, normal-map bake); a stop
 makes `decimate()` return an EMPTY shape (`isCancelled()` tells it from a failure; test
-`aRequestedStopTokenStopsTheDecimation`). A lowered flag changes nothing (same triangles, same vertices — test
-`VertexFactoryShapeDecimator.aLoweredCancellationFlagChangesNothing`).
-`setCancellationFlag(const std::atomic_bool *)` is TRANSITIONAL (read too) until the engine's LOD jobs own a
-`TaskHandle` (engine item `thread-pool-jobs-owned-through-a-task-handle`). ⚠️ The stop latency on 2.24 M triangles is **16 ms worst
+`aRequestedStopTokenStopsTheDecimation`). An unrequested token changes nothing (same triangles, same vertices — test
+`VertexFactoryShapeDecimator.anUnrequestedStopTokenChangesNothing`). The transitional `setCancellationFlag(const
+std::atomic_bool *)` (the engine's former global shutdown flag) is GONE since 2026-10-15: the engine's LOD jobs own a
+`TaskHandle` and hand its token. ⚠️ The stop latency on 2.24 M triangles is **16 ms worst
 on Linux, 2.5 ms on the M2, since `fd9dc5c`** (2026-10-09; Windows to re-measure), and its worst row is now the START
 (allocating and zeroing the work mesh's flat table). History: 0.74 s before D7, bounded by the DEALLOCATION of the
 stages' node-based containers; 25 ms after D7 step 4 (`9fb8f86`: a lean work mesh, the adjacency in one arena, every

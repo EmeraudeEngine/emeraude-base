@@ -29,7 +29,6 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <stop_token>
 #include <cmath>
 #include <cstdint>
@@ -113,32 +112,20 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief TRANSITIONAL: the engine's former global shutdown flag, still read until its LOD jobs own a TaskHandle
-			 * (Ave Robustus II, phase P2, engine item thread-pool-jobs-owned-through-a-task-handle) — then this setter goes.
-			 * @note Non-owning: the flag must outlive decimate().
-			 * @param flag A pointer to the flag, nullptr for none (the default).
-			 */
-			void
-			setCancellationFlag (const std::atomic_bool * flag) noexcept
-			{
-				m_cancellationFlag = flag;
-			}
-
-			/**
-			 * @brief Returns whether a stop was requested (stop token or transitional flag).
+			 * @brief Returns whether a stop was requested through the stop token (setStopToken()).
 			 * @return bool
 			 */
 			[[nodiscard]]
 			bool
 			isCancelled () const noexcept
 			{
-				return m_stopToken.stop_requested() || (m_cancellationFlag != nullptr && m_cancellationFlag->load(std::memory_order_relaxed));
+				return m_stopToken.stop_requested();
 			}
 
 			/**
 			 * @brief Performs the decimation and returns a new reduced shape.
 			 * @return Shape< vertex_data_t, index_data_t > The decimated shape, or an EMPTY shape when cancelled
-			 * (setCancellationFlag()).
+			 * (setStopToken()).
 			 */
 			[[nodiscard]]
 			Shape< vertex_data_t, index_data_t >
@@ -391,7 +378,7 @@ namespace EmEn::Base::VertexFactory
 
 			/** @brief The same for the collapse loop, whose iterations are heavy (a collapse runs the topology checks and
 			 * requeues every neighbour): 4096 of them took ~20 ms on Linux and ~60 ms on a Windows laptop — the floor of the
-			 * stop latency (2026-10-09). The check is an atomic load and a stop-token read: cheap at 256. */
+			 * stop latency (2026-10-09). The check is a stop-token read (an atomic load): cheap at 256. */
 			static constexpr size_t CollapseCheckInterval{256};
 
 			/**
@@ -2357,7 +2344,6 @@ namespace EmEn::Base::VertexFactory
 			uint32_t m_normalMapResolution{0};
 			ThreadPool * m_threadPool{nullptr};
 			std::stop_token m_stopToken;
-			const std::atomic_bool * m_cancellationFlag{nullptr};
 			mutable PixelFactory::Pixmap< uint8_t > m_normalMap;
 	};
 }

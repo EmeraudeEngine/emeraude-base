@@ -58,7 +58,7 @@ namespace EmEn::Base
 
 		const std::scoped_lock lock{m_state->mutex};
 
-		return m_state->finished;
+		return m_state->finished || ( !m_state->started && m_state->stopSource.stop_requested() );
 	}
 
 	void
@@ -80,8 +80,10 @@ namespace EmEn::Base
 			std::abort();
 		}
 
+		/* NOTE: A task stopped before it started will never run: no wait for the queue (owner decision 2026-10-15). The
+		 * runner decides under this lock, after the stop request: it sees the stop too. */
 		m_state->finishedSignal.wait(lock, [this] () {
-			return m_state->finished;
+			return m_state->finished || ( !m_state->started && m_state->stopSource.stop_requested() );
 		});
 	}
 
@@ -97,6 +99,214 @@ namespace EmEn::Base
 		this->wait();
 
 		m_state.reset();
+	}
+
+	namespace
+	{
+		/**
+		 * @brief Returns the innermost TaskGroupRunScope of the calling thread (nullptr: no group task runs on it).
+		 * @return const TaskGroupRunScope *&
+		 */
+		const TaskGroupRunScope * &
+		innermostGroupScope () noexcept
+		{
+			/* NOTE: Per thread by nature (which group task runs HERE): no other thread ever reads it. */
+			thread_local const TaskGroupRunScope * scope{nullptr};
+
+			return scope;
+		}
+
+		/**
+		 * @brief Returns whether the calling thread is a worker of a ThreadPool (TaskGroup::waitForAll() refuses it).
+		 * @return bool &
+		 */
+		bool &
+		isPoolWorker () noexcept
+		{
+			thread_local bool worker{false};
+
+			return worker;
+		}
+	}
+
+	TaskGroupRunScope::TaskGroupRunScope (const TaskGroup::State * state) noexcept
+		: m_state{state},
+		m_previous{innermostGroupScope()}
+	{
+		innermostGroupScope() = this;
+	}
+
+	TaskGroupRunScope::~TaskGroupRunScope ()
+	{
+		innermostGroupScope() = m_previous;
+	}
+
+	bool
+	TaskGroupRunScope::runsOnThisThread (const TaskGroup::State * state) noexcept
+	{
+		/* NOTE: Bounded by the nesting depth of inline task runs on this thread (one scope per frame). */
+		for ( const auto * scope = innermostGroupScope(); scope != nullptr; scope = scope->m_previous )
+		{
+			if ( scope->m_state == state )
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool
+	TaskGroup::State::admit () noexcept
+	{
+		const MutexLock lock{mutex};
+
+		if ( stopping )
+		{
+			return false;
+		}
+
+		++pending;
+
+		return true;
+	}
+
+	bool
+	TaskGroup::State::begin () noexcept
+	{
+		const MutexLock lock{mutex};
+
+		if ( stopping )
+		{
+			return false;
+		}
+
+		++running;
+
+		return true;
+	}
+
+	void
+	TaskGroup::State::release (bool ran) noexcept
+	{
+		bool wake = false;
+
+		{
+			const MutexLock lock{mutex};
+
+			assert(pending > 0);
+			assert(!ran || running > 0);
+
+			--pending;
+
+			if ( ran )
+			{
+				--running;
+			}
+
+			wake = this->idle();
+		}
+
+		/* NOTE: After the guard (CP.31): the runner still holds the state, so the waiter cannot destroy it under us. */
+		if ( wake )
+		{
+			idleSignal.notify_all();
+		}
+	}
+
+	TaskGroup::TaskGroup () noexcept
+		: m_state{std::make_shared< State >()}
+	{
+
+	}
+
+	TaskGroup::~TaskGroup ()
+	{
+		this->requestStop();
+		this->wait();
+	}
+
+	void
+	TaskGroup::requestStop () noexcept
+	{
+		{
+			const MutexLock lock{m_state->mutex};
+
+			m_state->stopping = true;
+		}
+
+		/* NOTE: A plain wait() in progress re-evaluates: after a stop it waits for the running tasks only. */
+		m_state->idleSignal.notify_all();
+
+		/* NOTE: Outside the guard: request_stop() runs the tasks' std::stop_callback synchronously (a
+		 * condition_variable_any wait registers one), and calling out under a lock is forbidden. A task admitted before
+		 * the flag sees the stop through its token; none is admitted after it. */
+		m_state->stopSource.request_stop();
+	}
+
+	bool
+	TaskGroup::stopRequested () const noexcept
+	{
+		return m_state->stopSource.stop_requested();
+	}
+
+	size_t
+	TaskGroup::pendingCount () const noexcept
+	{
+		const MutexLock lock{m_state->mutex};
+
+		return m_state->pending;
+	}
+
+	void
+	TaskGroup::wait () noexcept
+	{
+		if ( TaskGroupRunScope::runsOnThisThread(m_state.get()) )
+		{
+			/* NOTE: A task of the group waits for its own group (or destroys its owner): it would never return, and the
+			 * owner is going away under it. A CONTRACT FAULT, aborted in every build (owner decision D2, 2026-10-08). */
+			Logging::fatal("TaskGroup", "wait(), contract violation: a task waits for (or destroys) its own group ! Aborting.");
+
+			std::abort();
+		}
+
+		auto & state = *m_state;
+		MutexLock lock{state.mutex};
+
+		state.idleSignal.wait(lock, [&state] () EMEN_REQUIRES(state.mutex) {
+			return state.idle();
+		});
+	}
+
+	void
+	TaskGroup::waitForAll () noexcept
+	{
+		if ( isPoolWorker() || TaskGroupRunScope::runsOnThisThread(m_state.get()) )
+		{
+			/* NOTE: A worker waiting for the queue it serves can deadlock a saturated pool; a task of the group waits for
+			 * itself. Both are CONTRACT FAULTS, aborted in every build (D2, owner decision 2026-10-15). */
+			Logging::fatal("TaskGroup", "waitForAll(), contract violation: called from a thread-pool worker (or a task of its own group) ! Aborting.");
+
+			std::abort();
+		}
+
+		auto & state = *m_state;
+		MutexLock lock{state.mutex};
+
+		state.idleSignal.wait(lock, [&state] () EMEN_REQUIRES(state.mutex) {
+			return state.pending == 0;
+		});
+	}
+
+	std::shared_ptr< TaskGroup::State >
+	TaskGroup::admit () noexcept
+	{
+		if ( !m_state->admit() )
+		{
+			return nullptr;
+		}
+
+		return m_state;
 	}
 
 	ThreadPool::ThreadPool (size_t threadCount)
@@ -233,6 +443,8 @@ namespace EmEn::Base
 	void
 	ThreadPool::worker ()
 	{
+		isPoolWorker() = true;
+
 		while ( true )
 		{
 			Task task;

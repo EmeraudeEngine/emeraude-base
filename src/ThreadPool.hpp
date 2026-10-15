@@ -47,7 +47,9 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "Mutex.hpp"
 #include "Thread.hpp"
+#include "ThreadSafety.hpp"
 
 namespace EmEn::Base
 {
@@ -57,9 +59,15 @@ namespace EmEn::Base
 	 * (Ave Robustus II, owner decision D1, 2026-10-08).
 	 *
 	 * The task receives a std::stop_token. Destroying (or reassigning) the handle requests the task to stop and waits
-	 * for THAT task only — never for the whole pool. When wait() returns, the task's callable and everything it captured
-	 * are destroyed. The object that starts a job keeps its handle as a member: its own destruction then stops and waits
-	 * for the job, so nothing else (a global flag, another class's drain) has to.
+	 * for THAT task only — never for the whole pool. When wait() returns after a task RAN, its callable and everything
+	 * it captured are destroyed. The object that starts a job keeps its handle as a member: its own destruction then
+	 * stops and waits for the job, so nothing else (a global flag, another class's drain) has to.
+	 *
+	 * A task stopped BEFORE it starts never runs (owner decision 2026-10-15, the std::execution semantics: a stop before
+	 * the start completes as "stopped"), and wait() does not wait for it: a wait depends on a RUNNING task only, never on
+	 * the queue, so an owner destroyed on a pool worker cannot deadlock a saturated pool. Such a task's callable is
+	 * destroyed later, on the worker that dequeues it, without being invoked — it must not capture anything whose
+	 * destruction touches its owner.
 	 *
 	 * @note Thread-safe: requestStop(), finished() and wait() may be called from any thread. A task waiting for (or
 	 * destroying) its OWN handle would never return: a contract fault, traced and aborted in every build (owner decision
@@ -76,6 +84,7 @@ namespace EmEn::Base
 				std::mutex mutex;
 				std::condition_variable finishedSignal;
 				std::thread::id runningThread;
+				bool started{false};
 				bool finished{false};
 			};
 
@@ -144,14 +153,18 @@ namespace EmEn::Base
 			void requestStop () noexcept;
 
 			/**
-			 * @brief Returns whether the task has finished (or will never run). An empty handle reports true.
+			 * @brief Returns whether the task has finished, or will never run (stopped before it started). An empty handle
+			 * reports true.
 			 * @return bool
 			 */
 			[[nodiscard]]
 			bool finished () const noexcept;
 
 			/**
-			 * @brief Blocks until the task has finished and its callable is destroyed. Returns at once on an empty handle.
+			 * @brief Blocks until the task has finished and its callable is destroyed, or returns at once when the task was
+			 * stopped before it started (it will never run). Returns at once on an empty handle.
+			 * @note Without a stop, a task still queued is waited for: from a pool worker, on a saturated pool, that can
+			 * deadlock — an owner STOPS first (reset(), the destructor).
 			 * @pre Not called from the task's own thread (it would never return): a contract fault, aborted (decision D2).
 			 */
 			void wait () noexcept;
@@ -209,13 +222,26 @@ namespace EmEn::Base
 					return;
 				}
 
+				bool started = false;
+
 				{
 					const std::scoped_lock lock{m_state->mutex};
 
-					m_state->runningThread = std::this_thread::get_id();
+					/* NOTE: Stopped before it started: it never runs (its waiter may already be gone). Decided under the
+					 * state's lock, against which wait() reads `started`. */
+					if ( !m_state->stopSource.stop_requested() )
+					{
+						m_state->started = true;
+						m_state->runningThread = std::this_thread::get_id();
+
+						started = true;
+					}
 				}
 
-				(*m_function)(m_state->stopSource.get_token());
+				if ( started )
+				{
+					(*m_function)(m_state->stopSource.get_token());
+				}
 
 				this->finish();
 			}
@@ -247,6 +273,275 @@ namespace EmEn::Base
 
 			std::shared_ptr< TaskHandle::State > m_state;
 			std::optional< function_t > m_function;
+	};
+
+	/**
+	 * @class TaskGroup
+	 * @brief Owns every task submitted with ThreadPool::submit(TaskGroup &, …): the TaskHandle contract for an object
+	 * that runs SEVERAL tasks at once (a resource container's loads, a network manager's transfers).
+	 *
+	 * The group's tasks share one std::stop_source. Destroying the group requests the stop and waits for EVERY task of the
+	 * group — never for the rest of the pool; when wait() returns, the callable and the captures of every task that RAN
+	 * are destroyed. Once a stop is requested the group admits no new task (submit() refuses it): the stop is final.
+	 *
+	 * A task stopped BEFORE it starts never runs (owner decision 2026-10-15, as TaskHandle): after a stop, wait() waits
+	 * for the RUNNING tasks only, never for the queue, so an owner destroyed on a pool worker cannot deadlock a saturated
+	 * pool. The callable of a task that never ran is destroyed later, on the worker that dequeues it, without being
+	 * invoked.
+	 *
+	 * State of the art: the async scope of C++26 std::execution (P3149, `counting_scope`: a join that waits for the work
+	 * spawned into the scope, a stop request forwarded to it) and the nurseries of N. J. Smith's Trio ("Notes on
+	 * structured concurrency, or: Go statement considered harmful", 2018, https://vorpus.org/blog/) — no task outlives
+	 * the scope that started it.
+	 *
+	 * @note Thread-safe: tasks may be submitted, and requestStop(), stopRequested(), pendingCount() and wait() called,
+	 * from any thread. A task waiting for (or destroying) its OWN group would never return: a contract fault, traced and
+	 * aborted in every build (owner decision D2, 2026-10-08).
+	 * @note The owner declares its group AFTER every member the tasks use: the group is then destroyed (stopped, waited
+	 * for) first.
+	 */
+	class TaskGroup final
+	{
+		public:
+
+			/** @brief The state shared by a group and its tasks. */
+			struct State final
+			{
+				/**
+				 * @brief Counts one more task, unless a stop was requested.
+				 * @return bool False when the group is stopping (the task must not run).
+				 */
+				[[nodiscard]]
+				bool admit () noexcept;
+
+				/**
+				 * @brief Lets a dequeued task start, unless a stop was requested (it then never runs).
+				 * @return bool True when the task may run (it counts as running until release()).
+				 */
+				[[nodiscard]]
+				bool begin () noexcept;
+
+				/**
+				 * @brief Counts one task less (a task that ran, or one that never will); wakes the waiters.
+				 * @param ran Whether begin() let this task run.
+				 */
+				void release (bool ran) noexcept;
+
+				/**
+				 * @brief The waiters' condition: every task finished, or, after a stop, no task running any more.
+				 * @return bool
+				 */
+				[[nodiscard]]
+				bool idle () const noexcept EMEN_REQUIRES(mutex)
+				{
+					return pending == 0 || ( stopping && running == 0 );
+				}
+
+				std::stop_source stopSource;
+				mutable Mutex mutex;
+				std::condition_variable_any idleSignal;
+				size_t pending EMEN_GUARDED_BY(mutex){0};
+				size_t running EMEN_GUARDED_BY(mutex){0};
+				bool stopping EMEN_GUARDED_BY(mutex){false};
+			};
+
+			/** @brief Constructs an empty group (no task, no stop requested). */
+			TaskGroup () noexcept;
+
+			/** @brief Destructs the group: requests the stop, then waits for every task of the group. */
+			~TaskGroup ();
+
+			/** @brief Copy constructor (deleted: the tasks hold the group's state, one owner). */
+			TaskGroup (const TaskGroup & copy) = delete;
+
+			/** @brief Move constructor (deleted: a group is a member of its owner, it never changes owner). */
+			TaskGroup (TaskGroup && other) = delete;
+
+			/** @brief Copy assignment (deleted). @return TaskGroup & */
+			TaskGroup & operator= (const TaskGroup & copy) = delete;
+
+			/** @brief Move assignment (deleted). @return TaskGroup & */
+			TaskGroup & operator= (TaskGroup && other) = delete;
+
+			/**
+			 * @brief Asks every task of the group to stop (their std::stop_token reports it) and refuses any new task.
+			 * @note Final: a stopped group never admits a task again.
+			 */
+			void requestStop () noexcept;
+
+			/**
+			 * @brief Returns whether a stop was requested.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool stopRequested () const noexcept;
+
+			/**
+			 * @brief Returns the number of tasks submitted and not finished yet (queued or running). After a stop, a queued
+			 * task that will never run counts until a worker dequeues and discards it.
+			 * @note Stale as soon as it returns when tasks are submitted concurrently.
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			size_t pendingCount () const noexcept;
+
+			/**
+			 * @brief Blocks until every task of the group has finished and its callable is destroyed — after a stop, until
+			 * every RUNNING task has (the queued ones never run). Does not stop them.
+			 * @note Without a stop, queued tasks are waited for: from a pool worker, on a saturated pool, that can deadlock
+			 * — an owner STOPS first (the destructor does).
+			 * @pre Not called from one of the group's own tasks (it would never return): a contract fault, aborted
+			 * (decision D2).
+			 */
+			void wait () noexcept;
+
+			/**
+			 * @brief Blocks until EVERY task of the group is gone — the queued ones a stop discards included (destroyed by
+			 * the worker that dequeues them, without being invoked). After it returns, no callable of the group exists any
+			 * more: a discarded task's destructor (a "never ran" guard) has run.
+			 * @note For an owner that must know its discarded tasks are gone before it goes on (a service shutting down,
+			 * on the main thread).
+			 * @pre Not called from a thread-pool worker: it would wait for the queue its own worker serves (a deadlock on
+			 * a saturated pool). A contract fault, traced and aborted in every build.
+			 */
+			void waitForAll () noexcept;
+
+		private:
+
+			friend class ThreadPool;
+
+			/**
+			 * @brief Counts a new task for ThreadPool::submit().
+			 * @return std::shared_ptr< State > The state the task holds, or nullptr when the group is stopping.
+			 */
+			[[nodiscard]]
+			std::shared_ptr< State > admit () noexcept;
+
+			std::shared_ptr< State > m_state;
+	};
+
+	/**
+	 * @class TaskGroupRunScope
+	 * @brief Marks, on the calling thread, that a task of a group runs: TaskGroup::wait() refuses to wait for a group
+	 * whose task runs on the waiting thread (decision D2). Nested scopes chain (a pool without worker runs a task on the
+	 * submitting thread, possibly from inside another task).
+	 */
+	class TaskGroupRunScope final
+	{
+		public:
+
+			/**
+			 * @brief Opens the scope.
+			 * @param state The group whose task runs.
+			 */
+			explicit TaskGroupRunScope (const TaskGroup::State * state) noexcept;
+
+			/** @brief Closes the scope. */
+			~TaskGroupRunScope ();
+
+			TaskGroupRunScope (const TaskGroupRunScope & copy) = delete;
+			TaskGroupRunScope (TaskGroupRunScope && other) = delete;
+			TaskGroupRunScope & operator= (const TaskGroupRunScope & copy) = delete;
+			TaskGroupRunScope & operator= (TaskGroupRunScope && other) = delete;
+
+			/**
+			 * @brief Returns whether a task of this group runs on the calling thread.
+			 * @param state The group.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static bool runsOnThisThread (const TaskGroup::State * state) noexcept;
+
+		private:
+
+			const TaskGroup::State * m_state;
+			const TaskGroupRunScope * m_previous;
+	};
+
+	/**
+	 * @class TaskGroupRunner
+	 * @brief The callable a ThreadPool runs for ThreadPool::submit(TaskGroup &, …): runs the task with the group's stop
+	 * token — unless the group stopped before the task started — destroys it, then releases its count. A runner destroyed
+	 * without running (the pool refused it) still releases its count, so no wait() can hang on it.
+	 * @tparam function_t The task's callable type, invocable with a std::stop_token.
+	 */
+	template< typename function_t >
+	class TaskGroupRunner final
+	{
+		public:
+
+			/**
+			 * @brief Constructs the runner.
+			 * @param state The group's state, already counting this task (TaskGroup::admit()).
+			 * @param function The task.
+			 */
+			template< typename forwarded_t >
+			TaskGroupRunner (std::shared_ptr< TaskGroup::State > state, forwarded_t && function) noexcept
+				: m_state{std::move(state)},
+				m_function{std::in_place, std::forward< forwarded_t >(function)}
+			{
+
+			}
+
+			/** @brief Destructs the runner: a task that never ran still releases its count. */
+			~TaskGroupRunner ()
+			{
+				this->finish();
+			}
+
+			TaskGroupRunner (const TaskGroupRunner & copy) = delete;
+			TaskGroupRunner & operator= (const TaskGroupRunner & copy) = delete;
+			TaskGroupRunner (TaskGroupRunner && other) noexcept = default;
+			TaskGroupRunner & operator= (TaskGroupRunner && other) noexcept = delete;
+
+			/** @brief Runs the task, destroys it, then releases its count. */
+			void
+			operator() () noexcept
+			{
+				if ( m_state == nullptr || !m_function.has_value() )
+				{
+					return;
+				}
+
+				/* NOTE: Stopped before it started: it never runs (its group's waiter may already be gone). */
+				if ( !m_state->begin() )
+				{
+					this->finish();
+
+					return;
+				}
+
+				m_ran = true;
+
+				/* NOTE: Open while the callable runs AND while its captures are destroyed: a capture whose release destroys
+				 * the group's owner is a task waiting for its own group (D2). */
+				const TaskGroupRunScope scope{m_state.get()};
+
+				(*m_function)(m_state->stopSource.get_token());
+
+				this->finish();
+			}
+
+		private:
+
+			/** @brief Destroys the callable FIRST, then releases the count (the waiter may destroy the group's owner next). */
+			void
+			finish () noexcept
+			{
+				m_function.reset();
+
+				if ( m_state == nullptr )
+				{
+					return;
+				}
+
+				m_state->release(m_ran);
+				m_state.reset();
+			}
+
+			std::shared_ptr< TaskGroup::State > m_state;
+			std::optional< function_t > m_function;
+			bool m_ran{false};
 	};
 
 	/**
@@ -851,6 +1146,34 @@ namespace EmEn::Base
 				}
 
 				return TaskHandle{std::move(state)};
+			}
+
+			/**
+			 * @brief Submits a task OWNED by a group (Ave Robustus II): the object that runs several tasks at once keeps
+			 * one TaskGroup as a member, and its destruction stops and waits for all of them.
+			 * @note The task is invoked with the group's std::stop_token: a long task checks it at a bounded interval and
+			 * returns when a stop is requested.
+			 * @tparam function_t A callable invocable with a std::stop_token.
+			 * @param group The group that owns the task.
+			 * @param callable The task.
+			 * @return bool False when the group is stopping or the pool refuses the task (stopping): the callable never
+			 * runs and is destroyed before this returns.
+			 */
+			template< typename function_t >
+			requires std::invocable< function_t, std::stop_token >
+			[[nodiscard]]
+			bool
+			submit (TaskGroup & group, function_t && callable)
+			{
+				auto state = group.admit();
+
+				if ( state == nullptr )
+				{
+					return false;
+				}
+
+				/* NOTE: A refused runner is destroyed unrun and releases its count: nothing to wait for. */
+				return this->enqueueTask(Task{TaskGroupRunner< std::decay_t< function_t > >{std::move(state), std::forward< function_t >(callable)}});
 			}
 
 			/**
