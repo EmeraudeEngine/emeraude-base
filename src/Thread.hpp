@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <stop_token>
 #include <type_traits>
 #include <utility>
 
@@ -50,9 +51,15 @@ namespace EmEn::Base
 	 * exhaustion, a thread limit): under -fno-exceptions that is an abort. Thread::start() answers false instead, so each
 	 * caller decides what a refused start means (refuse its feature, run synchronously…). Built on pthread_create()
 	 * (POSIX) and _beginthreadex() (Windows), with their default stack sizes, like std::thread.
-	 * @note RAII: a started thread is JOINED by the destructor (and by a move assignment), unless detach() was called.
-	 * A join (or a destruction) from the thread itself is a contract fault: traced and ABORTED in every build (owner
+	 * @note The std::jthread model (Ave Robustus II § 4.2, owner decision 2026-10-15): each start() creates a fresh stop
+	 * state; a body invocable with a std::stop_token receives its token, so a wait on a std::condition_variable_any
+	 * (wait(lock, token, predicate)) wakes on the stop with no hand-made flag. The destructor and the move assignment
+	 * REQUEST THE STOP, then JOIN. There is no detach(): a started thread always has its owner.
+	 * @note A join (or a destruction) from the thread itself is a contract fault: traced and ABORTED in every build (owner
 	 * decision D2, 2026-10-08) — the owner must never be destroyed or stopped from its own thread.
+	 * @note Thread-safety: like std::jthread, one object is used by its owner; requestStop() reaches the body from the
+	 * owner's thread (the stop state itself is thread-safe), but no member may run concurrently with start(), join(),
+	 * a move or the destruction of the same object.
 	 */
 	class Thread final
 	{
@@ -83,26 +90,32 @@ namespace EmEn::Base
 			Thread & operator= (const Thread & copy) noexcept = delete;
 
 			/**
-			 * @brief Move assignment: joins this object's own thread first, then takes the other one's.
+			 * @brief Move assignment: requests the stop of this object's own thread and joins it first, then takes the
+			 * other one's (its stop state included).
 			 * @param other A reference to the moved instance, idle afterwards.
 			 * @return Thread &
 			 */
 			Thread & operator= (Thread && other) noexcept;
 
 			/**
-			 * @brief Joins the thread, if one runs and it was not detached.
+			 * @brief Requests the stop of the thread, if one runs, then joins it.
 			 */
 			~Thread ();
 
 			/**
-			 * @brief Starts a thread running a callable.
-			 * @note An object that already owns a joinable thread refuses (join() or detach() it first).
-			 * @tparam callable_t A callable taking no argument; its return value is ignored.
+			 * @brief Starts a thread running a callable, with a fresh stop state.
+			 * @note std::jthread's rule: a callable invocable with a std::stop_token receives the token of this start
+			 * (that form wins when both are possible); otherwise it is called with no argument (the form of the owners not
+			 * migrated yet: their body ignores the stop, the destructor still joins it).
+			 * @note An object that already owns a joinable thread refuses (join() it first).
+			 * @note The callable is destroyed on the new thread when it returns, before join() returns.
+			 * @tparam callable_t A callable taking a std::stop_token or no argument; its return value is ignored.
 			 * @param callable The callable, moved (or copied) into the new thread.
-			 * @return bool False when the system refused to start a thread (traced): the callable never runs.
+			 * @return bool False when the system refused to start a thread (traced): the callable never runs, and the stop
+			 * state of a previous start is kept.
 			 */
 			template< typename callable_t >
-			requires std::is_invocable_v< std::decay_t< callable_t > & >
+			requires std::is_invocable_v< std::decay_t< callable_t > &, std::stop_token > || std::is_invocable_v< std::decay_t< callable_t > & >
 			[[nodiscard]]
 			bool
 			start (callable_t && callable) noexcept
@@ -111,7 +124,7 @@ namespace EmEn::Base
 			}
 
 			/**
-			 * @brief Returns whether a started thread is owned (neither joined nor detached).
+			 * @brief Returns whether a started thread is owned (not joined yet).
 			 * @return bool
 			 */
 			[[nodiscard]]
@@ -129,9 +142,27 @@ namespace EmEn::Base
 			void join () noexcept;
 
 			/**
-			 * @brief Lets the thread run on its own: this object no longer owns it.
+			 * @brief Requests the stop of the current (or last) start: its body's token reports stop_requested().
+			 * @note Like std::jthread::request_stop(): the body decides when it returns; join() waits for it.
+			 * @return bool True when this call made the request; false when there is no stop state (never started, or
+			 * moved from) or the stop was already requested.
 			 */
-			void detach () noexcept;
+			bool
+			requestStop () noexcept
+			{
+				return m_stopSource.request_stop();
+			}
+
+			/**
+			 * @brief Returns the stop token of the current (or last) start, e.g. for the owner's own waits.
+			 * @return std::stop_token A token with no stop state (stop_possible() false) when never started or moved from.
+			 */
+			[[nodiscard]]
+			std::stop_token
+			stopToken () const noexcept
+			{
+				return m_stopSource.get_token();
+			}
 
 			/**
 			 * @brief Returns whether the calling thread is the one this object owns.
@@ -167,6 +198,8 @@ namespace EmEn::Base
 
 				virtual void run () noexcept = 0;
 
+				/** @brief The token of this start, written by start() before the system starts the thread. */
+				std::stop_token m_stopToken;
 				/** @brief Set by start() once it recorded the thread in its object: the new thread waits for it before
 				 * running the callable, so whatever start() wrote happens-before the callable (a self-join included). */
 				std::atomic_bool m_published{false};
@@ -188,7 +221,15 @@ namespace EmEn::Base
 				void
 				run () noexcept override
 				{
-					static_cast< void >(std::invoke(function));
+					if constexpr ( std::is_invocable_v< function_t &, std::stop_token > )
+					{
+						/* NOTE: A prvalue, as std::jthread passes get_stop_token(): exactly the form the constraint tested. */
+						static_cast< void >(std::invoke(function, std::stop_token{m_stopToken}));
+					}
+					else
+					{
+						static_cast< void >(std::invoke(function));
+					}
 				}
 
 				function_t function;
@@ -222,6 +263,7 @@ namespace EmEn::Base
 
 			pthread_t m_handle{};
 #endif
+			std::stop_source m_stopSource{std::nostopstate};
 			bool m_joinable{false};
 	};
 }

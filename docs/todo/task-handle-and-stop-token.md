@@ -3,7 +3,7 @@ id: task-handle-and-stop-token
 title: ThreadPool tasks owned through a TaskHandle with std::stop_token cancellation
 status: in-progress
 priority: high
-scope: src/ThreadPool.hpp, src/Thread.hpp, src/VertexFactory/ShapeDecimator.hpp
+scope: src/ThreadPool.hpp, src/VertexFactory/ShapeDecimator.hpp
 opened: 2026-10-08
 tags: [ave-robustus-ii, concurrency, lifetime]
 ---
@@ -69,15 +69,29 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
   things made it long: the copy of the source (`auto workShape = m_source;`, gone since steps 1-2) and the
   deallocation at return (gone with the arena, from the floor step on).
 
+## Done — `Base::Thread` on the `std::jthread` model (2026-10-15, macOS M6)
+
+- Owner decisions 2026-10-15: ONE `start()` with `std::jthread`'s dispatch rule (a body invocable with a
+  `std::stop_token` receives the token of this start, any other is called with no argument — the 8 engine owners
+  compile unchanged); accessors `requestStop()` (bool, like `request_stop()`) and `stopToken()`, no stop source handed
+  out. A fresh stop state per `start()`; `~Thread()` and the move assignment request the stop, then join; `detach()`
+  removed (no production caller in base, the engine or projet-alpha; its only test became stop-token tests). The D2
+  self-join abort is kept. Base `docs/caution-points.md` § Threads.
+- Tests (failed to compile before, pass after): `BaseThread.aStopRequestedBeforeTheBodyChecksIsSeenAtItsFirstCheck`,
+  `aStopWakesAConditionVariableWaitWithoutANotify`, `theDestructorRequestsTheStopThenJoins`,
+  `aMoveAssignmentOverARunningThreadStopsAndJoinsIt`, `aRestartedThreadGetsAFreshStopState`,
+  `aBodyTakingNoTokenStillRunsAndTheDestructorStillJoinsIt`.
+- Proof (macOS M6, AppleClang, paranoid warnings: 0 warning; `-Wdocumentation -Werror` clean): 2513/2513 in Release,
+  ASan/UBSan and TSan, 0 report; `BaseThread*` 20 rounds under TSan, 0 report; clang-tidy 21.1.6: 1 fixed, 1 on purpose
+  (ledger). Linux / Windows validation by the peers pending.
+
 ## What remains
 
-- **`Base::Thread` on the `std::jthread` model**: a stop token to the body, then request_stop + join in the
-  destructor. Today it still has `detach()` (`Thread.hpp:134`, `Thread.cpp:269`) and no stop token.
 - **`setCancellationFlag()` goes away** with the engine migration (`ShapeDecimator.hpp:122`; still called by engine
   `MeshResource.cpp:484` and `MultiLayerMeshResource.cpp:770`): engine item `thread-pool-jobs-owned-through-a-task-handle`, which
   needs nothing more from this item (`TaskHandle`, `submit()` and `setStopToken()` are done) and is open now (owner,
-  2026-10-13). Only the engine's `Base::Thread` owners (engine item `jobs-owned-by-their-starter`) wait for the
-  `Base::Thread` bullet above.
+  2026-10-13). The engine's `Base::Thread` owners (engine item `jobs-owned-by-their-starter`) can migrate once the
+  `Base::Thread` change above is pushed.
 - **Re-measure the stop latency on the NEW Windows machine** (`DISABLED_StopLatencyOnALargeMesh`). The last Windows
   figure, 57-71 ms at fb5a162, came from the dead laptop.
 - **Cross-OS bit identity**: owner decision on `-ffp-contract=off` cascade-wide. With it, macOS matches Linux on

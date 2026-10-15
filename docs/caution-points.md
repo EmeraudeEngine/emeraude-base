@@ -360,8 +360,9 @@ without overflow (seconds and remainder apart). A sample that is not a measureme
 
 `std::thread`'s constructor throws `std::system_error` when the system cannot start a thread (resource exhaustion, a
 thread limit): under `-fno-exceptions`, an abort — and `std::thread::join()` from the thread itself throws too.
-`Base::Thread` (`src/Thread.hpp`) starts on `pthread_create()` / `_beginthreadex()` and answers `false`; it joins on
-destruction and ABORTS on a self-join (since 2026-10-08, decision D2 — see below; it used to detach). **Rule:** no `std::thread` in the cascade (none is left,
+`Base::Thread` (`src/Thread.hpp`) starts on `pthread_create()` / `_beginthreadex()` and answers `false`; it requests
+the stop then joins on destruction (the `std::jthread` model since 2026-10-15 — see below) and ABORTS on a self-join
+(since 2026-10-08, decision D2 — see below; it used to detach). **Rule:** no `std::thread` in the cascade (none is left,
 2026-10-07: `/usr/bin/grep -rn "std::thread"` finds only `std::thread::id` / `hardware_concurrency()` and tests); a
 caller of `start()` decides what a refusal means. Owner policy: a feature thread refuses its feature (`false` +
 trace); the Tracer writes synchronously; `executeCommandPumpingEvents()` blocks; `ThreadPool` keeps the workers that
@@ -387,6 +388,31 @@ task. Proof: `BaseThread.aNewThreadSeesItsObjectAlreadyRecorded` holds `start()`
 `Thread::delayNextPublicationForTesting(ms)` — failed every time before the fix, passes after; the macOS load
 (16 × 500 Release, 16 × 300 ASan) gives 0 failure and every trace on Linux. **Rule:** an object handing work to
 another thread publishes its own state BEFORE the other thread can observe it, never after the hand-over call.
+
+### ⚠️⚠️ A `Base::Thread` stops through its `std::stop_token` — the `std::jthread` model, no `detach()` (2026-10-15)
+
+Ave Robustus II § 4.2 (owner decision 2026-10-15: one `start()`, `std::jthread`'s dispatch rule). Each `start()` creates
+a fresh stop state; a body invocable with a `std::stop_token` receives its token (that form wins when both are
+possible), any other body is called with no argument. `~Thread()` and the move assignment `requestStop()` then
+`join()`; `requestStop()` returns whether this call made the request; `stopToken()` hands the token to the owner's own
+waits (no stop source leaves the object: only the owner stops its thread). A refused start keeps the previous stop
+state; an idle or moved-from object has none (`stop_possible()` false). A started body ALWAYS runs, even when the stop
+comes before its first instruction (a dedicated thread is not queued): it sees the stop at its first check — unlike a
+`TaskHandle` task stopped before it starts, which never runs: the worker that dequeues it discards it without invoking
+it, and `wait()` does not wait for it (owner decision 2026-10-15; `TaskGroup` the same). `detach()` is GONE: a started
+thread always has an owner that stops and joins it (it had no production caller in base, the engine or projet-alpha).
+**Rule:** a thread body that loops or waits takes `const std::stop_token &` and checks it at a bounded interval; a wait
+is `std::condition_variable_any::wait(lock, token, predicate)` — it wakes on the stop with no notify, so neither a
+hand-made `std::atomic_bool m_stop` nor a condition variable declared "before the thread" is needed (the H2 class of the
+census). A body taking no token still compiles and is still joined, but nothing can stop it: that is the transitional
+form of the engine owners (engine item `jobs-owned-by-their-starter`); once they migrated, the no-argument form can go.
+⚠️ Like `std::jthread`, one object is used by its owner: `requestStop()` from the owner's thread reaches the body (the
+stop state is thread-safe), but no member may run concurrently with `start()`, `join()`, a move or the destruction.
+Proof: `BaseThread.aStopRequestedBeforeTheBodyChecksIsSeenAtItsFirstCheck`, `aStopWakesAConditionVariableWaitWithoutANotify`,
+`theDestructorRequestsTheStopThenJoins`, `aMoveAssignmentOverARunningThreadStopsAndJoinsIt`,
+`aRestartedThreadGetsAFreshStopState`, `aBodyTakingNoTokenStillRunsAndTheDestructorStillJoinsIt` (failed to compile
+before, pass after); macOS M6 (AppleClang, paranoid warnings, 0 warning): 2513/2513 in Release, ASan/UBSan and
+TSan (0 report), `BaseThread*` 20 rounds under TSan 0 report; `BaseThreadDeathTest.aThreadJoiningItselfAborts` kept.
 
 ### ⚠️⚠️ A job that touches an object is `submit()`ted, and the object keeps its `TaskHandle` (Ave Robustus II, 2026-10-08)
 

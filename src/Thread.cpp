@@ -32,8 +32,10 @@
 #include <cerrno>
 #include <chrono>
 #include <cstdlib>
+#include <stop_token>
 #include <string>
 #include <thread>
+#include <utility>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
@@ -121,6 +123,7 @@ namespace EmEn::Base
 #if IS_WINDOWS
 		m_threadID{other.m_threadID},
 #endif
+		m_stopSource{std::exchange(other.m_stopSource, std::stop_source{std::nostopstate})},
 		m_joinable{other.m_joinable}
 	{
 		other.m_handle = {};
@@ -135,6 +138,7 @@ namespace EmEn::Base
 	{
 		if ( this != &other )
 		{
+			this->requestStop();
 			this->join();
 
 			m_handle = other.m_handle;
@@ -142,6 +146,7 @@ namespace EmEn::Base
 			m_threadID = other.m_threadID;
 			other.m_threadID = 0;
 #endif
+			m_stopSource = std::exchange(other.m_stopSource, std::stop_source{std::nostopstate});
 			m_joinable = other.m_joinable;
 
 			other.m_handle = {};
@@ -153,6 +158,7 @@ namespace EmEn::Base
 
 	Thread::~Thread ()
 	{
+		this->requestStop();
 		this->join();
 	}
 
@@ -173,7 +179,7 @@ namespace EmEn::Base
 	{
 		if ( m_joinable )
 		{
-			Logging::error("Thread", "Thread::start(), this object already owns a running thread (join or detach it first) !");
+			Logging::error("Thread", "Thread::start(), this object already owns a running thread (join it first) !");
 
 			return false;
 		}
@@ -189,6 +195,12 @@ namespace EmEn::Base
 
 			return false;
 		}
+
+		/* NOTE: The stop state of THIS start. Its token is in the task before the system starts the thread (the thread
+		 * creation orders it); the object takes the source only on success, so a refused start keeps the previous one. */
+		std::stop_source stopSource;
+
+		task->m_stopToken = stopSource.get_token();
 
 #if IS_WINDOWS
 		unsigned threadID = 0;
@@ -223,6 +235,7 @@ namespace EmEn::Base
 			std::this_thread::sleep_for(std::chrono::milliseconds{delay});
 		}
 
+		m_stopSource = std::move(stopSource);
 		m_joinable = true;
 
 		/* The new thread owns the task now (Thread::entryPoint() deletes it). ⚠️ Publishing is the LAST access to the
@@ -258,28 +271,6 @@ namespace EmEn::Base
 		m_threadID = 0;
 #else
 		pthread_join(m_handle, nullptr);
-
-		m_handle = {};
-#endif
-
-		m_joinable = false;
-	}
-
-	void
-	Thread::detach () noexcept
-	{
-		if ( !m_joinable )
-		{
-			return;
-		}
-
-#if IS_WINDOWS
-		CloseHandle(m_handle);
-
-		m_handle = nullptr;
-		m_threadID = 0;
-#else
-		pthread_detach(m_handle);
 
 		m_handle = {};
 #endif
