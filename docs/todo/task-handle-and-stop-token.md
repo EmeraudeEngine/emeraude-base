@@ -101,10 +101,8 @@ ad-hoc cancellation mechanisms grew instead, and `Core` drains the pool on behal
 
 ## What remains
 
-- The engine's `Base::Thread` owners (engine item `jobs-owned-by-their-starter`) can migrate now: both base halves
-  are pushed.
-- **Re-measure the stop latency on the NEW Windows machine** (`DISABLED_StopLatencyOnALargeMesh`). The last Windows
-  figure, 57-71 ms at fb5a162, came from the dead laptop.
+- The stop latency on the new Windows machine was measured on 2026-10-15: worst 68.9 ms, over the 50 ms bound (the
+  large flat tables are built without a stop check) — base item `decimator-stop-latency-flat-table-init`.
 - **Cross-OS bit identity**: owner decision on `-ffp-contract=off` cascade-wide. With it, macOS matches Linux on
   every triangle / vertex count (4 / 8 exact fingerprints). The generators' own outputs change with FMA contraction
   even on one OS (positions of the torus, geodesic, capsule, cylinder).
