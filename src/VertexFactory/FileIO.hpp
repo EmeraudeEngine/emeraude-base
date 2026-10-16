@@ -35,6 +35,7 @@
 
 /* Local inclusions for usages. */
 #include "Logging/Logging.hpp"
+#include "FileFormatInterface.hpp"
 #include "FileFormatMDx.hpp"
 #include "FileFormatNative.hpp"
 #include "FileFormatOBJ.hpp"
@@ -102,28 +103,28 @@ namespace EmEn::Base::VertexFactory::FileIO
 		{
 			FileFormatNative< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.readStream(stream, result, readOptions);
+			return readFiniteStream(fileFormat, stream, result, readOptions);
 		}
 
 		if ( extension == "obj" )
 		{
 			FileFormatOBJ< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.readStream(stream, result, readOptions);
+			return readFiniteStream(fileFormat, stream, result, readOptions);
 		}
 
 		if ( extension == "stl" )
 		{
 			FileFormatSTL< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.readStream(stream, result, readOptions);
+			return readFiniteStream(fileFormat, stream, result, readOptions);
 		}
 
 		if ( extension == "mdl" || extension == "md2" || extension == "md3" || extension == "md5mesh" )
 		{
 			FileFormatMDx< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.readStream(stream, result, readOptions);
+			return readFiniteStream(fileFormat, stream, result, readOptions);
 		}
 
 		Logging::error("VertexFactory::FileIO", std::string{"read(), the file \'"} + IO::toU8String(filepath) + "\' format is not handled !");

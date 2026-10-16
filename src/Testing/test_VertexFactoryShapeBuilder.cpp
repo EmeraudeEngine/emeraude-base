@@ -27,6 +27,7 @@
 
 /* STL inclusions. */
 #include <cstdint>
+#include <limits>
 
 /* Local inclusions. */
 #include "Math/Vector.hpp"
@@ -359,4 +360,65 @@ TEST(VertexFactoryShape, aVertexColorIndexOutOfRangeIsRefused)
 
 	EXPECT_EQ(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal, TextureCoordinatesType::None, VertexColorType::RGBA), 0U);
 	EXPECT_GT(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal), 0U);
+}
+
+/* Ave robustus! (2026-10-16, base item shape-merge-quantization-overflow): the merge grid converted a coordinate
+ * divided by the cell side to int64_t without a range check — undefined behaviour beyond about ±9.2e14 (default cell
+ * 1e-4), and for a NaN or an infinity (found by fuzz_mdx). On x86-64 every such value became INT64_MIN, so two
+ * unrelated vertices far apart, or two NaN vertices, MERGED into one. A value without a representable cell is now
+ * never merged. */
+TEST(VertexFactoryShapeBuilder, verticesOutsideTheMergeGridAreNeverMerged)
+{
+	const EmEn::Base::Math::Vector< 3, float > up{0.0F, 1.0F, 0.0F};
+	const auto nan = std::numeric_limits< float >::quiet_NaN();
+	const auto infinity = std::numeric_limits< float >::infinity();
+
+	Shape< float, uint32_t > shape;
+
+	const auto farA = shape.addVertex({1.0e30F, 0.0F, 0.0F}, up);
+	const auto farB = shape.addVertex({-2.0e30F, 0.0F, 0.0F}, up);
+	const auto nanA = shape.addVertex({nan, 0.0F, 0.0F}, up);
+	const auto nanB = shape.addVertex({nan, 0.0F, 0.0F}, up);
+	const auto infA = shape.addVertex({infinity, 0.0F, 0.0F}, up);
+	const auto infB = shape.addVertex({infinity, 0.0F, 0.0F}, up);
+
+	EXPECT_NE(farA, farB) << "two vertices 3e30 apart were merged";
+	EXPECT_NE(nanA, nanB) << "two NaN vertices were merged";
+	EXPECT_NE(infA, infB) << "two infinite vertices were merged";
+	EXPECT_EQ(shape.vertices().size(), 6U);
+
+	/* An ordinary vertex still merges. */
+	const auto ordinary = shape.addVertex({1.0F, 2.0F, 3.0F}, up);
+	EXPECT_EQ(shape.addVertex({1.0F, 2.0F, 3.0F}, up), ordinary);
+
+	/* The colors use the same grid. */
+	const auto colorA = shape.addVertexColor({nan, 0.0F, 0.0F, 1.0F});
+	EXPECT_NE(shape.addVertexColor({nan, 0.0F, 0.0F, 1.0F}), colorA) << "two NaN colors were merged";
+}
+
+/* Same grid in the batch pass: ShapeProcessor::deduplicateVertices() keeps every vertex without a representable cell. */
+TEST(VertexFactoryShapeBuilder, deduplicationNeverMergesVerticesOutsideTheGrid)
+{
+	const EmEn::Base::Math::Vector< 3, float > up{0.0F, 1.0F, 0.0F};
+	const auto nan = std::numeric_limits< float >::quiet_NaN();
+
+	Shape< float, uint32_t > shape;
+
+	static_cast< void >(shape.saveVertex({1.0e30F, 0.0F, 0.0F}, up));
+	static_cast< void >(shape.saveVertex({-2.0e30F, 0.0F, 0.0F}, up));
+	static_cast< void >(shape.saveVertex({nan, 0.0F, 0.0F}, up));
+	static_cast< void >(shape.saveVertex({nan, 0.0F, 0.0F}, up));
+	/* A real duplicate pair, so the pass is not vacuous. */
+	static_cast< void >(shape.saveVertex({1.0F, 2.0F, 3.0F}, up));
+	static_cast< void >(shape.saveVertex({1.0F, 2.0F, 3.0F}, up));
+
+	ShapeTriangle< float > first{0, 1, 2};
+	ShapeTriangle< float > second{3, 4, 5};
+	shape.addTriangle(first);
+	shape.addTriangle(second);
+
+	ShapeProcessor< float, uint32_t > processor{shape};
+
+	EXPECT_EQ(processor.deduplicateVertices(), 1U) << "only the real duplicate may go";
+	EXPECT_EQ(shape.vertices().size(), 5U);
 }

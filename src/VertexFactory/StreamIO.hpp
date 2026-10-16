@@ -75,28 +75,28 @@ namespace EmEn::Base::VertexFactory::StreamIO
 			{
 				FileFormatNative< vertex_data_t, index_data_t > fileFormat{};
 
-				return fileFormat.readStream(stream, result, readOptions);
+				return readFiniteStream(fileFormat, stream, result, readOptions);
 			}
 
 			case FileFormatType::OBJ :
 			{
 				FileFormatOBJ< vertex_data_t, index_data_t > fileFormat{};
 
-				return fileFormat.readStream(stream, result, readOptions);
+				return readFiniteStream(fileFormat, stream, result, readOptions);
 			}
 
 			case FileFormatType::STL :
 			{
 				FileFormatSTL< vertex_data_t, index_data_t > fileFormat{};
 
-				return fileFormat.readStream(stream, result, readOptions);
+				return readFiniteStream(fileFormat, stream, result, readOptions);
 			}
 
 			case FileFormatType::MDx :
 			{
 				FileFormatMDx< vertex_data_t, index_data_t > fileFormat{};
 
-				return fileFormat.readStream(stream, result, readOptions);
+				return readFiniteStream(fileFormat, stream, result, readOptions);
 			}
 		}
 

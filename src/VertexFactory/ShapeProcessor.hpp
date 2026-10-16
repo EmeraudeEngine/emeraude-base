@@ -157,16 +157,23 @@ namespace EmEn::Base::VertexFactory
 
 				const auto scale = static_cast< vertex_data_t >(1) / m_positionTolerance;
 
-				auto quantizeVec = [scale] (const Math::Vector< 3, vertex_data_t > & v) -> std::array< int64_t, 3 >
+				/* NOTE: Nothing when a component has no grid cell (NaN, infinity, out of range): such a vertex is kept
+				 * as it is, never merged (mergeGridCell()). */
+				auto quantizeVec = [scale] (const Math::Vector< 3, vertex_data_t > & v) -> std::optional< std::array< int64_t, 3 > >
 				{
-					return {
-						static_cast< int64_t >(std::round(v[Math::X] * scale)),
-						static_cast< int64_t >(std::round(v[Math::Y] * scale)),
-						static_cast< int64_t >(std::round(v[Math::Z] * scale))
-					};
+					const auto x = mergeGridCell(v[Math::X] * scale);
+					const auto y = mergeGridCell(v[Math::Y] * scale);
+					const auto z = mergeGridCell(v[Math::Z] * scale);
+
+					if ( !x.has_value() || !y.has_value() || !z.has_value() )
+					{
+						return std::nullopt;
+					}
+
+					return std::array< int64_t, 3 >{*x, *y, *z};
 				};
 
-				constexpr std::array< int64_t, 3 > zero{0, 0, 0};
+				constexpr std::optional< std::array< int64_t, 3 > > zero{std::array< int64_t, 3 >{0, 0, 0}};
 
 				std::unordered_map< VertexKey, index_data_t, VertexKeyHash > uniqueMap;
 				std::vector< index_data_t > remapping(oldCount);
@@ -193,7 +200,16 @@ namespace EmEn::Base::VertexFactory
 					const auto & secondary = vert.secondaryTextureCoordinates();
 					const auto s = keepTextureCoordinates ? quantizeVec(Math::Vector< 3, vertex_data_t >{secondary[Math::X], secondary[Math::Y], 0}) : zero;
 
-					const VertexKey key{p[0], p[1], p[2], n[0], n[1], n[2], t[0], t[1], t[2], s[0], s[1]};
+					if ( !p.has_value() || !n.has_value() || !t.has_value() || !s.has_value() )
+					{
+						remapping[i] = static_cast< index_data_t >(newVertices.size());
+
+						newVertices.push_back(vert);
+
+						continue;
+					}
+
+					const VertexKey key{(*p)[0], (*p)[1], (*p)[2], (*n)[0], (*n)[1], (*n)[2], (*t)[0], (*t)[1], (*t)[2], (*s)[0], (*s)[1]};
 
 					auto [it, inserted] = uniqueMap.try_emplace(key, static_cast< index_data_t >(newVertices.size()));
 

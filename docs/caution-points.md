@@ -1027,6 +1027,20 @@ tolerance, and merging them would break the mapping. ⚠️ An earlier version o
 the seam on the epsilon comparison — it never was that. "A closed shape has every edge paired" is
 FALSE here, and a unit test written on that premise fails on correct code.
 
+⚠️⚠️ **A value without a grid cell is never merged** (2026-10-16, FIXED; found by `fuzz_mdx`). The cell was
+`static_cast< int64_t >(std::round(value / tolerance))`, unchecked: undefined behaviour for a NaN, an infinity, or a
+coordinate beyond about ±9.2e14 at the default 1e-4 cell. On x86-64 every such value became INT64_MIN, so unrelated
+far vertices — and every NaN vertex — MERGED into one (measured: 6 such vertices → 1). Both merge paths now go
+through `mergeGridCell()` (`Shape.hpp`), which returns no cell for those values: `addVertex()` / `addVertexColor()`
+store such a vertex without indexing it, `deduplicateVertices()` keeps it as it is. Owner decision 2026-10-16, both
+forms: the merge never UB, AND the file readers refuse the data — `FileIO::read()` / `StreamIO::read()` go through
+`readFiniteStream()` (`FileFormatInterface.hpp`), which refuses a shape whose `hasOnlyFiniteData()` is false and clears
+it. ⚠️ A format's `readStream()` called DIRECTLY (the fuzzers do) does not refuse non-finite data: only the two
+`read()` entries do. ⚠️ Fuzzing: UBSan does not halt by default — run with `UBSAN_OPTIONS=halt_on_error=1`, from a
+scratch directory (the `fuzz-N.log` files land in the current one). Tests: `VertexFactoryShapeBuilder.
+verticesOutsideTheMergeGridAreNeverMerged`, `.deduplicationNeverMergesVerticesOutsideTheGrid` (both failed before),
+`VertexFactoryStreamIO.nonFiniteGeometryIsRefused`.
+
 ### `Shape::addEdge()` returned the index PLUS ONE (Sept 2026, FIXED)
 
 `addEdge()` ended with `const auto newEdgeIndex = static_cast< index_data_t >(m_edges.size());`

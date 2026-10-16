@@ -31,6 +31,7 @@
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
+#include "Logging/Logging.hpp"
 #include "ShapeLoadResult.hpp"
 
 namespace EmEn::Base::VertexFactory
@@ -117,4 +118,38 @@ namespace EmEn::Base::VertexFactory
 
 			FileFormatInterface () noexcept = default;
 	};
+
+	/**
+	 * @brief Reads a stream with a file format, then refuses a shape holding a non-finite value.
+	 * @note The one read path of FileIO::read() and StreamIO::read() (a trust boundary): a file whose vertex data
+	 * holds a NaN or an infinity is refused and the shape cleared (owner decision 2026-10-16).
+	 * @tparam vertex_data_t The precision type of vertex data.
+	 * @tparam index_data_t The precision type of index data.
+	 * @param fileFormat A reference to the file format.
+	 * @param stream A reference to the input byte stream.
+	 * @param result A reference to the destination load result.
+	 * @param readOptions A reference to read options.
+	 * @return bool
+	 */
+	template< typename vertex_data_t, typename index_data_t >
+	[[nodiscard]]
+	bool
+	readFiniteStream (FileFormatInterface< vertex_data_t, index_data_t > & fileFormat, IO::ByteStream & stream, ShapeLoadResult< vertex_data_t, index_data_t > & result, const ReadOptions & readOptions) noexcept
+	{
+		if ( !fileFormat.readStream(stream, result, readOptions) )
+		{
+			return false;
+		}
+
+		if ( !result.shape.hasOnlyFiniteData() )
+		{
+			Logging::error("VertexFactory", "readFiniteStream(), the geometry holds a NaN or an infinite value, refused !");
+
+			result.shape.clear();
+
+			return false;
+		}
+
+		return true;
+	}
 }

@@ -38,6 +38,7 @@
 #include <functional>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <set>
 #include <span>
 #include <sstream>
@@ -70,6 +71,35 @@ namespace EmEn::Base::VertexFactory
 	{
 		std::vector< index_data_t > vertexIndices;
 	};
+
+	/**
+	 * @brief Returns the merge-grid cell of a value already divided by the cell side.
+	 * @note The one quantisation of the library's two merge paths (Shape::addVertex() and
+	 * ShapeProcessor::deduplicateVertices()). Never undefined behaviour: a value whose cell does not fit an int64_t, a NaN
+	 * or an infinity has NO cell, and a vertex with such a component is never merged (before 2026-10-16 the conversion
+	 * was unchecked, and on x86-64 every such value landed in the same cell).
+	 * @tparam precision_t The precision type.
+	 * @param scaledValue The value divided by the cell side.
+	 * @return std::optional< int64_t >
+	 */
+	template< typename precision_t >
+	requires (std::is_floating_point_v< precision_t >)
+	[[nodiscard]]
+	std::optional< int64_t >
+	mergeGridCell (precision_t scaledValue) noexcept
+	{
+		/* NOTE: 2^63 is exact in every floating-point type; an int64_t holds [-2^63, 2^63). */
+		constexpr auto Limit = static_cast< precision_t >(9223372036854775808.0L);
+
+		const auto rounded = std::round(scaledValue);
+
+		if ( !std::isfinite(rounded) || rounded >= Limit || rounded < -Limit )
+		{
+			return std::nullopt;
+		}
+
+		return static_cast< int64_t >(rounded);
+	}
 
 	/**
 	 * @brief The shape class for defining a complete geometry.
@@ -1899,9 +1929,15 @@ namespace EmEn::Base::VertexFactory
 			{
 				this->restoreConstructionIndexes();
 
-				const VertexKey key{this->quantize(position), this->quantize(normal), this->quantize(textureCoordinates)};
+				const auto key = this->vertexKey(position, normal, textureCoordinates);
 
-				const auto keyIt = m_vertexIndex.find(key);
+				/* NOTE: A component without a grid cell (NaN, infinity, out of range): never merged. */
+				if ( !key.has_value() )
+				{
+					return this->saveVertex(position, normal, textureCoordinates);
+				}
+
+				const auto keyIt = m_vertexIndex.find(*key);
 
 				if ( keyIt != m_vertexIndex.cend() )
 				{
@@ -1910,7 +1946,7 @@ namespace EmEn::Base::VertexFactory
 
 				const auto index = this->saveVertex(position, normal, textureCoordinates);
 
-				m_vertexIndex.emplace(key, index);
+				m_vertexIndex.emplace(*key, index);
 
 				return index;
 			}
@@ -1927,9 +1963,15 @@ namespace EmEn::Base::VertexFactory
 			{
 				this->restoreConstructionIndexes();
 
-				const ColorKey key{this->quantize(Math::Vector< 3, vertex_data_t >{color[Math::X], color[Math::Y], color[Math::Z]}), this->quantizeScalar(color[Math::W])};
+				const auto key = this->colorKey(color);
 
-				const auto keyIt = m_vertexColorIndex.find(key);
+				/* NOTE: A component without a grid cell (NaN, infinity, out of range): never merged. */
+				if ( !key.has_value() )
+				{
+					return this->saveVertexColor(color);
+				}
+
+				const auto keyIt = m_vertexColorIndex.find(*key);
 
 				if ( keyIt != m_vertexColorIndex.cend() )
 				{
@@ -1938,7 +1980,7 @@ namespace EmEn::Base::VertexFactory
 
 				const auto index = this->saveVertexColor(color);
 
-				m_vertexColorIndex.emplace(key, index);
+				m_vertexColorIndex.emplace(*key, index);
 
 				return index;
 			}
@@ -1967,6 +2009,31 @@ namespace EmEn::Base::VertexFactory
 			mergeTolerance () const noexcept
 			{
 				return m_mergeTolerance;
+			}
+
+			/**
+			 * @brief Returns whether every vertex attribute and vertex color is finite (no NaN, no infinity).
+			 * @note The file readers (FileIO::read(), StreamIO::read()) refuse a shape that is not: a non-finite value
+			 * from a file poisons the bounding volumes, the normals and every computation after them.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			hasOnlyFiniteData () const noexcept
+			{
+				const auto finite = [] < size_t dim_t > (const Math::Vector< dim_t, vertex_data_t > & vector) noexcept {
+					return std::ranges::all_of(std::span< const vertex_data_t, dim_t >{vector.data(), dim_t}, [] (vertex_data_t value) noexcept {
+						return std::isfinite(value);
+					});
+				};
+
+				const auto vertexIsFinite = [&finite] (const ShapeVertex< vertex_data_t > & vertex) noexcept {
+					return finite(vertex.position()) && finite(vertex.tangent()) && finite(vertex.normal()) &&
+						finite(vertex.textureCoordinates()) && finite(vertex.secondaryTextureCoordinates()) &&
+						finite(vertex.weights()) && std::isfinite(vertex.tangentHandedness());
+				};
+
+				return std::ranges::all_of(m_vertices, vertexIsFinite) && std::ranges::all_of(m_vertexColors, finite);
 			}
 
 			/**
@@ -2699,25 +2766,77 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Snaps a value to the merge grid.
 			 * @param value The value.
-			 * @return int64_t
+			 * @return std::optional< int64_t > Nothing when the value has no cell (see mergeGridCell()).
 			 */
 			[[nodiscard]]
-			int64_t
+			std::optional< int64_t >
 			quantizeScalar (vertex_data_t value) const noexcept
 			{
-				return static_cast< int64_t >(std::round(value / m_mergeTolerance));
+				return mergeGridCell(value / m_mergeTolerance);
 			}
 
 			/**
 			 * @brief Snaps a vector to the merge grid.
 			 * @param vector A reference to the vector.
-			 * @return QuantizedVector
+			 * @return std::optional< QuantizedVector > Nothing when a component has no cell.
 			 */
 			[[nodiscard]]
-			QuantizedVector
+			std::optional< QuantizedVector >
 			quantize (const Math::Vector< 3, vertex_data_t > & vector) const noexcept
 			{
-				return {this->quantizeScalar(vector[Math::X]), this->quantizeScalar(vector[Math::Y]), this->quantizeScalar(vector[Math::Z])};
+				const auto x = this->quantizeScalar(vector[Math::X]);
+				const auto y = this->quantizeScalar(vector[Math::Y]);
+				const auto z = this->quantizeScalar(vector[Math::Z]);
+
+				if ( !x.has_value() || !y.has_value() || !z.has_value() )
+				{
+					return std::nullopt;
+				}
+
+				return QuantizedVector{*x, *y, *z};
+			}
+
+			/**
+			 * @brief Returns the merge key of a vertex.
+			 * @param position A reference to the position.
+			 * @param normal A reference to the normal.
+			 * @param textureCoordinates A reference to the texture coordinates.
+			 * @return std::optional< VertexKey > Nothing when a component has no cell: the vertex is never merged.
+			 */
+			[[nodiscard]]
+			std::optional< VertexKey >
+			vertexKey (const Math::Vector< 3, vertex_data_t > & position, const Math::Vector< 3, vertex_data_t > & normal, const Math::Vector< 3, vertex_data_t > & textureCoordinates) const noexcept
+			{
+				const auto quantizedPosition = this->quantize(position);
+				const auto quantizedNormal = this->quantize(normal);
+				const auto quantizedTextureCoordinates = this->quantize(textureCoordinates);
+
+				if ( !quantizedPosition.has_value() || !quantizedNormal.has_value() || !quantizedTextureCoordinates.has_value() )
+				{
+					return std::nullopt;
+				}
+
+				return VertexKey{*quantizedPosition, *quantizedNormal, *quantizedTextureCoordinates};
+			}
+
+			/**
+			 * @brief Returns the merge key of a vertex color.
+			 * @param color A reference to the color.
+			 * @return std::optional< ColorKey > Nothing when a component has no cell: the color is never merged.
+			 */
+			[[nodiscard]]
+			std::optional< ColorKey >
+			colorKey (const Math::Vector< 4, vertex_data_t > & color) const noexcept
+			{
+				const auto rgb = this->quantize(Math::Vector< 3, vertex_data_t >{color[Math::X], color[Math::Y], color[Math::Z]});
+				const auto alpha = this->quantizeScalar(color[Math::W]);
+
+				if ( !rgb.has_value() || !alpha.has_value() )
+				{
+					return std::nullopt;
+				}
+
+				return ColorKey{*rgb, *alpha};
 			}
 
 			/**
@@ -2794,7 +2913,10 @@ namespace EmEn::Base::VertexFactory
 				{
 					const auto & vertex = m_vertices[index];
 
-					m_vertexIndex.try_emplace(VertexKey{this->quantize(vertex.position()), this->quantize(vertex.normal()), this->quantize(vertex.textureCoordinates())}, static_cast< index_data_t >(index));
+					if ( const auto key = this->vertexKey(vertex.position(), vertex.normal(), vertex.textureCoordinates()); key.has_value() )
+					{
+						m_vertexIndex.try_emplace(*key, static_cast< index_data_t >(index));
+					}
 				}
 
 				m_vertexColorIndex.reserve(m_vertexColors.size());
@@ -2803,7 +2925,10 @@ namespace EmEn::Base::VertexFactory
 				{
 					const auto & color = m_vertexColors[index];
 
-					m_vertexColorIndex.try_emplace(ColorKey{this->quantize(Math::Vector< 3, vertex_data_t >{color[Math::X], color[Math::Y], color[Math::Z]}), this->quantizeScalar(color[Math::W])}, static_cast< index_data_t >(index));
+					if ( const auto key = this->colorKey(color); key.has_value() )
+					{
+						m_vertexColorIndex.try_emplace(*key, static_cast< index_data_t >(index));
+					}
 				}
 
 				for ( size_t index = 0; index < m_edges.size(); ++index )

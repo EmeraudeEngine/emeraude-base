@@ -1019,6 +1019,45 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(result.shape.triangles().size(), 1U);
 	}
 
+	TEST(VertexFactoryStreamIO, nonFiniteGeometryIsRefused)
+	{
+		/* NOTE: Owner decision 2026-10-16 (base item shape-merge-quantization-overflow): the file readers refuse a
+		 * geometry holding a NaN or an infinity. The native format stores raw floats, so a NaN survives the round trip
+		 * and only the read path's check can refuse it. */
+		const EmEn::Base::Math::Vector< 3, float > up{0.0F, 1.0F, 0.0F};
+
+		Shape< float, uint32_t > shape;
+		static_cast< void >(shape.saveVertex({0.0F, 0.0F, 0.0F}, up));
+		static_cast< void >(shape.saveVertex({1.0F, 0.0F, 0.0F}, up));
+		static_cast< void >(shape.saveVertex({0.0F, std::numeric_limits< float >::quiet_NaN(), 0.0F}, up));
+		ShapeTriangle< float > triangle{0, 1, 2};
+		shape.addTriangle(triangle);
+
+		ASSERT_FALSE(shape.hasOnlyFiniteData());
+
+		std::vector< std::byte > buffer;
+		ASSERT_TRUE(StreamIO::write(shape, FileFormatType::Native, buffer));
+
+		Result result;
+		EXPECT_FALSE(StreamIO::read(buffer, FileFormatType::Native, result));
+		EXPECT_TRUE(result.shape.vertices().empty()) << "a refused geometry must not be left half-usable";
+
+		/* Control: the same shape without the NaN reads back. */
+		Shape< float, uint32_t > control;
+		static_cast< void >(control.saveVertex({0.0F, 0.0F, 0.0F}, up));
+		static_cast< void >(control.saveVertex({1.0F, 0.0F, 0.0F}, up));
+		static_cast< void >(control.saveVertex({0.0F, 1.0F, 0.0F}, up));
+		control.addTriangle(triangle);
+
+		ASSERT_TRUE(control.hasOnlyFiniteData());
+
+		std::vector< std::byte > controlBuffer;
+		ASSERT_TRUE(StreamIO::write(control, FileFormatType::Native, controlBuffer));
+
+		Result controlResult;
+		EXPECT_TRUE(StreamIO::read(controlBuffer, FileFormatType::Native, controlResult));
+	}
+
 	TEST(VertexFactoryStreamIO, formatParity)
 	{
 		/* Ave robustus! (Axis B): StreamIO must reach every format FileIO does. OBJ read gives a shape;
