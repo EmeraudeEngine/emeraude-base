@@ -364,6 +364,85 @@ TEST(Mutex, aGuardAdoptsASuccessfulTryLockAndReleasesIt)
 	ASSERT_TRUE(acquiredAfter);
 }
 
+namespace
+{
+	/** @brief Two accounts, each guarded by its own mutex: a transfer locks both (the pair lock's shape). */
+	class GuardedAccount final
+	{
+		public:
+
+			static
+			void
+			transfer (GuardedAccount & from, GuardedAccount & to, int amount) noexcept
+			{
+				const MutexPairLock lock{from.m_access, to.m_access};
+
+				from.m_balance -= amount;
+				to.m_balance += amount;
+			}
+
+			[[nodiscard]]
+			int
+			balance () const noexcept
+			{
+				const MutexLock lock{m_access};
+
+				return m_balance;
+			}
+
+		private:
+
+			mutable Mutex m_access;
+			int m_balance EMEN_GUARDED_BY(m_access){1000};
+	};
+}
+
+TEST(Mutex, aPairLockTakesTwoMutexesInEitherOrderWithoutDeadlock)
+{
+	constexpr int Transfers{50000};
+
+	GuardedAccount left;
+	GuardedAccount right;
+
+	/* NOTE: One thread locks (left, right), the other (right, left): sequential locks could deadlock here. */
+	std::thread forward{[&left, &right] {
+		for ( int index = 0; index < Transfers; ++index )
+		{
+			GuardedAccount::transfer(left, right, 1);
+		}
+	}};
+
+	std::thread backward{[&left, &right] {
+		for ( int index = 0; index < Transfers; ++index )
+		{
+			GuardedAccount::transfer(right, left, 1);
+		}
+	}};
+
+	forward.join();
+	backward.join();
+
+	ASSERT_EQ(left.balance(), 1000);
+	ASSERT_EQ(right.balance(), 1000);
+}
+
+namespace
+{
+	/** @brief Takes a pair lock on two references (the same mutex when the caller passes it twice). */
+	void
+	lockPair (Mutex & first, Mutex & second) noexcept
+	{
+		const MutexPairLock lock{first, second};
+	}
+}
+
+TEST(MutexDeathTest, aPairLockOnOneMutexTwiceAborts)
+{
+	Mutex access;
+
+	ASSERT_DEATH(lockPair(access, access), "");
+}
+
 TEST(ConditionVariable, waitReturnsWhenThePredicateHoldsWithTheMutexHeldAgain)
 {
 	GuardedMailbox mailbox;

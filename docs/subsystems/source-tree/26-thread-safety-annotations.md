@@ -26,6 +26,9 @@ without its lock" into a compile error: `-Wthread-safety` is in the paranoid war
   inside the `Mutex` for the wait and gives it back: `wait()`, `waitFor()`, `waitUntil()` with a predicate,
   `notifyOne()`, `notifyAll()`). `std::condition_variable_any` adds an internal mutex and a shared pointer to every wait;
   keep it only for a wait a `std::stop_token` must wake (C++20 has no other).
+- `Base::MutexPairLock`: TWO mutexes taken together by `std::lock()` (no lock-order deadlock: two threads locking
+  (a, b) and (b, a) cannot block each other — `std::scoped_lock{a, b}`'s role, annotated `EMEN_ACQUIRE(a, b)`); the
+  same mutex twice is a contract fault, the process aborts (2026-10-17, first user: the engine's AVConsole devices).
 - `Base::SharedMutex`: a `std::shared_mutex` inside, a capability with a shared mode. `SharedMutexReadLock` holds it
   shared (many readers), `SharedMutexWriteLock` exclusively; the analysis refuses a write under a read lock.
 

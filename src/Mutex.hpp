@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdlib>
 #include <mutex>
 
 /* Local inclusions. */
@@ -174,5 +175,58 @@ namespace EmEn::Base
 			friend class ConditionVariable;
 
 			Mutex & m_mutex;
+	};
+
+	/**
+	 * @brief The RAII guard of TWO Mutexes taken together (std::scoped_lock{a, b}'s role, annotated): std::lock() acquires
+	 * both without a lock-order deadlock (two threads locking (a, b) and (b, a) cannot block each other), the destructor
+	 * releases both.
+	 * @note The two mutexes must be distinct: the same mutex twice is a contract fault, the process aborts (std::lock() on
+	 * one mutex twice is undefined behaviour).
+	 */
+	class EMEN_SCOPED_CAPABILITY MutexPairLock final
+	{
+		public:
+
+			/**
+			 * @brief Acquires both mutexes.
+			 * @param first A reference to a mutex. It outlives the guard.
+			 * @param second A reference to another mutex. It outlives the guard.
+			 */
+			MutexPairLock (Mutex & first, Mutex & second) noexcept EMEN_ACQUIRE(first, second)
+				: m_first{first},
+				m_second{second}
+			{
+				if ( &first == &second ) [[unlikely]]
+				{
+					std::abort();
+				}
+
+				std::lock(m_first, m_second);
+			}
+
+			/** @brief Copy constructor. */
+			MutexPairLock (const MutexPairLock & copy) noexcept = delete;
+
+			/** @brief Move constructor. */
+			MutexPairLock (MutexPairLock && copy) noexcept = delete;
+
+			/** @brief Copy assignment. @return MutexPairLock & */
+			MutexPairLock & operator= (const MutexPairLock & copy) noexcept = delete;
+
+			/** @brief Move assignment. @return MutexPairLock & */
+			MutexPairLock & operator= (MutexPairLock && copy) noexcept = delete;
+
+			/** @brief Releases both mutexes. */
+			~MutexPairLock () EMEN_RELEASE()
+			{
+				m_second.unlock();
+				m_first.unlock();
+			}
+
+		private:
+
+			Mutex & m_first;
+			Mutex & m_second;
 	};
 }
