@@ -58,11 +58,20 @@
 /** @brief The function must be called with the capabilities held (exclusively). */
 #define EMEN_REQUIRES(...) EMEN_THREAD_ANNOTATION(requires_capability(__VA_ARGS__))
 
+/** @brief The function must be called with the capabilities held, at least shared (a read under a shared lock). */
+#define EMEN_REQUIRES_SHARED(...) EMEN_THREAD_ANNOTATION(requires_shared_capability(__VA_ARGS__))
+
 /** @brief The function must be called WITHOUT the capabilities held (it takes them itself: a re-entry deadlocks). */
 #define EMEN_EXCLUDES(...) EMEN_THREAD_ANNOTATION(locks_excluded(__VA_ARGS__))
 
 /** @brief The function acquires the capabilities and returns with them held. */
 #define EMEN_ACQUIRE(...) EMEN_THREAD_ANNOTATION(acquire_capability(__VA_ARGS__))
+
+/** @brief The function acquires the capabilities shared (a reader) and returns with them held. */
+#define EMEN_ACQUIRE_SHARED(...) EMEN_THREAD_ANNOTATION(acquire_shared_capability(__VA_ARGS__))
+
+/** @brief The function releases the capabilities it held shared. */
+#define EMEN_RELEASE_SHARED(...) EMEN_THREAD_ANNOTATION(release_shared_capability(__VA_ARGS__))
 
 /** @brief The function releases the capabilities. */
 #define EMEN_RELEASE(...) EMEN_THREAD_ANNOTATION(release_capability(__VA_ARGS__))

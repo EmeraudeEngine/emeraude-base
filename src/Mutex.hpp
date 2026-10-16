@@ -34,6 +34,8 @@
 
 namespace EmEn::Base
 {
+	class ConditionVariable;
+
 	/**
 	 * @brief A mutex the Clang thread-safety analysis knows (decision D12): annotated members name it in
 	 * EMEN_GUARDED_BY(), and every access outside a MutexLock is a compile-time warning (an error under -Werror).
@@ -94,14 +96,19 @@ namespace EmEn::Base
 
 		private:
 
+			/* NOTE: ConditionVariable waits on the std::mutex itself (the cost of a std::condition_variable). */
+			friend class ConditionVariable;
+
 			std::mutex m_mutex;
 	};
 
 	/**
 	 * @brief The RAII guard of a Mutex (std::scoped_lock's role, annotated): acquired by the constructor, released by the
 	 * destructor.
-	 * @note It is BasicLockable: std::condition_variable_any waits on it (wait(lock, predicate) releases and reacquires
-	 * the mutex around the wait; the analysis treats the wait as opaque, the predicate reads under the lock).
+	 * @note ConditionVariable waits on it at the cost of a std::condition_variable (ConditionVariable.hpp). It is also
+	 * BasicLockable: std::condition_variable_any waits on it, which a std::stop_token wait needs (wait(lock, predicate)
+	 * releases and reacquires the mutex around the wait; the analysis treats the wait as opaque, the predicate reads
+	 * under the lock).
 	 */
 	class EMEN_SCOPED_CAPABILITY MutexLock final
 	{
@@ -151,6 +158,8 @@ namespace EmEn::Base
 			}
 
 		private:
+
+			friend class ConditionVariable;
 
 			Mutex & m_mutex;
 	};
