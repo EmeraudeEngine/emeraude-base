@@ -51,7 +51,9 @@ class Something final
 - A private helper called with the lock held: `EMEN_REQUIRES(m_access)`; one that takes the lock itself and must not be
   called with it held: `EMEN_EXCLUDES(m_access)`.
 - Lock only through `MutexLock` (CP.20). A `try_lock()` is followed by the analysis only inside an `if` condition, never
-  hidden in an assertion macro.
+  hidden in an assertion macro; the guard then ADOPTS it (2026-10-16, clang's `mutex.h` pattern):
+  `if ( !m_access.try_lock() ) { return; } const Base::MutexLock lock{m_access, std::adopt_lock};` — never a manual
+  `unlock()`.
 - A notification, a signal or a callback is emitted AFTER the guard's scope closes (CP.31/32; the cascade rule "never
   emit while holding a mutex a handler may take").
 

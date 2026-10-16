@@ -322,6 +322,48 @@ namespace
 	};
 }
 
+TEST(Mutex, aGuardAdoptsASuccessfulTryLockAndReleasesIt)
+{
+	Mutex access;
+
+	{
+		if ( !access.try_lock() )
+		{
+			FAIL() << "a free mutex refused try_lock()";
+		}
+
+		const MutexLock lock{access, std::adopt_lock};
+
+		/* NOTE: Held by the adopted guard: another thread cannot take it. */
+		std::atomic_bool acquiredElsewhere{false};
+
+		std::thread other{[&access, &acquiredElsewhere] {
+			if ( access.try_lock() )
+			{
+				acquiredElsewhere = true;
+
+				access.unlock();
+			}
+		}};
+
+		other.join();
+
+		ASSERT_FALSE(acquiredElsewhere.load());
+	}
+
+	/* NOTE: The guard's end released it. */
+	bool acquiredAfter = false;
+
+	if ( access.try_lock() )
+	{
+		acquiredAfter = true;
+
+		access.unlock();
+	}
+
+	ASSERT_TRUE(acquiredAfter);
+}
+
 TEST(ConditionVariable, waitReturnsWhenThePredicateHoldsWithTheMutexHeldAgain)
 {
 	GuardedMailbox mailbox;

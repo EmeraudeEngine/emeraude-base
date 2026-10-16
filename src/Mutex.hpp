@@ -125,6 +125,18 @@ namespace EmEn::Base
 				m_mutex.lock();
 			}
 
+			/**
+			 * @brief Adopts a mutex the caller already holds (a successful try_lock()), and releases it at the end.
+			 * @note The pattern the analysis follows: `if ( !mutex.try_lock() ) { return; } const MutexLock lock{mutex,
+			 * std::adopt_lock};` — the try_lock() in a condition, the guard right after (never a manual unlock()).
+			 * @param mutex A reference to the held mutex. It outlives the guard.
+			 */
+			MutexLock (Mutex & mutex, std::adopt_lock_t /*adopt*/) noexcept EMEN_REQUIRES(mutex)
+				: m_mutex{mutex}
+			{
+
+			}
+
 			/** @brief Copy constructor. */
 			MutexLock (const MutexLock & copy) noexcept = delete;
 
