@@ -47,18 +47,18 @@ namespace EmEn::Base::Math::Space2D
 		public:
 
 			/**
-			 * @brief Constructs a default circle.
+			 * @brief Constructs a default circle: radius 0 at the origin.
 			 */
 			constexpr Circle () noexcept = default;
 
 			/**
 			 * @brief Constructs a circle.
-			 * @param radius The initial radius. Default 0.
+			 * @param radius The initial radius (its absolute value is kept).
 			 * @param position A reference to a point. Default origin.
 			 */
 			explicit
 			constexpr
-			Circle (precision_t radius = 0, const Point< precision_t > & position = {}) noexcept
+			Circle (precision_t radius, const Point< precision_t > & position = {}) noexcept
 				: m_position(position), m_radius(radius < 0 ? -radius : radius)
 			{
 
@@ -225,7 +225,7 @@ namespace EmEn::Base::Math::Space2D
 
 		private:
 
-			Point< precision_t > m_position;
-			precision_t m_radius;
+			Point< precision_t > m_position{};
+			precision_t m_radius{0};
 	};
 }

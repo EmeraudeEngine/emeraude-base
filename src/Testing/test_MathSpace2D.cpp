@@ -222,7 +222,8 @@ TYPED_TEST(MathSpace2D, SegmentReset)
 
 TYPED_TEST(MathSpace2D, CircleDefaultConstructor)
 {
-	const Circle< TypeParam > circle{static_cast< TypeParam >(0.0)};
+	/* NOTE: A truly default-constructed circle (ambiguous with the radius constructor before 2026-10-16). */
+	const Circle< TypeParam > circle;
 
 	ASSERT_EQ(circle.position(), Point< TypeParam >(0, 0));
 	ASSERT_EQ(circle.radius(), TypeParam{0});

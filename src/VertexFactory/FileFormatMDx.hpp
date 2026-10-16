@@ -276,7 +276,7 @@ namespace EmEn::Base::VertexFactory
 			bool
 			loadMDL (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry)
 			{
-				mdl_header_t header;
+				mdl_header_t header{};
 				file.read(reinterpret_cast< char * >(&header), sizeof(mdl_header_t));
 
 				/* NOTE: The skin size divides every texture coordinate below: a zero or negative size from the (untrusted)
@@ -498,7 +498,7 @@ namespace EmEn::Base::VertexFactory
 			bool
 			loadMD2 (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry)
 			{
-				md2_header_t header;
+				md2_header_t header{};
 				file.read(reinterpret_cast< char * >(&header), sizeof(md2_header_t));
 
 				/* NOTE: The skin size divides every texture coordinate below (see loadMDL()). */
@@ -708,8 +708,17 @@ namespace EmEn::Base::VertexFactory
 			bool
 			loadMD3 (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry)
 			{
-				md3_header_t header;
+				md3_header_t header{};
 				file.read(reinterpret_cast< char * >(&header), sizeof(md3_header_t));
+
+				/* NOTE: A short file used to leave most of the header indeterminate; only the stream's fail state made the
+				 * size check below refuse it, by luck. */
+				if ( !file )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMD3(), unreadable header !");
+
+					return false;
+				}
 
 				geometry.clear();
 				
@@ -734,6 +743,13 @@ namespace EmEn::Base::VertexFactory
 				{
 					file.seekg(currentSurfaceOffset, std::ios::beg);
 					file.read(reinterpret_cast< char * >(&surfaces[surfaceIndex]), sizeof(md3_surface_t));
+
+					if ( !file )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMD3(), unreadable surface header !");
+
+						return false;
+					}
 
 					/* num_triangles is untrusted: reject a negative or stream-exceeding count, and keep the
 					 * running total bounded so the reserveData() below cannot request gigabytes (fuzz_mdx OOM). */

@@ -491,6 +491,23 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_FALSE(format.readStream(stream, result, {}));
 	}
 
+	TEST(VertexFactoryMDx, md3TruncatedHeaderIsRejected)
+	{
+		/* NOTE: "IDP3" then 8 bytes of a 108-byte header. Before 2026-10-16 the rest of the header stayed indeterminate
+		 * and only the stream's fail state (tellg() == -1 in exceedsStream()) refused the file; a regression guard for
+		 * the explicit refusal that replaced that luck. */
+		std::vector< std::byte > buffer(12, std::byte{0});
+		buffer[0] = static_cast< std::byte >('I');
+		buffer[1] = static_cast< std::byte >('D');
+		buffer[2] = static_cast< std::byte >('P');
+		buffer[3] = static_cast< std::byte >('3');
+
+		MemoryStream stream{buffer};
+		MDx format;
+		Result result;
+		EXPECT_FALSE(format.readStream(stream, result, {}));
+	}
+
 	TEST(VertexFactoryMDx, md2EmptyFrameTableIsRejected)
 	{
 		/* num_frames = 0 with otherwise-consistent counts: the build read frames[0] on an empty
