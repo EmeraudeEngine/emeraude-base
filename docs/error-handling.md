@@ -292,7 +292,11 @@ JSF AV C++, MISRA C++:2023). It is a base rule for every new addition; existing 
 6. **Constructor = valid object, destructor = everything released** (C.41, C.31); rule of zero, else a complete rule
    of five (C.20, C.21); every member initialized; thread members declared after the state their thread uses.
 7. **Locks only through guards** (CP.20); never notify after releasing a lock the destructor could race.
-8. **A registration is an object** — registering returns a move-only token whose destructor unregisters.
+8. **A registration is an object** — registering returns a move-only token whose destructor unregisters:
+   `Base::ScopedRegistration` (`src/ScopedRegistration.hpp`, 2026-10-16), the one generic token of the cascade (owner
+   decision). The registry hands it its undo; the token runs it once (destruction, `reset()`, or replaced by a move
+   assignment), a moved-from token is empty. The registry outlives its tokens, or its undo tolerates its end (a weak
+   reference); the undo runs on the thread that ends the token.
 9. **No accepted undefined behaviour** — a tolerated dead `this`, a timeout-and-abandon or an "unlikely" race is a
    defect; every failure path exits cleanly, and is tested.
 10. **A `switch` on an enum that lists every enumerator has NO `default:`** (owner decision D14, 2026-10-08), so `-Wswitch`

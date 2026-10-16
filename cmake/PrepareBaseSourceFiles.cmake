@@ -174,6 +174,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmapFormat.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryProcessor.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryTextPixmap.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ScopedRegistration.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_StaticVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_String.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Thread.cpp
