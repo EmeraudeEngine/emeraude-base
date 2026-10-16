@@ -296,7 +296,8 @@ JSF AV C++, MISRA C++:2023). It is a base rule for every new addition; existing 
    `Base::ScopedRegistration` (`src/ScopedRegistration.hpp`, 2026-10-16), the one generic token of the cascade (owner
    decision). The registry hands it its undo; the token runs it once (destruction, `reset()`, or replaced by a move
    assignment), a moved-from token is empty. The registry outlives its tokens, or its undo tolerates its end (a weak
-   reference); the undo runs on the thread that ends the token.
+   reference); the undo runs on the thread that ends the token. A timer is held the same way:
+   `Time::EventTrait::createTimer()` returns a `TimerHandle`, declared after the state its callback uses.
 9. **No accepted undefined behaviour** — a tolerated dead `this`, a timeout-and-abandon or an "unlikely" race is a
    defect; every failure path exits cleanly, and is tested.
 10. **A `switch` on an enum that lists every enumerator has NO `default:`** (owner decision D14, 2026-10-08), so `-Wswitch`

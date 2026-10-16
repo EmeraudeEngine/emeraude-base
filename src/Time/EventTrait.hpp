@@ -38,11 +38,116 @@
 #include <vector>
 
 /* Local inclusions for usages. */
+#include "ScopedRegistration.hpp"
 #include "TimedEvent.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::Time
 {
+	/**
+	 * @brief A timer owned by its holder (Ave Robustus II P4, owner decision 2026-10-16): its end destroys the timer —
+	 * stops it and joins its thread (EventTrait::destroyTimer()).
+	 *
+	 * EventTrait is a base class: without a handle, its timers were joined only in its own destructor, AFTER the members
+	 * of the derived class, which a callback capturing `this` still used. The holder declares the handle after the state
+	 * its callback uses, so the timer is stopped before that state goes.
+	 * @pre The EventTrait that made the timer outlives the handle.
+	 * @note Move-only; a moved-from or reset handle is empty (valid() false, id() 0).
+	 */
+	class TimerHandle final
+	{
+		public:
+
+			/** @brief Constructs an empty handle (no timer). */
+			TimerHandle () noexcept = default;
+
+			/**
+			 * @brief Constructs a handle over a timer just created.
+			 * @param timerID The timer ID.
+			 * @param registration The undo destroying the timer.
+			 */
+			TimerHandle (TimerID timerID, ScopedRegistration registration) noexcept
+				: m_registration{std::move(registration)},
+				m_timerID{timerID}
+			{
+
+			}
+
+			/** @brief Copy constructor (deleted: one owner per timer). */
+			TimerHandle (const TimerHandle & copy) = delete;
+
+			/** @brief Copy assignment (deleted). */
+			TimerHandle & operator= (const TimerHandle & copy) = delete;
+
+			/**
+			 * @brief Move constructor: the timer changes owner, the source becomes empty.
+			 * @param other The handle to take the timer from.
+			 */
+			TimerHandle (TimerHandle && other) noexcept
+				: m_registration{std::move(other.m_registration)},
+				m_timerID{std::exchange(other.m_timerID, 0)}
+			{
+
+			}
+
+			/**
+			 * @brief Move assignment: the timer held before is destroyed, then the other one is taken.
+			 * @param other The handle to take the timer from.
+			 * @return TimerHandle &
+			 */
+			TimerHandle &
+			operator= (TimerHandle && other) noexcept
+			{
+				if ( this != &other )
+				{
+					m_registration = std::move(other.m_registration);
+					m_timerID = std::exchange(other.m_timerID, 0);
+				}
+
+				return *this;
+			}
+
+			/** @brief Destructs the handle: destroys the timer. */
+			~TimerHandle () = default;
+
+			/**
+			 * @brief Returns whether the handle owns a timer.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			valid () const noexcept
+			{
+				return m_registration.active();
+			}
+
+			/**
+			 * @brief Returns the timer ID (for EventTrait's start / stop / pause calls), 0 when empty.
+			 * @return TimerID
+			 */
+			[[nodiscard]]
+			TimerID
+			id () const noexcept
+			{
+				return m_timerID;
+			}
+
+			/**
+			 * @brief Destroys the timer now (stops it, joins its thread; deferred when called from its own callback).
+			 */
+			void
+			reset () noexcept
+			{
+				m_registration.reset();
+				m_timerID = 0;
+			}
+
+		private:
+
+			ScopedRegistration m_registration;
+			TimerID m_timerID{0};
+	};
+
 	/**
 	 * @brief Adds the ability to fire timed events to a class.
 	 * @tparam rep_t The time thick precision. Default unsigned int.
@@ -97,9 +202,10 @@ namespace EmEn::Base::Time
 			 * @param granularity This is the interval, or the timeout respecting period_t (Time unit).
 			 * @param once If set to true, your timer will fire only once and will be killed automatically.
 			 * @param autostart If set to true, the timer will execute automatically.
-			 * @return TimerID
+			 * @return TimerHandle The timer, owned by the caller: its end destroys it. Empty when refused.
 			 */
-			TimerID
+			[[nodiscard]]
+			TimerHandle
 			createTimer (const std::function< bool (TimerID) > & callable, rep_t granularity, bool once = false, bool autostart = false) noexcept
 			{
 				/* Declared before the lock, destroyed after it: the retired events' destructors join their threads. */
@@ -121,7 +227,7 @@ namespace EmEn::Base::Time
 				{
 					std::cerr << "EventTrait::createTimer(), unable to create a timer !" "\n";
 
-					return 0;
+					return {};
 				}
 
 				auto & timer = result.first->second;
@@ -133,19 +239,22 @@ namespace EmEn::Base::Time
 				{
 					m_events.erase(result.first);
 
-					return 0;
+					return {};
 				}
 
-				return timerID;
+				return TimerHandle{timerID, ScopedRegistration{[this, timerID] () {
+					this->destroyTimer(timerID);
+				}}};
 			}
 
 			/**
 			 * @brief Executes a single event using EventTrait::createTimer().
 			 * @param callable The function triggered after the timeout.
 			 * @param timeout The delay before firing the event respecting the period_t (Time unit).
-			 * @return TimerID
+			 * @return TimerHandle The timer, owned by the caller (its end cancels it if it has not fired yet).
 			 */
-			TimerID
+			[[nodiscard]]
+			TimerHandle
 			fire (const std::function< bool (TimerID) > & callable, rep_t timeout) noexcept
 			{
 				return this->createTimer(callable, timeout, true, true);

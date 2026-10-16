@@ -309,6 +309,17 @@ quaternion is a few ulps too long (accumulated rotations) gave NaN for all three
 
 ## Time
 
+### ⚠️⚠️ An `EventTrait` timer is OWNED through a `TimerHandle` (2026-10-16, Ave Robustus II P4)
+
+`EventTrait` is a BASE class: its destructor joins the timers AFTER the derived class's members are destroyed, while a
+callback capturing `this` still uses them (the `Notifier`'s timer, when its `onInitialize()` failed after creating it
+and `onTerminate()` never ran). `createTimer()` / `fire()` now return a `[[nodiscard]] TimerHandle` (the ID and a
+`ScopedRegistration`): its end destroys the timer (stop + join; deferred when reset from the timer's own callback).
+The holder declares the handle AFTER the state the callback uses — the last member — so the timer stops before that
+state goes. Keep the ID for `startTimer()` / `pauseTimer()` / … through `handle.id()`. Discarding the handle destroys
+the timer at once. Tests `TimeEventTrait.theEndOfItsHandleStopsTheTimer`, `aMovedHandleKeepsTheTimer`,
+`aCallbackMayResetItsOwnHandle` (Release, ASan/UBSan, TSan, 20 runs each).
+
 ### ⚠️⚠️ `EventTrait` joined its timers UNDER its lock, and a callback destroying its own timer self-joined (2026-10-07, FIXED)
 
 `destroyTimer()` / `destroyTimers()` erased the `TimedEvent`s under `m_eventsAccess`, and `~TimedEvent()` joins the

@@ -81,7 +81,9 @@ namespace EmEn::Base::Time
 			return false;
 		};
 
-		const auto timerID = events.createTimer(callback, 3'600'000U /* 1 h */, false, false);
+		const auto timer = events.createTimer(callback, 3'600'000U /* 1 h */, false, false);
+		const auto timerID = timer.id();
+		ASSERT_TRUE(timer.valid());
 		ASSERT_NE(timerID, 0U);
 		EXPECT_FALSE(events.isTimerStarted(timerID));
 
@@ -151,7 +153,7 @@ namespace EmEn::Base::Time
 		std::atomic_bool inCallback{false};
 		std::atomic_bool callbackReturned{false};
 
-		static_cast< void >(events.createTimer([&events, &inCallback, &callbackReturned] (TimerID self) {
+		const auto timer = events.createTimer([&events, &inCallback, &callbackReturned] (TimerID self) {
 			inCallback = true;
 
 			/* Long enough for the destroyer to take the lock first. */
@@ -162,8 +164,9 @@ namespace EmEn::Base::Time
 			callbackReturned = true;
 
 			return true;
-		}, 1U, true, true));
+		}, 1U, true, true);
 
+		ASSERT_TRUE(timer.valid());
 		ASSERT_TRUE(waitFor(inCallback));
 
 		std::atomic_bool destroyed{false};
@@ -199,7 +202,7 @@ namespace EmEn::Base::Time
 		std::atomic_int fired{0};
 		std::atomic_bool callbackReturned{false};
 
-		const auto timerID = events.createTimer([&events, &fired, &callbackReturned] (TimerID self) {
+		const auto timer = events.createTimer([&events, &fired, &callbackReturned] (TimerID self) {
 			fired.fetch_add(1);
 
 			events.destroyTimer(self);
@@ -209,6 +212,8 @@ namespace EmEn::Base::Time
 			/* A REPEATING timer: only the destruction may stop it. */
 			return false;
 		}, 1U, false, true);
+
+		const auto timerID = timer.id();
 
 		ASSERT_NE(timerID, 0U);
 		ASSERT_TRUE(waitFor(callbackReturned));
@@ -224,16 +229,108 @@ namespace EmEn::Base::Time
 		events.destroyTimers();
 	}
 
+	/* Ave Robustus II P4 (owner decision 2026-10-16): createTimer() hands the timer to its caller. The end of the handle
+	 * stops the timer and joins its thread: a holder that declares the handle after the state its callback uses can no
+	 * longer have that state destroyed under a running callback. */
+	TEST(TimeEventTrait, theEndOfItsHandleStopsTheTimer)
+	{
+		TestableEventTrait events;
+
+		std::atomic_int fired{0};
+		std::atomic_bool firedOnce{false};
+
+		auto timer = events.createTimer([&fired, &firedOnce] (TimerID) {
+			fired.fetch_add(1);
+			firedOnce = true;
+
+			return false;
+		}, 1U, false, true);
+
+		ASSERT_TRUE(timer.valid());
+		ASSERT_TRUE(waitFor(firedOnce));
+
+		const auto timerID = timer.id();
+
+		timer.reset();
+
+		EXPECT_FALSE(timer.valid());
+		EXPECT_EQ(timer.id(), 0U);
+
+		const auto firedAtReset = fired.load();
+
+		std::this_thread::sleep_for(std::chrono::milliseconds{30});
+
+		EXPECT_EQ(fired.load(), firedAtReset);
+		EXPECT_FALSE(events.isTimerStarted(timerID));
+		EXPECT_FALSE(events.startTimer(timerID));
+	}
+
+	TEST(TimeEventTrait, aMovedHandleKeepsTheTimer)
+	{
+		TestableEventTrait events;
+
+		auto first = events.createTimer([] (TimerID) { return false; }, 3'600'000U, false, true);
+		const auto timerID = first.id();
+
+		ASSERT_TRUE(first.valid());
+
+		auto second = std::move(first);
+
+		EXPECT_FALSE(first.valid());
+		EXPECT_EQ(first.id(), 0U);
+		EXPECT_TRUE(second.valid());
+		EXPECT_EQ(second.id(), timerID);
+		EXPECT_TRUE(events.isTimerStarted(timerID));
+
+		/* Replacing the timer held by a handle destroys it. */
+		second = events.createTimer([] (TimerID) { return false; }, 3'600'000U, false, true);
+
+		EXPECT_FALSE(events.isTimerStarted(timerID));
+		EXPECT_TRUE(events.isTimerStarted(second.id()));
+	}
+
+	TEST(TimeEventTrait, aCallbackMayResetItsOwnHandle)
+	{
+		TestableEventTrait events;
+
+		std::atomic_int fired{0};
+		std::atomic_bool callbackReturned{false};
+		TimerHandle timer;
+
+		timer = events.createTimer([&timer, &fired, &callbackReturned] (TimerID) {
+			fired.fetch_add(1);
+
+			/* Deferred, like destroyTimer() from the timer's own thread. */
+			timer.reset();
+
+			callbackReturned = true;
+
+			return false;
+		}, 1U, false, false);
+
+		/* NOTE: Started only once the handle is in place: the callback resets it. */
+		ASSERT_TRUE(events.startTimer(timer.id()));
+		ASSERT_TRUE(waitFor(callbackReturned));
+
+		std::this_thread::sleep_for(std::chrono::milliseconds{50});
+
+		EXPECT_EQ(fired.load(), 1);
+
+		/* Joins the retired thread. */
+		events.destroyTimers();
+	}
+
 	/* A timer whose thread the system refuses (Base::Thread, owner policy 2026-10-07) is refused: createTimer() answers
-	 * 0 and keeps nothing, startTimer() answers false. TimedEvent used to start a std::thread — an abort there. */
+	 * an empty handle and keeps nothing, startTimer() answers false. TimedEvent used to start a std::thread — an abort there. */
 	TEST(TimeEventTrait, aTimerWhoseThreadCannotStartIsRefused)
 	{
 		TestableEventTrait events;
 
 		Thread::failNextStartsForTesting(1);
-		EXPECT_EQ(events.createTimer([] (TimerID) { return true; }, 1U, true, true), 0U);
+		EXPECT_FALSE(events.createTimer([] (TimerID) { return true; }, 1U, true, true).valid());
 
-		const auto timerID = events.createTimer([] (TimerID) { return false; }, 3'600'000U, false, false);
+		const auto timer = events.createTimer([] (TimerID) { return false; }, 3'600'000U, false, false);
+		const auto timerID = timer.id();
 		ASSERT_NE(timerID, 0U);
 
 		Thread::failNextStartsForTesting(1);
