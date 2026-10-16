@@ -249,6 +249,8 @@ Declared here, inherited by the whole cascade:
 | `EMERAUDE_ENABLE_TESTS` | `Off` | Build the GoogleTest suites (`EmeraudeBaseUnitTests`). |
 | `EMERAUDE_ENABLE_BENCHMARKS` | `Off` | Build the Google Benchmark suites. |
 | `EMERAUDE_ENABLE_SANITIZERS` | `Off` | AddressSanitizer + UndefinedBehaviorSanitizer. |
+| `EMERAUDE_ENABLE_ASAN` | `Off` | AddressSanitizer alone (GCC / Clang / MSVC), the cascade-wide switch shared with emeraude-engine: one option instruments base, the engine and the application. The base unit tests keep `EMERAUDE_ENABLE_SANITIZERS`. |
+| `EMERAUDE_ENABLE_TSAN` | `Off` | ThreadSanitizer (GCC / Clang), shared with emeraude-engine the same way. |
 | `EMERAUDE_ENABLE_OPENMP` | `On` | OpenMP (used by VertexFactory). |
 | `EMERAUDE_USE_STATIC_RUNTIME` | `Off` | Windows: static MSVC runtime (`/MT`). |
 

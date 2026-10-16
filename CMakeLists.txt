@@ -58,6 +58,7 @@ option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual St
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
 option(EMERAUDE_ENABLE_TSAN "Build with ThreadSanitizer, GCC / Clang only, exclusive with EMERAUDE_ENABLE_SANITIZERS (Default Off)." Off)
+option(EMERAUDE_ENABLE_ASAN "Build with AddressSanitizer only, the cascade-wide switch shared with emeraude-engine (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
@@ -67,6 +68,10 @@ option(EMERAUDE_ENABLE_OPENMP "Enable OpenMP (used by VertexFactory)." On)
 
 if ( EMERAUDE_ENABLE_TSAN AND EMERAUDE_ENABLE_SANITIZERS )
 	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN and EMERAUDE_ENABLE_SANITIZERS are exclusive: ThreadSanitizer cannot share a process with AddressSanitizer.")
+endif ()
+
+if ( EMERAUDE_ENABLE_TSAN AND EMERAUDE_ENABLE_ASAN )
+	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN and EMERAUDE_ENABLE_ASAN are exclusive: ThreadSanitizer cannot share a process with AddressSanitizer.")
 endif ()
 
 if ( EMERAUDE_ENABLE_TSAN AND MSVC )
@@ -487,6 +492,22 @@ target_link_options(emeraude_base_flags INTERFACE
 	$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
 )
 add_library(emeraude::base::flags ALIAS emeraude_base_flags)
+
+# The cascade-wide AddressSanitizer switch: the same name as the engine's, so one option instruments base too.
+if ( EMERAUDE_ENABLE_ASAN )
+	if ( MSVC )
+		# /Z7: without debug information MSVC warns C5072, fatal under /WX. The two defines: the prebuilt static
+		# libraries are not instrumented, their container annotations would not match.
+		target_compile_options(emeraude_base_flags INTERFACE /fsanitize=address /Z7)
+		target_compile_definitions(emeraude_base_flags INTERFACE _DISABLE_VECTOR_ANNOTATION _DISABLE_STRING_ANNOTATION)
+		target_link_options(emeraude_base_flags INTERFACE /DEBUG /INCREMENTAL:NO)
+	else ()
+		target_compile_options(emeraude_base_flags INTERFACE -fsanitize=address -fno-omit-frame-pointer)
+		target_link_options(emeraude_base_flags INTERFACE -fsanitize=address)
+	endif ()
+
+	message(STATUS "[EmeraudeBase] AddressSanitizer ENABLED (EMERAUDE_ENABLE_ASAN, without UBSan).")
+endif ()
 
 if ( EMERAUDE_ENABLE_SANITIZERS )
 	message(STATUS "[EmeraudeBase] Sanitizers ENABLED: ASan + UBSan (-O1, halt-on-error). Incompatible with _FORTIFY_SOURCE (omitted).")
