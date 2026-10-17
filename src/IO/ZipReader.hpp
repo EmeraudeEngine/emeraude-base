@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -45,6 +46,11 @@ namespace EmEn::Base::IO
 		public:
 
 			static constexpr auto ClassId{"ZipReader"};
+
+			/** @brief The largest uncompressed size an entry may declare, as a multiple of its compressed size: deflate's
+			 * theoretical maximum (~1032:1), for every method (owner decision, 2026-10-17; the TIFF / JPEG readers bound
+			 * their payload the same way). Beyond it the entry is refused before any allocation. */
+			static constexpr uint64_t MaxCompressionRatio{1032};
 
 			/**
 			 * @brief Constructs a zip archive reader.
@@ -73,6 +79,7 @@ namespace EmEn::Base::IO
 			 * @brief Opens the archive.
 			 * @return bool
 			 */
+			[[nodiscard]]
 			bool open () noexcept;
 
 			/**
@@ -115,14 +122,20 @@ namespace EmEn::Base::IO
 
 			/**
 			 * @brief Extracts a specific entry from the ZIP archive to a buffer.
+			 * @note An empty file or a directory entry gives an empty buffer. Refused (false, an empty buffer): a missing
+			 * entry, a declared size beyond MaxCompressionRatio, an entry libzip cannot open (an unsupported method, an
+			 * encrypted entry) and data that does not read back whole (a CRC or a decompression error).
 			 * @param entryName A reference to a string.
 			 * @param buffer A reference to a vector.
 			 * @return bool
 			 */
+			[[nodiscard]]
 			bool extract (const std::string & entryName, std::vector< char > & buffer) const noexcept;
 
 			/**
 			 * @brief Extracts a specific entry from the ZIP archive to a directory.
+			 * @note A directory entry creates the directory. The entry is extracted in memory first: a refused entry
+			 * leaves no file behind.
 			 * @param entryName A reference to a string.
 			 * @param destinationPath A reference to a path.
 			 * @param overwrite Erase an existing file with the same name in the destination path. Default false.

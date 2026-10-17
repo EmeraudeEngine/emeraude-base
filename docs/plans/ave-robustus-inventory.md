@@ -116,7 +116,7 @@ These emerged from the audit and matter for sequencing:
 | `MemoryStream` grow-on-write + seek | `MemoryStream.hpp` | Implemented; 🐞 possible `size_t` overflow in `m_position+size` bounds check | A | overflow/short-read/negative-seek edge cases |
 | File utilities (exists/size/create/erase/dir/get/put/u8path) | `IO.cpp` | Complete, `noexcept`, error_code | A | UTF-8 / Windows-path handling verified |
 | `readable/writable/executable` cross-platform | `IO.hpp:194-237` | **Code complete incl. Windows AccessCheck**; docs falsely claim a Windows stub → **doc defect, close by correcting the claim** (corrects seed #2) | A (untested) + doc-fix | all platform branches tested; docs match code |
-| ZIP read (open/entries/extract/extractAll) | `ZipReader.cpp` | Complete; 🐞 `extract(...,buffer)` ignores `zip_fopen` return → null-deref; empty entries fail | A | corrupt/empty-entry handled; no null-deref |
+| ZIP read (open/entries/extract/extractAll) | `ZipReader.cpp` | Complete; ✅ fixed 2026-10-17 (coverage pass): `zip_fopen` / `zip_fread` checked (libzip tolerated the null handle: the defect was SUCCESS with wrong or unchecked data), empty and directory entries extract, declared size bounded (× 1032), extraction in memory before the file | A | corrupt/empty-entry handled; no null-deref |
 | ZIP write (addFile/addDir/create) | `ZipWriter.cpp` | Complete; loose source validation; fails if archive exists | A | malformed-source / overwrite / large archive |
 
 ### Module: compression

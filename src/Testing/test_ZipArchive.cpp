@@ -26,11 +26,15 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
 #include <vector>
+
+/* Third-party inclusions. */
+#include <zlib.h>
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
@@ -257,3 +261,201 @@ TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
 
 	expectTempDirRemoved(dir);
 }
+
+/* The coverage pass (2026-10-17): archives built byte by byte, for the cases a ZipWriter never produces — an empty entry
+ * and a directory entry, an unknown compression method, an encrypted entry, corrupted data, a declared size the payload
+ * cannot back. */
+namespace
+{
+	/* One stored entry of a hand-built archive; the overrides forge what a ZipWriter never writes. */
+	struct ZipEntrySpec
+	{
+		std::string name;
+		std::string data;
+		uint16_t method{0};
+		uint16_t flags{0};
+		bool corruptCRC{false};
+		uint64_t declaredSize{0}; /* 0 = the data size; otherwise written in a Zip64 extra field of the central directory. */
+	};
+
+	void
+	putU16 (std::string & out, uint32_t value)
+	{
+		out.push_back(static_cast< char >(value & 0xFFU));
+		out.push_back(static_cast< char >((value >> 8U) & 0xFFU));
+	}
+
+	void
+	putU32 (std::string & out, uint32_t value)
+	{
+		putU16(out, value & 0xFFFFU);
+		putU16(out, value >> 16U);
+	}
+
+	void
+	putU64 (std::string & out, uint64_t value)
+	{
+		putU32(out, static_cast< uint32_t >(value & 0xFFFFFFFFU));
+		putU32(out, static_cast< uint32_t >(value >> 32U));
+	}
+
+	/* A ZIP archive (local headers, data, central directory, end record) written to a file. */
+	void
+	writeZip (const std::filesystem::path & path, const std::vector< ZipEntrySpec > & entries)
+	{
+		std::string archive;
+		std::string central;
+
+		for ( const auto & entry : entries )
+		{
+			const std::vector< Bytef > bytes(entry.data.cbegin(), entry.data.cend());
+			auto crc = static_cast< uint32_t >(::crc32(0, bytes.data(), static_cast< uInt >(bytes.size())));
+
+			if ( entry.corruptCRC )
+			{
+				crc ^= 0xFFFFFFFFU;
+			}
+
+			const auto size = static_cast< uint32_t >(entry.data.size());
+			const auto offset = static_cast< uint32_t >(archive.size());
+
+			putU32(archive, 0x04034B50U);
+			putU16(archive, 20);
+			putU16(archive, entry.flags);
+			putU16(archive, entry.method);
+			putU16(archive, 0);
+			putU16(archive, 0x21);
+			putU32(archive, crc);
+			putU32(archive, size);
+			putU32(archive, size);
+			putU16(archive, static_cast< uint32_t >(entry.name.size()));
+			putU16(archive, 0);
+			archive += entry.name;
+			archive += entry.data;
+
+			const bool zip64 = entry.declaredSize != 0;
+
+			putU32(central, 0x02014B50U);
+			putU16(central, zip64 ? 45 : 20);
+			putU16(central, zip64 ? 45 : 20);
+			putU16(central, entry.flags);
+			putU16(central, entry.method);
+			putU16(central, 0);
+			putU16(central, 0x21);
+			putU32(central, crc);
+			putU32(central, size);
+			putU32(central, zip64 ? 0xFFFFFFFFU : size);
+			putU16(central, static_cast< uint32_t >(entry.name.size()));
+			putU16(central, zip64 ? 12 : 0);
+			putU16(central, 0);
+			putU16(central, 0);
+			putU16(central, 0);
+			putU32(central, entry.name.ends_with('/') ? 0x10U : 0U);
+			putU32(central, offset);
+			central += entry.name;
+
+			if ( zip64 )
+			{
+				putU16(central, 0x0001);
+				putU16(central, 8);
+				putU64(central, entry.declaredSize);
+			}
+		}
+
+		const auto centralOffset = static_cast< uint32_t >(archive.size());
+
+		archive += central;
+		putU32(archive, 0x06054B50U);
+		putU16(archive, 0);
+		putU16(archive, 0);
+		putU16(archive, static_cast< uint32_t >(entries.size()));
+		putU16(archive, static_cast< uint32_t >(entries.size()));
+		putU32(archive, static_cast< uint32_t >(central.size()));
+		putU32(archive, centralOffset);
+		putU16(archive, 0);
+
+		writeFile(path, archive);
+	}
+}
+
+TEST(ZipArchive, emptyEntriesAndDirectoryEntriesExtract)
+{
+	const auto dir = freshTempDir("emeraude_zip_empty");
+	const auto archive = dir / "empty.zip";
+
+	writeZip(archive, {{.name = "empty.txt", .data = ""}, {.name = "folder/", .data = ""}, {.name = "folder/a.txt", .data = "abc"}});
+
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+		ASSERT_EQ(reader.entries().size(), 3U);
+
+		std::vector< char > buffer{'x'};
+		EXPECT_TRUE(reader.extract("empty.txt", buffer));
+		EXPECT_TRUE(buffer.empty());
+
+		const auto destination = dir / "out";
+		EXPECT_TRUE(reader.extractAll(destination));
+
+		std::error_code errorCode;
+		EXPECT_TRUE(std::filesystem::is_directory(destination / "folder", errorCode));
+		EXPECT_EQ(std::filesystem::file_size(destination / "empty.txt", errorCode), 0U);
+		EXPECT_EQ(std::filesystem::file_size(destination / "folder" / "a.txt", errorCode), 3U);
+	}
+
+	expectTempDirRemoved(dir);
+}
+
+TEST(ZipArchive, entriesThatCannotBeReadAreRefused)
+{
+	const auto dir = freshTempDir("emeraude_zip_unreadable");
+	const auto archive = dir / "unreadable.zip";
+
+	writeZip(archive, {
+		{.name = "unknown-method.bin", .data = "payload", .method = 17},
+		{.name = "encrypted.bin", .data = "payload", .flags = 1},
+		{.name = "corrupted.bin", .data = "payload", .corruptCRC = true},
+		{.name = "good.txt", .data = "fine"}
+	});
+
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+
+		std::vector< char > buffer;
+		EXPECT_FALSE(reader.extract("unknown-method.bin", buffer));
+		EXPECT_FALSE(reader.extract("encrypted.bin", buffer));
+		EXPECT_FALSE(reader.extract("corrupted.bin", buffer));
+
+		/* A failed extraction leaves no file behind. */
+		EXPECT_FALSE(reader.extract("corrupted.bin", dir / "out"));
+		std::error_code errorCode;
+		EXPECT_FALSE(std::filesystem::exists(dir / "out" / "corrupted.bin", errorCode));
+
+		ASSERT_TRUE(reader.extract("good.txt", buffer));
+		EXPECT_EQ(std::string(buffer.begin(), buffer.end()), "fine");
+	}
+
+	expectTempDirRemoved(dir);
+}
+
+TEST(ZipArchive, declaredSizeThePayloadCannotBackIsRefused)
+{
+	/* The central directory declares 1 TiB for 7 stored bytes: the buffer used to be resized to the declared size
+	 * (std::bad_alloc -> abort under -fno-exceptions). */
+	const auto dir = freshTempDir("emeraude_zip_declared_size");
+	const auto archive = dir / "bomb.zip";
+
+	writeZip(archive, {{.name = "bomb.bin", .data = "payload", .declaredSize = uint64_t{1} << 40U}});
+
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+
+		std::vector< char > buffer;
+		EXPECT_FALSE(reader.extract("bomb.bin", buffer));
+	}
+
+	expectTempDirRemoved(dir);
+}
+

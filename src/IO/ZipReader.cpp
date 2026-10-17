@@ -31,8 +31,10 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iostream>
+#include <utility>
 
 /* Local inclusions. */
 #include "IO.hpp"
@@ -136,22 +138,66 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
+		buffer.clear();
+
 		struct zip_stat stat{};
 		zip_stat_init(&stat);
-		zip_stat(m_zip.get(), entryName.data(), 0, &stat);
 
-		if ( stat.size == 0 )
+		/* NOTE: A size of 0 is a legitimate empty file or a directory entry: only the call's result says "missing". */
+		if ( zip_stat(m_zip.get(), entryName.c_str(), 0, &stat) != 0 )
 		{
 			std::cerr << ClassId << " : The entry " << entryName << " doesn't exists !" "\n";
 
 			return false;
 		}
 
-		buffer.resize(stat.size);
+		constexpr auto RequiredFields = ZIP_STAT_SIZE | ZIP_STAT_COMP_SIZE;
 
-		zip_file * compressedFile = zip_fopen(m_zip.get(), entryName.data(), 0);
-		zip_fread(compressedFile, buffer.data(), stat.size);
-		zip_fclose(compressedFile);
+		if ( (stat.valid & RequiredFields) != RequiredFields )
+		{
+			std::cerr << ClassId << " : The entry " << entryName << " has no size information, refused !" "\n";
+
+			return false;
+		}
+
+		if ( entryName.ends_with('/') )
+		{
+			return true;
+		}
+
+		/* NOTE: The declared size comes from the ARCHIVE. It is bounded before the allocation: a few bytes could
+		 * declare a terabyte (std::bad_alloc -> abort under -fno-exceptions). Divided, never multiplied (overflow). */
+		if ( stat.size / MaxCompressionRatio > stat.comp_size || stat.size > buffer.max_size() )
+		{
+			std::cerr << ClassId << " : The entry " << entryName << " declares " << stat.size << " bytes for " << stat.comp_size << " compressed, refused !" "\n";
+
+			return false;
+		}
+
+		const std::unique_ptr< zip_file_t, decltype(&zip_fclose) > file{zip_fopen(m_zip.get(), entryName.c_str(), 0), &zip_fclose};
+
+		if ( file == nullptr )
+		{
+			std::cerr << ClassId << " : Unable to open the entry " << entryName << " (" << zip_strerror(m_zip.get()) << ") !" "\n";
+
+			return false;
+		}
+
+		buffer.resize(static_cast< size_t >(stat.size));
+
+		const auto bytesRead = zip_fread(file.get(), buffer.data(), stat.size);
+
+		/* NOTE: libzip verifies the CRC when it reaches the end of the data: one more read must report that end (0). */
+		std::array< char, 1 > beyond{};
+
+		if ( std::cmp_not_equal(bytesRead, stat.size) || zip_fread(file.get(), beyond.data(), beyond.size()) != 0 )
+		{
+			std::cerr << ClassId << " : Unable to read the entry " << entryName << " whole (" << zip_file_strerror(file.get()) << ") !" "\n";
+
+			buffer.clear();
+
+			return false;
+		}
 
 		return true;
 	}
@@ -178,6 +224,34 @@ namespace EmEn::Base::IO
 		}
 
 		const auto & filepath = *confined;
+
+		/* NOTE: A directory entry ("name/") creates the directory. */
+		if ( entryName.ends_with('/') )
+		{
+			if ( IO::directoryExists(filepath) )
+			{
+				return true;
+			}
+
+			if ( !IO::createDirectory(filepath) )
+			{
+				std::cerr << ClassId << " : Unable to create the directory " << toU8String(filepath) << " !" "\n";
+
+				return false;
+			}
+
+			return true;
+		}
+
+		/* NOTE: Extracted in memory FIRST: a refused entry must leave no file behind. */
+		std::vector< char > buffer;
+
+		if ( !this->extract(entryName, buffer) )
+		{
+			std::cerr << ClassId << " : Unable to extract the content buffer !" "\n";
+
+			return false;
+		}
 
 		/* NOTE: Check the final destination. */
 		const auto finalDirectory = filepath.parent_path();
@@ -217,16 +291,15 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::vector< char > buffer;
+		file.write(buffer.data(), static_cast< std::streamsize >(buffer.size()));
+		file.close();
 
-		if ( !this->extract(entryName, buffer) )
+		if ( file.fail() )
 		{
-			std::cerr << ClassId << " : Unable to extract the content buffer !" "\n";
+			std::cerr << ClassId << " : Unable to write the file " << toU8String(filepath) << " !" "\n";
 
 			return false;
 		}
-
-		file.write(buffer.data(), static_cast< std::streamsize >(buffer.size()));
 
 		return true;
 	}
@@ -329,7 +402,8 @@ namespace EmEn::Base::IO
 		for ( zip_int64_t index = 0; index < entryCount; index++)
 		{
 			/* NOTE: index is in [0, entryCount[, never negative. */
-			if ( zip_stat_index(m_zip.get(), static_cast< zip_uint64_t >(index), 0, &stat ) == 0 )
+			/* NOTE: The name is only valid when libzip says so (a null name would be undefined behaviour here). */
+			if ( zip_stat_index(m_zip.get(), static_cast< zip_uint64_t >(index), 0, &stat ) == 0 && (stat.valid & ZIP_STAT_NAME) != 0 && stat.name != nullptr )
 			{
 				m_entryNames.emplace_back(stat.name);
 			}

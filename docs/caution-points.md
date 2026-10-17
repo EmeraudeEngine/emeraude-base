@@ -587,6 +587,23 @@ definition, a ZIP entry name — "Zip Slip") is joined with `IO::confinedPath(ba
 absolute, root-named and `..`-escaping paths (lexical, no system call; a symlink inside the base is not resolved).
 `ZipReader::extract()` refuses such an entry (test `ZipArchive.extractionRefusesEntriesThatLeaveTheDestination`).
 
+### ⚠️ A ZIP entry is untrusted data — its declared size, its method, its CRC (2026-10-17, FIXED)
+
+Found by the coverage pass with archives built byte by byte (`ZipArchive.emptyEntriesAndDirectoryEntriesExtract`,
+`entriesThatCannotBeReadAreRefused`, `declaredSizeThePayloadCannotBackIsRefused`; all three failed on the former code):
+- `extract(name, buffer)` resized the buffer to the size the ARCHIVE declares: 200 bytes declaring 1 TiB threw
+  `std::bad_alloc` (abort under `-fno-exceptions`). Now an entry declaring more than its compressed size ×
+  `ZipReader::MaxCompressionRatio` (1032, deflate's maximum, every method — owner decision) is refused before the
+  allocation. A bzip2 / xz / zstd entry compressed beyond 1032:1 is refused too: the known trade-off.
+- `zip_fopen()` and `zip_fread()` results were ignored: an unsupported method, an encrypted entry and a CRC mismatch were
+  returned as SUCCESS with wrong data. libzip verifies the CRC when it reaches the end of the data: `extract()` reads one
+  byte beyond the declared size and demands the end (0).
+- `stat.size == 0` meant "missing": an empty file and a directory entry (`name/`) were refused, so `extractAll()`
+  failed on any archive holding a directory entry. Only `zip_stat()`'s result means missing now; a directory entry
+  creates its directory.
+- The file was opened (truncated) before the extraction: a refused entry left an empty file. Extraction runs in memory
+  first; the write is checked.
+
 ### ⚠️ A test's temporary file or directory gets a PER-PROCESS name — `Testing::uniqueTemporaryPath()` (2026-10-08, FIXED)
 
 Two copies of the suite running at once (the macOS peer's 8-copy stress run, two developers, a CI) shared ~25 FIXED
