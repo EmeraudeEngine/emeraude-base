@@ -152,7 +152,16 @@ TEST(NetworkTrustStore, bundleFileUnderANonASCIIDirectory)
 	const auto bundleFilepath = directory / "tls-test-ca.pem";
 
 	std::filesystem::copy_file(AssetsDirectory / "tls-test-ca.pem", bundleFilepath, error);
-	ASSERT_FALSE(error) << error.message();
+
+	/* NOTE: The directory goes on this path too: an early return left it behind (three empty ones in a Windows %TEMP%,
+	 * from an interrupted run on 2026-10-12). */
+	if ( error )
+	{
+		std::error_code ignored;
+		std::filesystem::remove_all(directory, ignored);
+
+		FAIL() << error.message();
+	}
 
 	asio::ssl::context context{asio::ssl::context::tls_client};
 
@@ -160,6 +169,7 @@ TEST(NetworkTrustStore, bundleFileUnderANonASCIIDirectory)
 	EXPECT_EQ(Network::TrustStore::certificateCount(context), 1U);
 
 	std::filesystem::remove_all(directory, error);
+	EXPECT_FALSE(error) << "cannot remove " << EmEn::Base::IO::toU8String(directory) << ": " << error.message();
 }
 
 TEST(NetworkTrustStore, missingBundleFileFails)

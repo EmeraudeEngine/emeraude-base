@@ -29,13 +29,21 @@ The library stays a normal g++ build. Each fuzz target is a **standalone clang e
   and the ext-deps audio/codec chain + jsoncpp.
 
 This avoids recompiling the whole library under clang while still instrumenting the code under test.
+
+> ⚠️ **A parser implemented in a `.cpp` is NOT instrumented through the library** (2026-10-17): its code comes from the
+> g++-built archive, so libFuzzer gets no coverage of it and ASan / UBSan see none of its accesses — the campaign is
+> blind. `fuzz_http_response` ran 520 M executions at 59 coverage edges that way. `build-fuzzers.sh` therefore
+> compiles such a target's parser sources into the target (`EXTRA_SOURCES`: compression, http_response, ini, jpeg,
+> png, wav). A new target whose parser has a `.cpp` gets its line there. Check the `cov:` figure of a first run: a
+> handful of edges means the parser is not instrumented. The third-party libraries (libpng, libjpeg-turbo, libsndfile,
+> zlib, xz) stay uninstrumented on purpose.
 `fuzz_midi` additionally compiles the TinySoundFont implementation in-target (the library does not
 provide it; the SF2 render path is odr-used by `renderToWave()`).
 
 ## Build & run
 
 ```sh
-src/Fuzzing/build-fuzzers.sh                       # builds every target into src/Fuzzing/build/
+src/Fuzzing/build-fuzzers.sh                       # builds every target into src/Fuzzing/build/ (OUT_DIR overrides)
 ASAN_OPTIONS=detect_leaks=1 src/Fuzzing/build/fuzz_midi src/Fuzzing/build/fuzz_midi.corpus -max_total_time=60
 ```
 

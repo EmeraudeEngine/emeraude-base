@@ -20,7 +20,7 @@ cd "${ROOT}"
 
 CXX="${CXX:-clang++}"
 BASE_BUILD_DIR="${BASE_BUILD_DIR:-.claude-build-debug}"
-OUT_DIR="src/Fuzzing/build"
+OUT_DIR="${OUT_DIR:-src/Fuzzing/build}"
 
 # Resolve the ext-deps root and the static library produced by the base build.
 EXT_LIBS_PATH="$(sed -n 's/^EMERAUDE_EXT_LIBS_PATH:PATH=//p' "${BASE_BUILD_DIR}/CMakeCache.txt")"
@@ -58,12 +58,26 @@ TARGETS=(
 	fuzz_http_response
 )
 
+# A parser implemented in a .cpp sits in the g++-built static library, uninstrumented: libFuzzer gets no coverage of
+# it and ASan / UBSan see none of its accesses (fuzz_http_response ran 520 M blind executions at 59 edges, 2026-10-17).
+# Such a target compiles its parser's own sources, instrumented; the archive's copies are then never pulled in.
+declare -A EXTRA_SOURCES=(
+	[fuzz_compression]="src/Compression/LZMA.cpp src/Compression/ZLIB.cpp"
+	[fuzz_http_response]="src/Network/HTTPResponseParser.cpp src/Network/HTTPResponse.cpp src/Network/HTTPHeaders.cpp"
+	[fuzz_ini]="src/INIParser.cpp"
+	[fuzz_jpeg]="src/PixelFactory/FileFormatJpeg.cpp"
+	[fuzz_png]="src/PixelFactory/FileFormatPNG.cpp"
+	[fuzz_wav]="src/WaveFactory/FileFormatSNDFile.cpp"
+)
+
 mkdir -p "${OUT_DIR}"
 
 for target in "${TARGETS[@]}"; do
 	echo "==> building ${target}"
+	read -r -a extraSources <<< "${EXTRA_SOURCES[${target}]:-}"
 	"${CXX}" "${FLAGS[@]}" "${INCLUDES[@]}" \
 		"src/Fuzzing/${target}.cpp" \
+		"${extraSources[@]}" \
 		"${STATIC_LIB}" \
 		"${EXT_LINK[@]}" \
 		-o "${OUT_DIR}/${target}"

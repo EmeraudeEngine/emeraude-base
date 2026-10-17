@@ -754,6 +754,18 @@ contacted the target, which the caller cannot tell apart from a transport failur
 check. Any future field that reaches the request the same way needs one too: the validation is not
 automatic, it is a list.
 
+### ⚠️ A response's status line is read strictly (RFC 9112 § 4); a parsed request may target a path (2026-10-17, FIXED)
+
+Found by the coverage pass (`NetworkHTTPResponse.statusLineIsStrict`, `NetworkHTTPRequest.parsedRequestKeepsItsLineAndHeaders`,
+both failing before; owner decisions):
+- `HTTPResponse::parseFirstLine()` read the code through `String::toNumber()`, which stops at the first non-digit:
+  "HTTP/1.1 200abc" was a 200. And an unknown version token ("FOO", "SSH-2.0") silently became HTTP/0.9. Now the
+  version is exactly `HTTP/` DIGIT `.` DIGIT — 1.0, 1.1, a higher 1.x read as 1.1 (RFC 9110 § 2.5), 0.9; any other is
+  refused, a textual "HTTP/2.0" included — and the code exactly three digits, still within 100-599.
+- `HTTPRequest::isValid()` demanded `!URI::empty()`, which means "has a scheme": a parsed request in origin-form
+  ("POST /upload HTTP/1.0", the normal request line) was never valid. A path now qualifies too. (`HTTPServer` has its
+  own request parser; nothing in the cascade parsed requests through `HTTPRequest`.)
+
 ### ⚠️ A test server that stops at the header terminator cannot prove a request body
 
 `HTTPSTestServer` read until `\r\n\r\n` and handed that to the handler. A POST body therefore

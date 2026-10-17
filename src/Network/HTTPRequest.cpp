@@ -40,7 +40,9 @@ namespace EmEn::Base::Network
 			return false;
 		}
 
-		if ( m_resource.empty() )
+		/* NOTE: A parsed request target is usually in origin-form ("/upload", RFC 9112 § 3.2.1): a path without a scheme,
+		 * which URI::empty() calls empty. Either an absolute URI or a path qualifies the request. */
+		if ( m_resource.empty() && m_resource.path().empty() )
 		{
 			return false;
 		}

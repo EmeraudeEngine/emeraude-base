@@ -27,6 +27,8 @@
 #include "HTTPResponse.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
+#include <optional>
 #include <sstream>
 
 /* Local inclusions. */
@@ -35,6 +37,45 @@
 
 namespace EmEn::Base::Network
 {
+	namespace
+	{
+		/**
+		 * @brief Reads the version of a status line, strictly (RFC 9112 § 2.3: HTTP-version = "HTTP/" DIGIT "." DIGIT).
+		 * @note HTTP/1.x above 1.1 is read as 1.1 (RFC 9110 § 2.5: the highest minor version implemented); any other
+		 * major version is refused, like a token that is not a version at all ("SSH-2.0", "FOO").
+		 * @param token The first token of the status line.
+		 * @return std::optional< HTTPHeaders::Version >
+		 */
+		[[nodiscard]]
+		std::optional< HTTPHeaders::Version >
+		statusLineVersion (const std::string & token) noexcept
+		{
+			const auto isDigit = [] (char character) noexcept {
+				return character >= '0' && character <= '9';
+			};
+
+			if ( token.size() != 8 || !token.starts_with("HTTP/") || !isDigit(token[5]) || token[6] != '.' || !isDigit(token[7]) )
+			{
+				return std::nullopt;
+			}
+
+			const auto major = token[5] - '0';
+			const auto minor = token[7] - '0';
+
+			if ( major == 1 )
+			{
+				return minor == 0 ? HTTPHeaders::Version::HTTP10 : HTTPHeaders::Version::HTTP11;
+			}
+
+			if ( major == 0 && minor == 9 )
+			{
+				return HTTPHeaders::Version::HTTP09;
+			}
+
+			return std::nullopt;
+		}
+	}
+
 	bool
 	HTTPResponse::isValid () const noexcept
 	{
@@ -77,11 +118,29 @@ namespace EmEn::Base::Network
 			return false;
 		}
 
-		/* Protocol version. */
-		this->setVersion(HTTPHeaders::parseVersion(chunks[0]));
+		/* Protocol version: strict, an unknown one is no longer read as HTTP/0.9. */
+		const auto version = statusLineVersion(chunks[0]);
 
-		/* Status code: exactly what qualifies the response — bounds-checked. */
-		const auto code = String::toNumber< int >(chunks[1]);
+		if ( !version.has_value() )
+		{
+			Logging::error("Network::HTTPResponse", "parseFirstLine(), invalid HTTP version : " + line);
+
+			return false;
+		}
+
+		this->setVersion(*version);
+
+		/* Status code: exactly three digits (RFC 9112 § 4; "200abc" was read as 200), then bounds-checked. */
+		const auto & codeText = chunks[1];
+
+		if ( codeText.size() != 3 || !std::ranges::all_of(codeText, [] (char character) { return character >= '0' && character <= '9'; }) )
+		{
+			Logging::error("Network::HTTPResponse", "parseFirstLine(), invalid HTTP status code : " + line);
+
+			return false;
+		}
+
+		const auto code = ((codeText[0] - '0') * 100) + ((codeText[1] - '0') * 10) + (codeText[2] - '0');
 
 		if ( code < 100 || code > 599 )
 		{
