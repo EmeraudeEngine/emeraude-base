@@ -36,8 +36,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <iomanip>
 #include <istream>
 #include <limits>
+#include <locale>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -358,6 +360,11 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				std::ostringstream output;
+
+				/* NOTE: Every float written back exactly (max_digits10: 9 for a float), in the classic locale whatever the
+				 * global one. The default precision (6 digits) wrote 0.123456789 as 0.123457 and 1.00000012 as 1. */
+				output.imbue(std::locale::classic());
+				output << std::setprecision(std::numeric_limits< vertex_data_t >::max_digits10);
 
 				/* Header */
 				output << "# Exported by Emeraude-Engine" << "\n";

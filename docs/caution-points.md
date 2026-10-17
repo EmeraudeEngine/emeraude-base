@@ -808,6 +808,19 @@ Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToB
 
 ## VertexFactory
 
+### ⚠️ The OBJ writer lost float precision; `computeVertexTBNSpace()` did not declare its normals (2026-10-17, FIXED)
+
+Found by the coverage pass (`VertexFactoryOBJ.writerRoundTripKeepsEveryFloat`, `requestedNormalsAndTangentsInEveryFaceForm`,
+both failing before):
+- `FileFormatOBJ::writeStream()` wrote through an `std::ostringstream` at its default precision, 6 significant digits:
+  0.123456789 came back 0.123457, 1.00000012 came back 1 — every exported model moved. It writes `max_digits10` digits
+  now (9 for a float: a write / read round trip gives the same floats), in `std::locale::classic()` whatever the global
+  locale. (`std::to_chars` would give the shortest form, but its floating-point overloads need macOS 13.3; the target
+  is 12.0.)
+- `Shape::computeVertexTBNSpace()` computes the vertex normals but did not set the "normals available" flag, which
+  `computeVertexNormal()` sets: an OBJ `v/vt` file read with a tangent space (and every MD5 model) carried normals the
+  shape declared absent, and the OBJ writer dropped them. It declares them now.
+
 ### `ShapeDecimator` can be interrupted — `setStopToken()` (2026-10-08)
 
 A decimation of a large mesh lasts SECONDS, and the engine runs it on a worker (automatic LODs): a shutdown waited for

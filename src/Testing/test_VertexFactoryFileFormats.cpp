@@ -1252,6 +1252,152 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(result.shape.triangles().size(), 1U);
 	}
 
+	/* The coverage pass (2026-10-17): the writer, the attribute forms, groups, the scale option, CRLF, malformed faces. */
+	namespace
+	{
+		/* Reads an OBJ text; an empty shape on refusal. */
+		Result
+		readOBJ (std::string_view text, const ReadOptions & options = {})
+		{
+			const auto buffer = toBytes(text);
+			MemoryStream stream{buffer};
+			OBJ format;
+			Result result;
+
+			if ( !format.readStream(stream, result, options) )
+			{
+				result = Result{};
+			}
+
+			return result;
+		}
+
+		/* Writes a shape as OBJ text. */
+		std::string
+		writeOBJ (const Shape< float, uint32_t > & shape)
+		{
+			std::vector< std::byte > buffer;
+			MemoryStream stream{buffer};
+			const OBJ format;
+
+			if ( !format.writeStream(stream, shape, {}) )
+			{
+				return {};
+			}
+
+			std::string text(buffer.size(), '\0');
+			std::memcpy(text.data(), buffer.data(), buffer.size());
+
+			return text;
+		}
+	}
+
+	TEST(VertexFactoryOBJ, writerRoundTripKeepsEveryFloat)
+	{
+		/* Values a 6-digit output would round: the file must give back the same floats. */
+		const auto source = readOBJ("v 0.123456789 1234.56789 -0.000123456789\nv 1.00000012 2 3\nv 7.654321e-5 -98765.4321 0.1\n"
+			"vt 0.333333343 0.666666687\nvn 0 0.707106781 0.707106781\nf 1/1/1 2/1/1 3/1/1\n");
+		ASSERT_EQ(source.shape.triangles().size(), 1U);
+
+		const auto text = writeOBJ(source.shape);
+		ASSERT_FALSE(text.empty());
+
+		const auto copy = readOBJ(text);
+		ASSERT_EQ(copy.shape.vertices().size(), source.shape.vertices().size());
+
+		for ( size_t index = 0; index < source.shape.vertices().size(); ++index )
+		{
+			const auto & a = source.shape.vertices()[index];
+			const auto & b = copy.shape.vertices()[index];
+
+			for ( size_t axis = 0; axis < 3; ++axis )
+			{
+				EXPECT_EQ(a.position()[axis], b.position()[axis]) << "vertex " << index << " axis " << axis;
+				EXPECT_EQ(a.normal()[axis], b.normal()[axis]) << "vertex " << index << " axis " << axis;
+			}
+
+			EXPECT_EQ(a.textureCoordinates()[0], b.textureCoordinates()[0]) << "vertex " << index;
+			EXPECT_EQ(a.textureCoordinates()[1], b.textureCoordinates()[1]) << "vertex " << index;
+		}
+	}
+
+	TEST(VertexFactoryOBJ, writerEmitsTheFaceFormOfItsAttributes)
+	{
+		const auto faceLine = [] (std::string_view obj) {
+			const auto text = writeOBJ(readOBJ(obj).shape);
+			const auto start = text.find("\nf ");
+
+			return start == std::string::npos ? std::string{} : text.substr(start + 1, text.find('\n', start + 1) - start - 1);
+		};
+
+		EXPECT_EQ(faceLine("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"), "f 1 2 3");
+		EXPECT_EQ(faceLine("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1/1 2/1 3/1\n"), "f 1/1 2/2 3/3");
+		EXPECT_EQ(faceLine("v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3//1\n"), "f 1//1 2//2 3//3");
+		EXPECT_EQ(faceLine("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvn 0 0 1\nf 1/1/1 2/1/1 3/1/1\n"), "f 1/1/1 2/2/2 3/3/3");
+
+		/* An empty shape is not written. */
+		EXPECT_TRUE(writeOBJ(Shape< float, uint32_t >{}).empty());
+	}
+
+	TEST(VertexFactoryOBJ, groupsScaleAndLineEndings)
+	{
+		/* Two "g" sections: (first triangle, count) = (0, 1) and (1, 1). */
+		const auto grouped = readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\ng first\nf 1 2 3\ng second\nf 3 2 1\n");
+		ASSERT_EQ(grouped.shape.groups().size(), 2U);
+		EXPECT_EQ(grouped.shape.groups()[0], (std::pair< uint32_t, uint32_t >{0, 1}));
+		EXPECT_EQ(grouped.shape.groups()[1], (std::pair< uint32_t, uint32_t >{1, 1}));
+
+		/* The scale option. */
+		ReadOptions options{};
+		options.scaleFactor = 2.0F;
+		const auto scaled = readOBJ("v 1 2 3\nv 1 0 0\nv 0 1 0\nf 1 2 3\n", options);
+		ASSERT_EQ(scaled.shape.vertices().size(), 3U);
+		EXPECT_TRUE(std::ranges::any_of(scaled.shape.vertices(), [] (const auto & vertex) { return vertex.position()[0] == 2.0F && vertex.position()[1] == 4.0F && vertex.position()[2] == 6.0F; }));
+
+		/* CRLF reads like LF. */
+		const auto lf = readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0.5 0.25\nf 1/1 2/1 3/1\n");
+		const auto crlf = readOBJ("v 0 0 0\r\nv 1 0 0\r\nv 0 1 0\r\nvt 0.5 0.25\r\nf 1/1 2/1 3/1\r\n");
+		ASSERT_EQ(crlf.shape.triangles().size(), 1U);
+		ASSERT_EQ(crlf.shape.vertices().size(), lf.shape.vertices().size());
+
+		for ( size_t index = 0; index < lf.shape.vertices().size(); ++index )
+		{
+			EXPECT_EQ(crlf.shape.vertices()[index].position(), lf.shape.vertices()[index].position());
+			EXPECT_EQ(crlf.shape.vertices()[index].textureCoordinates(), lf.shape.vertices()[index].textureCoordinates());
+		}
+	}
+
+	TEST(VertexFactoryOBJ, requestedNormalsAndTangentsInEveryFaceForm)
+	{
+		/* A triangle in the XY plane: whatever the face form, a requested normal is +Z (counter-clockwise winding). */
+		ReadOptions options{};
+		options.requestNormal = true;
+		options.requestTangentSpace = true;
+
+		for ( const auto * const obj : {
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n",
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nf 1/1 2/2 3/3\n",
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3//1\n",
+			"v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\n"} )
+		{
+			const auto result = readOBJ(obj, options);
+
+			ASSERT_EQ(result.shape.triangles().size(), 1U) << obj;
+			EXPECT_TRUE(result.shape.isNormalsAvailable()) << obj;
+			EXPECT_TRUE(std::ranges::all_of(result.shape.vertices(), [] (const auto & vertex) { return std::abs(vertex.normal()[2] - 1.0F) < 1e-5F; })) << obj;
+		}
+	}
+
+	TEST(VertexFactoryOBJ, malformedFilesAreRefused)
+	{
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nf 1 2\n").shape.triangles().empty()) << "a face of two vertices";
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 x 3\n").shape.triangles().empty()) << "a face token that is not a number";
+		EXPECT_TRUE(readOBJ("f 1 2 3\n").shape.triangles().empty()) << "no vertex";
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\n").shape.triangles().empty()) << "no face";
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1/1 2/1 3/9\n").shape.triangles().empty()) << "a texture index out of range";
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3//9\n").shape.triangles().empty()) << "a normal index out of range";
+	}
+
 	TEST(VertexFactoryStreamIO, nonFiniteGeometryIsRefused)
 	{
 		/* NOTE: Owner decision 2026-10-16 (base item shape-merge-quantization-overflow): the file readers refuse a

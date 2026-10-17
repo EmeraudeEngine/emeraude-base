@@ -1116,6 +1116,10 @@ namespace EmEn::Base::VertexFactory
 					m_vertices[globalVertexIndex].setNormal(normal.normalize());
 				}
 
+				/* NOTE: The normals are computed here too: declared, as computeVertexNormal() does (an OBJ v/vt read with a
+				 * tangent space lost its normals when written back, 2026-10-17). */
+				m_normalsDeclared = true;
+
 				return true;
 			}
 
