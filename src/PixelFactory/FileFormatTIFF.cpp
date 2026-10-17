@@ -168,7 +168,7 @@ namespace EmEn::Base::PixelFactory
 				}
 			}
 
-			if ( !TIFFRGBAImageOK(handle, nullptr) )
+			if ( TIFFRGBAImageOK(handle, nullptr) == 0 )
 			{
 				Logging::error("PixelFactory::FileFormatTIFF", "readStream(), this TIFF cannot be read as RGBA !");
 

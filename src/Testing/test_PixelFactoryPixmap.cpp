@@ -452,3 +452,34 @@ TEST(PixelFactoryPixmap, addAlphaChannelAlreadyHasAlpha)
 	EXPECT_EQ(image.channelMode(), ChannelMode::RGBA);
 	EXPECT_EQ(image.data(), (std::vector< uint8_t >{1, 2, 3, 4, 5, 6, 7, 8}));
 }
+
+/* Until 2026-10-17 the element count was computed in uint32 and WRAPPED: 65536x65536 grayscale (2^32 elements) allocated
+ * NOTHING and initialize() returned true — width() and height() said 65536, the buffer was empty. Owner decision: a pixmap
+ * beyond the uint32 element accounting of its getters is refused. Nothing is allocated by these checks. */
+TEST(Pixmap, elementCountBeyondUint32IsRefused)
+{
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	EXPECT_FALSE(pixmap.initialize(65536, 65536, PixelFactory::ChannelMode::Grayscale));
+	EXPECT_FALSE(pixmap.isValid());
+	EXPECT_TRUE(pixmap.data().empty());
+
+	EXPECT_FALSE(pixmap.initialize(65000, 65000, PixelFactory::ChannelMode::RGB));
+	EXPECT_FALSE(pixmap.isValid());
+
+	const PixelFactory::Pixmap< uint8_t, uint32_t > constructed{70000, 70000, PixelFactory::ChannelMode::RGBA};
+
+	EXPECT_FALSE(constructed.isValid());
+	EXPECT_TRUE(constructed.data().empty());
+}
+
+TEST(Pixmap, elementAndPixelCountsAreExact)
+{
+	/* The guard must not change what a normal pixmap reports. */
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	ASSERT_TRUE(pixmap.initialize(4, 4, PixelFactory::ChannelMode::RGB));
+	EXPECT_EQ(pixmap.elementCount(), 48U);
+	EXPECT_EQ(pixmap.pixelCount(), 16U);
+	EXPECT_EQ(pixmap.data().size(), 48U);
+}

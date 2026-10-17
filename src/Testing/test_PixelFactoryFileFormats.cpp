@@ -33,6 +33,8 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -198,7 +200,9 @@ TEST(PixelFactoryFileFormats, targaUnsupportedPixelDepthRejected)
 	auto buffer = makeTargaHeader(2, 1, 1, 64);
 	buffer.resize(buffer.size() + 16, std::byte{0});  // payload so the dimension guard passes
 
-	IO::MemoryStream stream{buffer};
+	/* ⚠️ std::as_const: MemoryStream's NON-const vector constructor is the WRITE mode — the read then failed at once and
+	 * this test passed without ever reaching the pixel-depth guard (until 2026-10-17). */
+	IO::MemoryStream stream{std::as_const(buffer)};
 	PixelFactory::FileFormatTarga< uint8_t, uint32_t > format;
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
@@ -684,7 +688,7 @@ TEST(PixelFactoryFileFormats, tiffGarbageRejected)
 		garbage[index] = static_cast< std::byte >((index * 37U + 11U) & 0xFFU);
 	}
 
-	IO::MemoryStream stream{garbage};
+	IO::MemoryStream stream{std::as_const(garbage)};
 	PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
@@ -809,7 +813,7 @@ TEST(PixelFactoryFileFormats, webpGarbageEmptyAndTruncatedRejected)
 			garbage[index] = static_cast< std::byte >((index * 53U + 7U) & 0xFFU);
 		}
 
-		IO::MemoryStream input{garbage};
+		IO::MemoryStream input{std::as_const(garbage)};
 
 		EXPECT_FALSE(format.readStream(input, decoded));
 	}
@@ -839,7 +843,7 @@ TEST(PixelFactoryFileFormats, webpGarbageEmptyAndTruncatedRejected)
 
 		encoded.resize(encoded.size() / 2);
 
-		IO::MemoryStream input{encoded};
+		IO::MemoryStream input{std::as_const(encoded)};
 
 		EXPECT_FALSE(format.readStream(input, decoded));
 	}
@@ -867,4 +871,184 @@ TEST(PixelFactoryFileFormats, webpWriteRefusesGrayscaleAndInvalidPixmaps)
 
 		EXPECT_FALSE(format.writeStream(stream, invalid, {}));
 	}
+}
+
+/* The JPEG reader / writer (libjpeg-turbo): 31 % covered until 2026-10-17. */
+namespace
+{
+	/* A smooth RGB or grayscale gradient: what JPEG compresses well, so the round trip stays close. */
+	[[nodiscard]]
+	PixelFactory::Pixmap< uint8_t, uint32_t >
+	makeGradient (uint32_t size, PixelFactory::ChannelMode channelMode)
+	{
+		PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+		if ( !pixmap.initialize(size, size, channelMode) )
+		{
+			return pixmap;
+		}
+
+		const auto colorCount = static_cast< size_t >(channelMode);
+		auto & data = pixmap.data();
+
+		for ( uint32_t y = 0; y < size; ++y )
+		{
+			for ( uint32_t x = 0; x < size; ++x )
+			{
+				const auto offset = ((static_cast< size_t >(y) * size) + x) * colorCount;
+
+				for ( size_t channel = 0; channel < colorCount; ++channel )
+				{
+					/* At most 2 x 31 + 2 x 31 + 3 x 30 = 214 for a 32 pixel side: no wrap, so no hard 255 -> 0 edge
+					 * (where JPEG rings) in the gradient. */
+					data[offset + channel] = static_cast< uint8_t >((x * 2U) + (y * 2U) + (channel * 30U));
+				}
+			}
+		}
+
+		return pixmap;
+	}
+
+	/* Encodes a pixmap with the engine's JPEG writer; empty on refusal. */
+	[[nodiscard]]
+	std::vector< std::byte >
+	encodeJpeg (const PixelFactory::Pixmap< uint8_t, uint32_t > & pixmap, const PixelFactory::WriteOptions & options = {})
+	{
+		std::vector< std::byte > encoded;
+		IO::MemoryStream output{encoded};
+		const PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
+
+		if ( !format.writeStream(output, pixmap, options) )
+		{
+			encoded.clear();
+		}
+
+		return encoded;
+	}
+
+	/* The largest absolute difference between two buffers of the same size. */
+	[[nodiscard]]
+	int
+	maximumDifference (const std::vector< uint8_t > & first, const std::vector< uint8_t > & second)
+	{
+		int maximum = 0;
+
+		for ( size_t index = 0; index < std::min(first.size(), second.size()); ++index )
+		{
+			maximum = std::max(maximum, std::abs(static_cast< int >(first[index]) - static_cast< int >(second[index])));
+		}
+
+		return maximum;
+	}
+}
+
+TEST(PixelFactoryFileFormats, jpegRoundTripRGBStaysClose)
+{
+	const auto source = makeGradient(32, PixelFactory::ChannelMode::RGB);
+
+	PixelFactory::WriteOptions options{};
+	options.jpeg.quality = 95;
+
+	const auto encoded = encodeJpeg(source, options);
+
+	ASSERT_FALSE(encoded.empty());
+
+	IO::MemoryStream input{encoded};
+	PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	ASSERT_TRUE(format.readStream(input, decoded));
+	ASSERT_EQ(decoded.width(), 32U);
+	ASSERT_EQ(decoded.height(), 32U);
+	ASSERT_EQ(decoded.channelMode(), PixelFactory::ChannelMode::RGB);
+	EXPECT_LE(maximumDifference(source.data(), decoded.data()), 24);
+}
+
+TEST(PixelFactoryFileFormats, jpegRoundTripGrayscaleAndProgressive)
+{
+	const auto source = makeGradient(24, PixelFactory::ChannelMode::Grayscale);
+
+	PixelFactory::WriteOptions options{};
+	options.jpeg.quality = 90;
+	options.jpeg.progressive = true;
+
+	const auto encoded = encodeJpeg(source, options);
+
+	ASSERT_FALSE(encoded.empty());
+
+	IO::MemoryStream input{encoded};
+	PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	ASSERT_TRUE(format.readStream(input, decoded));
+	ASSERT_EQ(decoded.channelMode(), PixelFactory::ChannelMode::Grayscale);
+	EXPECT_LE(maximumDifference(source.data(), decoded.data()), 24);
+}
+
+TEST(PixelFactoryFileFormats, jpegWriteRefusesAlphaAndInvalidPixmaps)
+{
+	EXPECT_TRUE(encodeJpeg(makeGradient(8, PixelFactory::ChannelMode::RGBA)).empty());
+	EXPECT_TRUE(encodeJpeg(PixelFactory::Pixmap< uint8_t, uint32_t >{}).empty());
+}
+
+TEST(PixelFactoryFileFormats, jpegEmptyStreamRejected)
+{
+	const std::vector< std::byte > empty;
+	IO::MemoryStream input{empty};
+	PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	EXPECT_FALSE(format.readStream(input, decoded));
+}
+
+TEST(PixelFactoryFileFormats, jpegTruncatedDoesNotAbort)
+{
+	auto encoded = encodeJpeg(makeGradient(32, PixelFactory::ChannelMode::RGB));
+
+	ASSERT_GT(encoded.size(), 64U);
+
+	encoded.resize(encoded.size() / 2);
+
+	IO::MemoryStream input{std::as_const(encoded)};
+	PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	const auto loaded = format.readStream(input, decoded);
+
+	std::cout << "[          ] truncated JPEG: readStream() returned " << (loaded ? "true" : "false") << "\n";
+}
+
+TEST(PixelFactoryFileFormats, jpegHugeDimensionsDoNotOOM)
+{
+	/* A valid 8x8 JPEG whose SOF header is rewritten to declare 65000x65000: a 12.7 GB RGB pixmap if unguarded. */
+	auto encoded = encodeJpeg(makeGradient(8, PixelFactory::ChannelMode::RGB));
+
+	ASSERT_FALSE(encoded.empty());
+
+	bool patched = false;
+
+	for ( size_t index = 0; index + 8 < encoded.size(); ++index )
+	{
+		const auto marker = static_cast< uint8_t >(encoded[index + 1]);
+
+		if ( static_cast< uint8_t >(encoded[index]) == 0xFF && (marker == 0xC0 || marker == 0xC2) )
+		{
+			/* FF Cx, length (2), precision (1), height (2), width (2), big-endian. */
+			encoded[index + 5] = std::byte{0xFD};
+			encoded[index + 6] = std::byte{0xE8};
+			encoded[index + 7] = std::byte{0xFD};
+			encoded[index + 8] = std::byte{0xE8};
+			patched = true;
+
+			break;
+		}
+	}
+
+	ASSERT_TRUE(patched);
+
+	IO::MemoryStream input{std::as_const(encoded)};
+	PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	ASSERT_FALSE(format.readStream(input, decoded));
 }

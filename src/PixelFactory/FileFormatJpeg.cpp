@@ -151,6 +151,27 @@ namespace EmEn::Base::PixelFactory
 		}
 
 		jpeg_read_header(&info, 1);
+
+		/* Guard the declared dimensions against the stream payload BEFORE allocating the pixmap: they come from the
+		 * header (up to 65500x65500, 17 GB of RGBA from a few hundred bytes). Same rule as the TIFF, Targa and HDR
+		 * readers; 1024 is far above a baseline JPEG's ratio — a flat PROGRESSIVE image (EOB runs) can exceed it and is
+		 * refused (owner decision 2026-10-17). The stream's own size, not the local copy: nothing is read after the
+		 * setjmp that it could clobber. */
+		{
+			constexpr uint64_t MaxCompressionExpansion{1024};
+
+			const uint64_t pixelCount = static_cast< uint64_t >(info.image_width) * static_cast< uint64_t >(info.image_height);
+
+			if ( pixelCount > static_cast< uint64_t >(stream.size()) * MaxCompressionExpansion )
+			{
+				Logging::error("PixelFactory::FileFormatJpeg", "readStream(), declared dimensions exceed the stream payload !");
+
+				jpeg_destroy_decompress(&info);
+
+				return false;
+			}
+		}
+
 		jpeg_start_decompress(&info);
 
 		if constexpr ( PixelFactoryDebugEnabled )

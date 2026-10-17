@@ -350,6 +350,13 @@ namespace EmEn::Base::PixelFactory
 				m_height{height},
 				m_channelMode{channelMode}
 			{
+				if ( !Pixmap::elementCountFits(width, height, channelMode) )
+				{
+					this->clear();
+
+					return;
+				}
+
 				m_data.resize(this->elementCount());
 
 				if constexpr ( IsDebug )
@@ -377,6 +384,13 @@ namespace EmEn::Base::PixelFactory
 				m_height{height},
 				m_channelMode{channelMode}
 			{
+				if ( !Pixmap::elementCountFits(width, height, channelMode) )
+				{
+					this->clear();
+
+					return;
+				}
+
 				const auto expectedSize = this->elementCount();
 
 				if ( data.size() != expectedSize )
@@ -408,6 +422,13 @@ namespace EmEn::Base::PixelFactory
 				m_height{height},
 				m_channelMode{channelMode}
 			{
+				if ( !Pixmap::elementCountFits(width, height, channelMode) )
+				{
+					this->clear();
+
+					return;
+				}
+
 				m_data.resize(this->elementCount());
 
 				if constexpr ( IsDebug )
@@ -443,6 +464,13 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
+				if ( !Pixmap::elementCountFits(width, height, channelMode) )
+				{
+					this->clear();
+
+					return false;
+				}
+
 				m_width = width;
 				m_height = height;
 				m_channelMode = channelMode;
@@ -468,6 +496,13 @@ namespace EmEn::Base::PixelFactory
 					{
 						std::cerr << "Invalid pixmap dimensions for span initialization!\n";
 					}
+
+					return false;
+				}
+
+				if ( !Pixmap::elementCountFits(width, height, channelMode) )
+				{
+					this->clear();
 
 					return false;
 				}
@@ -612,7 +647,8 @@ namespace EmEn::Base::PixelFactory
 			output_t
 			pixelCount () const noexcept requires (std::is_unsigned_v< output_t >)
 			{
-				return static_cast< output_t >(this->width() * this->height());
+				/* NOTE: The product in 64 bits: a 16-bit dimension type promotes to int, where 65535 x 65535 overflows. */
+				return static_cast< output_t >(static_cast< uint64_t >(this->width()) * static_cast< uint64_t >(this->height()));
 			}
 
 			/**
@@ -1969,6 +2005,11 @@ namespace EmEn::Base::PixelFactory
 
 					case ChannelMode::Grayscale :
 					{
+						if ( !Pixmap::elementCountFits(m_width, m_height, ChannelMode::GrayscaleAlpha) )
+						{
+							return false;
+						}
+
 						m_channelMode = ChannelMode::GrayscaleAlpha;
 						m_data.resize(this->elementCount());
 
@@ -1984,6 +2025,11 @@ namespace EmEn::Base::PixelFactory
 
 					case ChannelMode::RGB :
 					{
+						if ( !Pixmap::elementCountFits(m_width, m_height, ChannelMode::RGBA) )
+						{
+							return false;
+						}
+
 						m_channelMode = ChannelMode::RGBA;
 						m_data.resize(this->elementCount());
 
@@ -2953,6 +2999,35 @@ namespace EmEn::Base::PixelFactory
 			}
 
 		private:
+
+			/**
+			 * @brief Returns whether width × height × channels fits the uint32 element accounting of this class's getters
+			 * (elementCount(), pixelCount(), bytes() default to uint32_t), and logs the refusal otherwise.
+			 * @note ⚠️ Until 2026-10-17 the count was computed in uint32 and WRAPPED: 65000x65000 RGB (12.7 G elements)
+			 * allocated ~4.08 G — a buffer smaller than the size the pixmap reported, and a heap overflow on the first
+			 * fill (found by the JPEG reader's tests). Owner decision 2026-10-17: refuse beyond uint32, the type's own
+			 * limit (4.29 G elements; 16384x16384 RGBA is 1.07 G).
+			 * @param width The width.
+			 * @param height The height.
+			 * @param channelMode The channel mode.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			elementCountFits (dimension_t width, dimension_t height, ChannelMode channelMode) noexcept
+			{
+				const auto elements = static_cast< uint64_t >(width) * static_cast< uint64_t >(height) * static_cast< uint64_t >(channelMode);
+
+				if ( elements > std::numeric_limits< uint32_t >::max() )
+				{
+					std::cerr << "Pixmap : " << width << "x" << height << " with " << static_cast< uint32_t >(channelMode) << " channels exceeds the 4294967295 elements a pixmap can address, refused !" "\n";
+
+					return false;
+				}
+
+				return true;
+			}
 
 			/**
 			 * @brief STL streams printable object.

@@ -1464,6 +1464,17 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > **1024**, deflate's worst expansion (~1032:1) — owner decision. Peak RSS 14.9 MB; the five TIFF tests pass under a
 > 4 GB `ulimit -v`. (⚠️ Never cap the address space of an ASan run: its shadow memory reservation fails at start.)
 >
+> **`Pixmap` itself WRAPPED its element count in uint32 (found 2026-10-17 by the JPEG reader's test)**:
+> `elementCount()` / `pixelCount()` / `bytes()` default to `uint32_t`, and `initialize()` did
+> `m_data.resize(this->elementCount())`. 65000x65000 RGB (12.7 G elements) allocated ~4.08 G and REPORTED its real
+> size; libjpeg-turbo then wrote 12.7 GB into it — a SEGFAULT in `jsimd_ycc_rgb_convert_avx2`, not a clean failure.
+> 65536x65536 grayscale (2^32) allocated nothing and `initialize()` returned `true`. Owner decision: every entry
+> point (both `initialize()`, the three constructors, `addAlphaChannel()`) refuses a pixmap beyond the uint32
+> accounting of its getters (`elementCountFits()`, 4.29 G elements — the TYPE's limit; the arbitrary ceiling refused
+> above stays refused); `pixelCount()` multiplies in 64 bits. Test `Pixmap.elementCountBeyondUint32IsRefused` (it
+> failed on the former code: `true` for both). The JPEG reader got the payload guard as well (× 1024; a flat
+> PROGRESSIVE JPEG can compress beyond it and is refused — owner decision).
+>
 > **Deliberately NOT done (owner decisions, 2026-08-28):**
 > - **No allocation ceiling inside `Pixmap::initialize()`.** The guard stays the *reader's*
 >   responsibility. A ceiling would be a foundation contract change needing an arbitrary constant,
@@ -1497,3 +1508,13 @@ that comes from data is bounded below the operand's width BEFORE the shift.
   (0 by accident) in jsoncpp's `#if`; `-Wundef` caught it. Use `0` / `1`.
 - **Measure an interval with `std::chrono::steady_clock`**: libstdc++'s `high_resolution_clock` IS `system_clock`, which
   NTP moves backwards; the base timers defaulted to it until 2026-10-08.
+
+## Tests — `IO::MemoryStream`'s constructor picks the MODE by the vector's constness (2026-10-17)
+
+`MemoryStream(const std::vector< std::byte > &)` READS; `MemoryStream(std::vector< std::byte > &)` WRITES into the
+vector. A test that builds its input in a vector it then modifies (`auto bytes = ...; bytes.resize(...);`) and passes it
+non-const gets a WRITE stream: every `read()` fails at once, and a "the reader refuses this input" test passes for the
+wrong reason. Found on 2026-10-17 in four tests: three new ones (TIFF garbage, WebP garbage / truncated) and
+`targaUnsupportedPixelDepthRejected`, which had never reached the pixel-depth guard it is named after. Pass a read
+source as `std::as_const(bytes)` — and check in the test's log that the refusal comes from the guard it targets.
+
