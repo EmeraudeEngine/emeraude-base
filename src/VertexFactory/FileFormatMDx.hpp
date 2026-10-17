@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstring>
 #include <istream>
+#include <numbers>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -193,12 +194,6 @@ namespace EmEn::Base::VertexFactory
 				float size = 1;
 			};
 
-			struct mdl_skin_t
-			{
-				int group = 0;
-				std::vector< unsigned char > data;
-			};
-
 			struct mdl_texCoord_t
 			{
 				int onseam = 0;
@@ -295,7 +290,6 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 				
-				std::vector< mdl_skin_t > skins(static_cast< std::size_t >(header.num_skins));
 				if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_verts)) )
 				{
 					Logging::error("VertexFactory::FileFormatMDx", "readStream(), texcoord count exceeds the stream size !");
@@ -321,44 +315,109 @@ namespace EmEn::Base::VertexFactory
 				
 				std::vector< mdl_frame_t > frames(static_cast< std::size_t >(header.num_frames));
 
-				for ( auto & skin : skins )
+				/* The skins are not used by the geometry: skipped. A single skin is "int group = 0; image"; a skin GROUP is
+				 * "int group != 0; int count; float intervals[count]; images[count]" (Quake's modelgen.h) — it used to be
+				 * read as one image, and the rest of the file shifted (2026-10-17, owner decision: read the variants). */
+				const uint64_t skinSize = static_cast< uint64_t >(static_cast< uint32_t >(header.skinwidth)) * static_cast< uint64_t >(static_cast< uint32_t >(header.skinheight));
+
+				for ( int skinIndex = 0; skinIndex < header.num_skins; ++skinIndex )
 				{
-					const uint64_t skinSize = static_cast< uint64_t >(static_cast< uint32_t >(header.skinwidth)) * static_cast< uint64_t >(static_cast< uint32_t >(header.skinheight));
-					
-					if ( FileFormatMDx::exceedsStream(file, skinSize) )
+					int group = 0;
+					file.read(reinterpret_cast< char * >(&group), sizeof(int));
+
+					uint64_t images = 1;
+
+					if ( group != 0 )
+					{
+						int count = 0;
+						file.read(reinterpret_cast< char * >(&count), sizeof(int));
+
+						if ( !file || count <= 0 || FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(count)) )
+						{
+							Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), invalid skin group !");
+
+							return false;
+						}
+
+						images = static_cast< uint64_t >(count);
+						file.seekg(static_cast< std::streamoff >(images * sizeof(float)), std::ios::cur);
+					}
+
+					if ( !file || FileFormatMDx::exceedsStream(file, images * skinSize) )
 					{
 						Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), skin size exceeds the stream size !");
-					
+
 						return false;
 					}
-					
-					skin.data.resize(skinSize);
-					file.read(reinterpret_cast< char * >(&skin.group), sizeof(int));
-					/* Ave robustus! (A.4): read exactly skinSize, the value already validated against the
-					 * stream above (l.313/315) and used to size the buffer. Recomputing skinwidth*skinheight
-					 * here let the read size drift from the allocation; reading the validated size makes the
-					 * two impossible to diverge. */
-					file.read(reinterpret_cast< char * >(skin.data.data()), static_cast< std::streamsize >(skinSize));
+
+					file.seekg(static_cast< std::streamoff >(images * skinSize), std::ios::cur);
 				}
 
 				file.read(reinterpret_cast< char * >(textureCoordinates.data()), static_cast< std::streamsize >(sizeof(mdl_texCoord_t) * textureCoordinates.size()));
 				file.read(reinterpret_cast< char * >(triangles.data()), static_cast< std::streamsize >(sizeof(mdl_triangle_t) * triangles.size()));
+
+				/* A simple frame: bounding box, name, vertices. */
+				const auto readSimpleFrame = [&file, &header] (mdl_simpleframe_t & simpleFrame) {
+					simpleFrame.verts.resize(static_cast< std::size_t >(header.num_verts));
+					file.read(reinterpret_cast< char * >(&simpleFrame.bboxmin), sizeof(mdl_vertex_t));
+					file.read(reinterpret_cast< char * >(&simpleFrame.bboxmax), sizeof(mdl_vertex_t));
+					file.read(simpleFrame.name.data(), static_cast< std::streamsize >(simpleFrame.name.size()));
+					file.read(reinterpret_cast< char * >(simpleFrame.verts.data()), static_cast< std::streamsize >(sizeof(mdl_vertex_t) * simpleFrame.verts.size()));
+				};
+
+				const uint64_t simpleFrameBytes = (2 * sizeof(mdl_vertex_t)) + 16 + (static_cast< uint64_t >(header.num_verts) * sizeof(mdl_vertex_t));
 
 				for ( auto & frame : frames )
 				{
 					if ( FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(header.num_verts)) )
 					{
 						Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), vertex count exceeds the stream size !");
-					
+
 						return false;
 					}
-					
-					frame.frame.verts.resize(static_cast< std::size_t >(header.num_verts));
+
 					file.read(reinterpret_cast< char * >(&frame.type), sizeof(int));
-					file.read(reinterpret_cast< char * >(&frame.frame.bboxmin), sizeof(mdl_vertex_t));
-					file.read(reinterpret_cast< char * >(&frame.frame.bboxmax), sizeof(mdl_vertex_t));
-					file.read(reinterpret_cast< char * >(frame.frame.name.data()), sizeof(char) * 16);
-					file.read(reinterpret_cast< char * >(frame.frame.verts.data()), static_cast< std::streamsize >(sizeof(mdl_vertex_t) * frame.frame.verts.size()));
+
+					if ( frame.type == 0 )
+					{
+						readSimpleFrame(frame.frame);
+
+						continue;
+					}
+
+					/* A frame GROUP: "int count; bboxmin; bboxmax; float intervals[count]; simple frames[count]" (no type
+					 * before each). It used to be read as one simple frame. Its FIRST frame stands for it. */
+					int count = 0;
+					file.read(reinterpret_cast< char * >(&count), sizeof(int));
+
+					if ( !file || count <= 0 || FileFormatMDx::exceedsStream(file, static_cast< uint64_t >(count)) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), invalid frame group !");
+
+						return false;
+					}
+
+					const auto skipped = static_cast< uint64_t >(count - 1) * simpleFrameBytes;
+
+					file.seekg(static_cast< std::streamoff >((2 * sizeof(mdl_vertex_t)) + (static_cast< uint64_t >(count) * sizeof(float))), std::ios::cur);
+					readSimpleFrame(frame.frame);
+
+					if ( !file || FileFormatMDx::exceedsStream(file, skipped) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), frame group exceeds the stream size !");
+
+						return false;
+					}
+
+					file.seekg(static_cast< std::streamoff >(skipped), std::ios::cur);
+				}
+
+				/* A truncated file used to leave zeros in place of the missing data: refused. */
+				if ( !file )
+				{
+					Logging::error("VertexFactory::FileFormatMDx", "loadMDL(), truncated file !");
+
+					return false;
 				}
 
 				if ( header.num_tris <= 0 )
@@ -858,9 +917,14 @@ namespace EmEn::Base::VertexFactory
 							const auto & v = verts[vertexTableIndex];
 							const auto & uv = uvs[vertexTableIndex];
 
-							/* Decode Normal from lat/lng encoding. */
-							const float lat = (v.normal[0] * (2 * 3.14159265f) / 255.0f);
-							const float lng = (v.normal[1] * (2 * 3.14159265f) / 255.0f);
+							/* Decode the normal as Quake III's renderer does (ioquake3 tr_surface.c, LerpMeshVertexes): the file
+							 * holds a little-endian short, "lat = (normal >> 8) & 0xff; lng = normal & 0xff" — byte 1 is the
+							 * latitude, byte 0 the longitude, 256 steps per turn. Both were swapped (and divided by 255): on
+							 * fembotbig.md3 the decoded normals agreed with the geometry at |cos| 0.53 on average (random),
+							 * 0.89 decoded right (2026-10-17). */
+							constexpr float StepAngle = std::numbers::pi_v< float > * 2.0F / 256.0F;
+							const float lat = static_cast< float >(v.normal[1]) * StepAngle;
+							const float lng = static_cast< float >(v.normal[0]) * StepAngle;
 							const float nx = std::cos(lat) * std::sin(lng);
 							const float ny = std::sin(lat) * std::sin(lng);
 							const float nz = std::cos(lng);

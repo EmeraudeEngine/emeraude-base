@@ -28,11 +28,14 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <limits>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
@@ -781,6 +784,236 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Shape< float, uint32_t > shape;
 		EXPECT_FALSE(format.writeStream(stream, shape, {}));
+	}
+
+	/* The coverage pass (2026-10-17): files that LOAD, checked value by value. The MDL skin / frame GROUPS were read as
+	 * a single skin / simple frame (owner decision: read the variants); the MD3 normal bytes were swapped. */
+	namespace
+	{
+		/* Little-endian writer for the hand-built id Tech files. */
+		class Bytes final
+		{
+			public:
+
+				void i32 (int32_t value) { this->raw(&value, sizeof(value)); }
+				void f32 (float value) { this->raw(&value, sizeof(value)); }
+				void i16 (int16_t value) { this->raw(&value, sizeof(value)); }
+				void u8 (uint8_t value) { this->raw(&value, sizeof(value)); }
+				void zeros (size_t count) { m_data.insert(m_data.end(), count, std::byte{0}); }
+				void tag (std::string_view text) { this->raw(text.data(), text.size()); }
+
+				[[nodiscard]]
+				const std::vector< std::byte > &
+				data () const noexcept
+				{
+					return m_data;
+				}
+
+			private:
+
+				void
+				raw (const void * source, size_t size)
+				{
+					const auto offset = m_data.size();
+					m_data.resize(offset + size);
+					std::memcpy(m_data.data() + offset, source, size);
+				}
+
+				std::vector< std::byte > m_data;
+		};
+
+		/* A Quake 1 MDL: 2x2 skin, 3 vertices (10, 0, 0), (0, 20, 0), (0, 0, 30) with normal 5 (0, 0, 1), one triangle.
+		 * With groups, the skin is a group of two images and the frame a group of two frames — the first one carrying the
+		 * same vertices, the second other ones. */
+		std::vector< std::byte >
+		makeQuakeMDL (bool groups)
+		{
+			Bytes file;
+			file.tag("IDPO");
+			file.i32(6);
+			for ( int index = 0; index < 3; ++index ) { file.f32(1.0F); }
+			for ( int index = 0; index < 3; ++index ) { file.f32(0.0F); }
+			file.f32(1.0F);
+			for ( int index = 0; index < 3; ++index ) { file.f32(0.0F); }
+			file.i32(1);    /* num_skins */
+			file.i32(2);    /* skinwidth */
+			file.i32(2);    /* skinheight */
+			file.i32(3);    /* num_verts */
+			file.i32(1);    /* num_tris */
+			file.i32(1);    /* num_frames */
+			file.i32(0);    /* synctype */
+			file.i32(0);    /* flags */
+			file.f32(1.0F); /* size */
+
+			if ( groups )
+			{
+				file.i32(1);
+				file.i32(2);
+				file.f32(0.1F);
+				file.f32(0.2F);
+				file.zeros(8);
+			}
+			else
+			{
+				file.i32(0);
+				file.zeros(4);
+			}
+
+			/* Texture coordinates (onseam, s, t), then the triangle (facesfront, three indices). */
+			file.i32(0); file.i32(0); file.i32(0);
+			file.i32(0); file.i32(1); file.i32(0);
+			file.i32(0); file.i32(0); file.i32(1);
+			file.i32(1); file.i32(0); file.i32(1); file.i32(2);
+
+			const auto simpleFrame = [&file] (uint8_t a, uint8_t b, uint8_t c) {
+				file.zeros(8);
+				file.zeros(16);
+				file.u8(a); file.u8(0); file.u8(0); file.u8(5);
+				file.u8(0); file.u8(b); file.u8(0); file.u8(5);
+				file.u8(0); file.u8(0); file.u8(c); file.u8(5);
+			};
+
+			if ( groups )
+			{
+				file.i32(1);
+				file.i32(2);
+				file.zeros(8);
+				file.f32(0.1F);
+				file.f32(0.2F);
+				simpleFrame(10, 20, 30);
+				simpleFrame(99, 99, 99);
+			}
+			else
+			{
+				file.i32(0);
+				simpleFrame(10, 20, 30);
+			}
+
+			return file.data();
+		}
+
+		/* Whether the shape holds a vertex at this position (any order), and every vertex has this normal. */
+		bool
+		hasVertex (const Shape< float, uint32_t > & shape, float x, float y, float z, float s, float t)
+		{
+			return std::ranges::any_of(shape.vertices(), [&] (const auto & vertex) {
+				const auto & position = vertex.position();
+				const auto & uv = vertex.textureCoordinates();
+
+				return std::abs(position[0] - x) < 1e-5F && std::abs(position[1] - y) < 1e-5F && std::abs(position[2] - z) < 1e-5F
+					&& std::abs(uv[0] - s) < 1e-5F && std::abs(uv[1] - t) < 1e-5F;
+			});
+		}
+
+		bool
+		everyNormalIs (const Shape< float, uint32_t > & shape, float x, float y, float z)
+		{
+			return !shape.vertices().empty() && std::ranges::all_of(shape.vertices(), [&] (const auto & vertex) {
+				const auto & normal = vertex.normal();
+
+				return std::abs(normal[0] - x) < 1e-3F && std::abs(normal[1] - y) < 1e-3F && std::abs(normal[2] - z) < 1e-3F;
+			});
+		}
+	}
+
+	TEST(VertexFactoryMDx, mdlLoadsItsVerticesNormalsAndCoordinates)
+	{
+		/* id Tech (X forward, Y left, Z up) -> engine (y, z, x), x 0.01; UV (s + 0.5) / width; normal 5 = (0, 0, 1). */
+		for ( const bool groups : {false, true} )
+		{
+			const auto buffer = makeQuakeMDL(groups);
+			MemoryStream stream{buffer};
+			MDx format;
+			Result result;
+
+			ASSERT_TRUE(format.readStream(stream, result, {})) << "groups " << groups;
+			ASSERT_EQ(result.shape.triangles().size(), 1U);
+
+			EXPECT_TRUE(hasVertex(result.shape, 0.0F, 0.0F, 0.1F, 0.25F, 0.25F)) << "groups " << groups;
+			EXPECT_TRUE(hasVertex(result.shape, 0.2F, 0.0F, 0.0F, 0.75F, 0.25F)) << "groups " << groups;
+			EXPECT_TRUE(hasVertex(result.shape, 0.0F, 0.3F, 0.0F, 0.25F, 0.75F)) << "groups " << groups;
+			EXPECT_TRUE(everyNormalIs(result.shape, 0.0F, 1.0F, 0.0F)) << "groups " << groups;
+		}
+	}
+
+	TEST(VertexFactoryMDx, mdlTruncatedOrBadGroupIsRefused)
+	{
+		/* Cut in the middle of the frame: the reads used to leave zeros and load. */
+		{
+			auto buffer = makeQuakeMDL(false);
+			buffer.resize(buffer.size() - 4);
+
+			MemoryStream stream{std::as_const(buffer)};
+			MDx format;
+			Result result;
+			EXPECT_FALSE(format.readStream(stream, result, {}));
+		}
+
+		/* A skin group of zero images. */
+		{
+			auto buffer = makeQuakeMDL(true);
+			const int32_t zero = 0;
+			std::memcpy(buffer.data() + 88, &zero, sizeof(zero));
+
+			MemoryStream stream{std::as_const(buffer)};
+			MDx format;
+			Result result;
+			EXPECT_FALSE(format.readStream(stream, result, {}));
+		}
+	}
+
+	TEST(VertexFactoryMDx, md3NormalsFollowQuake3)
+	{
+		/* One surface, one triangle, three vertices whose normal is +X in id Tech space — Quake III encodes it as the
+		 * short (lat 0 << 8) | lng 64, the bytes [64, 0] on disk — which is +Z in the engine (y, z, x). The bytes were
+		 * read swapped: +X came out +Y. */
+		Bytes file;
+		file.tag("IDP3");
+		file.i32(15);
+		file.zeros(64);
+		file.i32(0);
+		file.i32(1);      /* num_frames */
+		file.i32(0);      /* num_tags */
+		file.i32(1);      /* num_surfaces */
+		file.i32(0);      /* num_skins */
+		file.i32(108);    /* offset_frames */
+		file.i32(108);    /* offset_tags */
+		file.i32(108);    /* offset_surfaces */
+		file.i32(108 + 168);
+
+		/* The surface: header (108), triangle (12), texture coordinates (3 x 8), vertices (3 x 8). */
+		file.tag("IDP3");
+		file.zeros(64);
+		file.i32(0);
+		file.i32(1);      /* num_frames */
+		file.i32(0);      /* num_shaders */
+		file.i32(3);      /* num_verts */
+		file.i32(1);      /* num_triangles */
+		file.i32(108);    /* offset_triangles */
+		file.i32(108);    /* offset_shaders */
+		file.i32(120);    /* offset_st */
+		file.i32(144);    /* offset_xyzn */
+		file.i32(168);    /* offset_end */
+		file.i32(0); file.i32(1); file.i32(2);
+		for ( int index = 0; index < 3; ++index ) { file.f32(0.5F); file.f32(0.5F); }
+
+		for ( const auto & position : std::array< std::array< int16_t, 3 >, 3 >{{{64, 0, 0}, {0, 64, 0}, {0, 0, 64}}} )
+		{
+			file.i16(position[0]);
+			file.i16(position[1]);
+			file.i16(position[2]);
+			file.u8(64);
+			file.u8(0);
+		}
+
+		const auto & buffer = file.data();
+		MemoryStream stream{buffer};
+		MDx format;
+		Result result;
+
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+		ASSERT_EQ(result.shape.triangles().size(), 1U);
+		EXPECT_TRUE(everyNormalIs(result.shape, 0.0F, 0.0F, 1.0F));
 	}
 
 	/* ===== Wavefront OBJ (text) — counts are line-derived (no allocation DoS); the crash risk
