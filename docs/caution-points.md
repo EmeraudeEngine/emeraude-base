@@ -1516,6 +1516,14 @@ first entry index, the refusals, grayscale RLE, an ID field and an attached colo
 failed on the former reader. `fuzz_targa` on the new reader (ASan + UBSan, seeded with the variants): 574 M executions
 (10 + 3 min), 0 crash / OOM / timeout.
 
+## UBSan — GCC's `-fsanitize=undefined` does NOT check a float-to-integer conversion (2026-10-17)
+
+A `double` converted to `uint32_t` out of range is undefined behaviour; Clang's `undefined` group reports it
+(`float-cast-overflow`), GCC's leaves it out. The base unit tests run under GCC's ASan + UBSan, so the MIDI renderer's
+out-of-range sample count (a 36-byte file, `docs/subsystems/wavefactory/06-input-robustness.md`) passed them;
+a clang probe found it. `EMERAUDE_ENABLE_UBSAN` now adds `-fsanitize=float-cast-overflow` on GCC (owner
+decision). A float computed from input and converted to an integer is saturated BEFORE the conversion (NaN included).
+
 ## The paranoid warning set — what a base-only check does not see (Ave Robustus II, 2026-10-08)
 
 - **A base TEMPLATE header is only judged where it is instantiated.** `TextProcessor`, `Math::linearInterpolation()`

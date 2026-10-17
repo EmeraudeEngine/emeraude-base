@@ -405,22 +405,29 @@ namespace EmEn::Base::WaveFactory
 			}
 
 			/**
-			 * @brief Converts filter resonance CC value (0-127) to feedback amount.
+			 * @brief Converts filter resonance CC value (0-127) to the resonance amount of applyResonantFilterSample().
+			 * @note The filter's source defines q between 0 and 1: the amount used to reach 3.8 and the filter diverged to
+			 * infinity from CC 40 on (2026-10-17). A value outside 0-127 is clamped.
 			 * @param resonanceCC The CC#71 value (0-127).
-			 * @return float Resonance feedback amount (0.0 to ~3.8).
+			 * @return float The resonance amount (0.0 to 0.99).
 			 */
 			[[nodiscard]]
 			static float
 			filterResonanceToFeedback (int16_t resonanceCC) noexcept
 			{
-				return static_cast< float >(resonanceCC) / 127.0F * 3.8F;
+				return static_cast< float >(std::clamp< int16_t >(resonanceCC, 0, 127)) / 127.0F * 0.99F;
 			}
 
 			/**
 			 * @brief Applies a 2-pole resonant low-pass filter to a single sample.
+			 * @note Paul Kellett, "Resonant filter", musicdsp.org Filters #29
+			 * (https://www.musicdsp.org/en/latest/Filters/29-resonant-filter.html): fb = q + q / (1 - f), "f and q between
+			 * 0 and 1" (filterResonanceToFeedback() gives at most 0.99, the bypass above keeps f below 0.99). Simulated over
+			 * every CC#71 x CC#74 value at 4, 22.05 and 48 kHz on a saw and a square of amplitude 0.25: the output peaks at
+			 * 4.15 (the resonance), never diverges.
 			 * @param sample The input sample.
 			 * @param cutoff The filter cutoff coefficient (from filterCutoffToCoefficient).
-			 * @param resonance The resonance feedback (from filterResonanceToFeedback).
+			 * @param resonance The resonance amount (from filterResonanceToFeedback), below 1.
 			 * @param state The filter state (updated in place).
 			 * @return float The filtered sample.
 			 */
@@ -433,7 +440,7 @@ namespace EmEn::Base::WaveFactory
 					return sample; /* Filter fully open, bypass. */
 				}
 
-				const float feedback = resonance + resonance / (1.0F - cutoff * 0.5F);
+				const float feedback = resonance + (resonance / (1.0F - cutoff));
 				state.buf0 += cutoff * (sample - state.buf0 + feedback * (state.buf0 - state.buf1));
 				state.buf1 += cutoff * (state.buf0 - state.buf1);
 

@@ -33,6 +33,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <string>
@@ -318,10 +319,11 @@ namespace EmEn::Base::WaveFactory
 			static uint16_t
 			readUInt16BE (std::istream & stream) noexcept
 			{
-				uint8_t bytes[2];
-				stream.read(reinterpret_cast< char * >(bytes), 2);
+				/* A short read yields EOF bytes (masked): a defined value, the stream left failed for the caller to check. */
+				const auto high = static_cast< uint32_t >(stream.get()) & 0xFFU;
+				const auto low = static_cast< uint32_t >(stream.get()) & 0xFFU;
 
-				return static_cast< uint16_t >((bytes[0] << 8) | bytes[1]);
+				return static_cast< uint16_t >((high << 8U) | low);
 			}
 
 			/**
@@ -333,10 +335,15 @@ namespace EmEn::Base::WaveFactory
 			static uint32_t
 			readUInt32BE (std::istream & stream) noexcept
 			{
-				uint8_t bytes[4];
-				stream.read(reinterpret_cast< char * >(bytes), 4);
+				/* A short read yields EOF bytes (masked): a defined value, the stream left failed for the caller to check. */
+				uint32_t value = 0;
 
-				return (static_cast< uint32_t >(bytes[0]) << 24) | (static_cast< uint32_t >(bytes[1]) << 16) | (static_cast< uint32_t >(bytes[2]) << 8) | static_cast< uint32_t >(bytes[3]);
+				for ( int index = 0; index < 4; ++index )
+				{
+					value = (value << 8U) | (static_cast< uint32_t >(stream.get()) & 0xFFU);
+				}
+
+				return value;
 			}
 
 			/**
@@ -380,10 +387,10 @@ namespace EmEn::Base::WaveFactory
 			parseHeader (std::istream & stream, MIDIHeader & header) noexcept
 			{
 				/* Read chunk type (should be "MThd"). */
-				char magic[4];
-				stream.read(magic, 4);
+				std::array< char, 4 > magic{};
+				stream.read(magic.data(), 4);
 
-				if ( std::strncmp(magic, "MThd", 4) != 0 )
+				if ( !stream.good() || std::strncmp(magic.data(), "MThd", 4) != 0 )
 				{
 					return false;
 				}
@@ -402,6 +409,13 @@ namespace EmEn::Base::WaveFactory
 				header.format = readUInt16BE(stream);
 				header.trackCount = readUInt16BE(stream);
 				header.division = readUInt16BE(stream);
+
+				if ( !stream.good() )
+				{
+					Logging::error("WaveFactory::FileFormatMIDI", "parseHeader(), truncated header !");
+
+					return false;
+				}
 
 				/* Check for SMPTE time division (not supported). */
 				if ( header.division & 0x8000 )
@@ -439,10 +453,10 @@ namespace EmEn::Base::WaveFactory
 			parseTrack (std::istream & stream, std::vector< MIDINote > & notes, std::vector< ControlEvent > & controlEvents, std::vector< TempoEvent > & tempoEvents, std::array< ChannelState, 16 > & channelStates, uint16_t trackIndex) noexcept
 			{
 				/* Read chunk type (should be "MTrk"). */
-				char magic[4];
-				stream.read(magic, 4);
+				std::array< char, 4 > magic{};
+				stream.read(magic.data(), 4);
 
-				if ( std::strncmp(magic, "MTrk", 4) != 0 )
+				if ( !stream.good() || std::strncmp(magic.data(), "MTrk", 4) != 0 )
 				{
 					return false;
 				}
@@ -804,12 +818,18 @@ namespace EmEn::Base::WaveFactory
 								else if ( metaType == 0x51 && metaLength == 3 )
 								{
 									/* Tempo change - store as event for accurate timing. */
-									uint8_t tempoBytes[3];
-									stream.read(reinterpret_cast< char * >(tempoBytes), 3);
-									const uint32_t tempo = (static_cast< uint32_t >(tempoBytes[0]) << 16) |
-														   (static_cast< uint32_t >(tempoBytes[1]) << 8) |
-														   static_cast< uint32_t >(tempoBytes[2]);
-									tempoEvents.push_back({currentTick, tempo});
+									uint32_t tempo = 0;
+
+									for ( int index = 0; index < 3; ++index )
+									{
+										tempo = (tempo << 8U) | (static_cast< uint32_t >(stream.get()) & 0xFFU);
+									}
+
+									/* A truncated tempo is not stored (the stream fails, the track loop ends). */
+									if ( stream.good() )
+									{
+										tempoEvents.push_back({currentTick, tempo});
+									}
 								}
 								else
 								{
@@ -1097,18 +1117,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				/* Add a small tail for release. */
-				const uint32_t tailTicks = header.division;
-				uint32_t totalSamples = ticksToSamplesWithTempoMap(maxEndTick + tailTicks, tempoEvents, header.division, sampleRate);
-
-				/* Limit maximum duration to 30 minutes to prevent memory issues. */
-				constexpr uint32_t MaxDurationSeconds = 30 * 60;
-				const uint32_t maxSamples = MaxDurationSeconds * sampleRate;
-
-				if ( totalSamples > maxSamples )
-				{
-					Logging::warning("WaveFactory::FileFormatMIDI", std::string{"renderWithSoundfont(), MIDI duration exceeds "} + std::to_string(MaxDurationSeconds) + "s limit, clamping.");
-					totalSamples = maxSamples;
-				}
+				const uint32_t totalSamples = renderedSampleCount(maxEndTick, header.division, tempoEvents, header.division, sampleRate);
 
 				/* Initialize the wave as stereo. */
 				if ( !wave.initialize(totalSamples, Channels::Stereo, m_frequency) )
@@ -1181,7 +1190,7 @@ namespace EmEn::Base::WaveFactory
 					{
 						const uint32_t deltaTicks = event.tick - lastEventTick;
 						const double deltaSeconds = (static_cast< double >(deltaTicks) * static_cast< double >(currentTempo)) / (static_cast< double >(header.division) * 1000000.0);
-						auto samplesToRender = static_cast< uint32_t >(deltaSeconds * static_cast< double >(sampleRate));
+						auto samplesToRender = saturatedUInt32(deltaSeconds * static_cast< double >(sampleRate));
 
 						/* Check if any channel has vibrato active. */
 						bool hasVibrato = false;
@@ -1403,7 +1412,57 @@ namespace EmEn::Base::WaveFactory
 				const uint32_t remainingTicks = tick - lastTick;
 				totalSeconds += (static_cast< double >(remainingTicks) * static_cast< double >(currentTempo)) / (static_cast< double >(division) * 1000000.0);
 
-				return static_cast< uint32_t >(totalSeconds * static_cast< double >(sampleRate));
+				return saturatedUInt32(totalSeconds * static_cast< double >(sampleRate));
+			}
+
+			/**
+			 * @brief Converts a sample or tick count computed in floating point to uint32_t, saturated.
+			 * @note A plain conversion of a value beyond uint32_t is undefined behaviour, and a few bytes of delta time
+			 * reach it (a 4-byte delta is 2^28 ticks). NaN and negative values give 0.
+			 * @param value The value.
+			 * @return uint32_t
+			 */
+			[[nodiscard]]
+			static uint32_t
+			saturatedUInt32 (double value) noexcept
+			{
+				constexpr auto Maximum = static_cast< double >(std::numeric_limits< uint32_t >::max());
+
+				if ( !(value > 0.0) )
+				{
+					return 0;
+				}
+
+				return value >= Maximum ? std::numeric_limits< uint32_t >::max() : static_cast< uint32_t >(value);
+			}
+
+			/**
+			 * @brief Returns the length of the rendering in samples: the last note's end plus a release tail, at most
+			 * MaxDurationSeconds (beyond it the rendering is truncated, with a warning).
+			 * @param lastTick The last note's end tick.
+			 * @param tailTicks The release tail in ticks.
+			 * @param tempoEvents The sorted tempo events.
+			 * @param division Ticks per quarter note.
+			 * @param sampleRate The sample rate in Hz.
+			 * @return uint32_t
+			 */
+			[[nodiscard]]
+			static uint32_t
+			renderedSampleCount (uint32_t lastTick, uint32_t tailTicks, const std::vector< TempoEvent > & tempoEvents, uint16_t division, uint32_t sampleRate) noexcept
+			{
+				/* The end tick saturates instead of wrapping (a last note near the uint32_t limit). */
+				const auto endTick = static_cast< uint32_t >(std::min< uint64_t >(static_cast< uint64_t >(lastTick) + tailTicks, std::numeric_limits< uint32_t >::max()));
+				const auto samples = ticksToSamplesWithTempoMap(endTick, tempoEvents, division, sampleRate);
+				const auto maxSamples = static_cast< uint32_t >(std::min< uint64_t >(static_cast< uint64_t >(MaxDurationSeconds) * sampleRate, std::numeric_limits< uint32_t >::max()));
+
+				if ( samples > maxSamples )
+				{
+					Logging::warning("WaveFactory::FileFormatMIDI", std::string{"renderedSampleCount(), the MIDI duration exceeds the "} + std::to_string(MaxDurationSeconds) + " s limit, the rendering is truncated.");
+
+					return maxSamples;
+				}
+
+				return samples;
 			}
 
 			/**
@@ -1464,8 +1523,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				/* Add a small tail for release. */
-				const uint32_t tailTicks = header.division / 2;
-				const uint32_t totalSamples = ticksToSamplesWithTempoMap(maxEndTick + tailTicks, tempoEvents, header.division, sampleRate);
+				const uint32_t totalSamples = renderedSampleCount(maxEndTick, header.division / 2U, tempoEvents, header.division, sampleRate);
 
 				/* Initialize the wave as stereo. */
 				if ( !wave.initialize(totalSamples, Channels::Stereo, m_frequency) )
@@ -1579,11 +1637,10 @@ namespace EmEn::Base::WaveFactory
 					float expressionFactor = static_cast< float >(cache.expression) / 127.0F;
 					float volumeFactor = static_cast< float >(cache.volume) / 127.0F;
 
-					/* Filter parameters: 2-pole resonant low-pass filter (Moog-style ladder approximation). */
+					/* Filter parameters: Paul Kellett's 2-pole resonant low-pass (Synthesizer::applyResonantFilterSample()). */
 					float filterCutoff = Synth::filterCutoffToCoefficient(cache.filterCutoff, sampleRateF);
 					float filterResonance = Synth::filterResonanceToFeedback(cache.filterResonance);
-					float filterBuf0 = 0.0F; /* Filter state buffer 0. */
-					float filterBuf1 = 0.0F; /* Filter state buffer 1. */
+					FilterState filterState{};
 
 					/* Tremolo depth (0.0 to 1.0). */
 					float tremoloDepth = static_cast< float >(cache.tremoloDepth) / 127.0F;
@@ -1600,7 +1657,7 @@ namespace EmEn::Base::WaveFactory
 						if ( localSample % ControlUpdateInterval == 0 )
 						{
 							/* Calculate current tick (multiplication faster than division). */
-							const auto currentTick = static_cast< uint32_t >(static_cast< float >(globalSample) * sampleToTickFactor);
+							const auto currentTick = saturatedUInt32(static_cast< double >(globalSample) * static_cast< double >(sampleToTickFactor));
 
 							/* Update cache with any new events. */
 							updateControlCache(controlEvents, channelEvents, cache, searchIndex, currentTick);
@@ -1677,24 +1734,17 @@ namespace EmEn::Base::WaveFactory
 								phase = std::fmod(phase, 1.0F);
 							}
 
-							/* Apply resonant low-pass filter (2-pole Moog-style ladder approximation).
-							 * The filter only applies to melodic instruments, not percussion. */
-							if ( filterCutoff < 0.99F ) [[likely]]
-							{
-								/* Calculate feedback based on resonance and cutoff.
-								 * Higher resonance at lower cutoffs gives the classic "squelchy" sound. */
-								const float feedback = filterResonance + filterResonance / (1.0F - filterCutoff * 0.5F);
-
-								/* Two-pole filter with resonance feedback. */
-								filterBuf0 += filterCutoff * (sample - filterBuf0 + feedback * (filterBuf0 - filterBuf1));
-								filterBuf1 += filterCutoff * (filterBuf0 - filterBuf1);
-
-								/* Use the second buffer as output (2-pole rolloff = -12dB/octave). */
-								sample = filterBuf1;
-							}
+							/* The resonant low-pass filter applies to melodic instruments only, not percussion. */
+							sample = Synth::applyResonantFilterSample(sample, filterCutoff, filterResonance, filterState);
 						}
 
-						/* Mix into stereo output. */
+						/* Mix into stereo output. A non-finite sample is dropped, a contribution clipped BEFORE its conversion to
+						 * an integer (out of range, the conversion is undefined behaviour). */
+						if ( !std::isfinite(sample) ) [[unlikely]]
+						{
+							sample = 0.0F;
+						}
+
 						const size_t stereoIndex = static_cast< size_t >(globalSample) * 2;
 
 						if ( stereoIndex + 1 < waveData.size() )
@@ -1707,8 +1757,8 @@ namespace EmEn::Base::WaveFactory
 							else
 							{
 								const auto maxVal = static_cast< float >(std::numeric_limits< precision_t >::max());
-								const auto leftSample = static_cast< int32_t >(sample * leftGain * maxVal);
-								const auto rightSample = static_cast< int32_t >(sample * rightGain * maxVal);
+								const auto leftSample = static_cast< int32_t >(std::clamp(sample * leftGain, -1.0F, 1.0F) * maxVal);
+								const auto rightSample = static_cast< int32_t >(std::clamp(sample * rightGain, -1.0F, 1.0F) * maxVal);
 
 								const int32_t leftSum = static_cast< int32_t >(waveData[stereoIndex]) + leftSample;
 								const int32_t rightSum = static_cast< int32_t >(waveData[stereoIndex + 1]) + rightSample;
@@ -1727,6 +1777,10 @@ namespace EmEn::Base::WaveFactory
 
 				return true;
 			}
+
+			/** @brief The longest rendering in seconds, both renderers (a 36-byte file can declare any duration;
+			 * 30 minutes cost ~1.35 GB in the additive renderer at 48 kHz). */
+			static constexpr uint32_t MaxDurationSeconds{30 * 60};
 
 			Frequency m_frequency{Frequency::PCM48000Hz};
 			tsf * m_soundfont{nullptr};

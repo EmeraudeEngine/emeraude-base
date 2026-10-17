@@ -94,7 +94,8 @@ The `Synthesizer` class works exclusively with mono audio:
 - Post-rendering normalization with 5% headroom (target peak = 0.95)
 - Adaptive chunk sizes: 4096 samples normally, 64 samples when vibrato active
 - Direct rendering into accumulator (no intermediate buffer allocation)
-- Maximum duration limit: 30 minutes to prevent memory exhaustion
+- Maximum duration: `MaxDurationSeconds` (30 minutes), shared with the additive renderer — beyond it the rendering is
+  truncated with a warning (`renderedSampleCount()`); every tick / sample conversion saturates (`saturatedUInt32()`)
 - See: `FileFormatMIDI.hpp:renderWithSoundfont()`
 
 **Robustness:**

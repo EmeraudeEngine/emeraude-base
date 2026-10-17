@@ -68,3 +68,10 @@ static const std::filesystem::path SmallPatternRBG_3{AssetsDirectory / "126x126-
 static const std::filesystem::path MediumPatternRBG_1{AssetsDirectory / "256x256-RGB_pattern001.png"};
 static const std::filesystem::path SmallRGBA{AssetsDirectory / "64x64-RGBA.png"};
 static const std::filesystem::path LargeRGB_RLE_Targa{AssetsDirectory / "1700x1280-RGB_RLE.tga"};
+
+/* NOTE: A small General MIDI SoundFont, the one TinySoundFont ships (the submodule is required by the build). */
+#ifdef EMERAUDE_TESTS_SOUNDFONT
+static const std::filesystem::path TestSoundFont{EMERAUDE_TESTS_SOUNDFONT};
+#else
+static const std::filesystem::path TestSoundFont{"./florestan-subset.sf2"};
+#endif

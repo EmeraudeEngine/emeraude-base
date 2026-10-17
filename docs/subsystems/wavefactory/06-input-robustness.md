@@ -9,6 +9,26 @@ in Release **and** under ASan/UBSan via `ctest`.
 - **MIDI — zero time division** (`FileFormatMIDI::parseHeader`): `division == 0` is now rejected.
   It is the divisor in the tick→sample tempo conversion; unchecked it produces `+inf` and the cast
   to a `uint32_t` sample count is UB.
+- **MIDI — the rendered duration (2026-10-17, the coverage pass; owner decision: 30 minutes for both renderers)**: a
+  4-byte delta time is 2^28 ticks, so a 36-byte file can declare any duration. The additive renderer (no SoundFont) had
+  no ceiling: ~750 KB of RAM per declared second at 48 kHz, 2 hours = 6 GB then `std::bad_alloc` -> abort; beyond
+  ~24.8 hours both renderers converted the sample count to `uint32_t` out of range (undefined behaviour, the SoundFont
+  path BEFORE its own 30-minute clamp). Now `renderedSampleCount()` bounds both renderers to `MaxDurationSeconds`
+  (truncated, a warning — the SoundFont path's former behaviour; worst case of a hostile file: ~1.35 GB / 3.4 s at
+  48 kHz), and every floating-point tick / sample conversion goes through `saturatedUInt32()`. The header and the track
+  chunk refuse a short read (`!stream.good()`), and the big-endian readers never read an indeterminate byte. Tests:
+  `WaveFactoryMIDI.declaredDurationBeyondTheLimitIsTruncated` (both renderers) and the coverage tests beside it.
+  `fuzz_midi` (10 min, `float-cast-overflow` on): 0 crash / OOM / timeout. ⚠️ The CPU cost is NOT bounded yet (~3 s
+  per note held 30 minutes, no stop token): `docs/todo/midi-additive-render-cost.md`.
+- **MIDI — the additive renderer's resonant filter diverged (2026-10-17, found by the same tests under GCC UBSan with
+  `float-cast-overflow`)**: Paul Kellett's filter (musicdsp.org Filters #29) defines its resonance q between 0 and 1;
+  `Synthesizer::filterResonanceToFeedback()` mapped CC#71 up to 3.8 and the feedback used `(1 - f/2)` instead of the
+  published `(1 - f)`. From CC#71 ~ 40 with the filter engaged the output grew to infinity: one such note ruined the
+  whole track (the normalization) and its conversion to an integer was undefined behaviour. Owner decisions: the
+  published form (q at most 0.99, `fb = q + q/(1 - f)`; bounded over the whole CC grid, 4.15 peak for a 0.25 input),
+  CC#71 / CC#74 kept ABSOLUTE (GS/XG read them relative to 64 — not adopted). The renderer calls
+  `Synthesizer::applyResonantFilterSample()` (its inline copy removed), drops a non-finite sample and clips each
+  contribution before its integer conversion. Test `WaveFactoryMIDI.resonantFilterStaysBoundedOverTheWholeControllerRange`.
 - **MIDI — speculative reserve clamp** (`processIStream`): the per-track `reserve()` hints derive
   from the untrusted 16-bit `trackCount`. They are clamped (`min(trackCount, 256)`) so a forged
   header cannot trigger a large transient allocation before the per-track parse fails fast.

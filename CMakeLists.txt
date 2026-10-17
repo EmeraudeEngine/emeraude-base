@@ -72,8 +72,9 @@ option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
 # - TSan (ThreadSanitizer): data races and lock-order inversions. 5-15x slower, built -O1 -g. Alone: it cannot share
 #   a process with ASan, LSan or MSan.
 # - UBSan (UndefinedBehaviorSanitizer): signed overflow, invalid shift, misaligned or null access, an out-of-range
-#   enum or bool, a division by zero, an unreachable reached... The first one aborts (-fno-sanitize-recover=all).
-#   Combines with ASan (the usual unit test build) or TSan.
+#   enum or bool, a division by zero, an unreachable reached, a floating-point value converted to an integer type that
+#   cannot hold it (added explicitly on GCC, whose "undefined" group leaves it out)... The first one aborts
+#   (-fno-sanitize-recover=all). Combines with ASan (the usual unit test build) or TSan.
 # - MSan (MemorySanitizer): reads of uninitialised memory. Clang on Linux only, and every linked library must be
 #   instrumented too (libc++ / the prebuilt ext-deps are not: expect false reports there). Exclusive with ASan, LSan
 #   and TSan.
@@ -370,6 +371,11 @@ else ()
 
 	if ( _emeraudeUseUBSAN )
 		list(APPEND _emeraudeSanitizerList undefined)
+
+		# GCC leaves float-cast-overflow out of "undefined" (Clang includes it).
+		if ( CMAKE_CXX_COMPILER_ID STREQUAL "GNU" )
+			list(APPEND _emeraudeSanitizerList float-cast-overflow)
+		endif ()
 		list(APPEND _emeraudeSanitizerCompileOptions -fno-sanitize-recover=all)
 		message(STATUS "[EmeraudeBase] UndefinedBehaviorSanitizer ENABLED (the first report aborts).")
 	endif ()
@@ -823,6 +829,7 @@ if ( EMERAUDE_ENABLE_TESTS )
 	# (ctest, IDE run configs and direct runs all behave the same). Constants.hpp
 	# consumes it to build every asset path; tmp_* outputs land there too (gitignored).
 	target_compile_definitions(EmeraudeBaseUnitTests PRIVATE EMERAUDE_TESTS_ASSETS_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources/assets")
+	target_compile_definitions(EmeraudeBaseUnitTests PRIVATE EMERAUDE_TESTS_SOUNDFONT="${CMAKE_CURRENT_SOURCE_DIR}/dependencies/tinysoundfont/examples/florestan-subset.sf2")
 	target_compile_options(EmeraudeBaseUnitTests PRIVATE ${EMERAUDE_COMPILE_OPTIONS})
 	target_link_libraries(EmeraudeBaseUnitTests PRIVATE emeraude::base gtest_main)
 
