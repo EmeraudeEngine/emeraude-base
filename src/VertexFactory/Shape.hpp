@@ -2041,6 +2041,40 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Returns whether every index a triangle holds points into its table: a vertex index below the vertex
+			 * count, a color index below the color count (when the shape has colors), an edge index "none" or below the
+			 * edge count.
+			 * @note The file readers refuse a shape that is not (owner decision 2026-10-17): the native format stores its
+			 * triangles as a raw blob, and a vertex index past the table was accepted — the first consumer read out of
+			 * bounds.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			hasConsistentIndices () const noexcept
+			{
+				constexpr auto NoEdge = std::numeric_limits< index_data_t >::max();
+
+				const auto vertexCount = m_vertices.size();
+				const auto colorCount = m_vertexColors.size();
+				const auto edgeCount = m_edges.size();
+
+				return std::ranges::all_of(m_triangles, [vertexCount, colorCount, edgeCount] (const ShapeTriangle< vertex_data_t, index_data_t > & triangle) noexcept {
+					for ( index_data_t corner = 0; corner < 3; ++corner )
+					{
+						const auto edge = triangle.edgeIndex(corner);
+
+						if ( triangle.vertexIndex(corner) >= vertexCount || (colorCount > 0 && triangle.vertexColorIndex(corner) >= colorCount) || (edge != NoEdge && edge >= edgeCount) )
+						{
+							return false;
+						}
+					}
+
+					return true;
+				});
+			}
+
+			/**
 			 * @brief Saves the new vertex and returns its index.
 			 * @note This function is for building the shape manually.
 			 * @param position The position of the vertex.

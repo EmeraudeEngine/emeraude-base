@@ -225,6 +225,47 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_FALSE(format.readStream(stream, result, {}));
 	}
 
+	/* The triangles are a raw blob: their vertex and color indices come from the FILE (the coverage pass,
+	 * 2026-10-17). One pointing past the vertex table was accepted, and the first consumer read out of bounds. */
+	TEST(VertexFactoryNative, aTriangleIndexOutOfItsTableIsRefused)
+	{
+		const auto build = [] (uint32_t vertexIndex, uint32_t colorIndex, uint64_t colorCount) {
+			const size_t vertexBytes = 3 * sizeof(ShapeVertex< float >);
+			const size_t triangleBytes = sizeof(ShapeTriangle< float, uint32_t >);
+			auto buffer = makeNative(3, 1, colorCount, vertexBytes + triangleBytes + (colorCount * sizeof(Math::Vector< 4, float >)));
+
+			ShapeTriangle< float, uint32_t > triangle{0, 1, vertexIndex};
+			triangle.setVertexColorIndex(0, colorIndex);
+			std::memcpy(buffer.data() + HeaderBytes + vertexBytes, static_cast< const void * >(&triangle), triangleBytes);
+
+			return buffer;
+		};
+
+		{
+			const auto buffer = build(2, 0, 0);
+			Result result;
+			ASSERT_TRUE(StreamIO::read(buffer, FileFormatType::Native, result)) << "the control: every index in its table";
+			EXPECT_TRUE(result.shape.computeTriangleNormal());
+		}
+
+		{
+			const auto buffer = build(999, 0, 0);
+			Result result;
+			EXPECT_FALSE(StreamIO::read(buffer, FileFormatType::Native, result)) << "a vertex index past the table";
+
+			if ( !result.shape.triangles().empty() )
+			{
+				static_cast< void >(result.shape.computeTriangleNormal());
+			}
+		}
+
+		{
+			const auto buffer = build(2, 7, 2);
+			Result result;
+			EXPECT_FALSE(StreamIO::read(buffer, FileFormatType::Native, result)) << "a color index past the color table";
+		}
+	}
+
 	TEST(VertexFactoryNative, badMagicIsRejected)
 	{
 		auto buffer = makeNative(0, 0, 0, 0);

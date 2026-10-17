@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -235,6 +236,16 @@ namespace EmEn::Base::VertexFactory
 						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read triangles !");
 
 						return false;
+					}
+
+					/* NOTE: The edges are not stored: an edge index in the blob points into a table that does not exist
+					 * any more (Shape::hasConsistentIndices() would refuse it). Reset to "none". */
+					for ( auto & triangle : triangles )
+					{
+						for ( index_data_t corner = 0; corner < 3; ++corner )
+						{
+							triangle.setEdgeIndex(corner, std::numeric_limits< index_data_t >::max());
+						}
 					}
 				}
 

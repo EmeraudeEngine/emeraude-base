@@ -120,9 +120,10 @@ namespace EmEn::Base::VertexFactory
 	};
 
 	/**
-	 * @brief Reads a stream with a file format, then refuses a shape holding a non-finite value.
+	 * @brief Reads a stream with a file format, then refuses a shape holding a non-finite value or an inconsistent index.
 	 * @note The one read path of FileIO::read() and StreamIO::read() (a trust boundary): a file whose vertex data
-	 * holds a NaN or an infinity is refused and the shape cleared (owner decision 2026-10-16).
+	 * holds a NaN or an infinity (owner decision 2026-10-16), or whose triangles index outside their tables
+	 * (2026-10-17), is refused and the shape cleared.
 	 * @tparam vertex_data_t The precision type of vertex data.
 	 * @tparam index_data_t The precision type of index data.
 	 * @param fileFormat A reference to the file format.
@@ -144,6 +145,17 @@ namespace EmEn::Base::VertexFactory
 		if ( !result.shape.hasOnlyFiniteData() )
 		{
 			Logging::error("VertexFactory", "readFiniteStream(), the geometry holds a NaN or an infinite value, refused !");
+
+			result.shape.clear();
+
+			return false;
+		}
+
+		/* NOTE: An index past its table (a forged raw blob) would make the first consumer read out of bounds (owner
+		 * decision 2026-10-17, every format). */
+		if ( !result.shape.hasConsistentIndices() )
+		{
+			Logging::error("VertexFactory", "readFiniteStream(), a triangle holds an index outside its table, refused !");
 
 			result.shape.clear();
 

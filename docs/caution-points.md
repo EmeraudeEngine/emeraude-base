@@ -808,6 +808,18 @@ Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToB
 
 ## VertexFactory
 
+### ⚠️⚠️ A triangle index from a FILE was trusted — the native format's raw blob (2026-10-17, FIXED)
+
+`FileFormatNative` reads its triangles as a raw blob: their vertex, color and edge indices come from the file, and the
+common read path (`readFiniteStream()`, FileIO / StreamIO) only refused non-finite values. A forged `.ee3d` whose
+triangle pointed at vertex 999 of a 3-vertex shape was ACCEPTED, and the first consumer read out of bounds
+(`VertexFactoryNative.aTriangleIndexOutOfItsTableIsRefused`, an ASan / libstdc++ assertion abort before). Owner
+decision: every format. `Shape::hasConsistentIndices()` (vertex index below the vertex count, color index below the
+color count when there are colors, edge index "none" or below the edge count) is checked by `readFiniteStream()`
+beside `hasOnlyFiniteData()`. The native reader resets the stored edge indices to "none": the edges themselves are not
+stored, so an index into them is stale. Demos geometry-generator (OBJ) and animation-debug (MD5, the data-store
+geometries through `IndexedVertexResource`) load with 0 refusal.
+
 ### ⚠️⚠️ A sealed cut of a HOLLOW shape covered its holes; the cut points overflowed an int32 (2026-10-17, FIXED)
 
 Found by the coverage pass (`VertexFactoryShapeSplitter.aTorusCutThroughItsHoleKeepsTheHole`,
