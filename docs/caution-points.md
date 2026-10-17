@@ -1457,6 +1457,13 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > one of them peaks at the bare process baseline (~11.5 MB). `hdrHugeDimensionsDoNotOOM` was the
 > **only** guard in the suite that guarded nothing.
 >
+> **`FileFormatTIFF` had NO guard at all (found by the coverage pass, 2026-10-17)**: its comment credited
+> `TIFFRGBAImageOK()` with bounding the raster, but that call checks the pixel FORMAT only. A 70-byte TIFF declaring
+> 100000x100000 asked `raster.resize()` for 40 GB — `std::bad_alloc` (`tiffHugeDimensionsDoNotOOM` failed so before the
+> fix). Now the same guard: the declared pixel count against `stream.size()` (libtiff seeks over the whole file) times
+> **1024**, deflate's worst expansion (~1032:1) — owner decision. Peak RSS 14.9 MB; the five TIFF tests pass under a
+> 4 GB `ulimit -v`. (⚠️ Never cap the address space of an ASan run: its shadow memory reservation fails at start.)
+>
 > **Deliberately NOT done (owner decisions, 2026-08-28):**
 > - **No allocation ceiling inside `Pixmap::initialize()`.** The guard stays the *reader's*
 >   responsibility. A ceiling would be a foundation contract change needing an arbitrary constant,

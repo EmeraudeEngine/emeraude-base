@@ -36,6 +36,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -49,6 +50,8 @@
 #include "PixelFactory/FileFormatJpeg.hpp"
 #include "PixelFactory/FileFormatPNG.hpp"
 #include "PixelFactory/FileFormatTarga.hpp"
+#include "PixelFactory/FileFormatTIFF.hpp"
+#include "PixelFactory/FileFormatWebP.hpp"
 #include "PixelFactory/Font.hpp"
 #include "PixelFactory/Pixmap.hpp"
 
@@ -83,6 +86,54 @@ namespace
 			b(pixelDepth),                                     // imagePixelSize
 			b(0)                                               // imageDescriptorByte
 		};
+	}
+
+	/* Builds a minimal little-endian baseline TIFF: uncompressed 8-bit RGB, one strip. 'pixels' is appended as the strip;
+	 * 'declaredStripBytes' is what the header claims (a lie makes a truncated file). */
+	[[nodiscard]]
+	std::vector< std::byte >
+	makeTIFF (uint32_t width, uint32_t height, const std::vector< uint8_t > & pixels, uint32_t declaredStripBytes)
+	{
+		std::vector< std::byte > file;
+
+		const auto u8 = [&file] (uint32_t value) { file.push_back(static_cast< std::byte >(value & 0xFFU)); };
+		const auto u16 = [&u8] (uint32_t value) { u8(value); u8(value >> 8U); };
+		const auto u32 = [&u16] (uint32_t value) { u16(value & 0xFFFFU); u16(value >> 16U); };
+
+		constexpr uint32_t EntryCount{10};
+		constexpr uint32_t IFDOffset{8};
+		constexpr uint32_t BitsPerSampleOffset{IFDOffset + 2 + (EntryCount * 12) + 4};
+		constexpr uint32_t StripOffset{BitsPerSampleOffset + 6};
+
+		/* An IFD entry: tag, type (3 SHORT, 4 LONG), count, value or offset. */
+		const auto entry = [&u16, &u32] (uint32_t tag, uint32_t type, uint32_t count, uint32_t value) {
+			u16(tag);
+			u16(type);
+			u32(count);
+			u32(value);
+		};
+
+		u8('I'); u8('I'); u16(42); u32(IFDOffset);
+		u16(EntryCount);
+		entry(256, 4, 1, width);                /* ImageWidth */
+		entry(257, 4, 1, height);               /* ImageLength */
+		entry(258, 3, 3, BitsPerSampleOffset);  /* BitsPerSample: 8, 8, 8 */
+		entry(259, 3, 1, 1);                    /* Compression: none */
+		entry(262, 3, 1, 2);                    /* PhotometricInterpretation: RGB */
+		entry(273, 4, 1, StripOffset);          /* StripOffsets */
+		entry(277, 3, 1, 3);                    /* SamplesPerPixel */
+		entry(278, 4, 1, height);               /* RowsPerStrip */
+		entry(279, 4, 1, declaredStripBytes);   /* StripByteCounts */
+		entry(284, 3, 1, 1);                    /* PlanarConfiguration: chunky */
+		u32(0);                                 /* No next IFD. */
+		u16(8); u16(8); u16(8);
+
+		for ( const auto value : pixels )
+		{
+			u8(value);
+		}
+
+		return file;
 	}
 }
 
@@ -599,5 +650,221 @@ TEST(PixelFactoryFileFormats, hdrResolutionLineGrammar)
 		PixelFactory::Pixmap< float, uint32_t > pixmap;
 
 		EXPECT_FALSE(format.readStream(stream, pixmap)) << "line '" << refused << "'";
+	}
+}
+
+/* The TIFF reader (libtiff through a ByteStream): 0 % covered until 2026-10-17. */
+TEST(PixelFactoryFileFormats, tiffSmallRGBDecodesTopLeftInRGBA)
+{
+	/* 2x2: red, green / blue, white — row 0 first in the file. */
+	const std::vector< uint8_t > pixels{255, 0, 0,  0, 255, 0,  0, 0, 255,  255, 255, 255};
+	const auto file = makeTIFF(2, 2, pixels, static_cast< uint32_t >(pixels.size()));
+
+	IO::MemoryStream stream{file};
+	PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	ASSERT_TRUE(format.readStream(stream, pixmap));
+	ASSERT_EQ(pixmap.width(), 2U);
+	ASSERT_EQ(pixmap.height(), 2U);
+
+	const std::vector< uint8_t > expected{255, 0, 0, 255,  0, 255, 0, 255,  0, 0, 255, 255,  255, 255, 255, 255};
+	const auto & data = pixmap.data();
+
+	ASSERT_EQ(data.size(), expected.size());
+	EXPECT_TRUE(std::equal(expected.cbegin(), expected.cend(), data.cbegin()));
+}
+
+TEST(PixelFactoryFileFormats, tiffGarbageRejected)
+{
+	std::vector< std::byte > garbage(256);
+
+	for ( size_t index = 0; index < garbage.size(); ++index )
+	{
+		garbage[index] = static_cast< std::byte >((index * 37U + 11U) & 0xFFU);
+	}
+
+	IO::MemoryStream stream{garbage};
+	PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	ASSERT_FALSE(format.readStream(stream, pixmap));
+}
+
+TEST(PixelFactoryFileFormats, tiffTruncatedPixelDataRejected)
+{
+	/* 2x2 RGB declares 12 bytes of strip, the file holds 3. */
+	const auto file = makeTIFF(2, 2, {255, 0, 0}, 12);
+
+	IO::MemoryStream stream{file};
+	PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	ASSERT_FALSE(format.readStream(stream, pixmap));
+}
+
+TEST(PixelFactoryFileFormats, tiffHugeDimensionsDoNotOOM)
+{
+	/* 100000x100000 declared in a few bytes: a 40 GB RGBA raster if unguarded. */
+	const auto file = makeTIFF(100000, 100000, {0, 0, 0}, 3);
+
+	IO::MemoryStream stream{file};
+	PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	ASSERT_FALSE(format.readStream(stream, pixmap));
+}
+
+TEST(PixelFactoryFileFormats, tiffWriteRefused)
+{
+	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+	ASSERT_TRUE(pixmap.initialize(2, 2, PixelFactory::ChannelMode::RGBA));
+
+	std::vector< std::byte > output;
+	IO::MemoryStream stream{output};
+	const PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
+
+	ASSERT_FALSE(format.writeStream(stream, pixmap, {}));
+}
+
+/* The WebP reader / writer (libwebp, lossless writing): 0 % covered until 2026-10-17. */
+namespace
+{
+	/* Encodes a pixmap into a WebP byte stream with the engine's own writer. */
+	[[nodiscard]]
+	std::vector< std::byte >
+	encodeWebP (const PixelFactory::Pixmap< uint8_t, uint32_t > & pixmap)
+	{
+		std::vector< std::byte > encoded;
+		IO::MemoryStream output{encoded};
+		const PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
+
+		if ( !format.writeStream(output, pixmap, {}) )
+		{
+			encoded.clear();
+		}
+
+		return encoded;
+	}
+}
+
+TEST(PixelFactoryFileFormats, webpLosslessRoundTripRGB)
+{
+	const std::vector< uint8_t > pixels{255, 0, 0,  0, 255, 0,  0, 0, 255,  10, 20, 30,  200, 100, 50,  1, 2, 3};
+	PixelFactory::Pixmap< uint8_t, uint32_t > source;
+
+	ASSERT_TRUE(source.initialize(3, 2, PixelFactory::ChannelMode::RGB, std::span< const uint8_t >{pixels}));
+
+	const auto encoded = encodeWebP(source);
+
+	ASSERT_FALSE(encoded.empty());
+
+	IO::MemoryStream input{encoded};
+	PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	ASSERT_TRUE(format.readStream(input, decoded));
+	ASSERT_EQ(decoded.width(), 3U);
+	ASSERT_EQ(decoded.height(), 2U);
+	ASSERT_EQ(decoded.channelMode(), PixelFactory::ChannelMode::RGB);
+	EXPECT_TRUE(std::equal(pixels.cbegin(), pixels.cend(), decoded.data().cbegin(), decoded.data().cend()));
+}
+
+TEST(PixelFactoryFileFormats, webpLosslessRoundTripKeepsAlpha)
+{
+	const std::vector< uint8_t > pixels{255, 0, 0, 0,  0, 255, 0, 128,  0, 0, 255, 255,  9, 9, 9, 7};
+	PixelFactory::Pixmap< uint8_t, uint32_t > source;
+
+	ASSERT_TRUE(source.initialize(2, 2, PixelFactory::ChannelMode::RGBA, std::span< const uint8_t >{pixels}));
+
+	const auto encoded = encodeWebP(source);
+
+	ASSERT_FALSE(encoded.empty());
+
+	IO::MemoryStream input{encoded};
+	PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	ASSERT_TRUE(format.readStream(input, decoded));
+	ASSERT_EQ(decoded.channelMode(), PixelFactory::ChannelMode::RGBA);
+	/* Lossless keeps every channel — but a fully transparent pixel's colour is not part of the contract. */
+	const auto & data = decoded.data();
+
+	ASSERT_EQ(data.size(), pixels.size());
+	EXPECT_EQ(data[3], 0);
+	EXPECT_TRUE(std::equal(pixels.cbegin() + 4, pixels.cend(), data.cbegin() + 4));
+}
+
+TEST(PixelFactoryFileFormats, webpGarbageEmptyAndTruncatedRejected)
+{
+	PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
+	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
+
+	{
+		std::vector< std::byte > garbage(128);
+
+		for ( size_t index = 0; index < garbage.size(); ++index )
+		{
+			garbage[index] = static_cast< std::byte >((index * 53U + 7U) & 0xFFU);
+		}
+
+		IO::MemoryStream input{garbage};
+
+		EXPECT_FALSE(format.readStream(input, decoded));
+	}
+
+	{
+		const std::vector< std::byte > empty;
+		IO::MemoryStream input{empty};
+
+		EXPECT_FALSE(format.readStream(input, decoded));
+	}
+
+	{
+		std::vector< uint8_t > pixels(16U * 16U * 3U);
+
+		for ( size_t index = 0; index < pixels.size(); ++index )
+		{
+			pixels[index] = static_cast< uint8_t >((index * 131U) & 0xFFU);
+		}
+
+		PixelFactory::Pixmap< uint8_t, uint32_t > source;
+
+		ASSERT_TRUE(source.initialize(16, 16, PixelFactory::ChannelMode::RGB, std::span< const uint8_t >{pixels}));
+
+		auto encoded = encodeWebP(source);
+
+		ASSERT_GT(encoded.size(), 32U);
+
+		encoded.resize(encoded.size() / 2);
+
+		IO::MemoryStream input{encoded};
+
+		EXPECT_FALSE(format.readStream(input, decoded));
+	}
+}
+
+TEST(PixelFactoryFileFormats, webpWriteRefusesGrayscaleAndInvalidPixmaps)
+{
+	const PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
+
+	{
+		PixelFactory::Pixmap< uint8_t, uint32_t > gray;
+
+		ASSERT_TRUE(gray.initialize(2, 2, PixelFactory::ChannelMode::Grayscale));
+
+		std::vector< std::byte > output;
+		IO::MemoryStream stream{output};
+
+		EXPECT_FALSE(format.writeStream(stream, gray, {}));
+	}
+
+	{
+		const PixelFactory::Pixmap< uint8_t, uint32_t > invalid;
+		std::vector< std::byte > output;
+		IO::MemoryStream stream{output};
+
+		EXPECT_FALSE(format.writeStream(stream, invalid, {}));
 	}
 }

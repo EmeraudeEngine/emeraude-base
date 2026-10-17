@@ -148,9 +148,26 @@ namespace EmEn::Base::PixelFactory
 				return false;
 			}
 
-			/* ⚠️ The guard is not paranoia: TIFF dimensions come straight from the file, and
-			 * the RGBA buffer below is width × height × 4 bytes. A crafted or corrupt header
-			 * would otherwise ask for an allocation of arbitrary size. */
+			/* ⚠️ Guard the declared dimensions against the stream payload BEFORE allocating: they come straight from
+			 * the file, and the RGBA raster below is width × height × 4 bytes. A 70-byte file declaring 100000x100000
+			 * asked for 40 GB: std::bad_alloc, i.e. std::terminate under -fno-exceptions (2026-10-17, test
+			 * tiffHugeDimensionsDoNotOOM). TIFFRGBAImageOK() checks the pixel FORMAT, never the size. Same rule as the
+			 * Targa and HDR readers; 1024 covers deflate's worst expansion (~1032:1) — owner decision 2026-10-17. */
+			{
+				constexpr uint64_t MaxCompressionExpansion{1024};
+
+				const uint64_t pixelCount = static_cast< uint64_t >(width) * static_cast< uint64_t >(height);
+
+				if ( pixelCount > static_cast< uint64_t >(stream.size()) * MaxCompressionExpansion )
+				{
+					Logging::error("PixelFactory::FileFormatTIFF", "readStream(), declared dimensions exceed the stream payload !");
+
+					TIFFClose(handle);
+
+					return false;
+				}
+			}
+
 			if ( !TIFFRGBAImageOK(handle, nullptr) )
 			{
 				Logging::error("PixelFactory::FileFormatTIFF", "readStream(), this TIFF cannot be read as RGBA !");
@@ -163,15 +180,6 @@ namespace EmEn::Base::PixelFactory
 			std::vector< uint32_t > raster;
 
 			raster.resize(static_cast< size_t >(width) * static_cast< size_t >(height), 0U);
-
-			if ( raster.size() != static_cast< size_t >(width) * static_cast< size_t >(height) )
-			{
-				Logging::error("PixelFactory::FileFormatTIFF", "readStream(), unable to allocate the raster !");
-
-				TIFFClose(handle);
-
-				return false;
-			}
 
 			/* ORIENTATION_TOPLEFT is what makes the output canonical. The plain
 			 * TIFFReadRGBAImage() returns the image BOTTOM-UP, which renders as a
