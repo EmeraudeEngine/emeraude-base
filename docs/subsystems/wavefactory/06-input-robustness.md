@@ -52,6 +52,15 @@ in Release **and** under ASan/UBSan via `ctest`.
   Tests `test_WaveFactorySynthesizer.cpp` (5 of 6 failed on the former code: two UBSan aborts, the crushed float, the
   accepted script) `fuzz_json_sfx` (instrumented, seeded with valid scripts) 10 minutes after the fixes: 22 M
   executions, 0 crash.
+- **SFXScript — a parameter of the wrong type (2026-10-17; owner decision: REFUSE it, WARN on an unknown key)**: every
+  optional parameter was read with `getValue(...).value_or(default)`, so a value present with the wrong type was read
+  as ABSENT — `"frequency": "880"` played at 440 Hz, `"channels": "1"` became 1, `"offset": "5"` became 0 — and an
+  optional array of the wrong type (`"instructions": 5`) was skipped. Now `param< T >()` refuses the instruction (and
+  the script) naming the key, `isPresentButNotAnArray()` refuses such an array, and `warnUnknownKeys()` warns about a
+  key no instruction / script / track / region reads (`"bitDepth"` for `"bits"`). NOTE: a fractional value for an
+  integer (`"bits": 6.5`) is NOT a wrong type — FastJSON truncates it toward zero, its documented contract. The 12 SFX
+  scripts of the projet-alpha data stores decode with 0 error and 0 warning under these rules and the effect domains.
+  Tests `WaveFactorySFXScript.*` (every instruction type, regions, final instructions, stereo, the structural refusals).
 - **WaveFactory::Processor (2026-10-17)**: `convertBitDepth(32)` computed its level count as `1 << 31` in an `int`
   (INT_MIN): a negative step and reversed dither bounds (libstdc++ asserts `a <= b` in `uniform_real_distribution`) —
   computed in 64 bits now. `test_WaveFactoryProcessor.cpp` covers every operation (the engine's mix-down / resample

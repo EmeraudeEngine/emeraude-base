@@ -29,6 +29,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -294,3 +295,130 @@ TEST(WaveFactorySynthesizer, anSFXScriptWithAnOutOfDomainParameterIsRefused)
 	EXPECT_FALSE(decode(R"({"duration":50,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":440.0,"amplitude":0.5},{"type":"applyDistortion","gain":100.0}]}]})"));
 	EXPECT_FALSE(decode(R"({"duration":50,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":-440.0,"amplitude":0.5}]}]})"));
 }
+
+/* SFXScript (the coverage pass, 2026-10-17): every instruction type, regions, final instructions, stereo, and the
+ * structural refusals. */
+namespace
+{
+	bool
+	decodeSFX (std::string_view script, Wave< int16_t > & wave)
+	{
+		std::vector< std::byte > buffer(script.size());
+		std::ranges::transform(script, buffer.begin(), [] (char character) { return static_cast< std::byte >(character); });
+
+		IO::MemoryStream stream{std::as_const(buffer)};
+		FileFormatJSON< int16_t > format;
+
+		return format.readStream(stream, wave, {});
+	}
+
+	bool
+	decodeSFX (std::string_view script)
+	{
+		Wave< int16_t > wave;
+
+		return decodeSFX(script, wave);
+	}
+}
+
+TEST(WaveFactorySFXScript, everyInstructionTypeRuns)
+{
+	constexpr std::array< std::string_view, 35 > Instructions{
+		R"({"type":"whiteNoise"})", R"({"type":"pinkNoise"})", R"({"type":"brownNoise"})", R"({"type":"blueNoise"})",
+		R"({"type":"sineWave","frequency":440,"amplitude":0.5})", R"({"type":"squareWave"})", R"({"type":"triangleWave"})",
+		R"({"type":"sawtoothWave"})", R"({"type":"pitchSweep","startFrequency":200,"endFrequency":800})",
+		R"({"type":"noiseBurst","decayTime":0.05,"whiteNoise":false})", R"({"type":"applyADSR"})", R"({"type":"applyVibrato"})",
+		R"({"type":"applyTremolo"})", R"({"type":"applyFadeIn","time":0.01})", R"({"type":"applyFadeOut","time":0.01})",
+		R"({"type":"applyLowPass","cutoff":800})", R"({"type":"applyHighPass","cutoff":200})", R"({"type":"applyWahWah"})",
+		R"({"type":"applyAutoWah"})", R"({"type":"applyDistortion","hardClip":true})", R"({"type":"applyOverdrive"})",
+		R"({"type":"applyFuzz","octaveUp":true})", R"({"type":"applyBitCrush","bits":6})", R"({"type":"applySampleRateReduce","factor":2})",
+		R"({"type":"applyRingModulation","frequency":30})", R"({"type":"applyChorus"})", R"({"type":"applyFlanger"})",
+		R"({"type":"applyPhaser","stages":6})", R"({"type":"applyDelay","delayTime":20})", R"({"type":"applyReverb"})",
+		R"({"type":"applyCompressor"})", R"({"type":"applyNoiseGate"})", R"({"type":"applyPitchShift","semitones":5})",
+		R"({"type":"normalize"})", R"({"type":"reverse"})"
+	};
+
+	for ( const auto instruction : Instructions )
+	{
+		const auto script = std::string{R"({"duration":60,"channels":1,"tracks":[{"preInstructions":[{"type":"sineWave","frequency":440,"amplitude":0.5}],"instructions":[)"} + std::string{instruction} + "]}]}";
+		Wave< int16_t > wave;
+
+		EXPECT_TRUE(decodeSFX(script, wave)) << instruction;
+		EXPECT_EQ(wave.sampleCount(), 60U * static_cast< size_t >(wave.frequency()) / 1000U) << instruction;
+	}
+}
+
+TEST(WaveFactorySFXScript, regionsFinalInstructionsAndStereo)
+{
+	/* A region confines its instructions: a tone in [20, 40) ms only. */
+	{
+		Wave< int16_t > wave;
+		ASSERT_TRUE(decodeSFX(R"({"duration":60,"channels":1,"tracks":[{"regions":[{"offset":20,"length":20,"instructions":[{"type":"sineWave","frequency":1000,"amplitude":0.5}]}]}]})", wave));
+
+		const auto rate = static_cast< size_t >(wave.frequency());
+		const auto & data = wave.data();
+		const auto loudest = [&data] (size_t from, size_t to) {
+			int peak = 0;
+
+			for ( size_t index = from; index < to; ++index )
+			{
+				peak = std::max(peak, std::abs(static_cast< int >(data[index])));
+			}
+
+			return peak;
+		};
+
+		EXPECT_EQ(loudest(0, rate * 20 / 1000), 0);
+		EXPECT_GT(loudest(rate * 20 / 1000, rate * 40 / 1000), 10000);
+		EXPECT_EQ(loudest(rate * 40 / 1000, data.size()), 0);
+	}
+
+	/* Two tracks interleave into a stereo wave; the final instructions apply to each. */
+	{
+		Wave< int16_t > wave;
+		ASSERT_TRUE(decodeSFX(R"({"duration":30,"channels":2,"tracks":[{"instructions":[{"type":"sineWave","amplitude":0.5}]},{"instructions":[]}],"finalInstructions":[{"type":"applyFadeOut","time":0.01}]})", wave));
+		EXPECT_EQ(wave.channels(), Channels::Stereo);
+
+		bool rightSilent = true;
+
+		for ( size_t index = 1; index < wave.data().size(); index += 2 )
+		{
+			rightSilent = rightSilent && wave.data()[index] == 0;
+		}
+
+		EXPECT_TRUE(rightSilent);
+		EXPECT_LE(std::abs(static_cast< int >(wave.data()[wave.data().size() - 2])), 33) << "the final fade-out ends near 0 (one linear step)";
+	}
+}
+
+TEST(WaveFactorySFXScript, structuralRefusals)
+{
+	EXPECT_FALSE(decodeSFX(R"({"channels":1,"tracks":[{}]})")) << "no duration";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":3,"tracks":[{},{},{}]})")) << "3 channels";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1})")) << "no tracks";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":2,"tracks":[{}]})")) << "track count";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"explode"}]}]})")) << "unknown type";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"frequency":440}]}]})")) << "no type";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[42]}]})")) << "an instruction that is not an object";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"regions":[{"instructions":[{"type":"explode"}]}]}]})")) << "a bad instruction in a region";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{}],"finalInstructions":[{"type":"explode"}]})")) << "a bad final instruction";
+	EXPECT_FALSE(decodeSFX(R"([1,2,3])")) << "not an object";
+}
+
+TEST(WaveFactorySFXScript, aParameterOfTheWrongTypeIsRefused)
+{
+	/* "880" (a string) was read as absent: the tone played at the default 440 Hz without a word. */
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":"880"}]}]})"));
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"applyBitCrush","bits":"6"}]}]})"));
+
+	/* NOTE: 6.5 for an integer is NOT a wrong type: FastJSON truncates a fractional value toward zero (its contract). */
+	EXPECT_TRUE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"applyBitCrush","bits":6.5}]}]})"));
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"regions":[{"offset":"5","instructions":[]}]}]})"));
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":"1","tracks":[{}]})"));
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":5}]})")) << "an instruction list that is not an array";
+	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{}],"finalInstructions":{}})")) << "final instructions that are not an array";
+
+	/* An unknown key is only a warning: the script plays. */
+	EXPECT_TRUE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"applyBitCrush","bitDepth":6}]}]})"));
+}
+
