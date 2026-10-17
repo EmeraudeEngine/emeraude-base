@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <random>
 #include <string>
@@ -657,8 +658,9 @@ namespace EmEn::Base::WaveFactory
 			return false;
 		}
 
-		/* Calculate quantization levels. */
-		const auto levels = static_cast< float >(1 << (bits - 1));
+		/* Calculate quantization levels. NOTE: In 64 bits: "1 << 31" in an int is INT_MIN — 32 bits had a NEGATIVE level
+		 * count, and the dither distribution below reversed bounds (its precondition a <= b; libstdc++ asserts it). */
+		const auto levels = static_cast< float >(uint64_t{1} << static_cast< unsigned >(bits - 1));
 		const auto ditherAmount = 1.0F / levels;
 
 		/* Setup random generator for dithering. */

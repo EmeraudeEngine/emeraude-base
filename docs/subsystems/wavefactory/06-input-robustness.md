@@ -38,6 +38,24 @@ in Release **and** under ASan/UBSan via `ctest`.
   out-of-range frame counts cancel the load instead of OOM-ing under `-fno-exceptions`.
 - **libsndfile — short-write detection** (`writeStream`): `sf_writef_short` return value is now
   checked against the requested frame count; a partial write returns `false` (was silently ignored).
+- **Synthesizer / SFX scripts — the parameter domains, the saturated output (2026-10-17, the coverage pass; owner
+  decision: REFUSE a value outside its domain)**: SFX scripts (data) drive the generators and effects with whatever
+  finite number they hold. A clang UBSan probe of every effect with reachable extremes found: `toSampleFormat()`
+  converting an amplitude above 1 to `int16_t` out of range (UB), `applyADSR()` / `applyFadeOut()` turning a negative
+  time into a `size_t` (UB), `applyVibrato()` extrapolating its interpolation to -7e8, a negative-frequency
+  triangle / sawtooth and a 0 Hz high-pass leaving [-1, 1]. Now every generator and effect checks each parameter
+  against its documented domain (`Synthesizer::inDomain()`: NaN refused; times within the 30-minute SFX ceiling;
+  frequencies in (0, Nyquist]; the ranges of each `@param`) and refuses with an error naming it — SFXScript then
+  refuses the script; an amplitude above 1 stays allowed and `toSampleFormat()` saturates (clipping, NaN gives
+  silence). Also found: every effect READ a float wave divided by `numeric_limits< float >::max()` (a float wave came
+  out ~1e-39 after an envelope, `normalize()` did nothing) — `fromSampleFormat()`, the mirror of `toSampleFormat()`, now.
+  Tests `test_WaveFactorySynthesizer.cpp` (5 of 6 failed on the former code: two UBSan aborts, the crushed float, the
+  accepted script) `fuzz_json_sfx` (instrumented, seeded with valid scripts) 10 minutes after the fixes: 22 M
+  executions, 0 crash.
+- **WaveFactory::Processor (2026-10-17)**: `convertBitDepth(32)` computed its level count as `1 << 31` in an `int`
+  (INT_MIN): a negative step and reversed dither bounds (libstdc++ asserts `a <= b` in `uniform_real_distribution`) —
+  computed in 64 bits now. `test_WaveFactoryProcessor.cpp` covers every operation (the engine's mix-down / resample
+  path of every sound and music load included).
 - **JSON SFX — duration cap** (`SFXScript::processScript`): `sampleCount = sampleRate * durationMs
   / 1000` sizes one Synthesizer buffer per track. `durationMs` is capped at 30 min (`MaxDurationMs`)
   so an unbounded JSON duration cannot request a multi-hundred-GiB allocation.

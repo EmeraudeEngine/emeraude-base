@@ -36,9 +36,11 @@
 #include <limits>
 #include <numbers>
 #include <random>
+#include <string>
 #include <type_traits>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Types.hpp"
 #include "Wave.hpp"
 
@@ -787,6 +789,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("sineWave", "toneFrequency", toneFrequency, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("sineWave", "amplitude", amplitude, 0.0F, std::numeric_limits< float >::max()) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -827,6 +836,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("squareWave", "toneFrequency", toneFrequency, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("squareWave", "amplitude", amplitude, 0.0F, std::numeric_limits< float >::max()) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -864,6 +880,13 @@ namespace EmEn::Base::WaveFactory
 				{
 					std::cerr << "Synthesizer::triangleWave(), wave is not initialized !" "\n";
 
+					return false;
+				}
+
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("triangleWave", "toneFrequency", toneFrequency, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("triangleWave", "amplitude", amplitude, 0.0F, std::numeric_limits< float >::max()) )
+				{
 					return false;
 				}
 
@@ -913,6 +936,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("sawtoothWave", "toneFrequency", toneFrequency, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("sawtoothWave", "amplitude", amplitude, 0.0F, std::numeric_limits< float >::max()) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -952,6 +982,15 @@ namespace EmEn::Base::WaveFactory
 				{
 					std::cerr << "Synthesizer::applyADSR(), wave is not initialized !" "\n";
 
+					return false;
+				}
+
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyADSR", "attackTime", attackTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyADSR", "decayTime", decayTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyADSR", "sustainLevel", sustainLevel, 0.0F, 1.0F) ||
+					!Synthesizer::inDomain("applyADSR", "releaseTime", releaseTime, 0.0F, MaxTimeSeconds) )
+				{
 					return false;
 				}
 
@@ -999,7 +1038,7 @@ namespace EmEn::Base::WaveFactory
 					}
 
 					/* Apply envelope. */
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(currentSample * envelope);
 				}
 
@@ -1021,6 +1060,14 @@ namespace EmEn::Base::WaveFactory
 				{
 					std::cerr << "Synthesizer::pitchSweep(), wave is not initialized !" "\n";
 
+					return false;
+				}
+
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("pitchSweep", "startFrequency", startFrequency, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("pitchSweep", "endFrequency", endFrequency, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("pitchSweep", "amplitude", amplitude, 0.0F, std::numeric_limits< float >::max()) )
+				{
 					return false;
 				}
 
@@ -1067,6 +1114,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("noiseBurst", "decayTime", decayTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("noiseBurst", "amplitude", amplitude, 0.0F, std::numeric_limits< float >::max()) )
+				{
+					return false;
+				}
+
 				/* Generate the noise first (region-aware). */
 				if ( useWhiteNoise )
 				{
@@ -1096,7 +1150,7 @@ namespace EmEn::Base::WaveFactory
 						envelope = amplitude * std::exp(-5.0F * progress);
 					}
 
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(currentSample * envelope);
 				}
 
@@ -1119,6 +1173,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyVibrato", "vibratoRate", vibratoRate, 0.0F, this->nyquist()) ||
+					!Synthesizer::inDomain("applyVibrato", "vibratoDepth", vibratoDepth, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -1137,16 +1198,18 @@ namespace EmEn::Base::WaveFactory
 					const auto modulation = vibratoDepth * sampleRateFloat * fastSin(vibratoRate * dTime);
 					const auto readPos = static_cast< float >(localIndex) + modulation;
 
-					/* Interpolate between samples. */
-					const auto readPosInt = static_cast< size_t >(std::max(0.0F, readPos));
-					const auto readPosFrac = readPos - static_cast< float >(readPosInt);
+					/* Interpolate between samples. NOTE: The fraction comes from the CLAMPED position: a position before the
+					 * start gave a fraction of -1e8 and the "interpolation" extrapolated far outside the signal. */
+					const auto clampedPos = std::max(0.0F, readPos);
+					const auto readPosInt = static_cast< size_t >(clampedPos);
+					const auto readPosFrac = clampedPos - static_cast< float >(readPosInt);
 
 					if ( readPosInt + 1 < originalData.size() )
 					{
 						/* Linear interpolation. */
 						const auto sample1 = static_cast< float >(originalData[readPosInt]);
 						const auto sample2 = static_cast< float >(originalData[readPosInt + 1]);
-						data[sampleIndex] = static_cast< precision_t >(sample1 + readPosFrac * (sample2 - sample1));
+						data[sampleIndex] = static_cast< precision_t >(sample1 + (readPosFrac * (sample2 - sample1)));
 					}
 				}
 
@@ -1169,6 +1232,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyTremolo", "tremoloRate", tremoloRate, 0.0F, this->nyquist()) ||
+					!Synthesizer::inDomain("applyTremolo", "tremoloDepth", tremoloDepth, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -1181,7 +1251,7 @@ namespace EmEn::Base::WaveFactory
 					/* Use fastSin() instead of std::sin() for ~10-20x speedup. */
 					const auto modulation = 1.0F - tremoloDepth * 0.5F * (1.0F + fastSin(tremoloRate * dTime));
 
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(currentSample * modulation);
 				}
 
@@ -1203,6 +1273,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyFadeIn", "fadeTime", fadeTime, 0.0F, MaxTimeSeconds) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto regionSampleCount = endSample - startSample;
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
@@ -1215,7 +1291,7 @@ namespace EmEn::Base::WaveFactory
 					const auto sampleIndex = startSample + localIndex;
 					const auto envelope = static_cast< float >(localIndex) / static_cast< float >(fadeSamples);
 
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(currentSample * envelope);
 				}
 
@@ -1237,6 +1313,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyFadeOut", "fadeTime", fadeTime, 0.0F, MaxTimeSeconds) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto regionSampleCount = endSample - startSample;
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
@@ -1250,7 +1332,7 @@ namespace EmEn::Base::WaveFactory
 					const auto sampleIndex = startSample + localIndex;
 					const auto envelope = 1.0F - static_cast< float >(localIndex - fadeStartLocal) / static_cast< float >(fadeSamples);
 
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(currentSample * envelope);
 				}
 
@@ -1273,6 +1355,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyLowPass", "cutoffFrequency", cutoffFrequency, std::numeric_limits< float >::min(), this->nyquist()) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -1286,7 +1374,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Low-pass filter: y[n] = y[n-1] + alpha * (x[n] - y[n-1]) */
 					const auto filteredSample = prevSample + alpha * (currentSample - prevSample);
@@ -1314,6 +1402,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyHighPass", "cutoffFrequency", cutoffFrequency, std::numeric_limits< float >::min(), this->nyquist()) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -1328,7 +1422,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto currentInput = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentInput = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* High-pass filter: y[n] = alpha * (y[n-1] + x[n] - x[n-1]) */
 					const auto filteredSample = alpha * (prevOutput + currentInput - prevInput);
@@ -1357,6 +1451,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("mix", "mixLevel", mixLevel, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				auto & data = m_wave.data();
 				const auto & otherData = other.data();
@@ -1370,8 +1470,8 @@ namespace EmEn::Base::WaveFactory
 						break;
 					}
 
-					const auto sample1 = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
-					const auto sample2 = static_cast< float >(otherData[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto sample1 = Synthesizer::fromSampleFormat(data[sampleIndex]);
+					const auto sample2 = Synthesizer::fromSampleFormat(otherData[sampleIndex]);
 					const auto mixedSample = thisLevel * sample1 + otherLevel * sample2;
 
 					data[sampleIndex] = toSampleFormat(std::clamp(mixedSample, -1.0F, 1.0F));
@@ -1395,6 +1495,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyRingModulation", "modulatorFrequency", modulatorFrequency, 0.0F, this->nyquist()) )
+				{
+					return false;
+				}
+
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
 				auto & data = m_wave.data();
@@ -1407,7 +1513,7 @@ namespace EmEn::Base::WaveFactory
 					/* Use fastSin() instead of std::sin() for ~10-20x speedup. */
 					const auto modulator = fastSin(modulatorFrequency * dTime);
 
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(currentSample * modulator);
 				}
 
@@ -1429,6 +1535,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyBitCrush", "bitDepth", static_cast< float >(bitDepth), 1.0F, 16.0F) )
+				{
+					return false;
+				}
+
 				bitDepth = std::clamp(bitDepth, 1, 16);
 				const auto levels = static_cast< float >(1 << bitDepth);
 
@@ -1437,7 +1549,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto currentSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto currentSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Quantize to reduced bit depth. */
 					const auto crushedSample = std::round(currentSample * levels) / levels;
@@ -1465,6 +1577,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyDistortion", "gain", gain, 1.0F, 50.0F) ||
+					!Synthesizer::inDomain("applyDistortion", "mix", mix, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				gain = std::max(1.0F, gain);
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
@@ -1473,7 +1592,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto drySample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto drySample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Apply gain. */
 					auto wetSample = drySample * gain;
@@ -1516,6 +1635,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyOverdrive", "drive", drive, 1.0F, 20.0F) ||
+					!Synthesizer::inDomain("applyOverdrive", "tone", tone, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				drive = std::clamp(drive, 1.0F, 20.0F);
 				tone = std::clamp(tone, 0.0F, 1.0F);
 
@@ -1528,7 +1654,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					auto sample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					auto sample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Apply drive. */
 					sample *= drive;
@@ -1573,6 +1699,12 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyFuzz", "intensity", intensity, 1.0F, 20.0F) )
+				{
+					return false;
+				}
+
 				intensity = std::clamp(intensity, 1.0F, 20.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
@@ -1580,7 +1712,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					auto sample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					auto sample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Apply intensity gain. */
 					sample *= intensity;
@@ -1630,6 +1762,14 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyChorus", "rate", rate, 0.1F, 5.0F) ||
+					!Synthesizer::inDomain("applyChorus", "depth", depth, 1.0F, 30.0F) ||
+					!Synthesizer::inDomain("applyChorus", "mix", mix, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				rate = std::clamp(rate, 0.1F, 5.0F);
 				depth = std::clamp(depth, 1.0F, 30.0F);
 				mix = std::clamp(mix, 0.0F, 1.0F);
@@ -1656,7 +1796,7 @@ namespace EmEn::Base::WaveFactory
 					const auto delayAmount = lfo * depthSamples;
 					const auto readPos = static_cast< float >(localIndex) - delayAmount;
 
-					const auto drySample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto drySample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					float wetSample = 0.0F;
 
@@ -1668,8 +1808,8 @@ namespace EmEn::Base::WaveFactory
 
 						if ( readPosInt + 1 < originalData.size() )
 						{
-							const auto sample1 = static_cast< float >(originalData[readPosInt]) / static_cast< float >(std::numeric_limits< precision_t >::max());
-							const auto sample2 = static_cast< float >(originalData[readPosInt + 1]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+							const auto sample1 = Synthesizer::fromSampleFormat(originalData[readPosInt]);
+							const auto sample2 = Synthesizer::fromSampleFormat(originalData[readPosInt + 1]);
 							wetSample = sample1 + readPosFrac * (sample2 - sample1);
 						}
 					}
@@ -1700,6 +1840,15 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyFlanger", "rate", rate, 0.1F, 2.0F) ||
+					!Synthesizer::inDomain("applyFlanger", "depth", depth, 1.0F, 10.0F) ||
+					!Synthesizer::inDomain("applyFlanger", "feedback", feedback, 0.0F, 0.95F) ||
+					!Synthesizer::inDomain("applyFlanger", "mix", mix, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				rate = std::clamp(rate, 0.1F, 2.0F);
 				depth = std::clamp(depth, 1.0F, 10.0F);
 				feedback = std::clamp(feedback, 0.0F, 0.95F);
@@ -1727,7 +1876,7 @@ namespace EmEn::Base::WaveFactory
 					const auto lfo = 2.0F * std::abs(2.0F * lfoPhase - 1.0F) - 1.0F;
 					const auto delaySamples = (lfo * 0.5F + 0.5F) * depthSamples;
 
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Read from delay buffer with interpolation. */
 					const auto readOffset = delaySamples;
@@ -1772,6 +1921,24 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyPhaser", "rate", rate, 0.1F, 3.0F) ||
+					!Synthesizer::inDomain("applyPhaser", "depth", depth, 0.0F, 1.0F) ||
+					!Synthesizer::inDomain("applyPhaser", "stages", static_cast< float >(stages), 2.0F, 12.0F) ||
+					!Synthesizer::inDomain("applyPhaser", "feedback", feedback, 0.0F, 0.95F) ||
+					!Synthesizer::inDomain("applyPhaser", "mix", mix, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
+				/* NOTE: An even stage count (2 to 12), as documented. */
+				if ( stages % 2 != 0 )
+				{
+					Logging::error("WaveFactory::Synthesizer", "applyPhaser(), 'stages' must be even !");
+
+					return false;
+				}
+
 				rate = std::clamp(rate, 0.1F, 3.0F);
 				depth = std::clamp(depth, 0.0F, 1.0F);
 				stages = std::clamp(stages, 2, 12);
@@ -1805,7 +1972,7 @@ namespace EmEn::Base::WaveFactory
 					const auto w0 = 2.0F * std::numbers::pi_v< float > * sweepFreq / sampleRateFloat;
 					const auto allpassCoeff = (1.0F - std::tan(w0 / 2.0F)) / (1.0F + std::tan(w0 / 2.0F));
 
-					auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Add feedback. */
 					inputSample += feedbackState * feedback;
@@ -1824,7 +1991,7 @@ namespace EmEn::Base::WaveFactory
 					feedbackState = processedSample;
 
 					/* Mix dry and wet (inverted wet for notch effect). */
-					const auto drySample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto drySample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					const auto outputSample = drySample * (1.0F - mix) + processedSample * mix;
 
 					data[sampleIndex] = toSampleFormat(std::clamp(outputSample, -1.0F, 1.0F));
@@ -1851,6 +2018,14 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyDelay", "delayTime", delayTime, 10.0F, 2000.0F) ||
+					!Synthesizer::inDomain("applyDelay", "feedback", feedback, 0.0F, 0.95F) ||
+					!Synthesizer::inDomain("applyDelay", "mix", mix, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				delayTime = std::clamp(delayTime, 10.0F, 2000.0F);
 				feedback = std::clamp(feedback, 0.0F, 0.95F);
 				mix = std::clamp(mix, 0.0F, 1.0F);
@@ -1868,7 +2043,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Read from delay buffer. */
 					const auto delayedSample = delayBuffer[writeIndex];
@@ -1900,6 +2075,14 @@ namespace EmEn::Base::WaveFactory
 				{
 					std::cerr << "Synthesizer::applyReverb(), wave is not initialized !" "\n";
 
+					return false;
+				}
+
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyReverb", "roomSize", roomSize, 0.0F, 1.0F) ||
+					!Synthesizer::inDomain("applyReverb", "damping", damping, 0.0F, 1.0F) ||
+					!Synthesizer::inDomain("applyReverb", "mix", mix, 0.0F, 1.0F) )
+				{
 					return false;
 				}
 
@@ -1949,7 +2132,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Parallel comb filters. */
 					float combOut = 0.0F;
@@ -2007,6 +2190,22 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyWahWah", "rate", rate, 0.5F, 10.0F) ||
+					!Synthesizer::inDomain("applyWahWah", "depth", depth, 0.0F, 1.0F) ||
+					!Synthesizer::inDomain("applyWahWah", "minFreq", minFreq, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("applyWahWah", "maxFreq", maxFreq, std::numeric_limits< float >::min(), this->nyquist()) )
+				{
+					return false;
+				}
+
+				if ( minFreq >= maxFreq )
+				{
+					Logging::error("WaveFactory::Synthesizer", "applyWahWah(), 'minFreq' must be below 'maxFreq' !");
+
+					return false;
+				}
+
 				rate = std::clamp(rate, 0.5F, 10.0F);
 				depth = std::clamp(depth, 0.0F, 1.0F);
 				minFreq = std::clamp(minFreq, 100.0F, 1000.0F);
@@ -2037,7 +2236,7 @@ namespace EmEn::Base::WaveFactory
 					/* Use fastSinRadians() instead of std::sin() for ~10-20x speedup. */
 					const auto f = 2.0F * fastSinRadians(std::numbers::pi_v< float > * sweepFreq / sampleRateFloat);
 
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* State variable filter. */
 					highpass = inputSample - lowpass - bandpass / Q;
@@ -2071,6 +2270,23 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyAutoWah", "sensitivity", sensitivity, 0.1F, 10.0F) ||
+					!Synthesizer::inDomain("applyAutoWah", "minFreq", minFreq, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("applyAutoWah", "maxFreq", maxFreq, std::numeric_limits< float >::min(), this->nyquist()) ||
+					!Synthesizer::inDomain("applyAutoWah", "attackTime", attackTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyAutoWah", "releaseTime", releaseTime, 0.0F, MaxTimeSeconds) )
+				{
+					return false;
+				}
+
+				if ( minFreq >= maxFreq )
+				{
+					Logging::error("WaveFactory::Synthesizer", "applyAutoWah(), 'minFreq' must be below 'maxFreq' !");
+
+					return false;
+				}
+
 				sensitivity = std::clamp(sensitivity, 0.1F, 10.0F);
 				minFreq = std::clamp(minFreq, 50.0F, 1000.0F);
 				maxFreq = std::clamp(maxFreq, minFreq + 100.0F, 5000.0F);
@@ -2093,7 +2309,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Envelope follower. */
 					const auto inputAbs = std::abs(inputSample);
@@ -2146,6 +2362,16 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyCompressor", "threshold", threshold, -60.0F, 0.0F) ||
+					!Synthesizer::inDomain("applyCompressor", "ratio", ratio, 1.0F, 20.0F) ||
+					!Synthesizer::inDomain("applyCompressor", "attackTime", attackTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyCompressor", "releaseTime", releaseTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyCompressor", "makeupGain", makeupGain, 0.0F, 30.0F) )
+				{
+					return false;
+				}
+
 				threshold = std::clamp(threshold, -60.0F, 0.0F);
 				ratio = std::clamp(ratio, 1.0F, 20.0F);
 				attackTime = std::clamp(attackTime, 0.0001F, 1.0F);
@@ -2179,7 +2405,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Envelope follower (peak detector). */
 					const auto inputAbs = std::abs(inputSample);
@@ -2232,6 +2458,15 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyNoiseGate", "threshold", threshold, -80.0F, 0.0F) ||
+					!Synthesizer::inDomain("applyNoiseGate", "attackTime", attackTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyNoiseGate", "holdTime", holdTime, 0.0F, MaxTimeSeconds) ||
+					!Synthesizer::inDomain("applyNoiseGate", "releaseTime", releaseTime, 0.0F, MaxTimeSeconds) )
+				{
+					return false;
+				}
+
 				threshold = std::clamp(threshold, -80.0F, 0.0F);
 				attackTime = std::clamp(attackTime, 0.0001F, 0.1F);
 				holdTime = std::clamp(holdTime, 0.0F, 1.0F);
@@ -2256,7 +2491,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto inputSample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Simple envelope follower. */
 					const auto inputAbs = std::abs(inputSample);
@@ -2303,6 +2538,13 @@ namespace EmEn::Base::WaveFactory
 					return false;
 				}
 
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applyPitchShift", "semitones", semitones, -12.0F, 12.0F) ||
+					!Synthesizer::inDomain("applyPitchShift", "mix", mix, 0.0F, 1.0F) )
+				{
+					return false;
+				}
+
 				semitones = std::clamp(semitones, -12.0F, 12.0F);
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
@@ -2325,7 +2567,7 @@ namespace EmEn::Base::WaveFactory
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
 					const auto localIndex = sampleIndex - startSample;
-					const auto drySample = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto drySample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* Calculate read position with pitch shift. */
 					const auto readPos = static_cast< float >(localIndex) * pitchRatio;
@@ -2338,8 +2580,8 @@ namespace EmEn::Base::WaveFactory
 					{
 						if ( readPosInt < originalData.size() && readPosInt + 1 < originalData.size() )
 						{
-							const auto sample1 = static_cast< float >(originalData[readPosInt]) / static_cast< float >(std::numeric_limits< precision_t >::max());
-							const auto sample2 = static_cast< float >(originalData[readPosInt + 1]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+							const auto sample1 = Synthesizer::fromSampleFormat(originalData[readPosInt]);
+							const auto sample2 = Synthesizer::fromSampleFormat(originalData[readPosInt + 1]);
 							wetSample = sample1 + readPosFrac * (sample2 - sample1);
 						}
 					}
@@ -2364,6 +2606,12 @@ namespace EmEn::Base::WaveFactory
 				{
 					std::cerr << "Synthesizer::applySampleRateReduce(), wave is not initialized !" "\n";
 
+					return false;
+				}
+
+				/* NOTE: Every parameter within its documented domain (SFX scripts are data). */
+				if ( !Synthesizer::inDomain("applySampleRateReduce", "factor", static_cast< float >(factor), 1.0F, std::numeric_limits< float >::max()) )
+				{
 					return false;
 				}
 
@@ -2449,7 +2697,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto sampleFloat = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto sampleFloat = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					maxAbs = std::max(maxAbs, std::abs(sampleFloat));
 				}
 
@@ -2463,7 +2711,7 @@ namespace EmEn::Base::WaveFactory
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
 				{
-					const auto sampleFloat = static_cast< float >(data[sampleIndex]) / static_cast< float >(std::numeric_limits< precision_t >::max());
+					const auto sampleFloat = Synthesizer::fromSampleFormat(data[sampleIndex]);
 					data[sampleIndex] = toSampleFormat(sampleFloat * scale);
 				}
 
@@ -2572,23 +2820,87 @@ namespace EmEn::Base::WaveFactory
 				return end - start;
 			}
 
+			/** @brief The longest time an effect parameter may hold, in seconds: the longest SFX script (30 minutes). */
+			static constexpr float MaxTimeSeconds{30.0F * 60.0F};
+
+			/**
+			 * @brief Checks one parameter against its documented domain [minimum, maximum]; NaN is refused.
+			 * @note SFX scripts (data) drive these effects: a value out of its domain is refused with an error naming it,
+			 * never computed into undefined behaviour or a signal out of range (owner decision, 2026-10-17).
+			 * @param effect The effect's name.
+			 * @param parameter The parameter's name.
+			 * @param value The value.
+			 * @param minimum The smallest accepted value.
+			 * @param maximum The largest accepted value.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static bool
+			inDomain (const char * effect, const char * parameter, float value, float minimum, float maximum) noexcept
+			{
+				if ( value >= minimum && value <= maximum )
+				{
+					return true;
+				}
+
+				Logging::error("WaveFactory::Synthesizer", std::string{effect} + "(), '" + parameter + "' = " + std::to_string(value) + " is outside [" + std::to_string(minimum) + ", " + std::to_string(maximum) + "] !");
+
+				return false;
+			}
+
+			/**
+			 * @brief Returns the highest frequency the wave can carry (half its sample rate), in Hz.
+			 * @return float
+			 */
+			[[nodiscard]]
+			float
+			nyquist () const noexcept
+			{
+				return static_cast< float >(m_wave.frequency()) * 0.5F;
+			}
+
+			/**
+			 * @brief Converts a stored sample to a normalized float sample [-1.0, 1.0], the reverse of toSampleFormat().
+			 * @note A float wave is already normalized: dividing it by numeric_limits< float >::max(), as every effect did,
+			 * crushed it to ~1e-39 (2026-10-17).
+			 * @param sample The stored sample.
+			 * @return float
+			 */
+			[[nodiscard]]
+			static float
+			fromSampleFormat (precision_t sample) noexcept
+			{
+				if constexpr ( std::is_floating_point_v< precision_t > )
+				{
+					return static_cast< float >(sample);
+				}
+				else
+				{
+					return static_cast< float >(sample) / static_cast< float >(std::numeric_limits< precision_t >::max());
+				}
+			}
+
 			/**
 			 * @brief Converts a normalized float sample [-1.0, 1.0] to the target precision type.
+			 * @note Saturated (a louder sample is clipped, as audio does) and NaN gives silence: a sample beyond the
+			 * integer type was converted out of range — undefined behaviour (amplitude 2 in an SFX script, 2026-10-17).
 			 * @param sample The normalized sample value.
 			 * @return precision_t
 			 */
 			static precision_t
 			toSampleFormat (float sample) noexcept
 			{
+				const float clipped = std::isnan(sample) ? 0.0F : std::clamp(sample, -1.0F, 1.0F);
+
 				if constexpr ( std::is_floating_point_v< precision_t > )
 				{
-					return static_cast< precision_t >(sample);
+					return static_cast< precision_t >(clipped);
 				}
 				else
 				{
 					/* Scale to integer range. */
 					const auto maxVal = static_cast< float >(std::numeric_limits< precision_t >::max());
-					return static_cast< precision_t >(sample * maxVal);
+					return static_cast< precision_t >(clipped * maxVal);
 				}
 			}
 
