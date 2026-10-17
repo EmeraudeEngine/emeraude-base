@@ -29,7 +29,9 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <queue>
 #include <type_traits>
 #include <unordered_map>
@@ -605,7 +607,7 @@ namespace EmEn::Base::VertexFactory
 				/* Build a spatial index of all boundary vertex positions in the target shape. */
 				struct QuantizedPos
 				{
-					int32_t x, y, z;
+					int64_t x, y, z;
 
 					bool operator== (const QuantizedPos & other) const noexcept = default;
 				};
@@ -614,9 +616,9 @@ namespace EmEn::Base::VertexFactory
 				{
 					size_t operator() (const QuantizedPos & p) const noexcept
 					{
-						auto h = std::hash< int32_t >{}(p.x);
-						h ^= std::hash< int32_t >{}(p.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-						h ^= std::hash< int32_t >{}(p.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						auto h = std::hash< int64_t >{}(p.x);
+						h ^= std::hash< int64_t >{}(p.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						h ^= std::hash< int64_t >{}(p.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
 
 						return h;
 					}
@@ -624,12 +626,15 @@ namespace EmEn::Base::VertexFactory
 
 				const auto posScale = static_cast< vertex_data_t >(1) / static_cast< vertex_data_t >(1e-4);
 
+				/* NOTE: Through mergeGridCell(): an int32 cell overflowed from 214 748 units on (undefined behaviour,
+				 * 2026-10-17). A position without a cell (NaN, infinity, beyond int64) shares the sentinel cell: the
+				 * shape's positions are finite by contract, the sentinel only rules the UB out. */
 				auto quantize = [] (const Math::Vector< 3, vertex_data_t > & pos, vertex_data_t scale) -> QuantizedPos
 				{
 					return {
-						static_cast< int32_t >(std::round(pos[Math::X] * scale)),
-						static_cast< int32_t >(std::round(pos[Math::Y] * scale)),
-						static_cast< int32_t >(std::round(pos[Math::Z] * scale))
+						mergeGridCell(pos[Math::X] * scale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(pos[Math::Y] * scale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(pos[Math::Z] * scale).value_or(std::numeric_limits< int64_t >::min())
 					};
 				};
 
@@ -733,7 +738,7 @@ namespace EmEn::Base::VertexFactory
 				 * (e.g. from getOrCopyVertex vs getOrCreateIntersectionVertex). */
 				struct QuantizedPos
 				{
-					int32_t x, y, z;
+					int64_t x, y, z;
 
 					bool operator== (const QuantizedPos & other) const noexcept = default;
 				};
@@ -742,9 +747,9 @@ namespace EmEn::Base::VertexFactory
 				{
 					size_t operator() (const QuantizedPos & p) const noexcept
 					{
-						auto h = std::hash< int32_t >{}(p.x);
-						h ^= std::hash< int32_t >{}(p.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-						h ^= std::hash< int32_t >{}(p.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						auto h = std::hash< int64_t >{}(p.x);
+						h ^= std::hash< int64_t >{}(p.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						h ^= std::hash< int64_t >{}(p.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
 
 						return h;
 					}
@@ -752,14 +757,17 @@ namespace EmEn::Base::VertexFactory
 
 				const auto posScale = static_cast< vertex_data_t >(1) / static_cast< vertex_data_t >(1e-4);
 
+				/* NOTE: Through mergeGridCell(): an int32 cell overflowed from 214 748 units on (undefined behaviour —
+				 * 2 km of a model in centimetres, 2026-10-17). A position without a cell (NaN, infinity, beyond int64)
+				 * shares the sentinel cell: the shape's positions are finite by contract, the sentinel rules the UB out. */
 				auto quantize = [&shape, posScale] (index_data_t idx) -> QuantizedPos
 				{
 					const auto & pos = shape.vertex(idx).position();
 
 					return {
-						static_cast< int32_t >(std::round(pos[Math::X] * posScale)),
-						static_cast< int32_t >(std::round(pos[Math::Y] * posScale)),
-						static_cast< int32_t >(std::round(pos[Math::Z] * posScale))
+						mergeGridCell(pos[Math::X] * posScale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(pos[Math::Y] * posScale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(pos[Math::Z] * posScale).value_or(std::numeric_limits< int64_t >::min())
 					};
 				};
 

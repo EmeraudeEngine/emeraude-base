@@ -808,6 +808,24 @@ Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToB
 
 ## VertexFactory
 
+### ⚠️⚠️ A sealed cut of a HOLLOW shape covered its holes; the cut points overflowed an int32 (2026-10-17, FIXED)
+
+Found by the coverage pass (`VertexFactoryShapeSplitter.aTorusCutThroughItsHoleKeepsTheHole`,
+`nestedLoopsKeepTheirGapsAndIslands`, `largeCoordinatesAreSealedWithoutOverflow`, all failing before):
+- `ShapeProcessor::sealAllBoundaryLoops()` ear-clipped EACH loop on its own: the cut of a torus (an annulus — an outer
+  and an inner loop) got a full disk over its hole plus a second disk on top (57 cap triangles in the hole; a solid
+  sphere in a hollow shell: 46 in the gap). Closed, and the signed volumes CANCEL — a volume check does not see it;
+  only the cap's position does. Owner decision: in-house hole bridging. With a cap normal (a planar cut), the loops are
+  nested by inclusion in the cap plane (even depth: a contour; odd: a hole of its smallest enclosing contour) and each
+  hole is bridged into its contour (D. Eberly, "Triangulation by Ear Clipping", § polygons with holes) before the
+  existing ear clipper, which now ignores a bridge's duplicate of the candidate ear's own corners.
+- `ShapeSplitter` welded the cut points by quantizing them to 1e-4 into an `int32_t` (`chainBoundaryEdges()`,
+  `mirrorBoundaryLoops()`): undefined behaviour from 214 748 units on (2 km of a model in centimetres). The same
+  unchecked conversion sat in `ShapeProcessor` (an `int32_t` grouping, an `int64_t` key) and `ShapeDecimator` (an
+  `int64_t` key: a NaN was UB). All five go through `mergeGridCell()` now (no cell: a sentinel cell — the positions are
+  finite by contract). Left as they are: the tree growers' spatial grids (`TreeColonizationGrower`, `TreeSkinner`),
+  which quantize their own generated positions by their own cell size.
+
 ### ⚠️ The OBJ writer lost float precision; `computeVertexTBNSpace()` did not declare its normals (2026-10-17, FIXED)
 
 Found by the coverage pass (`VertexFactoryOBJ.writerRoundTripKeepsEveryFloat`, `requestedNormalsAndTangentsInEveryFaceForm`,

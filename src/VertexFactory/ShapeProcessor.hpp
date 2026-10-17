@@ -33,6 +33,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <numbers>
 #include <numeric>
 #include <optional>
@@ -636,7 +637,12 @@ namespace EmEn::Base::VertexFactory
 
 					while ( cursor != prevIdx[i] )
 					{
-						if ( isReflex[cursor] && isPointInTriangle2D(projected[order[cursor]], pA, pB, pC) )
+						const auto & point = projected[order[cursor]];
+
+						/* NOTE: A hole bridge repeats two vertices: a copy of a corner of this ear is not inside it. */
+						const bool isCorner = point == pA || point == pB || point == pC;
+
+						if ( !isCorner && isReflex[cursor] && isPointInTriangle2D(point, pA, pB, pC) )
 						{
 							isEar[i] = false;
 
@@ -787,6 +793,233 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Merges the holes of planar boundary loops into their contours, so each contour and its holes become
+			 * ONE polygon for the ear clipper.
+			 * @note D. Eberly, "Triangulation by Ear Clipping" (Geometric Tools, 2002-2015), § 4-5 "Polygons with holes":
+			 * the loops are nested by inclusion in the cap plane (an even depth is a contour, an odd depth a hole of its
+			 * smallest enclosing contour); holes are bridged by decreasing maximum X, each from its rightmost vertex M to
+			 * a contour vertex visible from M (the nearest edge hit by the ray +X, or the reflex contour vertex inside the
+			 * triangle (M, hit, edge end) with the smallest angle to the ray). A hole that cannot be bridged stays a loop.
+			 * @param loops The boundary loops, all in one plane.
+			 * @param normal The plane's unit normal.
+			 * @return std::vector< BoundaryLoop< index_data_t > >
+			 */
+			[[nodiscard]]
+			std::vector< BoundaryLoop< index_data_t > >
+			bridgeHolesIntoContours (const std::vector< BoundaryLoop< index_data_t > > & loops, const Math::Vector< 3, vertex_data_t > & normal) const noexcept
+			{
+				using Point = Math::Vector< 2, vertex_data_t >;
+
+				const auto [axisU, axisV] = buildOrthonormalBasis(normal);
+
+				struct Ring
+				{
+					std::vector< index_data_t > indices;
+					std::vector< Point > points;
+					vertex_data_t area{0};
+					int depth{0};
+					std::vector< size_t > holes;
+				};
+
+				std::vector< Ring > rings;
+				rings.reserve(loops.size());
+
+				for ( const auto & loop : loops )
+				{
+					if ( loop.vertexIndices.size() < 3 )
+					{
+						continue;
+					}
+
+					Ring ring;
+					ring.indices = loop.vertexIndices;
+
+					for ( const auto index : ring.indices )
+					{
+						const auto & position = m_shape.vertex(index).position();
+						ring.points.push_back({Math::Vector< 3, vertex_data_t >::dotProduct(position, axisU), Math::Vector< 3, vertex_data_t >::dotProduct(position, axisV)});
+					}
+
+					/* Every ring counter-clockwise. */
+					const auto signedArea = computeSignedArea2D(ring.points);
+
+					if ( signedArea < 0 )
+					{
+						std::ranges::reverse(ring.indices);
+						std::ranges::reverse(ring.points);
+					}
+
+					ring.area = std::abs(signedArea);
+					rings.push_back(std::move(ring));
+				}
+
+				const auto contains = [] (const std::vector< Point > & polygon, const Point & point) noexcept {
+					bool inside = false;
+
+					for ( size_t i = 0, j = polygon.size() - 1; i < polygon.size(); j = i++ )
+					{
+						const auto & a = polygon[i];
+						const auto & b = polygon[j];
+
+						if ( (a[Math::Y] > point[Math::Y]) != (b[Math::Y] > point[Math::Y]) &&
+							point[Math::X] < (((b[Math::X] - a[Math::X]) * (point[Math::Y] - a[Math::Y])) / (b[Math::Y] - a[Math::Y])) + a[Math::X] )
+						{
+							inside = !inside;
+						}
+					}
+
+					return inside;
+				};
+
+				/* Nesting depth, then each hole's parent: the smallest enclosing ring one level up. */
+				for ( size_t i = 0; i < rings.size(); ++i )
+				{
+					for ( size_t j = 0; j < rings.size(); ++j )
+					{
+						if ( i != j && rings[j].area > rings[i].area && contains(rings[j].points, rings[i].points.front()) )
+						{
+							++rings[i].depth;
+						}
+					}
+				}
+
+				for ( size_t i = 0; i < rings.size(); ++i )
+				{
+					if ( rings[i].depth % 2 == 0 )
+					{
+						continue;
+					}
+
+					size_t parent = rings.size();
+
+					for ( size_t j = 0; j < rings.size(); ++j )
+					{
+						if ( rings[j].depth == rings[i].depth - 1 && rings[j].area > rings[i].area && contains(rings[j].points, rings[i].points.front()) &&
+							(parent == rings.size() || rings[j].area < rings[parent].area) )
+						{
+							parent = j;
+						}
+					}
+
+					if ( parent < rings.size() )
+					{
+						rings[parent].holes.push_back(i);
+					}
+					else
+					{
+						rings[i].depth = 0;
+					}
+				}
+
+				std::vector< BoundaryLoop< index_data_t > > result;
+
+				for ( size_t contourIndex = 0; contourIndex < rings.size(); ++contourIndex )
+				{
+					auto & contour = rings[contourIndex];
+
+					if ( contour.depth % 2 != 0 )
+					{
+						continue;
+					}
+
+					/* Holes by decreasing maximum X (Eberly § 5). */
+					const auto maxX = [&rings] (size_t ring) {
+						return std::ranges::max(rings[ring].points, {}, [] (const Point & point) { return point[Math::X]; })[Math::X];
+					};
+
+					std::ranges::sort(contour.holes, [&maxX] (size_t a, size_t b) { return maxX(a) > maxX(b); });
+
+					for ( const auto holeIndex : contour.holes )
+					{
+						auto & hole = rings[holeIndex];
+
+						/* M: the hole's rightmost vertex. */
+						const auto mIt = std::ranges::max_element(hole.points, {}, [] (const Point & point) { return point[Math::X]; });
+						const auto m = static_cast< size_t >(std::distance(hole.points.begin(), mIt));
+						const auto & pointM = hole.points[m];
+
+						/* The nearest contour edge hit by the ray from M toward +X. */
+						size_t bridge = contour.points.size();
+						auto hitX = std::numeric_limits< vertex_data_t >::max();
+
+						for ( size_t i = 0; i < contour.points.size(); ++i )
+						{
+							const auto & a = contour.points[i];
+							const auto & b = contour.points[(i + 1) % contour.points.size()];
+
+							if ( (a[Math::Y] > pointM[Math::Y]) == (b[Math::Y] > pointM[Math::Y]) )
+							{
+								continue;
+							}
+
+							const auto x = a[Math::X] + (((pointM[Math::Y] - a[Math::Y]) * (b[Math::X] - a[Math::X])) / (b[Math::Y] - a[Math::Y]));
+
+							if ( x >= pointM[Math::X] && x < hitX )
+							{
+								hitX = x;
+								bridge = a[Math::X] > b[Math::X] ? i : (i + 1) % contour.points.size();
+							}
+						}
+
+						if ( bridge == contour.points.size() )
+						{
+							/* Not bridgeable: the hole stays a loop of its own (the former behaviour). */
+							result.push_back({hole.indices});
+
+							continue;
+						}
+
+						/* A contour vertex inside the triangle (M, hit, P) would hide P: take the one closest to the ray. */
+						const Point hit{hitX, pointM[Math::Y]};
+						const auto pointP = contour.points[bridge];
+						auto bestAngle = std::numeric_limits< vertex_data_t >::max();
+
+						for ( size_t i = 0; i < contour.points.size(); ++i )
+						{
+							const auto & candidate = contour.points[i];
+
+							if ( i == bridge || candidate == pointP || !isPointInTriangle2D(candidate, pointM, hit, pointP) )
+							{
+								continue;
+							}
+
+							const auto dx = candidate[Math::X] - pointM[Math::X];
+							const auto dy = std::abs(candidate[Math::Y] - pointM[Math::Y]);
+
+							if ( dx > 0 && dy / dx < bestAngle )
+							{
+								bestAngle = dy / dx;
+								bridge = i;
+							}
+						}
+
+						/* Splice: contour up to P, the hole CLOCKWISE from M back to M, then P again and the rest. */
+						std::vector< index_data_t > indices(contour.indices.begin(), contour.indices.begin() + static_cast< ptrdiff_t >(bridge + 1));
+						std::vector< Point > points(contour.points.begin(), contour.points.begin() + static_cast< ptrdiff_t >(bridge + 1));
+
+						for ( size_t step = 0; step <= hole.indices.size(); ++step )
+						{
+							const auto index = (m + hole.indices.size() - (step % hole.indices.size())) % hole.indices.size();
+							indices.push_back(hole.indices[index]);
+							points.push_back(hole.points[index]);
+						}
+
+						indices.push_back(contour.indices[bridge]);
+						points.push_back(contour.points[bridge]);
+						indices.insert(indices.end(), contour.indices.begin() + static_cast< ptrdiff_t >(bridge + 1), contour.indices.end());
+						points.insert(points.end(), contour.points.begin() + static_cast< ptrdiff_t >(bridge + 1), contour.points.end());
+
+						contour.indices = std::move(indices);
+						contour.points = std::move(points);
+					}
+
+					result.push_back({contour.indices});
+				}
+
+				return result;
+			}
+
+			/**
 			 * @brief Finds and fills all holes in the shape.
 			 * @param expectedNormal Optional expected cap normal direction for all holes.
 			 * @return size_t The number of holes filled.
@@ -810,6 +1043,13 @@ namespace EmEn::Base::VertexFactory
 					{
 						loops = this->mergeFragmentedLoops(loops);
 					}
+				}
+
+				/* NOTE: A planar cap (an expected normal) may hold nested loops — the cut of a hollow shape is an annulus:
+				 * a hole is bridged into its contour, never filled as a disk of its own (2026-10-17). */
+				if ( expectedNormal.lengthSquared() > static_cast< vertex_data_t >(0.01) && loops.size() > 1 )
+				{
+					loops = this->bridgeHolesIntoContours(loops, expectedNormal.normalized());
 				}
 
 				size_t sealed = 0;
@@ -1119,7 +1359,7 @@ namespace EmEn::Base::VertexFactory
 				/* Quantize positions to group vertices at the same location. */
 				struct QuantizedPos
 				{
-					int32_t x, y, z;
+					int64_t x, y, z;
 
 					bool operator== (const QuantizedPos & other) const noexcept = default;
 				};
@@ -1128,9 +1368,9 @@ namespace EmEn::Base::VertexFactory
 				{
 					size_t operator() (const QuantizedPos & p) const noexcept
 					{
-						auto h = std::hash< int32_t >{}(p.x);
-						h ^= std::hash< int32_t >{}(p.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-						h ^= std::hash< int32_t >{}(p.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						auto h = std::hash< int64_t >{}(p.x);
+						h ^= std::hash< int64_t >{}(p.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+						h ^= std::hash< int64_t >{}(p.z) + 0x9e3779b9 + (h << 6) + (h >> 2);
 
 						return h;
 					}
@@ -1144,10 +1384,11 @@ namespace EmEn::Base::VertexFactory
 				for ( size_t i = 0; i < vertCount; ++i )
 				{
 					const auto & pos = vertices[i].position();
+					/* NOTE: Through mergeGridCell(): the int32 cell was undefined behaviour beyond 2^31 cells (2026-10-17). */
 					const QuantizedPos key{
-						static_cast< int32_t >(std::round(pos[Math::X] * scale)),
-						static_cast< int32_t >(std::round(pos[Math::Y] * scale)),
-						static_cast< int32_t >(std::round(pos[Math::Z] * scale))
+						mergeGridCell(pos[Math::X] * scale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(pos[Math::Y] * scale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(pos[Math::Z] * scale).value_or(std::numeric_limits< int64_t >::min())
 					};
 
 					groups[key].push_back(i);
@@ -2011,10 +2252,11 @@ namespace EmEn::Base::VertexFactory
 			{
 				const auto scale = static_cast< vertex_data_t >(1) / m_positionTolerance;
 
+				/* NOTE: Through mergeGridCell(): a NaN or a value beyond int64 was undefined behaviour (2026-10-17). */
 				return PositionKey{
-					static_cast< int64_t >(std::round(position[Math::X] * scale)),
-					static_cast< int64_t >(std::round(position[Math::Y] * scale)),
-					static_cast< int64_t >(std::round(position[Math::Z] * scale))
+					mergeGridCell(position[Math::X] * scale).value_or(std::numeric_limits< int64_t >::min()),
+					mergeGridCell(position[Math::Y] * scale).value_or(std::numeric_limits< int64_t >::min()),
+					mergeGridCell(position[Math::Z] * scale).value_or(std::numeric_limits< int64_t >::min())
 				};
 			}
 

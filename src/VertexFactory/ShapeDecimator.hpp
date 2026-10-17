@@ -870,10 +870,11 @@ namespace EmEn::Base::VertexFactory
 
 					const auto & position = srcVerts[index].position();
 
+					/* NOTE: Through mergeGridCell(): a NaN or a value beyond int64 was undefined behaviour (2026-10-17). */
 					quantized[index] = {
-						static_cast< int64_t >(std::round(position[Math::X] * scale)),
-						static_cast< int64_t >(std::round(position[Math::Y] * scale)),
-						static_cast< int64_t >(std::round(position[Math::Z] * scale))
+						mergeGridCell(position[Math::X] * scale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(position[Math::Y] * scale).value_or(std::numeric_limits< int64_t >::min()),
+						mergeGridCell(position[Math::Z] * scale).value_or(std::numeric_limits< int64_t >::min())
 					};
 				}
 
