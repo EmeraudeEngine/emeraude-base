@@ -26,6 +26,10 @@
 
 #include "LZMA.hpp"
 
+/* STL inclusions. */
+#include <algorithm>
+#include <limits>
+
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
 
@@ -77,16 +81,26 @@ namespace EmEn::Base::Compression::LZMA
 	bool
 	decompressString (const std::string & input, std::string & output) noexcept
 	{
-		static constexpr size_t kMemLimit = 1 << 30;  // 1 GB.
+		output.clear();
+
+		if ( input.empty() )
+		{
+			Logging::error("Compression::LZMA", "decompressString(), empty input !");
+
+			return false;
+		}
+
+		/* NOTE: The output is bounded BEFORE it grows; its buffer may hold one byte more, so an output of exactly the bound
+		 * still reaches its end. */
+		const size_t maxOutput = input.size() > (std::numeric_limits< size_t >::max() - 1) / MaxDecompressionRatio ? std::numeric_limits< size_t >::max() - 1 : input.size() * MaxDecompressionRatio;
 
 		lzma_stream stream = LZMA_STREAM_INIT;
 
-		output.clear();
-		output.resize(8192);
+		output.resize(std::min< size_t >(8192, maxOutput + 1));
 
 		size_t resultUsed = 0;
 
-		if ( lzma_stream_decoder(&stream, kMemLimit, LZMA_CONCATENATED) != LZMA_OK )
+		if ( lzma_stream_decoder(&stream, DecoderMemoryLimit, LZMA_CONCATENATED) != LZMA_OK )
 		{
 			return false;
 		}
@@ -122,8 +136,10 @@ namespace EmEn::Base::Compression::LZMA
 			{
 				resultUsed += avail0 - stream.avail_out;
 
-				if ( stream.avail_in != 0 )  // Guaranteed by lzma_stream_decoder().
+				if ( stream.avail_in != 0 || resultUsed > maxOutput )  // avail_in: guaranteed by lzma_stream_decoder().
 				{
+					output.clear();
+
 					return false;
 				}
 
@@ -132,8 +148,19 @@ namespace EmEn::Base::Compression::LZMA
 				return true;
 			}
 
+			if ( outputCode == LZMA_MEMLIMIT_ERROR )
+			{
+				Logging::error("Compression::LZMA", "decompressString(), the stream needs more decoder memory than the limit, refused !");
+
+				output.clear();
+
+				return false;
+			}
+
 			if ( outputCode != LZMA_OK )
 			{
+				output.clear();
+
 				return false;
 			}
 
@@ -141,7 +168,16 @@ namespace EmEn::Base::Compression::LZMA
 			{
 				resultUsed += avail0 - stream.avail_out;
 
-				output.resize(output.size() << 1);
+				if ( output.size() > maxOutput )
+				{
+					Logging::error("Compression::LZMA", "decompressString(), the output exceeds the input size x MaxDecompressionRatio, refused !");
+
+					output.clear();
+
+					return false;
+				}
+
+				output.resize(std::min(output.size() << 1U, maxOutput + 1));
 
 				stream.next_out = reinterpret_cast< uint8_t * >(output.data() + resultUsed);
 				stream.avail_out = avail0 = output.size() - resultUsed;

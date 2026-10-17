@@ -1545,6 +1545,30 @@ first entry index, the refusals, grayscale RLE, an ID field and an attached colo
 failed on the former reader. `fuzz_targa` on the new reader (ASan + UBSan, seeded with the variants): 574 M executions
 (10 + 3 min), 0 crash / OOM / timeout.
 
+## Compression — a fuzz target must instrument its parser; ZLIB and LZMA bounded by what is really there (2026-10-17)
+
+- **Six fuzz targets fuzzed their own `.cpp` parser BLIND**: `build-fuzzers.sh` linked them against the g++-built
+  archive, uninstrumented — no coverage feedback, no ASan / UBSan on that code (`fuzz_http_response`: 59 edges, 654
+  instrumented). The targets now compile their parser sources (`src/Fuzzing/README.md`). The first instrumented
+  `fuzz_compression` run found the defects below at once (6 OOMs).
+- **`ZLIB::decompressStream()` allocated a chunk's two buffers from its HEADER**: sizes capped at 1 GiB and the ratio
+  checked (× 1032), but the declared compressed bytes were never required to be present — 16-74 bytes made 0.1-2 GB
+  peak. The payload is now read in 1 MiB steps, the buffer growing with what arrives; the destination is allocated
+  after (~4 MB peak on the same inputs). `Compression.ZLIBChunkHeaderWithoutItsPayloadIsRefused` (result-only: the proof
+  is the peak RSS above).
+- **LZMA had no output ceiling — a real bomb**: 156 KB of xz → 1 GiB of zeros, 2.1 GB peak, accepted (the function and
+  the streaming `Decompressor`). Now refused beyond the input × `LZMA::MaxDecompressionRatio` (1032, every base reader's
+  rule — owner decision). `Compression.LZMABombBeyondTheRatioIsRefused`.
+- **The decoder memory limit is a HARDENING, not a proven defect**: 1 GiB in the function, none in the streaming class.
+  An 80-byte header declaring a 512-768 MiB dictionary RESERVED it without touching it — no RSS on Linux. ⚠️ The
+  fuzzer's OOMs were first attributed to it; they were ZLIB's (the harness calls both): measure each function on its own
+  before naming a culprit. Owner decision, kept knowingly:
+  `LZMA::DecoderMemoryLimit` = 65 MiB (the xz -9 preset's need, measured; 64 MiB refuses it) for both, multithreaded
+  included (liblzma then falls back to one thread). `Compression.LZMAHeaderDeclaringALargeDictionaryIsRefused`.
+- The streaming class's thread count was `max(min(1, cpus), requested)` — the request, uncapped: now clamped to
+  [1, processor threads].
+- After the fixes, `fuzz_compression` instrumented, 10 minutes: 41 M executions, 0 OOM / crash.
+
 ## UBSan — GCC's `-fsanitize=undefined` does NOT check a float-to-integer conversion (2026-10-17)
 
 A `double` converted to `uint32_t` out of range is undefined behaviour; Clang's `undefined` group reports it

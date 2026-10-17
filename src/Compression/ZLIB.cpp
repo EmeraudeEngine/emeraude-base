@@ -27,6 +27,7 @@
 #include "ZLIB.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -199,15 +200,35 @@ namespace EmEn::Base::Compression::ZLIB
 			auto baseSize = static_cast< uLongf >(baseSizeField);
 			const auto compressedSize = static_cast< uLongf >(compressedSizeField);
 
-			/* Resize both of buffer before writing into. */
-			source.resize(compressedSize);
-			destination.resize(baseSize);
+			/* NOTE: The compressed bytes are read in steps, the buffer growing only with what ARRIVES: a chunk header alone
+			 * (27 bytes) declared 1 GB of each buffer and made both allocations before failing to read (2 GB peak,
+			 * fuzz_compression 2026-10-17). The destination is allocated once the payload is real (bounded x 1032 above). */
+			constexpr uLongf ReadStep = 1U << 20U;
 
-			/* Read some bytes of compressed data. */
-			const auto readSize = static_cast< std::streamsize >(compressedSize * sizeof(char));
+			source.clear();
 
-			if ( sourceStream.read(source.data(), readSize) )
+			bool payloadRead = true;
+
+			for ( uLongf received = 0; received < compressedSize; )
 			{
+				const auto step = std::min(ReadStep, compressedSize - received);
+
+				source.resize(received + step);
+
+				if ( !sourceStream.read(source.data() + received, static_cast< std::streamsize >(step)) )
+				{
+					payloadRead = false;
+
+					break;
+				}
+
+				received += step;
+			}
+
+			if ( payloadRead )
+			{
+				destination.resize(baseSize);
+
 				auto * dest = reinterpret_cast< Bytef * >(destination.data());
 				const auto * src = reinterpret_cast< const Bytef * >(source.c_str());
 

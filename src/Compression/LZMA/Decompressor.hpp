@@ -27,7 +27,9 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -95,6 +97,9 @@ namespace EmEn::Base::Compression::LZMA
 
 			/**
 			 * @brief Decompresses a string
+			 * @note The output is bounded at the input size x MaxDecompressionRatio (Compression/LZMA.hpp); the decoder
+			 * memory at DecoderMemoryLimit, single or multithreaded (a multithreaded decoder that does not fit falls back
+			 * to one thread).
 			 * @param input A reference to string.
 			 * @param output A writable reference to a string.
 			 * @return bool
@@ -123,10 +128,11 @@ namespace EmEn::Base::Compression::LZMA
 			 * @brief Internal decompression method following the initialization.
 			 * @param input A writable reference to a stream.
 			 * @param output A writable reference to a stream.
+			 * @param maxOutput The largest output in bytes, refused beyond. Default: unbounded (a stream to the caller).
 			 * @return bool
 			 */
 			[[nodiscard]]
-			bool decompress (std::stringstream & input, std::stringstream & output) noexcept;
+			bool decompress (std::stringstream & input, std::stringstream & output, size_t maxOutput = std::numeric_limits< size_t >::max()) noexcept;
 
 			lzma_stream m_stream LZMA_STREAM_INIT;
 			bool m_ready{false};

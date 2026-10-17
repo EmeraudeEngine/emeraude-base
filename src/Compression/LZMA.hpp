@@ -27,10 +27,24 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstddef>
+#include <cstdint>
 #include <string>
 
 namespace EmEn::Base::Compression::LZMA
 {
+	/** @brief The memory a decoder may use: 65 MiB, what the xz -9 preset needs (measured; 64 MiB refuses it). A header
+	 * declaring a larger dictionary is refused (LZMA_MEMLIMIT_ERROR). A HARDENING, not a proven defect (owner decision,
+	 * 2026-10-17): an 80-byte stream declaring a 512-768 MiB dictionary reserved it without touching it (no RSS on Linux);
+	 * the limit bounds that reservation (address space, Windows commit). The streaming Decompressor had no limit. */
+	constexpr uint64_t DecoderMemoryLimit{65ULL << 20U};
+
+	/** @brief The largest decompressed string, as a multiple of its compressed size (deflate's maximum — the rule of
+	 * every base reader, owner decision 2026-10-17). Beyond it the decompression is refused: 156 KB of xz decompressed to
+	 * 1 GiB of zeros (2.1 GB peak, accepted) with no bound. An xz stream compressed beyond 1032:1 (a run of zeros) is
+	 * refused too: the known trade-off. */
+	constexpr size_t MaxDecompressionRatio{1032};
+
 	/**
 	 * @brief Compresses a string with LZMA algorithm.
 	 * @param input A reference to a string.
@@ -42,6 +56,8 @@ namespace EmEn::Base::Compression::LZMA
 
 	/**
 	 * @brief Decompresses a string with LZMA algorithm.
+	 * @note Refused (false, an empty output): an empty input, a stream needing more than DecoderMemoryLimit, an output
+	 * beyond the input size x MaxDecompressionRatio, a corrupt or truncated stream.
 	 * @param input A reference to a string.
 	 * @param output A writable reference to a string.
 	 * @return bool

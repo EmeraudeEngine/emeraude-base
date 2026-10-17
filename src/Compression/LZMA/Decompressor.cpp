@@ -27,8 +27,12 @@
 #include "Decompressor.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <iostream>
+
+/* Local inclusions. */
+#include "Compression/LZMA.hpp"
 
 namespace EmEn::Base::Compression::LZMA
 {
@@ -57,7 +61,10 @@ namespace EmEn::Base::Compression::LZMA
 
 		std::stringstream outputStream;
 
-		if ( !this->decompress(sourceStream, outputStream) )
+		/* NOTE: A string is bounded: a few bytes of xz can expand without limit. */
+		const size_t maxOutput = input.size() > std::numeric_limits< size_t >::max() / MaxDecompressionRatio ? std::numeric_limits< size_t >::max() : input.size() * MaxDecompressionRatio;
+
+		if ( !this->decompress(sourceStream, outputStream, maxOutput) )
 		{
 			return false;
 		}
@@ -70,7 +77,7 @@ namespace EmEn::Base::Compression::LZMA
 	bool
 	Decompressor::init () noexcept
 	{
-		const auto ret = lzma_stream_decoder(&m_stream, UINT64_MAX, LZMA_CONCATENATED);
+		const auto ret = lzma_stream_decoder(&m_stream, DecoderMemoryLimit, LZMA_CONCATENATED);
 
 		if ( ret != LZMA_OK )
 		{
@@ -100,10 +107,13 @@ namespace EmEn::Base::Compression::LZMA
 	{
 		lzma_mt settings{};
 		settings.flags = LZMA_CONCATENATED;
-		settings.threads = std::max(std::min(1U, lzma_cputhreads()), maxThreads);
+		/* NOTE: At least one thread, at most the processor's (lzma_cputhreads() is 0 when unknown). The formula was
+		 * max(min(1, cpus), maxThreads): the request, uncapped. */
+		settings.threads = std::clamp(maxThreads, 1U, std::max(1U, lzma_cputhreads()));
 		settings.timeout = 0;
-		settings.memlimit_threading = UINT64_MAX;
-		settings.memlimit_stop = UINT64_MAX;
+		/* NOTE: One hard limit for the whole decoder: liblzma falls back to one thread when several do not fit. */
+		settings.memlimit_threading = DecoderMemoryLimit;
+		settings.memlimit_stop = DecoderMemoryLimit;
 
 		const auto ret = lzma_stream_decoder_mt(&m_stream, &settings);
 
@@ -112,19 +122,19 @@ namespace EmEn::Base::Compression::LZMA
 			switch ( ret )
 			{
 				case LZMA_MEM_ERROR :
-					std::cerr << "LZMA encoder init (MT) error : Memory allocation failed !" "\n";
+					std::cerr << "LZMA decoder init (MT) error : Memory allocation failed !" "\n";
 					break;
 
 				case LZMA_OPTIONS_ERROR :
-					std::cerr << "LZMA encoder init (MT) error : Specified filter chain is not supported !" "\n";
+					std::cerr << "LZMA decoder init (MT) error : Specified filter chain is not supported !" "\n";
 					break;
 
 				case LZMA_UNSUPPORTED_CHECK :
-					std::cerr << "LZMA encoder init (MT) error : Specified integrity check is not supported !" "\n";
+					std::cerr << "LZMA decoder init (MT) error : Specified integrity check is not supported !" "\n";
 					break;
 
 				default :
-					std::cerr << "LZMA encoder init (MT) error : Unknown error, possibly a bug !" "\n";
+					std::cerr << "LZMA decoder init (MT) error : Unknown error, possibly a bug !" "\n";
 					break;
 			}
 
@@ -135,8 +145,10 @@ namespace EmEn::Base::Compression::LZMA
 	}
 
 	bool
-	Decompressor::decompress (std::stringstream & input, std::stringstream & output) noexcept
+	Decompressor::decompress (std::stringstream & input, std::stringstream & output, size_t maxOutput) noexcept
 	{
+		size_t written = 0;
+
 		if ( !m_ready )
 		{
 			return false;
@@ -178,6 +190,17 @@ namespace EmEn::Base::Compression::LZMA
 
 			if ( m_stream.avail_out == 0 || ret == LZMA_STREAM_END )
 			{
+				const auto produced = outbuf.size() - m_stream.avail_out;
+
+				if ( produced > maxOutput - written )
+				{
+					std::cerr << "LZMA decoder error: The output exceeds its bound, refused !" "\n";
+
+					return false;
+				}
+
+				written += produced;
+
 				if ( output.write(reinterpret_cast< char * >(outbuf.data()), static_cast< long >(outbuf.size() - m_stream.avail_out)).bad() )
 				{
 					std::cerr << "LZMA decoder error: Write error !" "\n";
@@ -200,6 +223,10 @@ namespace EmEn::Base::Compression::LZMA
 				{
 					case LZMA_MEM_ERROR :
 						std::cerr << "LZMA decoder error: Memory allocation failed !" "\n";
+						break;
+
+					case LZMA_MEMLIMIT_ERROR :
+						std::cerr << "LZMA decoder error: The stream needs more decoder memory than the limit, refused !" "\n";
 						break;
 
 					case LZMA_FORMAT_ERROR :
