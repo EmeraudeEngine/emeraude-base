@@ -1492,6 +1492,30 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## PixelFactory — the Targa reader decodes every TGA 2.0 variant, oriented by the descriptor (2026-10-17)
+
+Found by the coverage pass (owner decisions: implement the variants, follow the specification for the orientation):
+
+- **The vertical order comes from the image descriptor's bit 5 (1 = top to bottom), never from `yOrigin`.** The reader
+  used to flip whenever `yOrigin == 0`: a top-left file written with `yOrigin` 0 loaded UPSIDE DOWN
+  (`projet-alpha.data` `Images/Woods/Stomp001-color_b.tga`, the only one of the 48 data-store files concerned). Bit 4
+  (right to left) is honoured as well. The 48 files decode byte-identical to Pillow 11.1 (47 before the fix).
+- **The colour-mapped (types 1 / 9), 15 / 16-bit true-colour (A1R5G5B5, the alpha bit counted only when the descriptor
+  declares one) and 16-bit grayscale + alpha variants were ACCEPTED and decoded as garbage**: the indices were copied
+  as colours, two 16-bit bytes as two channels. They are decoded now; an index outside the colour map refuses the file.
+  A colour map beside true-colour / grayscale data (allowed by the specification) is skipped — it used to be read as the
+  first pixels. A depth the kind does not define, an unknown type or colour map type: refused.
+- **Uncompressed data larger than the stream is refused before any allocation** (the × 128 guard only bounds an RLE
+  stream).
+- **The writer was right and is unchanged**: it writes bottom-up (bit 5 clear) and mirrors only a top-down pixmap;
+  with `invertYAxis` the pixmap is already bottom-up. Every pixel is now decoded straight to its place: no mirror and no
+  channel-swap pass on read.
+
+Tests `PixelFactoryFileFormats.targa*` (hand-built files: each orientation, each depth, colour-mapped raw / RLE / with a
+first entry index, the refusals, grayscale RLE, an ID field and an attached colour map, the writer round trips); seven
+failed on the former reader. `fuzz_targa` on the new reader (ASan + UBSan, seeded with the variants): 574 M executions
+(10 + 3 min), 0 crash / OOM / timeout.
+
 ## The paranoid warning set — what a base-only check does not see (Ave Robustus II, 2026-10-08)
 
 - **A base TEMPLATE header is only judged where it is instantiated.** `TextProcessor`, `Math::linearInterpolation()`

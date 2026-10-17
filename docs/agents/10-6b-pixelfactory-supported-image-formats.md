@@ -19,6 +19,12 @@
 > [`docs/caution-points.md`](../caution-points.md) § PixelFactory. ⚠️ A `…DoesNotOOM` test going
 > green proves nothing on a big-RAM host — verify peak RSS and re-run under `ulimit -v`.
 
+> [!NOTE]
+> **Targa: every TGA 2.0 variant is read** (2026-10-17) — colour-mapped (8 / 16-bit indices, 15 / 16 / 24 / 32-bit
+> entries), true colour 15 / 16 (A1R5G5B5) / 24 / 32, grayscale 8 and 16 (gray + alpha), raw or RLE. The orientation is
+> the descriptor's (bit 5 top to bottom, bit 4 right to left), never `yOrigin`. The writer emits 24 / 32-bit true colour
+> or 8-bit grayscale, bottom-up. Details: [`docs/caution-points.md`](../caution-points.md) § the Targa reader.
+
 **Why TIFF was added, breaking the "Ave robustus!" freeze on purpose (owner decision,
 2026-08-09):** Intel's Jungle Ruins — the engine's gold-goal scene — stores the base colour and
 translucency of its **entire vegetation** as 16-bit TIFF. Ten files, all under

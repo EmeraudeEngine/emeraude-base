@@ -1052,3 +1052,277 @@ TEST(PixelFactoryFileFormats, jpegHugeDimensionsDoNotOOM)
 
 	ASSERT_FALSE(format.readStream(input, decoded));
 }
+
+/* The Targa reader, every variant of TGA 2.0 (owner decision 2026-10-17: implement the colour-mapped, 15 / 16-bit and
+ * 16-bit grayscale ones, which were decoded as garbage; the orientation follows the descriptor's bits 4 and 5, not
+ * yOrigin). Files built byte by byte. */
+namespace
+{
+	/* The header fields of a Targa file (the byte sections are arguments of makeTarga()). */
+	struct TargaSpec
+	{
+		uint8_t type{2};
+		uint16_t width{2};
+		uint16_t height{2};
+		uint8_t depth{24};
+		uint8_t descriptor{0};
+		uint8_t colorMapType{0};
+		uint16_t colorMapOrigin{0};
+		uint16_t colorMapLength{0};
+		uint8_t colorMapEntrySize{0};
+		uint16_t yOrigin{0};
+	};
+
+	/* A Targa file: the 18-byte header, the identification field, the colour map, then the pixel data as given. */
+	[[nodiscard]]
+	std::vector< std::byte >
+	makeTarga (const TargaSpec & spec, const std::vector< uint8_t > & pixels, const std::vector< uint8_t > & colorMap = {}, const std::vector< uint8_t > & identification = {})
+	{
+		std::vector< std::byte > file;
+
+		const auto u8 = [&file] (uint32_t value) { file.push_back(static_cast< std::byte >(value & 0xFFU)); };
+		const auto u16 = [&u8] (uint32_t value) { u8(value); u8(value >> 8U); };
+
+		u8(static_cast< uint32_t >(identification.size()));
+		u8(spec.colorMapType);
+		u8(spec.type);
+		u16(spec.colorMapOrigin);
+		u16(spec.colorMapLength);
+		u8(spec.colorMapEntrySize);
+		u16(0);
+		u16(spec.yOrigin);
+		u16(spec.width);
+		u16(spec.height);
+		u8(spec.depth);
+		u8(spec.descriptor);
+
+		for ( const auto value : identification ) { u8(value); }
+		for ( const auto value : colorMap ) { u8(value); }
+		for ( const auto value : pixels ) { u8(value); }
+
+		return file;
+	}
+
+	/* Decodes a Targa file; an empty pixmap on refusal. */
+	[[nodiscard]]
+	PixelFactory::Pixmap< uint8_t, uint32_t >
+	readTarga (const std::vector< std::byte > & file)
+	{
+		IO::MemoryStream input{file};
+		PixelFactory::FileFormatTarga< uint8_t, uint32_t > format;
+		PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
+
+		if ( !format.readStream(input, pixmap) )
+		{
+			pixmap.clear();
+		}
+
+		return pixmap;
+	}
+
+	/* The pixmap's bytes, top-left first. */
+	[[nodiscard]]
+	std::vector< uint8_t >
+	bytesOf (const PixelFactory::Pixmap< uint8_t, uint32_t > & pixmap)
+	{
+		return {pixmap.data().cbegin(), pixmap.data().cend()};
+	}
+}
+
+TEST(PixelFactoryFileFormats, targaOrientationFollowsTheDescriptorBits)
+{
+	/* File order: first pixel (B,G,R) = red, then green / blue, white. */
+	const std::vector< uint8_t > pixels{0, 0, 255,  0, 255, 0,  255, 0, 0,  255, 255, 255};
+
+	/* Bottom-left (bit 5 clear): the FIRST file row is the BOTTOM row. */
+	{
+		const auto pixmap = readTarga(makeTarga({.descriptor = 0x00}, pixels));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::RGB);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{0, 0, 255,  255, 255, 255,  255, 0, 0,  0, 255, 0}));
+	}
+
+	/* Top-left (bit 5 set) with yOrigin 0 — the case loaded upside down until 2026-10-17. */
+	{
+		const auto pixmap = readTarga(makeTarga({.descriptor = 0x20}, pixels));
+
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{255, 0, 0,  0, 255, 0,  0, 0, 255,  255, 255, 255}));
+	}
+
+	/* Top-left with yOrigin = height (another writer's habit): the same image. */
+	{
+		const auto pixmap = readTarga(makeTarga({.descriptor = 0x20, .yOrigin = 2}, pixels));
+
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{255, 0, 0,  0, 255, 0,  0, 0, 255,  255, 255, 255}));
+	}
+
+	/* Top-left, right-to-left (bit 4): the columns are mirrored. */
+	{
+		const auto pixmap = readTarga(makeTarga({.descriptor = 0x30}, pixels));
+
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{0, 255, 0,  255, 0, 0,  255, 255, 255,  0, 0, 255}));
+	}
+}
+
+TEST(PixelFactoryFileFormats, targaTrueColorDepths)
+{
+	/* 32 bits: BGRA -> RGBA. */
+	{
+		const auto pixmap = readTarga(makeTarga({.width = 1, .height = 1, .depth = 32, .descriptor = 0x28}, {10, 20, 30, 40}));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::RGBA);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{30, 20, 10, 40}));
+	}
+
+	/* 16 bits with one alpha bit: A1R5G5B5, little-endian. 0x7C00 = red, alpha bit clear (transparent);
+	 * 0x83E0 = green, alpha bit set (opaque). */
+	{
+		const auto pixmap = readTarga(makeTarga({.width = 2, .height = 1, .depth = 16, .descriptor = 0x21}, {0x00, 0x7C,  0xE0, 0x83}));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::RGBA);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{255, 0, 0, 0,  0, 255, 0, 255}));
+	}
+
+	/* 15 bits: no alpha, RGB; 0x001F = blue, 0x0210 = (0, 16, 16) -> (0, 132, 132) by bit replication. */
+	{
+		const auto pixmap = readTarga(makeTarga({.width = 2, .height = 1, .depth = 15, .descriptor = 0x20}, {0x1F, 0x00,  0x10, 0x02}));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::RGB);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{0, 0, 255,  0, 132, 132}));
+	}
+}
+
+TEST(PixelFactoryFileFormats, targaColorMappedImages)
+{
+	/* A 24-bit palette of three entries (BGR), the first index being 1: indices 1, 2, 3. */
+	const std::vector< uint8_t > palette{0, 0, 255,  0, 255, 0,  255, 0, 0};
+
+	/* Raw (type 1). */
+	{
+		const auto pixmap = readTarga(makeTarga({.type = 1, .width = 3, .height = 1, .depth = 8, .descriptor = 0x20,
+			.colorMapType = 1, .colorMapOrigin = 1, .colorMapLength = 3, .colorMapEntrySize = 24}, {3, 1, 2}, palette));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::RGB);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{0, 0, 255,  255, 0, 0,  0, 255, 0}));
+	}
+
+	/* RLE (type 9): a run of 2 x index 2, then a raw packet of 1 x index 3. */
+	{
+		const auto pixmap = readTarga(makeTarga({.type = 9, .width = 3, .height = 1, .depth = 8, .descriptor = 0x20,
+			.colorMapType = 1, .colorMapOrigin = 1, .colorMapLength = 3, .colorMapEntrySize = 24}, {0x81, 2,  0x00, 3}, palette));
+
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{0, 255, 0,  0, 255, 0,  0, 0, 255}));
+	}
+
+	/* A 32-bit palette makes an RGBA image. */
+	{
+		const auto pixmap = readTarga(makeTarga({.type = 1, .width = 1, .height = 1, .depth = 8, .descriptor = 0x28,
+			.colorMapType = 1, .colorMapLength = 1, .colorMapEntrySize = 32}, {0}, {1, 2, 3, 4}));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::RGBA);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{3, 2, 1, 4}));
+	}
+}
+
+TEST(PixelFactoryFileFormats, targaColorMappedRefusals)
+{
+	const std::vector< uint8_t > palette{0, 0, 255,  0, 255, 0};
+
+	/* An index outside the map (the map holds indices 0 and 1). */
+	EXPECT_FALSE(readTarga(makeTarga({.type = 1, .width = 2, .height = 1, .depth = 8,
+		.colorMapType = 1, .colorMapLength = 2, .colorMapEntrySize = 24}, {1, 5}, palette)).isValid());
+
+	/* An index below the first entry index. */
+	EXPECT_FALSE(readTarga(makeTarga({.type = 1, .width = 2, .height = 1, .depth = 8,
+		.colorMapType = 1, .colorMapOrigin = 4, .colorMapLength = 2, .colorMapEntrySize = 24}, {4, 0}, palette)).isValid());
+
+	/* A colour-mapped image without a colour map. */
+	EXPECT_FALSE(readTarga(makeTarga({.type = 1, .width = 2, .height = 1, .depth = 8}, {0, 1})).isValid());
+
+	/* A colour map entry size the format does not define. */
+	EXPECT_FALSE(readTarga(makeTarga({.type = 1, .width = 1, .height = 1, .depth = 8,
+		.colorMapType = 1, .colorMapLength = 1, .colorMapEntrySize = 12}, {0}, {0, 0})).isValid());
+}
+
+TEST(PixelFactoryFileFormats, targaGrayscaleImages)
+{
+	/* 8 bits, raw (type 3). */
+	{
+		const auto pixmap = readTarga(makeTarga({.type = 3, .width = 2, .height = 1, .depth = 8, .descriptor = 0x20}, {7, 200}));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::Grayscale);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{7, 200}));
+	}
+
+	/* 16 bits = gray + alpha, RLE (type 11): a run of 3 x (gray 50, alpha 128). */
+	{
+		const auto pixmap = readTarga(makeTarga({.type = 11, .width = 3, .height = 1, .depth = 16, .descriptor = 0x28}, {0x82, 50, 128}));
+
+		ASSERT_EQ(pixmap.channelMode(), PixelFactory::ChannelMode::GrayscaleAlpha);
+		EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{50, 128,  50, 128,  50, 128}));
+	}
+}
+
+TEST(PixelFactoryFileFormats, targaSkipsTheIdentificationAndAnAttachedColorMap)
+{
+	/* A true-colour image MAY carry a colour map (the specification): skipped, never read as pixels. And an ID field. */
+	const auto pixmap = readTarga(makeTarga({.width = 1, .height = 1, .depth = 24, .descriptor = 0x20,
+		.colorMapType = 1, .colorMapLength = 2, .colorMapEntrySize = 24}, {30, 20, 10}, {9, 9, 9,  9, 9, 9}, {'E', 'M', 'E', 'N'}));
+
+	ASSERT_TRUE(pixmap.isValid());
+	EXPECT_EQ(bytesOf(pixmap), (std::vector< uint8_t >{10, 20, 30}));
+}
+
+TEST(PixelFactoryFileFormats, targaRefusesUndefinedVariants)
+{
+	/* A true-colour depth of 8 bits, a grayscale one of 24, an unknown type, an unknown colour map type. */
+	EXPECT_FALSE(readTarga(makeTarga({.type = 2, .width = 1, .height = 1, .depth = 8}, {0})).isValid());
+	EXPECT_FALSE(readTarga(makeTarga({.type = 3, .width = 1, .height = 1, .depth = 24}, {0, 0, 0})).isValid());
+	EXPECT_FALSE(readTarga(makeTarga({.type = 7, .width = 1, .height = 1, .depth = 24}, {0, 0, 0})).isValid());
+	EXPECT_FALSE(readTarga(makeTarga({.width = 1, .height = 1, .depth = 24, .colorMapType = 2}, {0, 0, 0})).isValid());
+}
+
+TEST(PixelFactoryFileFormats, targaUncompressedDataLargerThanTheStreamRefused)
+{
+	/* 100 x 100 x 3 bytes declared, 300 bytes given: within the RLE bound (x128), refused before the allocation. */
+	EXPECT_FALSE(readTarga(makeTarga({.width = 100, .height = 100, .depth = 24}, std::vector< uint8_t >(300, 0))).isValid());
+}
+
+TEST(PixelFactoryFileFormats, targaWriterRoundTrips)
+{
+	const std::vector< uint8_t > rgb{255, 0, 0,  0, 255, 0,  0, 0, 255,  9, 8, 7,  1, 1, 1,  1, 1, 1};
+	const std::vector< uint8_t > rgba{255, 0, 0, 10,  0, 255, 0, 20,  0, 0, 255, 30,  9, 8, 7, 40};
+	const std::vector< uint8_t > gray{1, 2, 3, 3, 3, 3};
+
+	const auto roundTrip = [] (uint32_t width, uint32_t height, PixelFactory::ChannelMode mode, const std::vector< uint8_t > & pixels, bool rle) {
+		PixelFactory::Pixmap< uint8_t, uint32_t > source;
+
+		if ( !source.initialize(width, height, mode, std::span< const uint8_t >{pixels}) )
+		{
+			return false;
+		}
+
+		PixelFactory::WriteOptions options{};
+		options.targa.rleCompression = rle;
+
+		std::vector< std::byte > encoded;
+		IO::MemoryStream output{encoded};
+		const PixelFactory::FileFormatTarga< uint8_t, uint32_t > format;
+
+		if ( !format.writeStream(output, source, options) )
+		{
+			return false;
+		}
+
+		const auto decoded = readTarga(std::as_const(encoded));
+
+		return decoded.isValid() && decoded.channelMode() == mode && bytesOf(decoded) == pixels;
+	};
+
+	for ( const bool rle : {false, true} )
+	{
+		EXPECT_TRUE(roundTrip(3, 2, PixelFactory::ChannelMode::RGB, rgb, rle)) << "RGB, RLE " << rle;
+		EXPECT_TRUE(roundTrip(2, 2, PixelFactory::ChannelMode::RGBA, rgba, rle)) << "RGBA, RLE " << rle;
+		EXPECT_TRUE(roundTrip(3, 2, PixelFactory::ChannelMode::Grayscale, gray, rle)) << "Grayscale, RLE " << rle;
+	}
+}
