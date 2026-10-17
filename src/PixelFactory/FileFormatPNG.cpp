@@ -103,7 +103,12 @@ namespace EmEn::Base::PixelFactory
 		{
 			auto * stream = static_cast< IO::ByteStream * >(png_get_io_ptr(pngPtr));
 
-			stream->read(data, length);
+			/* NOTE: A short read is a libpng error (it longjmps to the reader's setjmp): ignored, libpng went on decoding
+			 * a buffer the stream never filled (2026-10-17). */
+			if ( !stream->read(data, length) )
+			{
+				png_error(pngPtr, "the stream ended before the PNG data");
+			}
 		}
 
 		/**
@@ -194,6 +199,24 @@ namespace EmEn::Base::PixelFactory
 		const auto width = png_get_image_width(png, pngInfo);
 		const auto height = png_get_image_height(png, pngInfo);
 		const auto bitDepth = png_get_bit_depth(png, pngInfo);
+
+		/* NOTE: The declared size against the payload BEFORE any allocation: the image data is deflate, which expands
+		 * at most ~1032:1 (the ZIP / TIFF / JPEG readers' rule) — 66 bytes declaring 30000 x 30000 RGBA allocated 3.6 GB
+		 * before failing (2026-10-17). The raw data is (row bytes + 1 filter byte) x height, at the file's depth. */
+		{
+			constexpr uint64_t MaxDeflateRatio = 1032;
+
+			const auto rawBytes = (static_cast< uint64_t >(png_get_rowbytes(png, pngInfo)) + 1U) * static_cast< uint64_t >(height);
+
+			if ( rawBytes / MaxDeflateRatio > static_cast< uint64_t >(stream.size()) )
+			{
+				Logging::error("PixelFactory::FileFormatPNG", "readStream(), the declared size exceeds what the stream can hold !");
+
+				png_destroy_read_struct(&png, &pngInfo, nullptr);
+
+				return false;
+			}
+		}
 
 		auto pixmapAllocated = false;
 

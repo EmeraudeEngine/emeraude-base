@@ -1564,6 +1564,21 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## PixelFactory — the PNG reader bounds the declared size and refuses a short read (2026-10-17)
+
+Found by the coverage pass (`PixelFactoryFileFormats.png*`):
+- No size guard: 66 bytes declaring 30000 x 30000 RGBA allocated the 3.6 GB pixmap before libpng failed on the empty
+  data (3.5 GB peak RSS; the test passed on its result only — the peak RSS is the proof). The raw image data the header
+  implies, (row bytes + 1 filter byte) x height at the file's depth, is now bounded by the stream size x 1032 (deflate's
+  maximum, the ZIP / TIFF / JPEG rule) BEFORE the allocation: 15 MB peak.
+- The libpng read callback ignored a short read: libpng decoded on with a buffer the stream never filled (it caught
+  the damage by luck — a CRC, an end of data). A short read calls `png_error()` now (it longjmps to the reader's
+  setjmp, both phases armed).
+- The 7 667 PNG files of the projet-alpha data stores and base resources load under the guard (0 refused); every
+  colour type and depth (1 / 4 / 8 / 16 bits, gray, gray + alpha, RGB, RGBA, palette with and without tRNS) decodes as
+  Pillow does; the writer's five filters and Adam7 interlacing round-trip. `fuzz_png` (the reader instrumented, a 1 GB
+  RSS limit) 10 minutes: 217 M executions, 0 crash / OOM.
+
 ## PixelFactory — the Targa reader decodes every TGA 2.0 variant, oriented by the descriptor (2026-10-17)
 
 Found by the coverage pass (owner decisions: implement the variants, follow the specification for the orientation):
