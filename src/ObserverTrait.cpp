@@ -44,14 +44,14 @@ namespace EmEn::Base
 		 * serialises with any in-flight notify() on those observables. */
 		std::set< ObservableTrait * > snapshot;
 		{
-			const std::lock_guard< std::mutex > selfLock{m_observationMutex};
+			const MutexLock selfLock{m_observationMutex};
 
 			snapshot.swap(m_observables);
 		}
 
 		for ( auto * observable : snapshot )
 		{
-			const std::lock_guard< std::mutex > observableLock{observable->m_notificationMutex};
+			const MutexLock observableLock{observable->m_notificationMutex};
 
 			observable->m_observers.erase(this);
 		}
@@ -60,10 +60,9 @@ namespace EmEn::Base
 	void
 	ObserverTrait::observe (ObservableTrait * observable) noexcept
 	{
-		/* NOTE: Lock both mutexes atomically. std::scoped_lock uses a
-		 * deadlock-avoidance algorithm, which is required because the
-		 * destructor path acquires locks in the opposite order. */
-		const std::scoped_lock lock{m_observationMutex, observable->m_notificationMutex};
+		/* NOTE: Lock both mutexes atomically (MutexPairLock: std::lock's deadlock avoidance), which is required because
+		 * the destructor path acquires locks in the opposite order. */
+		const MutexPairLock lock{m_observationMutex, observable->m_notificationMutex};
 
 		const auto result = m_observables.emplace(observable);
 
@@ -83,7 +82,7 @@ namespace EmEn::Base
 	void
 	ObserverTrait::forget (ObservableTrait * observable) noexcept
 	{
-		const std::scoped_lock lock{m_observationMutex, observable->m_notificationMutex};
+		const MutexPairLock lock{m_observationMutex, observable->m_notificationMutex};
 
 		if ( m_observables.erase(observable) == 0 )
 		{

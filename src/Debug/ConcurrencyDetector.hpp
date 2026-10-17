@@ -34,8 +34,12 @@
 #include <string>
 #include <thread>
 
+/* Local inclusions. */
+#include "Mutex.hpp"
+
 namespace EmEn::Base::Debug
 {
+	/* NOTE: Serializes the console output of this development tool (no data guarded): std::mutex on purpose. */
 	inline std::mutex g_console_mutex;
 
 	/**
@@ -85,7 +89,7 @@ namespace EmEn::Base::Debug
 			{
 				const auto currentThreadId = std::this_thread::get_id();
 
-				const std::lock_guard< std::mutex > lock{m_internalMutex};
+				const MutexLock lock{m_internalMutex};
 
 				if ( m_activeThreadId.has_value() )
 				{
@@ -115,7 +119,7 @@ namespace EmEn::Base::Debug
 			{
 				const std::thread::id current_id = std::this_thread::get_id();
 
-				const std::lock_guard< std::mutex > lock{m_internalMutex};
+				const MutexLock lock{m_internalMutex};
 
 				/* NOTE: We only release the section if we are the ones occupying it. */
 				if ( m_activeThreadId.has_value() && m_activeThreadId.value() == current_id )
@@ -125,8 +129,8 @@ namespace EmEn::Base::Debug
 			}
 
 			std::string m_contextName;
-			std::mutex m_internalMutex;
-			std::optional< std::thread::id > m_activeThreadId;
+			Mutex m_internalMutex;
+			std::optional< std::thread::id > m_activeThreadId EMEN_GUARDED_BY(m_internalMutex);
 	};
 
 	/**

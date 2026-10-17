@@ -90,7 +90,15 @@ every VertexFactory OpenMP loop reads as a race otherwise (3374 false reports in
 `docs/unit-testing.md` § "ThreadSanitizer".
 
 ### The annotated classes
-`Time::TimedEvent` (base) and, in the engine, `Audio::TrackMixer` and `Notifier` (2026-10-12). The engine's remaining
-mutex-protected members (89 in 61 files, 2026-10-16 census) are converted by subsystem lots (projet-alpha
-`docs/plans/ave-robustus-ii.md`, P-W). A class that gains a
-mutex takes `Base::Mutex` and annotates its members in the same change.
+Every mutex of the cascade, since 2026-10-17 (projet-alpha `docs/plans/ave-robustus-ii.md`, P-W): `Base::Mutex` /
+`Base::SharedMutex` / `Base::ConditionVariable`, its members `EMEN_GUARDED_BY`, its "caller holds the lock" helpers
+`EMEN_REQUIRES`. In base: `Time::TimedEvent`, `Time::EventTrait` (its events and retired events), `ObservableTrait` /
+`ObserverTrait` (their sets; `observe()`, `forget()` and `notify()`'s detach take the two mutexes through
+`MutexPairLock`; `isObserved()` / `isObserving()` read the sets UNLOCKED until 2026-10-17 — locked now; proof:
+`Observer.observationQueriesAreSafeAgainstConcurrentChanges`, a TSan data race on the former code, 0 on the new),
+`ThreadPool` (the queue; `TaskHandle::State`'s start / end state; `TaskGroup`), `Network::HTTPSClient` (the idle
+connection pool), `Network::HTTPServer` (its stop handshake), `Debug::ConcurrencyDetector`. Kept on purpose:
+`std::condition_variable_any` where the wait takes a `std::stop_token` (`TimedEvent`, `TaskGroup`), over a
+`Base::MutexLock`; `Debug::g_console_mutex` (a development tool's console lock, no data guarded). The engine's lots:
+engine `docs/cpp-conventions.md` § "Mutexes are annotated". A class that gains a mutex takes `Base::Mutex` and
+annotates its members in the same change.

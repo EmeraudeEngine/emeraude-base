@@ -34,7 +34,6 @@
 #include <functional>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <utility>
@@ -49,6 +48,7 @@
 #include "HTTPRequest.hpp"
 #include "HTTPResponse.hpp"
 #include "HTTPResponseParser.hpp"
+#include "Mutex.hpp"
 #include "TLSConnection.hpp"
 #include "URI.hpp"
 
@@ -465,7 +465,7 @@ namespace EmEn::Base::Network
 			/* The idle connections (keep-alive). ⚠️ SHARED state, unlike the per-call outcome above: it is meant to be
 			 * shared by the concurrent workers, guarded by its own mutex, and a connection taken from it belongs to one
 			 * exchange alone until it is given back. Closing a connection (close_notify) never happens under the lock. */
-			mutable std::mutex m_idleConnectionsAccess;
-			mutable std::map< ConnectionKey, std::vector< IdleConnection > > m_idleConnections;
+			mutable Mutex m_idleConnectionsAccess;
+			mutable std::map< ConnectionKey, std::vector< IdleConnection > > m_idleConnections EMEN_GUARDED_BY(m_idleConnectionsAccess);
 	};
 }

@@ -66,7 +66,7 @@ namespace EmEn::Base
 			return true;
 		}
 
-		const std::scoped_lock lock{m_state->mutex};
+		const MutexLock lock{m_state->mutex};
 
 		return m_state->finished;
 	}
@@ -79,7 +79,7 @@ namespace EmEn::Base
 			return;
 		}
 
-		std::unique_lock< std::mutex > lock{m_state->mutex};
+		MutexLock lock{m_state->mutex};
 
 		if ( !m_state->finished && m_state->runningThread == std::this_thread::get_id() )
 		{
@@ -92,7 +92,7 @@ namespace EmEn::Base
 
 		/* NOTE: After a stop, the task is either running (it ends), dequeued but not started (its worker discards it), or
 		 * was removed from the queue by requestStop() (finished already): no wait depends on the queue. */
-		m_state->finishedSignal.wait(lock, [this] () {
+		m_state->finishedSignal.wait(lock, [this] () EMEN_REQUIRES(m_state->mutex) {
 			return m_state->finished;
 		});
 	}
@@ -367,13 +367,13 @@ namespace EmEn::Base
 
 		/* Signal all workers to stop. */
 		{
-			const std::scoped_lock lock{m_mutex};
+			const MutexLock lock{m_mutex};
 
 			m_stop.store(true, std::memory_order_release);
 		}
 
 		/* Wake all workers so they can see the stop flag. */
-		m_condition.notify_all();
+		m_condition.notifyAll();
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
@@ -402,7 +402,7 @@ namespace EmEn::Base
 		std::deque< Task > purged;
 
 		{
-			const std::scoped_lock lock{m_mutex};
+			const MutexLock lock{m_mutex};
 
 			/* NOTE: Nothing of this owner queued (the common case): the queue is left untouched. */
 			if ( std::ranges::none_of(m_tasks, [owner] (const Task & task) { return task.owner() == owner; }) )
@@ -436,7 +436,7 @@ namespace EmEn::Base
 		purged.clear();
 
 		/* NOTE: A ThreadPool::wait() may now see an empty pool. */
-		m_completionCondition.notify_all();
+		m_completionCondition.notifyAll();
 	}
 
 	bool
@@ -456,7 +456,7 @@ namespace EmEn::Base
 		}
 
 		{
-			const std::scoped_lock lock{m_mutex};
+			const MutexLock lock{m_mutex};
 
 			if ( m_stop.load(std::memory_order_acquire) )
 			{
@@ -477,7 +477,7 @@ namespace EmEn::Base
 			std::cout << "[ThreadPool-debug] New task added to queue." "\n";
 		}
 
-		m_condition.notify_one();
+		m_condition.notifyOne();
 
 		return true;
 	}
@@ -492,9 +492,9 @@ namespace EmEn::Base
 				"(" << m_pendingTasks.load(std::memory_order_relaxed) << " tasks left)..." "\n";
 		}
 
-		std::unique_lock< std::mutex > lock{m_mutex};
+		MutexLock lock{m_mutex};
 
-		m_completionCondition.wait(lock, [this] {
+		m_completionCondition.wait(lock, [this] () {
 			return m_pendingTasks.load(std::memory_order_acquire) == 0 && m_busyWorkers.load(std::memory_order_acquire) == 0;
 		});
 
@@ -514,10 +514,10 @@ namespace EmEn::Base
 			Task task;
 
 			{
-				std::unique_lock< std::mutex > lock{m_mutex};
+				MutexLock lock{m_mutex};
 
 				/* Wait until there's work or stop signal. */
-				m_condition.wait(lock, [this] {
+				m_condition.wait(lock, [this] () EMEN_REQUIRES(m_mutex) {
 					return m_stop.load(std::memory_order_acquire) || !m_tasks.empty();
 				});
 
@@ -578,12 +578,12 @@ namespace EmEn::Base
 			 * NOTE: The notification is issued after releasing the mutex, so woken
 			 * waiters do not immediately block on a still-held lock. */
 			{
-				const std::scoped_lock lock{m_mutex};
+				const MutexLock lock{m_mutex};
 
 				m_busyWorkers.fetch_sub(1, std::memory_order_release);
 			}
 
-			m_completionCondition.notify_all();
+			m_completionCondition.notifyAll();
 		}
 	}
 }

@@ -27,11 +27,11 @@
 #pragma once
 
 /* STL inclusions. */
-#include <mutex>
 #include <set>
 
 /* Local inclusions. */
 #include "Any.hpp"
+#include "Mutex.hpp"
 
 /* Forward declarations. */
 
@@ -92,6 +92,8 @@ namespace EmEn::Base
 			bool
 			isObserving () const noexcept
 			{
+				const MutexLock lock{m_observationMutex};
+
 				return !m_observables.empty();
 			}
 
@@ -104,6 +106,8 @@ namespace EmEn::Base
 			bool
 			isObserving (ObservableTrait * observable) const noexcept
 			{
+				const MutexLock lock{m_observationMutex};
+
 				return m_observables.contains(observable);
 			}
 
@@ -139,7 +143,7 @@ namespace EmEn::Base
 			[[nodiscard]]
 			virtual bool onNotification (const ObservableTrait * observable, int notificationCode, const Any & data) noexcept = 0;
 
-			std::set< ObservableTrait * > m_observables;
-			mutable std::mutex m_observationMutex;
+			mutable Mutex m_observationMutex;
+			std::set< ObservableTrait * > m_observables EMEN_GUARDED_BY(m_observationMutex);
 	};
 }

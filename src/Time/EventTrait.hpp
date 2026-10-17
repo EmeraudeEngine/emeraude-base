@@ -38,6 +38,7 @@
 #include <vector>
 
 /* Local inclusions for usages. */
+#include "Mutex.hpp"
 #include "ScopedRegistration.hpp"
 #include "TimedEvent.hpp"
 #include "Types.hpp"
@@ -211,7 +212,7 @@ namespace EmEn::Base::Time
 				/* Declared before the lock, destroyed after it: the retired events' destructors join their threads. */
 				std::vector< EventNode > reaped;
 
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				const MutexLock lock{m_eventsAccess};
 
 				this->takeRetiredEvents(reaped);
 
@@ -353,7 +354,7 @@ namespace EmEn::Base::Time
 			void
 			startTimers () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				const MutexLock lock{m_eventsAccess};
 
 				for ( auto & event : std::ranges::views::values(m_events) )
 				{
@@ -368,7 +369,7 @@ namespace EmEn::Base::Time
 			void
 			stopTimers () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				const MutexLock lock{m_eventsAccess};
 
 				for ( auto & event : std::ranges::views::values(m_events) )
 				{
@@ -382,7 +383,7 @@ namespace EmEn::Base::Time
 			void
 			pauseTimers () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				const MutexLock lock{m_eventsAccess};
 
 				for ( auto & event : std::ranges::views::values(m_events) )
 				{
@@ -396,7 +397,7 @@ namespace EmEn::Base::Time
 			void
 			resumeTimers () noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				const MutexLock lock{m_eventsAccess};
 
 				for ( auto & event : std::ranges::views::values(m_events) )
 				{
@@ -434,7 +435,7 @@ namespace EmEn::Base::Time
 				std::vector< EventNode > reaped;
 
 				{
-					const std::scoped_lock lock{m_eventsAccess};
+					const MutexLock lock{m_eventsAccess};
 
 					this->takeRetiredEvents(reaped);
 
@@ -460,7 +461,7 @@ namespace EmEn::Base::Time
 				std::vector< EventNode > reaped;
 
 				{
-					const std::scoped_lock lock{m_eventsAccess};
+					const MutexLock lock{m_eventsAccess};
 
 					this->takeRetiredEvents(reaped);
 
@@ -498,7 +499,7 @@ namespace EmEn::Base::Time
 			std::invoke_result_t< function_t, TimedEvent< rep_t, period_t > * >
 			withTimer (TimerID timerID, function_t function) noexcept
 			{
-				const std::lock_guard< std::mutex > lock{m_eventsAccess};
+				const MutexLock lock{m_eventsAccess};
 
 				const auto timerIt = m_events.find(timerID);
 
@@ -542,7 +543,7 @@ namespace EmEn::Base::Time
 			 * @param event The event's node, not empty.
 			 */
 			void
-			retire (EventNode event) noexcept
+			retire (EventNode event) noexcept EMEN_REQUIRES(m_eventsAccess)
 			{
 				event.mapped().requestExit();
 
@@ -555,7 +556,7 @@ namespace EmEn::Base::Time
 			 * @param reaped The output.
 			 */
 			void
-			takeRetiredEvents (std::vector< EventNode > & reaped) noexcept
+			takeRetiredEvents (std::vector< EventNode > & reaped) noexcept EMEN_REQUIRES(m_eventsAccess)
 			{
 				for ( auto & event : m_retiredEvents )
 				{
@@ -572,9 +573,9 @@ namespace EmEn::Base::Time
 			}
 
 			std::atomic< TimerID > m_lastTimerID{1};
-			std::map< TimerID, TimedEvent< rep_t, period_t > > m_events;
+			mutable Mutex m_eventsAccess;
+			std::map< TimerID, TimedEvent< rep_t, period_t > > m_events EMEN_GUARDED_BY(m_eventsAccess);
 			/** @brief The events destroyed from their own callback, waiting for another thread to join them. */
-			std::vector< EventNode > m_retiredEvents;
-			mutable std::mutex m_eventsAccess;
+			std::vector< EventNode > m_retiredEvents EMEN_GUARDED_BY(m_eventsAccess);
 	};
 }

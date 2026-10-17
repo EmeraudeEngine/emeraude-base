@@ -25,6 +25,7 @@
  */
 
 /* STL inclusions. */
+#include <atomic>
 #include <cstddef>
 #include <string>
 
@@ -35,6 +36,7 @@
 #include "AnyValue.hpp"
 #include "ObservableTrait.hpp"
 #include "ObserverTrait.hpp"
+#include "Thread.hpp"
 
 using namespace EmEn::Base;
 
@@ -221,4 +223,44 @@ TEST(Observer, anyValueNeverThrowsOnAMismatchedPayload)
 	const auto * string = EmEn::Base::anyValue< std::string >(text, "test");
 	ASSERT_NE(string, nullptr);
 	EXPECT_EQ(*string, "payload");
+}
+
+/* isObserved() / isObserving() read the observer sets UNLOCKED until 2026-10-17, while observe() / forget() change them
+ * under the lock from another thread: a data race ThreadSanitizer reports (the EMERAUDE_ENABLE_TSAN build). The queries
+ * lock now; this test is the proof under TSan, and a plain consistency check elsewhere. */
+TEST(Observer, observationQueriesAreSafeAgainstConcurrentChanges)
+{
+	DummyClass observable{};
+	Watcher watcher{};
+	std::atomic_bool done{false};
+
+	Thread writer;
+
+	ASSERT_TRUE(writer.start([&observable, &watcher, &done] {
+		for ( int iteration = 0; iteration < 20000; ++iteration )
+		{
+			watcher.observe(&observable);
+			watcher.forget(&observable);
+		}
+
+		done.store(true, std::memory_order_release);
+	}));
+
+	size_t queries = 0;
+
+	while ( !done.load(std::memory_order_acquire) )
+	{
+		static_cast< void >(observable.isObserved());
+		static_cast< void >(observable.isObserved(&watcher));
+		static_cast< void >(watcher.isObserving());
+		static_cast< void >(watcher.isObserving(&observable));
+
+		++queries;
+	}
+
+	writer.join();
+
+	EXPECT_GT(queries, 0U);
+	EXPECT_FALSE(observable.isObserved());
+	EXPECT_FALSE(watcher.isObserving());
 }

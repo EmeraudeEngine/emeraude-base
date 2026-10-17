@@ -45,14 +45,14 @@ namespace EmEn::Base
 		 * observe()/forget() or parallel destruction on those observers. */
 		std::set< ObserverTrait * > snapshot;
 		{
-			const std::scoped_lock selfLock{m_notificationMutex};
+			const MutexLock selfLock{m_notificationMutex};
 
 			snapshot.swap(m_observers);
 		}
 
 		for ( auto * observer : snapshot )
 		{
-			const std::scoped_lock observerLock{observer->m_observationMutex};
+			const MutexLock observerLock{observer->m_observationMutex};
 
 			observer->m_observables.erase(this);
 		}
@@ -67,7 +67,7 @@ namespace EmEn::Base
 		 * and so that concurrent notify() on this same observable can proceed. */
 		std::vector< ObserverTrait * > observers;
 		{
-			const std::scoped_lock selfLock{m_notificationMutex};
+			const MutexLock selfLock{m_notificationMutex};
 
 			if constexpr ( ObserverDebugEnabled )
 			{
@@ -95,14 +95,14 @@ namespace EmEn::Base
 			}
 		}
 
-		/* Phase 3: apply the detachments atomically per observer. std::scoped_lock
-		 * uses a deadlock-avoidance algorithm to acquire both mutexes safely,
+		/* Phase 3: apply the detachments atomically per observer. MutexPairLock
+		 * uses a deadlock-avoidance algorithm (std::lock) to acquire both mutexes safely,
 		 * regardless of the order used by concurrent callers. To double-check on
 		 * m_observers.erase() tolerates observers that were already removed via
 		 * forget() or a concurrent notify(). */
 		for ( auto * observer : toDetach )
 		{
-			const std::scoped_lock cross{m_notificationMutex, observer->m_observationMutex};
+			const MutexPairLock cross{m_notificationMutex, observer->m_observationMutex};
 
 			if ( m_observers.erase(observer) > 0 )
 			{

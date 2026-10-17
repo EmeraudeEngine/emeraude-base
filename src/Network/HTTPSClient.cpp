@@ -717,7 +717,7 @@ namespace EmEn::Base::Network
 			std::vector< std::unique_ptr< TLSConnection > > expired;
 
 			{
-				const std::scoped_lock lock{m_idleConnectionsAccess};
+				const MutexLock lock{m_idleConnectionsAccess};
 
 				const auto keyIt = m_idleConnections.find(key);
 
@@ -779,7 +779,7 @@ namespace EmEn::Base::Network
 		std::vector< std::unique_ptr< TLSConnection > > closing;
 
 		{
-			const std::scoped_lock lock{m_idleConnectionsAccess};
+			const MutexLock lock{m_idleConnectionsAccess};
 
 			const auto now = std::chrono::steady_clock::now();
 

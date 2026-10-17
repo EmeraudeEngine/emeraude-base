@@ -47,6 +47,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "ConditionVariable.hpp"
 #include "Mutex.hpp"
 #include "Thread.hpp"
 #include "ThreadSafety.hpp"
@@ -83,13 +84,13 @@ namespace EmEn::Base
 			struct State final
 			{
 				std::stop_source stopSource;
-				std::mutex mutex;
-				std::condition_variable finishedSignal;
-				std::thread::id runningThread;
+				Mutex mutex;
+				ConditionVariable finishedSignal;
+				std::thread::id runningThread EMEN_GUARDED_BY(mutex);
 				/** @brief The pool the task was submitted to (set before the task is queued, never changed). */
 				ThreadPool * pool{nullptr};
-				bool started{false};
-				bool finished{false};
+				bool started EMEN_GUARDED_BY(mutex){false};
+				bool finished EMEN_GUARDED_BY(mutex){false};
 			};
 
 			/** @brief Constructs an empty handle (no task; valid() is false). */
@@ -234,7 +235,7 @@ namespace EmEn::Base
 				bool started = false;
 
 				{
-					const std::scoped_lock lock{m_state->mutex};
+					const MutexLock lock{m_state->mutex};
 
 					/* NOTE: Stopped before it started: it never runs (its waiter may already be gone). Decided under the
 					 * state's lock, against which wait() reads `started`. */
@@ -270,11 +271,11 @@ namespace EmEn::Base
 
 				{
 					/* NOTE: notified UNDER the lock (see PeerStore / SharingServer, 2026-10-08). */
-					const std::scoped_lock lock{m_state->mutex};
+					const MutexLock lock{m_state->mutex};
 
 					m_state->finished = true;
 					m_state->runningThread = {};
-					m_state->finishedSignal.notify_all();
+					m_state->finishedSignal.notifyAll();
 				}
 
 				m_state.reset();
@@ -1259,7 +1260,7 @@ namespace EmEn::Base
 				}
 
 				{
-					const std::scoped_lock lock{m_mutex};
+					const MutexLock lock{m_mutex};
 
 					/* NOTE: The stop flag is checked under the mutex (like enqueueTask()) so
 					 * a concurrent shutdown cannot slip in between the check and the insertion,
@@ -1278,7 +1279,7 @@ namespace EmEn::Base
 					m_pendingTasks.fetch_add(count, std::memory_order_release);
 				}
 
-				m_condition.notify_all();
+				m_condition.notifyAll();
 
 				return count;
 			}
@@ -1752,10 +1753,10 @@ namespace EmEn::Base
 			void worker ();
 
 			std::vector< Thread > m_workers;
-			std::deque< Task > m_tasks;
-			std::mutex m_mutex;
-			std::condition_variable m_condition;
-			std::condition_variable m_completionCondition;
+			Mutex m_mutex;
+			std::deque< Task > m_tasks EMEN_GUARDED_BY(m_mutex);
+			ConditionVariable m_condition;
+			ConditionVariable m_completionCondition;
 			std::atomic< size_t > m_pendingTasks{0};
 			std::atomic< size_t > m_busyWorkers{0};
 			std::atomic< bool > m_stop{false};

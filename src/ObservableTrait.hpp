@@ -28,12 +28,12 @@
 
 /* STL inclusions. */
 #include <cstddef>
-#include <mutex>
 #include <set>
 
 /* Local inclusions. */
 #include "Any.hpp"
 #include "Hash/FNV1a.hpp"
+#include "Mutex.hpp"
 
 /* Forward declarations. */
 
@@ -94,6 +94,8 @@ namespace EmEn::Base
 			bool
 			isObserved () const noexcept
 			{
+				const MutexLock lock{m_notificationMutex};
+
 				return !m_observers.empty();
 			}
 
@@ -106,6 +108,8 @@ namespace EmEn::Base
 			bool
 			isObserved (ObserverTrait * observer) const noexcept
 			{
+				const MutexLock lock{m_notificationMutex};
+
 				return m_observers.contains(observer);
 			}
 
@@ -146,7 +150,7 @@ namespace EmEn::Base
 			 * @param observer The pointer of the observer.
 			 */
 			void
-			addObserver (ObserverTrait * observer) noexcept
+			addObserver (ObserverTrait * observer) noexcept EMEN_REQUIRES(m_notificationMutex)
 			{
 				m_observers.emplace(observer);
 			}
@@ -156,12 +160,12 @@ namespace EmEn::Base
 			 * @param observer The pointer of the observer.
 			 */
 			void
-			removeObserver (ObserverTrait * observer) noexcept
+			removeObserver (ObserverTrait * observer) noexcept EMEN_REQUIRES(m_notificationMutex)
 			{
 				m_observers.erase(observer);
 			}
 
-			std::set< ObserverTrait * > m_observers;
-			mutable std::mutex m_notificationMutex;
+			mutable Mutex m_notificationMutex;
+			std::set< ObserverTrait * > m_observers EMEN_GUARDED_BY(m_notificationMutex);
 	};
 }

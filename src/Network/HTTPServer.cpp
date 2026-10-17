@@ -29,16 +29,16 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <chrono>
-#include <condition_variable>
 #include <cstdlib>
 #include <memory>
-#include <mutex>
 #include <sstream>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
+#include "ConditionVariable.hpp"
 #include "Logging/Logging.hpp"
+#include "Mutex.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
@@ -1033,17 +1033,17 @@ namespace EmEn::Base::Network
 		 * the state outlives this frame, and an abandoned handler that had not started does nothing. */
 		struct StopHandshake final
 		{
-			std::mutex mutex;
-			std::condition_variable signal;
-			bool done{false};
-			bool abandoned{false};
+			Mutex mutex;
+			ConditionVariable signal;
+			bool done EMEN_GUARDED_BY(mutex){false};
+			bool abandoned EMEN_GUARDED_BY(mutex){false};
 		};
 
 		const auto handshake = std::make_shared< StopHandshake >();
 
 		asio::post(m_ioContext, [this, handshake] () {
 			{
-				const std::scoped_lock lock{handshake->mutex};
+				const MutexLock lock{handshake->mutex};
 
 				if ( handshake->abandoned )
 				{
@@ -1055,18 +1055,18 @@ namespace EmEn::Base::Network
 			this->closeEverything();
 
 			{
-				const std::scoped_lock lock{handshake->mutex};
+				const MutexLock lock{handshake->mutex};
 
 				handshake->done = true;
 			}
 
-			handshake->signal.notify_one();
+			handshake->signal.notifyOne();
 		});
 
 		{
-			std::unique_lock< std::mutex > lock{handshake->mutex};
+			MutexLock lock{handshake->mutex};
 
-			if ( !handshake->signal.wait_for(lock, std::chrono::seconds{3}, [&handshake] () { return handshake->done; }) )
+			if ( !handshake->signal.waitFor(lock, std::chrono::seconds{3}, [&handshake] () EMEN_REQUIRES(handshake->mutex) { return handshake->done; }) )
 			{
 				/* NOTE: A handler that already started finishes before the join() below returns; one that did not start
 				 * yet will return at once if it ever runs. */
@@ -1087,7 +1087,7 @@ namespace EmEn::Base::Network
 		bool closedHere = false;
 
 		{
-			const std::scoped_lock lock{handshake->mutex};
+			const MutexLock lock{handshake->mutex};
 
 			closedHere = !handshake->done;
 		}
