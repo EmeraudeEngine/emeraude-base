@@ -56,9 +56,32 @@ option(EMERAUDE_ENABLE_FP_OPTIMIZATION "Enable fast (non-strict) floating-point 
 option(EMERAUDE_ENABLE_AGGRESSIVE_OPTIMIZATION "Raise the Release optimisation one notch: -O3 instead of -O2 (GCC/Clang), /Ob3 instead of /Ob2 (MSVC) (Default Off)." Off)
 option(EMERAUDE_ENABLE_PCH "Enable the precompiled headers, useful for Visual Studio (Default Off)." Off)
 option(EMERAUDE_ENABLE_TESTS "Build the GoogleTest suites (Default Off)." Off)
-option(EMERAUDE_ENABLE_SANITIZERS "Build with AddressSanitizer + UndefinedBehaviorSanitizer (Default Off)." Off)
-option(EMERAUDE_ENABLE_TSAN "Build with ThreadSanitizer, GCC / Clang only, exclusive with EMERAUDE_ENABLE_SANITIZERS (Default Off)." Off)
-option(EMERAUDE_ENABLE_ASAN "Build with AddressSanitizer only, the cascade-wide switch shared with emeraude-engine (Default Off)." Off)
+# Sanitizers: development tools, never in a release. Each one instruments the WHOLE cascade (base, the engine, the
+# application: emeraude_base_flags carries the flags). One the toolchain lacks is skipped with a warning; two that
+# cannot share a process stop the configure step. Availability:
+#                 Linux GCC   Linux Clang   macOS AppleClang   Windows MSVC
+#   ASan          yes         yes           yes                yes
+#   LSan          yes         yes           no                 no
+#   TSan          yes         yes           yes                no
+#   UBSan         yes         yes           yes                no
+#   MSan          no          yes           no                 no
+# - ASan (AddressSanitizer): out-of-bounds reads / writes (heap, stack, globals), use-after-free, use-after-return,
+#   double free, and (Linux) the leaks at exit. About 2x slower. On Linux it also turns on the libstdc++ checks
+#   (_GLIBCXX_ASSERTIONS: operator[], front(), back() on an empty container, which ASan cannot see).
+# - LSan (LeakSanitizer): the leaks at exit only, almost no slowdown. Already inside ASan on Linux.
+# - TSan (ThreadSanitizer): data races and lock-order inversions. 5-15x slower, built -O1 -g. Alone: it cannot share
+#   a process with ASan, LSan or MSan.
+# - UBSan (UndefinedBehaviorSanitizer): signed overflow, invalid shift, misaligned or null access, an out-of-range
+#   enum or bool, a division by zero, an unreachable reached... The first one aborts (-fno-sanitize-recover=all).
+#   Combines with ASan (the usual unit test build) or TSan.
+# - MSan (MemorySanitizer): reads of uninitialised memory. Clang on Linux only, and every linked library must be
+#   instrumented too (libc++ / the prebuilt ext-deps are not: expect false reports there). Exclusive with ASan, LSan
+#   and TSan.
+option(EMERAUDE_ENABLE_ASAN "Build with AddressSanitizer: memory errors, use-after-free, leaks on Linux. GCC, Clang, AppleClang, MSVC (Default Off)." Off)
+option(EMERAUDE_ENABLE_LSAN "Build with LeakSanitizer alone: the leaks at exit. Linux GCC / Clang (Default Off)." Off)
+option(EMERAUDE_ENABLE_TSAN "Build with ThreadSanitizer: data races. GCC, Clang, AppleClang; exclusive with ASan, LSan, MSan (Default Off)." Off)
+option(EMERAUDE_ENABLE_UBSAN "Build with UndefinedBehaviorSanitizer: undefined behaviour at run time. GCC, Clang, AppleClang (Default Off)." Off)
+option(EMERAUDE_ENABLE_MSAN "Build with MemorySanitizer: uninitialised reads. Clang on Linux only; exclusive with ASan, LSan, TSan (Default Off)." Off)
 option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default Off)." Off)
 # Windows MSVC runtime selection (/MT vs /MD). Drives the runtime, the ext-deps dirname
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
@@ -66,17 +89,13 @@ option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default 
 option(EMERAUDE_USE_STATIC_RUNTIME "Build with the static MSVC runtime (Windows only)." Off)
 option(EMERAUDE_ENABLE_OPENMP "Enable OpenMP (used by VertexFactory)." On)
 
-if ( EMERAUDE_ENABLE_TSAN AND EMERAUDE_ENABLE_SANITIZERS )
-	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN and EMERAUDE_ENABLE_SANITIZERS are exclusive: ThreadSanitizer cannot share a process with AddressSanitizer.")
+# EMERAUDE_ENABLE_SANITIZERS (ASan + UBSan) was replaced on 2026-10-17: a build directory that still carries it ON would
+# silently lose its sanitizers.
+if ( EMERAUDE_ENABLE_SANITIZERS )
+	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_SANITIZERS was removed: use -DEMERAUDE_ENABLE_ASAN=On -DEMERAUDE_ENABLE_UBSAN=On, and -UEMERAUDE_ENABLE_SANITIZERS to drop the old cache entry.")
 endif ()
 
-if ( EMERAUDE_ENABLE_TSAN AND EMERAUDE_ENABLE_ASAN )
-	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN and EMERAUDE_ENABLE_ASAN are exclusive: ThreadSanitizer cannot share a process with AddressSanitizer.")
-endif ()
-
-if ( EMERAUDE_ENABLE_TSAN AND MSVC )
-	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN: MSVC has no ThreadSanitizer (build it on Linux or macOS).")
-endif ()
+unset(EMERAUDE_ENABLE_SANITIZERS CACHE)
 
 # Consumed by emeraude_base_config.hpp.in
 option(EMERAUDE_DEBUG_OBSERVER_PATTERN "Debug output for the observer pattern." Off)
@@ -244,6 +263,137 @@ endif ()
 # variables. Consumers (emeraude-engine, …) apply EMERAUDE_COMPILE_DEFINITIONS /
 # EMERAUDE_COMPILE_OPTIONS to their own targets; to diverge, override them in CMake.
 
+# The sanitizers (the options above): which ones this toolchain has, then their flags. The compile flags and definitions
+# join EMERAUDE_COMPILE_OPTIONS / EMERAUDE_COMPILE_DEFINITIONS, the link flags emeraude_base_flags.
+set(_emeraudeIsGCCOrClang Off)
+set(_emeraudeIsLinux Off)
+
+if ( CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID MATCHES "Clang" )
+	if ( NOT MSVC )
+		set(_emeraudeIsGCCOrClang On)
+	endif ()
+endif ()
+
+if ( UNIX AND NOT APPLE )
+	set(_emeraudeIsLinux On)
+endif ()
+
+set(_emeraudeAvailableASAN Off)
+set(_emeraudeAvailableLSAN Off)
+set(_emeraudeAvailableTSAN Off)
+set(_emeraudeAvailableUBSAN Off)
+set(_emeraudeAvailableMSAN Off)
+
+if ( MSVC OR _emeraudeIsGCCOrClang )
+	set(_emeraudeAvailableASAN On)
+endif ()
+
+if ( _emeraudeIsGCCOrClang )
+	set(_emeraudeAvailableTSAN On)
+	set(_emeraudeAvailableUBSAN On)
+
+	if ( _emeraudeIsLinux )
+		set(_emeraudeAvailableLSAN On)
+	endif ()
+
+	if ( _emeraudeIsLinux AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang" )
+		set(_emeraudeAvailableMSAN On)
+	endif ()
+endif ()
+
+foreach ( _emeraudeSanitizer ASAN LSAN TSAN UBSAN MSAN )
+	set(_emeraudeUse${_emeraudeSanitizer} Off)
+
+	if ( EMERAUDE_ENABLE_${_emeraudeSanitizer} )
+		if ( _emeraudeAvailable${_emeraudeSanitizer} )
+			set(_emeraudeUse${_emeraudeSanitizer} On)
+		else ()
+			message(WARNING "[EmeraudeBase] EMERAUDE_ENABLE_${_emeraudeSanitizer} skipped: not available with ${CMAKE_CXX_COMPILER_ID} on ${CMAKE_SYSTEM_NAME}.")
+		endif ()
+	endif ()
+endforeach ()
+
+if ( _emeraudeUseTSAN AND ( _emeraudeUseASAN OR _emeraudeUseLSAN OR _emeraudeUseMSAN ) )
+	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_TSAN cannot share a process with ASan, LSan or MSan: enable it alone (UBSan may join).")
+endif ()
+
+if ( _emeraudeUseMSAN AND ( _emeraudeUseASAN OR _emeraudeUseLSAN ) )
+	message(FATAL_ERROR "[EmeraudeBase] EMERAUDE_ENABLE_MSAN cannot share a process with ASan or LSan.")
+endif ()
+
+# ASan already detects the leaks on Linux: -fsanitize=leak beside it is redundant.
+if ( _emeraudeUseASAN AND _emeraudeUseLSAN )
+	set(_emeraudeUseLSAN Off)
+	message(STATUS "[EmeraudeBase] EMERAUDE_ENABLE_LSAN: already inside AddressSanitizer.")
+endif ()
+
+set(_emeraudeSanitizerList "")
+set(_emeraudeSanitizerCompileOptions "")
+set(_emeraudeSanitizerCompileDefinitions "")
+set(_emeraudeSanitizerLinkOptions "")
+
+if ( MSVC )
+	if ( _emeraudeUseASAN )
+		# /Z7: without debug information MSVC warns C5072, fatal under /WX. The two defines: the prebuilt static
+		# libraries are not instrumented, their container annotations would not match.
+		list(APPEND _emeraudeSanitizerCompileOptions /fsanitize=address /Z7)
+		list(APPEND _emeraudeSanitizerCompileDefinitions _DISABLE_VECTOR_ANNOTATION _DISABLE_STRING_ANNOTATION)
+		list(APPEND _emeraudeSanitizerLinkOptions /DEBUG /INCREMENTAL:NO)
+		message(STATUS "[EmeraudeBase] AddressSanitizer ENABLED (MSVC: clang_rt.asan_dynamic-x86_64.dll on PATH at run time).")
+	endif ()
+else ()
+	if ( _emeraudeUseASAN )
+		list(APPEND _emeraudeSanitizerList address)
+		list(APPEND _emeraudeSanitizerCompileOptions -fstack-protector-strong)
+
+		if ( _emeraudeIsLinux )
+			list(APPEND _emeraudeSanitizerCompileDefinitions _GLIBCXX_ASSERTIONS)
+		endif ()
+
+		if ( APPLE )
+			message(STATUS "[EmeraudeBase] AddressSanitizer ENABLED (no leak detection with AppleClang: ASAN_OPTIONS=detect_leaks=0).")
+		else ()
+			message(STATUS "[EmeraudeBase] AddressSanitizer ENABLED (leak detection included).")
+		endif ()
+	endif ()
+
+	if ( _emeraudeUseLSAN )
+		list(APPEND _emeraudeSanitizerList leak)
+		message(STATUS "[EmeraudeBase] LeakSanitizer ENABLED.")
+	endif ()
+
+	if ( _emeraudeUseTSAN )
+		list(APPEND _emeraudeSanitizerList thread)
+		list(APPEND _emeraudeSanitizerCompileOptions -O1)
+		message(STATUS "[EmeraudeBase] ThreadSanitizer ENABLED (-O1 -g). Run with TSAN_OPTIONS=halt_on_error=1 for a hard verdict, and OMP_NUM_THREADS=1 (libgomp is not instrumented: its loops would read as races).")
+	endif ()
+
+	if ( _emeraudeUseUBSAN )
+		list(APPEND _emeraudeSanitizerList undefined)
+		list(APPEND _emeraudeSanitizerCompileOptions -fno-sanitize-recover=all)
+		message(STATUS "[EmeraudeBase] UndefinedBehaviorSanitizer ENABLED (the first report aborts).")
+	endif ()
+
+	if ( _emeraudeUseMSAN )
+		list(APPEND _emeraudeSanitizerList memory)
+		list(APPEND _emeraudeSanitizerCompileOptions -fsanitize-memory-track-origins)
+		message(STATUS "[EmeraudeBase] MemorySanitizer ENABLED (every linked library must be instrumented: the prebuilt ext-deps and the standard library are not).")
+	endif ()
+
+	if ( _emeraudeSanitizerList )
+		list(JOIN _emeraudeSanitizerList "," _emeraudeSanitizers)
+		list(PREPEND _emeraudeSanitizerCompileOptions -fsanitize=${_emeraudeSanitizers} -fno-omit-frame-pointer -g)
+		list(APPEND _emeraudeSanitizerLinkOptions -fsanitize=${_emeraudeSanitizers})
+	endif ()
+endif ()
+
+# _FORTIFY_SOURCE replaces the C string / memory functions with checked copies that bypass the sanitizers' interceptors.
+set(_emeraudeFortifySource On)
+
+if ( _emeraudeUseASAN OR _emeraudeUseTSAN OR _emeraudeUseMSAN )
+	set(_emeraudeFortifySource Off)
+endif ()
+
 # The paranoid warning set (Ave Robustus II, owner decision 2026-10-08: "every adequate flag under the PARANOID
 # option"). Every configuration, both GCC and Clang; a finding is FIXED, never silenced. The flags left out on
 # purpose, and why, are listed in projet-alpha docs/plans/ave-robustus-ii.md § 6.1 (e.g. -Wuseless-cast: a cast that
@@ -343,6 +493,7 @@ if ( MSVC )
 		_WIN32_WINNT=0x0A00													# Target Windows 10/11 (0x0601=Win7, 0x0602=Win8, 0x0603=Win8.1)
 		NOMINMAX															# Prevent <windows.h> from defining min/max macros (breaks Math/Vector.h and every std::min/std::max)
 		WIN32_LEAN_AND_MEAN													# Trim rarely-used headers pulled by <windows.h> (faster compilation, fewer macro conflicts)
+		${_emeraudeSanitizerCompileDefinitions}								# The sanitizers (see above)
 		CACHE STRING "Project-wide compile definitions (Windows)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS
@@ -369,12 +520,14 @@ if ( MSVC )
 		/wd4481 															# Ignore "nonstandard extension used: override"
 		/wd4512																# Ignore "assignment operator could not be generated"
 		/bigobj																# Remove the COFF object format limitation
+		${_emeraudeSanitizerCompileOptions}									# The sanitizers (see above)
 		CACHE STRING "Project-wide compile options (Windows)." FORCE
 	)
 elseif ( APPLE )
 	set(EMERAUDE_COMPILE_DEFINITIONS
 		$<$<CONFIG:Debug>:DEBUG>													# Declares DEBUG macro
 		$<$<CONFIG:Release>:NDEBUG>													# Declares NDEBUG macro
+		${_emeraudeSanitizerCompileDefinitions}										# The sanitizers (see above)
 		CACHE STRING "Project-wide compile definitions (macOS)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS
@@ -391,24 +544,15 @@ elseif ( APPLE )
 		${EMERAUDE_PARANOID_WARNINGS}												# The paranoid warning set (see above)
 		-Wformat 																	# Check format string arguments
 		-Wformat-security															# Warn about format string vulnerabilities
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-omit-frame-pointer>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fstack-protector-strong>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-O1>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fno-omit-frame-pointer>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-g>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-O1>
+		${_emeraudeSanitizerCompileOptions}											# The sanitizers (see above)
 		CACHE STRING "Project-wide compile options (macOS)." FORCE
 	)
 elseif ( UNIX )
 	set(EMERAUDE_COMPILE_DEFINITIONS
 		$<$<CONFIG:Debug>:DEBUG>													# Declares DEBUG macro
 		$<$<CONFIG:Release>:NDEBUG>													# Declares NDEBUG macro
-		$<$<CONFIG:Release>:_FORTIFY_SOURCE=2>										# Runtime buffer overflow detection
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:_GLIBCXX_ASSERTIONS>				# libstdc++ checks back() / front() / [] (ASan cannot see them on Linux)
+		$<$<AND:$<CONFIG:Release>,$<BOOL:${_emeraudeFortifySource}>>:_FORTIFY_SOURCE=2> # Runtime buffer overflow detection (off under ASan / TSan / MSan, see above)
+		${_emeraudeSanitizerCompileDefinitions}										# The sanitizers (see above)
 		CACHE STRING "Project-wide compile definitions (Linux)." FORCE
 	)
 	set(EMERAUDE_COMPILE_OPTIONS
@@ -425,16 +569,7 @@ elseif ( UNIX )
 		${EMERAUDE_PARANOID_WARNINGS} 												# The paranoid warning set (see above)
 		-Wformat 																	# Check format string arguments
 		-Wformat-security 															# Warn about format string vulnerabilities
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-sanitize-recover=all>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fno-omit-frame-pointer>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fstack-protector-strong>
-		$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-O1>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fno-omit-frame-pointer>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-g>
-		$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-O1>
+		${_emeraudeSanitizerCompileOptions}											# The sanitizers (see above)
 		CACHE STRING "Project-wide compile options (Linux)." FORCE
 	)
 endif ()
@@ -486,36 +621,8 @@ target_link_directories(emeraude_base_flags INTERFACE ${EMERAUDE_EXT_LIBS_LIB_DI
 target_compile_features(emeraude_base_flags INTERFACE cxx_std_${EMERAUDE_CXX_VERSION})
 target_compile_definitions(emeraude_base_flags INTERFACE ${EMERAUDE_COMPILE_DEFINITIONS})
 target_compile_options(emeraude_base_flags INTERFACE ${EMERAUDE_COMPILE_OPTIONS})
-target_link_options(emeraude_base_flags INTERFACE
-	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=address>
-	$<$<BOOL:${EMERAUDE_ENABLE_SANITIZERS}>:-fsanitize=undefined>
-	$<$<BOOL:${EMERAUDE_ENABLE_TSAN}>:-fsanitize=thread>
-)
+target_link_options(emeraude_base_flags INTERFACE ${_emeraudeSanitizerLinkOptions})
 add_library(emeraude::base::flags ALIAS emeraude_base_flags)
-
-# The cascade-wide AddressSanitizer switch: the same name as the engine's, so one option instruments base too.
-if ( EMERAUDE_ENABLE_ASAN )
-	if ( MSVC )
-		# /Z7: without debug information MSVC warns C5072, fatal under /WX. The two defines: the prebuilt static
-		# libraries are not instrumented, their container annotations would not match.
-		target_compile_options(emeraude_base_flags INTERFACE /fsanitize=address /Z7)
-		target_compile_definitions(emeraude_base_flags INTERFACE _DISABLE_VECTOR_ANNOTATION _DISABLE_STRING_ANNOTATION)
-		target_link_options(emeraude_base_flags INTERFACE /DEBUG /INCREMENTAL:NO)
-	else ()
-		target_compile_options(emeraude_base_flags INTERFACE -fsanitize=address -fno-omit-frame-pointer)
-		target_link_options(emeraude_base_flags INTERFACE -fsanitize=address)
-	endif ()
-
-	message(STATUS "[EmeraudeBase] AddressSanitizer ENABLED (EMERAUDE_ENABLE_ASAN, without UBSan).")
-endif ()
-
-if ( EMERAUDE_ENABLE_SANITIZERS )
-	message(STATUS "[EmeraudeBase] Sanitizers ENABLED: ASan + UBSan (-O1, halt-on-error). Incompatible with _FORTIFY_SOURCE (omitted).")
-endif ()
-
-if ( EMERAUDE_ENABLE_TSAN )
-	message(STATUS "[EmeraudeBase] ThreadSanitizer ENABLED (-O1 -g). Run with TSAN_OPTIONS=halt_on_error=1 for a hard verdict, and OMP_NUM_THREADS=1 (libgomp is not instrumented: its loops would read as races).")
-endif ()
 
 # Per-module sources (no globbing); see cmake/PrepareBaseSourceFiles.cmake
 include(PrepareBaseSourceFiles)
@@ -686,21 +793,13 @@ if ( EMERAUDE_ENABLE_TESTS )
 
 	FetchContent_MakeAvailable(googletest)
 
-	# gtest shares std::vector instances with the instrumented tests: libc++'s ASan container annotations need both
-	# sides instrumented, or its registry reads as a heap-buffer-overflow at static initialisation (macOS).
-	if ( EMERAUDE_ENABLE_SANITIZERS AND NOT MSVC )
+	# gtest is instrumented like the tests. ASan: gtest shares std::vector instances with them, and libc++'s container
+	# annotations need both sides instrumented, or its registry reads as a heap-buffer-overflow at static initialisation
+	# (macOS). TSan and MSan must see every memory access of the process: gtest's own locks and buffers included.
+	if ( _emeraudeSanitizerList )
 		foreach ( gtestTarget IN ITEMS gtest gtest_main gmock gmock_main )
 			if ( TARGET ${gtestTarget} )
-				target_compile_options(${gtestTarget} PRIVATE -fsanitize=address -fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer)
-			endif ()
-		endforeach ()
-	endif ()
-
-	# ThreadSanitizer must see every memory access of the process: gtest's own locks included.
-	if ( EMERAUDE_ENABLE_TSAN )
-		foreach ( gtestTarget IN ITEMS gtest gtest_main gmock gmock_main )
-			if ( TARGET ${gtestTarget} )
-				target_compile_options(${gtestTarget} PRIVATE -fsanitize=thread -fno-omit-frame-pointer)
+				target_compile_options(${gtestTarget} PRIVATE ${_emeraudeSanitizerCompileOptions})
 			endif ()
 		endforeach ()
 	endif ()
@@ -708,7 +807,7 @@ if ( EMERAUDE_ENABLE_TESTS )
 	add_executable(EmeraudeBaseUnitTests ${EMERAUDE_BASE_TEST_SOURCES})
 
 	# The system libc++ is not instrumented: its half-seen container annotations are false positives (macOS).
-	if ( EMERAUDE_ENABLE_SANITIZERS AND APPLE )
+	if ( _emeraudeUseASAN AND APPLE )
 		target_sources(EmeraudeBaseUnitTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/AsanDefaultOptions.cpp)
 	endif ()
 

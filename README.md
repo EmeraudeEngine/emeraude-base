@@ -248,11 +248,18 @@ Declared here, inherited by the whole cascade:
 | `EMERAUDE_ENABLE_PCH` | `On` | Shared STL precompiled header (`EMERAUDE_BASE_STL_PCH_HEADERS`, see `cmake/STLPrecompiledHeaders.cmake`). Applies to every target of the cascade that asks for it; the one exception is the emeraude-engine target on MSVC, excluded by its own export-all guard. |
 | `EMERAUDE_ENABLE_TESTS` | `Off` | Build the GoogleTest suites (`EmeraudeBaseUnitTests`). |
 | `EMERAUDE_ENABLE_BENCHMARKS` | `Off` | Build the Google Benchmark suites. |
-| `EMERAUDE_ENABLE_SANITIZERS` | `Off` | AddressSanitizer + UndefinedBehaviorSanitizer. |
-| `EMERAUDE_ENABLE_ASAN` | `Off` | AddressSanitizer alone (GCC / Clang / MSVC), the cascade-wide switch shared with emeraude-engine: one option instruments base, the engine and the application. The base unit tests keep `EMERAUDE_ENABLE_SANITIZERS`. |
-| `EMERAUDE_ENABLE_TSAN` | `Off` | ThreadSanitizer (GCC / Clang), shared with emeraude-engine the same way. |
+| `EMERAUDE_ENABLE_ASAN` | `Off` | AddressSanitizer: out-of-bounds accesses, use-after-free, double free, leaks on Linux; on Linux also `_GLIBCXX_ASSERTIONS`. GCC, Clang, AppleClang, MSVC. |
+| `EMERAUDE_ENABLE_LSAN` | `Off` | LeakSanitizer alone: the leaks at exit. Linux GCC / Clang. Already inside ASan on Linux. |
+| `EMERAUDE_ENABLE_TSAN` | `Off` | ThreadSanitizer: data races (`-O1 -g`). GCC, Clang, AppleClang. Exclusive with ASan, LSan, MSan. |
+| `EMERAUDE_ENABLE_UBSAN` | `Off` | UndefinedBehaviorSanitizer: undefined behaviour at run time, the first report aborts. GCC, Clang, AppleClang. ASan + UBSan is the unit test gate. |
+| `EMERAUDE_ENABLE_MSAN` | `Off` | MemorySanitizer: uninitialised reads. Clang on Linux only; every linked library must be instrumented. Exclusive with ASan, LSan, TSan. |
 | `EMERAUDE_ENABLE_OPENMP` | `On` | OpenMP (used by VertexFactory). |
 | `EMERAUDE_USE_STATIC_RUNTIME` | `Off` | Windows: static MSVC runtime (`/MT`). |
+
+The five sanitizer switches instrument the whole cascade (base, the engine, the application). A switch the toolchain
+lacks is skipped with a warning; two that cannot share a process stop the configure step. `_FORTIFY_SOURCE` is left
+out under ASan, TSan and MSan (its checked copies bypass their interceptors). `EMERAUDE_ENABLE_SANITIZERS` (ASan +
+UBSan) was removed on 2026-10-17: a build directory still carrying it ON stops at configure, with the replacement.
 
 Per-subsystem debug output is also available (`EMERAUDE_DEBUG_OBSERVER_PATTERN`,
 `EMERAUDE_DEBUG_PIXEL_FACTORY`, `EMERAUDE_DEBUG_VERTEX_FACTORY`, `EMERAUDE_DEBUG_WAVE_FACTORY`,

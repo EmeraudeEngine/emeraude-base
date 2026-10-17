@@ -17,7 +17,8 @@ Suite target: **`EmeraudeBaseUnitTests`**, gated by the CMake option
   (`AssetsDirectory`). Test outputs (`tmp_*`) land in that same directory, gitignored.
   Never hard-code `./assets/...` in a test — compose paths with `AssetsDirectory`.
 - **Sanitizer gate**: the suite also builds under ASan+UBSan via
-  **`EMERAUDE_ENABLE_SANITIZERS`** (Debug, separate build dir). A fix is "proven" when the
+  **`EMERAUDE_ENABLE_ASAN` + `EMERAUDE_ENABLE_UBSAN`** (Debug, separate build dir; `EMERAUDE_ENABLE_SANITIZERS` was
+  removed 2026-10-17). A fix is "proven" when the
   suite is green in Release AND under the sanitizers. **TSan** (data races): the separate
   `EMERAUDE_ENABLE_TSAN` build (exclusive with ASan), run with `OMP_NUM_THREADS=1` — 2510 tests,
   0 report on 2026-10-12 (procedure: projet-alpha `docs/unit-testing.md` § "ThreadSanitizer").
@@ -82,7 +83,7 @@ cd .claude-build-release && ctest --output-on-failure -j$(nproc)
 cd resources && ../.claude-build-release/Release/EmeraudeBaseUnitTests --gtest_filter='ThreadPool.*'
 
 # Sanitizer gate (ASan+UBSan, Debug, own build dir):
-cmake -S . -B .claude-build-san -DCMAKE_BUILD_TYPE=Debug -DEMERAUDE_ENABLE_TESTS=On -DEMERAUDE_ENABLE_SANITIZERS=On
+cmake -S . -B .claude-build-san -DCMAKE_BUILD_TYPE=Debug -DEMERAUDE_ENABLE_TESTS=On -DEMERAUDE_ENABLE_ASAN=On -DEMERAUDE_ENABLE_UBSAN=On
 cmake --build .claude-build-san --target EmeraudeBaseUnitTests -j$(nproc)
 cd .claude-build-san && ctest --output-on-failure -j$(nproc)
 ```

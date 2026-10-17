@@ -80,10 +80,11 @@ class Something final
 
 ### The ThreadSanitizer build — `EMERAUDE_ENABLE_TSAN`
 The analysis proves the annotated protocol; TSan finds the races in what is not annotated (atomics misuse, a lock-free
-handoff, a forgotten member). `EMERAUDE_ENABLE_TSAN` (default OFF, GCC / Clang only, exclusive with
-`EMERAUDE_ENABLE_SANITIZERS`: the configure step refuses both) adds `-fsanitize=thread -fno-omit-frame-pointer -g -O1`
-to `EMERAUDE_COMPILE_OPTIONS` and `-fsanitize=thread` to the link, so it reaches the engine and the applications built
-on top; googletest is instrumented too. Run it with `OMP_NUM_THREADS=1`: the system's libgomp is not instrumented and
+handoff, a forgotten member). `EMERAUDE_ENABLE_TSAN` (default OFF, GCC / Clang / AppleClang, exclusive with
+`EMERAUDE_ENABLE_ASAN`, `_LSAN` and `_MSAN`: the configure step refuses them together; UBSan may join) adds
+`-fsanitize=thread -fno-omit-frame-pointer -g -O1` to `EMERAUDE_COMPILE_OPTIONS` and `-fsanitize=thread` to the link,
+so it reaches the engine and the applications built on top; googletest is instrumented too. The five switches:
+base `README.md` § Options. Run it with `OMP_NUM_THREADS=1`: the system's libgomp is not instrumented and
 every VertexFactory OpenMP loop reads as a race otherwise (3374 false reports in one run). First full run, 2026-10-12:
 2510 tests, 0 report, after it found the `TimedEvent` sleep (`docs/caution-points.md` § Time). Procedure: projet-alpha
 `docs/unit-testing.md` § "ThreadSanitizer".
