@@ -342,6 +342,41 @@ TEST(VertexFactoryShape, anInconsistentShapeIsRefusedNotAborted)
 	EXPECT_TRUE(indexBuffer.empty());
 }
 
+/* Ave robustus! (2026-10-18, found by the engine's fuzz_gltf): a glTF index past its primitive's vertices built a shape
+ * whose triangles point outside the vertex array, and the normal / tangent computations indexed the vertices through
+ * those triangles without a check — out-of-bounds reads and writes (heap overflow, use after free) on a loading thread.
+ * Each of them refuses an inconsistent shape now (false, nothing computed) and still computes a consistent one. */
+TEST(VertexFactoryShape, normalsAndTangentsRefuseAnInconsistentShape)
+{
+	auto consistent = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8, 4);
+
+	ASSERT_TRUE(consistent.indicesInRange());
+	ASSERT_TRUE(consistent.isTextureCoordinatesAvailable());
+
+	auto shape = consistent;
+	const auto vertexCount = static_cast< uint32_t >(shape.vertices().size());
+
+	shape.triangles().emplace_back(0U, vertexCount + 1000U, vertexCount + 5000U);
+
+	ASSERT_FALSE(shape.indicesInRange());
+
+	EXPECT_FALSE(shape.computeTriangleNormal());
+	EXPECT_FALSE(shape.computeTriangleTangent());
+	EXPECT_FALSE(shape.computeTriangleTangentFromEdge());
+	EXPECT_FALSE(shape.computeTriangleTBNSpace());
+	EXPECT_FALSE(shape.computeVertexNormal());
+	EXPECT_FALSE(shape.computeVertexTangent());
+	EXPECT_FALSE(shape.computeVertexTBNSpace());
+
+	EXPECT_TRUE(consistent.computeTriangleNormal());
+	EXPECT_TRUE(consistent.computeTriangleTangent());
+	EXPECT_TRUE(consistent.computeTriangleTangentFromEdge());
+	EXPECT_TRUE(consistent.computeTriangleTBNSpace());
+	EXPECT_TRUE(consistent.computeVertexNormal());
+	EXPECT_TRUE(consistent.computeVertexTangent());
+	EXPECT_TRUE(consistent.computeVertexTBNSpace());
+}
+
 /* A vertex color index past the color array is refused when the colors are requested (it was read out of bounds). */
 TEST(VertexFactoryShape, aVertexColorIndexOutOfRangeIsRefused)
 {

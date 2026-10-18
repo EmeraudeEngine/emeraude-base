@@ -813,6 +813,11 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
+				if ( !this->trianglesReferToVertices("computeTriangleNormal") )
+				{
+					return false;
+				}
+
 				const auto trianglesCount = static_cast< int64_t >(m_triangles.size());
 				auto & trianglesRef = m_triangles;
 				const auto & verticesRef = m_vertices;
@@ -851,6 +856,11 @@ namespace EmEn::Base::VertexFactory
 				{
 					std::cerr << "Shape::computeTriangleTangent(), geometry data is empty !" "\n";
 
+					return false;
+				}
+
+				if ( !this->trianglesReferToVertices("computeTriangleTangent") )
+				{
 					return false;
 				}
 
@@ -899,6 +909,11 @@ namespace EmEn::Base::VertexFactory
 				{
 					std::cerr << "Shape::computeTriangleTangentFromEdge(), geometry data is empty !" "\n";
 
+					return false;
+				}
+
+				if ( !this->trianglesReferToVertices("computeTriangleTangentFromEdge") )
+				{
 					return false;
 				}
 
@@ -960,6 +975,11 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
+				if ( !this->trianglesReferToVertices("computeTriangleTBNSpace") )
+				{
+					return false;
+				}
+
 				if ( !this->isTextureCoordinatesAvailable() )
 				{
 					std::cerr << "Shape::computeTriangleTBNSpace(), there is no texture coordinates !" "\n";
@@ -1014,6 +1034,11 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
+				if ( !this->trianglesReferToVertices("computeVertexNormal") )
+				{
+					return false;
+				}
+
 				/* Build adjacency table: vertex → adjacent triangle indices. O(T) */
 				const auto adjacency = this->buildVertexToTriangleAdjacency();
 
@@ -1047,6 +1072,11 @@ namespace EmEn::Base::VertexFactory
 				{
 					std::cerr << "Shape::computeVertexTangent(), geometry is empty !" "\n";
 
+					return false;
+				}
+
+				if ( !this->trianglesReferToVertices("computeVertexTangent") )
+				{
 					return false;
 				}
 
@@ -1088,6 +1118,11 @@ namespace EmEn::Base::VertexFactory
 				{
 					std::cerr << "Shape::computeVertexTBNSpace(), geometry is empty !" "\n";
 
+					return false;
+				}
+
+				if ( !this->trianglesReferToVertices("computeVertexTBNSpace") )
+				{
 					return false;
 				}
 
@@ -2306,6 +2341,29 @@ namespace EmEn::Base::VertexFactory
 			}
 
 		private:
+
+			/**
+			 * @brief Returns whether every triangle refers to existing vertices, saying which computation refused otherwise.
+			 * @note Ave robustus! (2026-10-18, found by the engine's fuzz_gltf): a loader's index past its vertices built a
+			 * shape whose triangles point outside the vertex array, and the normal / tangent computations indexed the
+			 * vertices through them unchecked (out-of-bounds reads and writes on a loading thread). O(triangles), like each
+			 * computation it guards.
+			 * @param caller The computation, for the message.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			trianglesReferToVertices (const char * caller) const noexcept
+			{
+				if ( this->indicesInRange() )
+				{
+					return true;
+				}
+
+				std::cerr << "Shape::" << caller << "(), a triangle refers to a vertex that does not exist, nothing computed !" "\n";
+
+				return false;
+			}
 
 			/**
 			 * @brief Returns the tangent frame of a triangle from its texture coordinates: the tangent dP/du and the

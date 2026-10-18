@@ -4,6 +4,13 @@
 
 `Shape::computeVertexNormal()`, `computeVertexTangent()`, and `computeVertexTBNSpace()` use a **vertex-to-triangle adjacency table** for O(V+T) performance instead of the previous O(V×T) brute-force scan.
 
+⚠️ **An inconsistent shape is refused (2026-10-18, found by the engine's fuzz_gltf):** a triangle referring to a vertex
+past the vertex array (a loader's index past its primitive) made the seven normal / tangent computations
+(`computeTriangleNormal`, `computeTriangleTangent`, `computeTriangleTangentFromEdge`, `computeTriangleTBNSpace`,
+`computeVertexNormal`, `computeVertexTangent`, `computeVertexTBNSpace`) read and write out of bounds. Each returns
+`false` and computes nothing when `indicesInRange()` is false (`trianglesReferToVertices()`, O(triangles)); test
+`VertexFactoryShape.normalsAndTangentsRefuseAnInconsistentShape`.
+
 **Algorithm:**
 1. `buildVertexToTriangleAdjacency()` builds a lookup table: for each vertex, the list of triangles it belongs to. Cost: O(T).
 2. Each vertex accumulates normals/tangents only from its adjacent triangles. Cost: O(V + average fan size).
