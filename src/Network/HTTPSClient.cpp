@@ -1019,9 +1019,8 @@ namespace EmEn::Base::Network
 
 		if ( sink == BodySink::File )
 		{
-			fileStream.open(filepath, std::ios::binary | std::ios::trunc);
-
-			if ( !fileStream.is_open() )
+			/* NOTE: Through IO::openOutputFile(): a FIFO at the destination blocked the open forever (2026-10-18). */
+			if ( !IO::openOutputFile(filepath, fileStream) )
 			{
 				outcome = DownloadOutcome::LocalIO;
 

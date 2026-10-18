@@ -203,6 +203,29 @@ namespace EmEn::Base::IO
 	bool openInputFile (const std::filesystem::path & filepath, std::ifstream & stream, std::ios::openmode mode = std::ios::binary) noexcept;
 
 	/**
+	 * @brief Checks that a path can be opened for writing: missing (the open creates it) or a regular file (a symbolic
+	 * link to one is followed).
+	 * @note Opening a FIFO for writing without a reader blocks FOREVER, and a device, a socket or a directory is no file
+	 * to write (2026-10-18, the writers' twin of isReadableRegularFile()).
+	 * @param filepath Path to the file.
+	 * @return bool False when the path is empty or names something that is not a regular file (logged).
+	 */
+	[[nodiscard]]
+	bool isWritableTarget (const std::filesystem::path & filepath) noexcept;
+
+	/**
+	 * @brief Opens a file for writing, refusing an existing path that is not a regular file.
+	 * @note Every writer of the library opens through this (isWritableTarget(), then the open). The check and the open
+	 * are two system calls: swapping the file for a FIFO between them needs write access to its directory already.
+	 * @param filepath Path to the file.
+	 * @param[out] stream The stream to open (closed first).
+	 * @param mode The open mode; std::ios::out is added. Default binary + truncate.
+	 * @return bool False when the target is refused or the open fails.
+	 */
+	[[nodiscard]]
+	bool openOutputFile (const std::filesystem::path & filepath, std::ofstream & stream, std::ios::openmode mode = std::ios::binary | std::ios::trunc) noexcept;
+
+	/**
 	 * @brief Returns the size of a file opened for reading, the stream left at its beginning.
 	 * @note A pseudo-file (/proc) cannot seek to its end, or claims 0 bytes while it holds some: -1, the size is unknown.
 	 * @param stream An open input stream.
@@ -718,9 +741,10 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ofstream file{systemPath(filepath), std::ios::binary | (append ? std::ios::app : std::ios::trunc)};
+		/* NOTE: Through IO::openOutputFile(): a FIFO blocked the open forever (2026-10-18). */
+		std::ofstream file;
 
-		if ( !file.is_open() ) [[unlikely]]
+		if ( !openOutputFile(filepath, file, std::ios::binary | (append ? std::ios::app : std::ios::trunc)) )
 		{
 			Logging::error("IO", "filePutContents: cannot open " + toU8String(filepath) + " for writing");
 

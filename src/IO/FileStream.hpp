@@ -77,7 +77,8 @@ namespace EmEn::Base::IO
 				}
 				else
 				{
-					m_output.open(filepath, std::ios::binary);
+					/* NOTE: Through IO::openOutputFile(): a FIFO blocked the open forever (2026-10-18). */
+					static_cast< void >(IO::openOutputFile(filepath, m_output));
 				}
 			}
 

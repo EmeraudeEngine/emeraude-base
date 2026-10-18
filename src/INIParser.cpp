@@ -151,9 +151,10 @@ namespace EmEn::Base
 	bool
 	INIParser::write (const std::filesystem::path & filepath) const noexcept
 	{
-		std::ofstream file{filepath, std::ios::out | std::ios::trunc};
+		/* NOTE: Through IO::openOutputFile(): a FIFO blocked the open forever (2026-10-18). Text mode, as before. */
+		std::ofstream file;
 
-		if ( !file.is_open() )
+		if ( !IO::openOutputFile(filepath, file, std::ios::trunc) )
 		{
 			return false;
 		}

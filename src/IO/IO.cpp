@@ -296,6 +296,51 @@ namespace EmEn::Base::IO
 		return stream.is_open();
 	}
 
+	bool
+	isWritableTarget (const std::filesystem::path & filepath) noexcept
+	{
+		if ( filepath.empty() ) [[unlikely]]
+		{
+			return false;
+		}
+
+		std::error_code errorCode;
+		const auto status = std::filesystem::status(systemPath(filepath), errorCode);
+
+		/* NOTE: A missing path is created by the open; an inaccessible one fails there, the caller reports it. */
+		if ( !std::filesystem::exists(status) )
+		{
+			return true;
+		}
+
+		if ( !std::filesystem::is_regular_file(status) ) [[unlikely]]
+		{
+			Logging::error("IO", std::string{"IO::isWritableTarget(), "} + toU8String(filepath) + " is not a regular file (a FIFO, a device, a socket or a directory): refused.");
+
+			return false;
+		}
+
+		return true;
+	}
+
+	bool
+	openOutputFile (const std::filesystem::path & filepath, std::ofstream & stream, std::ios::openmode mode) noexcept
+	{
+		if ( stream.is_open() )
+		{
+			stream.close();
+		}
+
+		if ( !isWritableTarget(filepath) )
+		{
+			return false;
+		}
+
+		stream.open(systemPath(filepath), mode | std::ios::out);
+
+		return stream.is_open();
+	}
+
 	std::streamoff
 	fileSizeFromStream (std::ifstream & stream) noexcept
 	{
@@ -359,9 +404,10 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ofstream file{systemPath(filepath)};
+		/* NOTE: Through openOutputFile(): a FIFO blocked the open forever (2026-10-18). Text mode, truncated, as before. */
+		std::ofstream file;
 
-		return file.is_open();
+		return openOutputFile(filepath, file, std::ios::trunc);
 	}
 
 	bool
@@ -751,9 +797,10 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ofstream file{systemPath(filepath), std::ios::binary | (append ? std::ios::app : std::ios::trunc)};
+		/* NOTE: Through openOutputFile(): a FIFO blocked the open forever (2026-10-18). */
+		std::ofstream file;
 
-		if ( !file.is_open() ) [[unlikely]]
+		if ( !openOutputFile(filepath, file, std::ios::binary | (append ? std::ios::app : std::ios::trunc)) ) [[unlikely]]
 		{
 			Logging::error("IO", std::string{"IO::filePutContents(), unable to write into "} + toU8String(filepath) + " file.");
 

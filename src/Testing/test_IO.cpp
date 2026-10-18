@@ -61,6 +61,7 @@
 #include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
 #include "IO/ZipReader.hpp"
+#include "IO/ZipWriter.hpp"
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
 #include "PixelFactory/FileIO.hpp"
@@ -900,38 +901,69 @@ TEST(IOFileUtils, aPseudoFileIsRefusedNotReadEmpty)
 #if IS_LINUX || IS_MACOS
 namespace
 {
+	/** @brief Which end of the FIFO the code under test would block on. */
+	enum class BlockedEnd : uint8_t
+	{
+		Reader,
+		Writer
+	};
+
 	/**
-	 * @brief A FIFO for one test. If a reader blocks on it, a writer opened (non-blocking) after one second releases
-	 * it: the former code fails the test instead of hanging the suite.
+	 * @brief A FIFO for one test. If an open blocks on it, the releaser opens the other end (non-blocking) after one
+	 * second: the former code fails the test instead of hanging the suite.
 	 */
 	class FifoForOneTest final
 	{
 		public:
 
 			explicit
-			FifoForOneTest (std::string_view leaf)
+			FifoForOneTest (std::string_view leaf, BlockedEnd blockedEnd = BlockedEnd::Reader)
 				: m_path{EmEn::Base::Testing::uniqueTemporaryPath(leaf)},
 				m_created{::mkfifo(m_path.c_str(), 0600) == 0}
 			{
-				m_releaser = std::jthread{[path = m_path] (const std::stop_token & stopToken) {
+				m_releaser = std::jthread{[path = m_path, blockedEnd] (const std::stop_token & stopToken) {
 					const auto start = std::chrono::steady_clock::now();
+					int heldReadEnd = -1;
 
 					while ( !stopToken.stop_requested() )
 					{
-						if ( std::chrono::steady_clock::now() - start >= std::chrono::seconds{1} )
+						if ( heldReadEnd < 0 && std::chrono::steady_clock::now() - start >= std::chrono::seconds{1} )
 						{
-							/* NOTE: Succeeds only while a reader waits in its open(). */
-							const int descriptor = ::open(path.c_str(), O_WRONLY | O_NONBLOCK);
-
-							if ( descriptor >= 0 )
+							if ( blockedEnd == BlockedEnd::Reader )
 							{
-								::close(descriptor);
+								/* NOTE: Succeeds only while a reader waits in its open(). */
+								const int descriptor = ::open(path.c_str(), O_WRONLY | O_NONBLOCK);
 
-								return;
+								if ( descriptor >= 0 )
+								{
+									::close(descriptor);
+
+									return;
+								}
+							}
+							else
+							{
+								/* NOTE: A non-blocking read end opens at once and releases a writer waiting in its open().
+								 * It stays open (drained) until the test ends: closing it under a writer would SIGPIPE. */
+								heldReadEnd = ::open(path.c_str(), O_RDONLY | O_NONBLOCK);
+							}
+						}
+
+						if ( heldReadEnd >= 0 )
+						{
+							std::array< char, 256 > drain{};
+
+							while ( ::read(heldReadEnd, drain.data(), drain.size()) > 0 )
+							{
 							}
 						}
 
 						std::this_thread::sleep_for(std::chrono::milliseconds{20});
+					}
+
+					if ( heldReadEnd >= 0 )
+					{
+						::close(heldReadEnd);
 					}
 				}};
 			}
@@ -971,12 +1003,13 @@ namespace
 			bool m_created{false};
 	};
 
-	/** @brief Runs a read on a fresh FIFO: it must be refused at once (a blocked open waits for the releaser, 1 s). */
+	/** @brief Runs a read (or a write) on a fresh FIFO: it must be refused at once (a blocked open waits for the
+	 * releaser, 1 s). */
 	template< typename read_t >
 	void
-	expectRefusedAtOnce (std::string_view leaf, read_t && read)
+	expectRefusedAtOnce (std::string_view leaf, read_t && read, BlockedEnd blockedEnd = BlockedEnd::Reader)
 	{
-		const FifoForOneTest fifo{leaf};
+		const FifoForOneTest fifo{leaf, blockedEnd};
 		ASSERT_TRUE(fifo.created());
 
 		const auto start = std::chrono::steady_clock::now();
@@ -1023,5 +1056,49 @@ TEST(IOFileUtils, readersRefuseAFifoWithoutBlocking)
 		return reader.open();
 	});
 }
-#endif
+TEST(IOFileUtils, writersRefuseAFifoWithoutBlocking)
+{
+	/* Opening a FIFO for WRITING without a reader blocked std::ofstream::open() forever too (2026-10-18). */
+	expectRefusedAtOnce("emeraude_io_wfifo_create", [] (const std::filesystem::path & path) {
+		return EmEn::Base::IO::createFile(path);
+	}, BlockedEnd::Writer);
+	expectRefusedAtOnce("emeraude_io_wfifo_put", [] (const std::filesystem::path & path) {
+		return EmEn::Base::IO::filePutContents(path, std::string_view{"x"});
+	}, BlockedEnd::Writer);
+	expectRefusedAtOnce("emeraude_io_wfifo_put_bytes", [] (const std::filesystem::path & path) {
+		const std::vector< uint8_t > bytes{1, 2, 3};
+		return EmEn::Base::IO::filePutContents(path, bytes);
+	}, BlockedEnd::Writer);
+	expectRefusedAtOnce("emeraude_io_wfifo_stream", [] (const std::filesystem::path & path) {
+		return EmEn::Base::IO::FileStream{path, EmEn::Base::IO::FileStream::Mode::Write}.isOpen();
+	}, BlockedEnd::Writer);
+	expectRefusedAtOnce("emeraude_io_wfifo_ini", [] (const std::filesystem::path & path) {
+		return EmEn::Base::INIParser{}.write(path);
+	}, BlockedEnd::Writer);
 
+	/* An archive entry extracted (overwrite) onto a FIFO of its destination: the entry takes the FIFO's own name. */
+	expectRefusedAtOnce("emeraude_io_wfifo_zip_entry.txt", [] (const std::filesystem::path & path) {
+		std::error_code errorCode;
+		const auto archiveDirectory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_wfifo_zip");
+		std::filesystem::create_directories(archiveDirectory, errorCode);
+		static_cast< void >(EmEn::Base::IO::filePutContents(archiveDirectory / "a.txt", std::string_view{"payload"}));
+
+		const auto entryName = EmEn::Base::IO::toU8String(path.filename());
+		bool accepted = false;
+
+		{
+			EmEn::Base::IO::ZipWriter writer{archiveDirectory / "one.zip"};
+
+			if ( writer.addFilepathToSources(archiveDirectory / "a.txt", entryName) && writer.create() )
+			{
+				EmEn::Base::IO::ZipReader reader{archiveDirectory / "one.zip"};
+				accepted = reader.open() && reader.extract(entryName, path.parent_path(), true);
+			}
+		}
+
+		std::filesystem::remove_all(archiveDirectory, errorCode);
+
+		return accepted;
+	}, BlockedEnd::Writer);
+}
+#endif

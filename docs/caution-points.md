@@ -1670,8 +1670,15 @@ Found by the coverage pass (`IOFileUtils.*`):
   (both), `fileGetRange()`, `FileStream`, `FastJSON::getRootFromFile()`, `INIParser::read()`, `MD5AnimParser::parse()`,
   `ZipWriter::readSource()`, `HTTPServer`'s file body; `ZipReader` checks before libzip opens the path itself. The
   check and the open are two calls: swapping the file for a FIFO between them needs write access to its directory.
-  The writers have the same defect: `docs/todo/writers-refuse-non-regular-files.md`; the engine's own readers:
+  The writers had the same defect (fixed the same day, below); the engine's own readers:
   engine `docs/todo/readers-through-io-open-input-file.md`.
+- **The writers too** (2026-10-18): opening a FIFO for WRITING without a reader blocked `std::ofstream::open()` forever
+  (6 of 6 writers tested). `IO::isWritableTarget()` accepts a missing path (the open creates it) or a regular file and
+  refuses an existing FIFO, device, socket or directory (logged); `IO::openOutputFile()` opens after it. Through it:
+  `createFile()`, `filePutContents()` (both), `FileStream` in write mode, `ZipReader::extract()`, `INIParser::write()`,
+  `HTTPSClient`'s download file. `ZipWriter` needed nothing (`create()` refuses an existing target), nor do the three
+  `FileIO::write()` (they write a fresh temporary file aside). The test harness releases a blocked WRITER by opening the
+  read end (non-blocking) and holding it, drained, until the test ends — closing it under a writer would SIGPIPE.
 - **A pseudo-file is refused explicitly** (owner decision): /proc cannot seek to its end, or claims 0 bytes while it
   holds some — `IO::fileSizeFromStream()` answers -1, `fileGetContents()` says "the size is unknown" (it used to fail
   as "unable to read"). Read /proc line by line with a stream (the engine does).

@@ -289,9 +289,10 @@ namespace EmEn::Base::IO
 			}
 		}
 
-		std::ofstream file{filepath, std::ios::binary | std::ios::trunc};
+		/* NOTE: Through IO::openOutputFile(): a FIFO in the destination blocked the open forever (2026-10-18). */
+		std::ofstream file;
 
-		if ( !file.is_open() )
+		if ( !IO::openOutputFile(filepath, file) )
 		{
 			std::cerr << ClassId << " : Unable to open the file " << toU8String(filepath) << " for writing !" "\n";
 
