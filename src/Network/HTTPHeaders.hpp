@@ -175,6 +175,19 @@ namespace EmEn::Base::Network
 			}
 
 			/**
+			 * @brief Sets a header line, replacing the value it had.
+			 * @note add() keeps the first value of a name (an emplace): a field that must follow its source (Host) is
+			 * set, never added (2026-10-18).
+			 * @param key The name of the header.
+			 * @param value The value of the header.
+			 */
+			void
+			set (const std::string & key, const std::string & value) noexcept
+			{
+				m_headers.insert_or_assign(key, value);
+			}
+
+			/**
 			 * @brief Returns the value of a header.
 			 * @param key The name of the header.
 			 * @return std::string

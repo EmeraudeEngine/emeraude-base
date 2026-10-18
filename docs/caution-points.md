@@ -1564,6 +1564,16 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## Network — HTTPRequest's Host field is the resource's authority and follows it (2026-10-18)
+
+Found by the coverage pass (`NetworkHTTPRequest.theHostFieldFollowsTheResourceAuthority`): `HTTPRequest(Method, URI)`
+and `setResource()` wrote `Host` from the host NAME alone — "alpha.example.net" for `http://alpha.example.net:8080/`,
+against RFC 9110 § 7.2 (the field is the URI's authority, the port included when the URI has one, the userinfo
+excluded) — and through `add()`, whose `emplace` keeps the FIRST value of a name: a second `setResource()` left the old
+host in place (a request rebuilt for beta still said alpha). Both write `URIDomain::host()` through the new
+`HTTPHeaders::set()` (replaces) now; `add()` keeps its first-value meaning. The production client (`HTTPSClient`) builds
+its own request text and was right; this public class has no user in the cascade. The test failed on the former code.
+
 ## Hash — HashType is scoped: the hash classes are usable by name again (2026-10-18)
 
 Found by the coverage pass (`Hash.crc32KnownAnswers`, the first test of `CRC32`, at 0 % before): `enum HashType` was

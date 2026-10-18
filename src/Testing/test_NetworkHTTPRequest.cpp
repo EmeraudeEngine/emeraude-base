@@ -178,3 +178,28 @@ TEST(NetworkHTTPResponse, statusLineIsStrict)
 	EXPECT_EQ(response.version(), HTTPHeaders::Version::HTTP11);
 }
 
+TEST(NetworkHTTPRequest, theHostFieldFollowsTheResourceAuthority)
+{
+	/* RFC 9110 § 7.2: Host is the URI's authority without the userinfo. It held the host name alone (no port), and a
+	 * second resource kept the FIRST Host (the header map keeps the first value of a name) — 2026-10-18. */
+	HTTPRequest request{HTTPRequest::Method::GET, URI{"http://alpha.example.net:8080/a"}};
+	EXPECT_EQ(request.value("Host"), "alpha.example.net:8080");
+
+	request.setResource(URI{"https://beta.example.net/b"});
+	EXPECT_EQ(request.value("Host"), "beta.example.net");
+
+	const HTTPRequest withUserinfo{HTTPRequest::Method::GET, URI{"https://user:secret@gamma.example.net/c"}};
+	EXPECT_EQ(withUserinfo.value("Host"), "gamma.example.net");
+
+	/* A resource set without the header leaves the previous one alone. */
+	request.setResource(URI{"https://delta.example.net/d"}, true);
+	EXPECT_EQ(request.value("Host"), "beta.example.net");
+
+	/* set() replaces, add() keeps the first value. */
+	request.add("Accept", "text/plain");
+	request.add("Accept", "text/html");
+	EXPECT_EQ(request.value("Accept"), "text/plain");
+	request.set("accept", "application/json");
+	EXPECT_EQ(request.value("Accept"), "application/json");
+}
+

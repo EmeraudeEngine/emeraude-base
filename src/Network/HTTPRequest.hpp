@@ -117,7 +117,9 @@ namespace EmEn::Base::Network
 				m_method{method},
 				m_resource{resource}
 			{
-				this->add(Host, to_string(resource.uriDomain().hostname()));
+				/* NOTE: RFC 9110 § 7.2: the Host field is the URI's authority (the port included when the URI has one),
+				 * without the userinfo. It held the host name alone ("alpha.example.net" for ":8080", 2026-10-18). */
+				this->set(Host, resource.uriDomain().host());
 			}
 
 			/**
@@ -172,9 +174,11 @@ namespace EmEn::Base::Network
 			{
 				m_resource = resource;
 
+				/* NOTE: Set, not added: a second resource kept the FIRST Host (the header map keeps the first value of a
+				 * name), a request rebuilt for another host still named the old one (2026-10-18). */
 				if ( !doNotAddHeader )
 				{
-					this->add(Host, to_string(resource.uriDomain().hostname()));
+					this->set(Host, resource.uriDomain().host());
 				}
 			}
 

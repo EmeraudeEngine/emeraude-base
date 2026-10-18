@@ -1459,8 +1459,17 @@ TEST(PixelFactoryFileIO, readRefusesWhatItCannotDecode)
 	ASSERT_FALSE(errorCode) << errorCode.message();
 	EXPECT_FALSE(FileIO::read(directory / "image.bmp", image));
 
-	/* The extension is matched without case. */
+	/* The extension is matched without case. On a case-insensitive file system (APFS, NTFS) both names are one file:
+	 * the copy is refused and the read below still goes through the upper-case name (macOS peer, 2026-10-18); a copy
+	 * failure on a case-sensitive one is not swallowed. */
 	std::filesystem::copy_file(directory / "image.png", directory / "IMAGE.PNG", errorCode);
+
+	if ( errorCode )
+	{
+		std::error_code equivalentError;
+		EXPECT_TRUE(std::filesystem::equivalent(directory / "image.png", directory / "IMAGE.PNG", equivalentError)) << errorCode.message();
+	}
+
 	EXPECT_TRUE(FileIO::read(directory / "IMAGE.PNG", image));
 	EXPECT_EQ(image.width(), 4U);
 
