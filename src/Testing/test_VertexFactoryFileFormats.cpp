@@ -45,6 +45,7 @@
 #include "VertexFactory/FileFormatNative.hpp"
 #include "VertexFactory/FileFormatOBJ.hpp"
 #include "VertexFactory/FileFormatSTL.hpp"
+#include "VertexFactory/ShapeGenerator.hpp"
 #include "VertexFactory/ShapeLoadResult.hpp"
 #include "VertexFactory/StreamIO.hpp"
 #include "VertexFactory/ShapeTriangle.hpp"
@@ -264,6 +265,61 @@ namespace EmEn::Base::VertexFactory
 			Result result;
 			EXPECT_FALSE(StreamIO::read(buffer, FileFormatType::Native, result)) << "a color index past the color table";
 		}
+	}
+
+	TEST(VertexFactoryNative, everyTruncationOfARealFileIsRefused)
+	{
+		/* The coverage pass (2026-10-18): a real file, cut at EVERY length, is refused at every stage (header, metadata,
+		 * counts, vertices, triangles, colors) — never read short, never past its end (ASan). */
+		const ShapeBuilderOptions< float > options{true, true, true, false, false};
+		const auto cube = ShapeGenerator::generateCuboid< float >(1.0F, 1.0F, 1.0F, options);
+		ASSERT_TRUE(cube.isValid());
+
+		std::vector< std::byte > written;
+		{
+			MemoryStream output{written};
+			ASSERT_TRUE(Native{}.writeStream(output, cube, {}));
+		}
+
+		{
+			const auto & whole = written;
+			MemoryStream input{whole};
+			Result result;
+			ASSERT_TRUE(Native{}.readStream(input, result, {}));
+			EXPECT_EQ(result.shape.vertices().size(), cube.vertices().size());
+			EXPECT_EQ(result.shape.vertexColors().size(), cube.vertexColors().size());
+		}
+
+		size_t refused = 0;
+
+		for ( size_t length = 0; length < written.size(); ++length )
+		{
+			const std::vector< std::byte > truncated(written.cbegin(), written.cbegin() + static_cast< std::ptrdiff_t >(length));
+			MemoryStream input{truncated};
+			Result result;
+
+			if ( !Native{}.readStream(input, result, {}) )
+			{
+				++refused;
+			}
+			else
+			{
+				ADD_FAILURE() << "a file cut at " << length << " of " << written.size() << " bytes was accepted";
+			}
+		}
+
+		EXPECT_EQ(refused, written.size());
+	}
+
+	TEST(VertexFactoryNative, aPrecisionMismatchIsRefused)
+	{
+		auto buffer = makeNative(1, 0, 0, sizeof(ShapeVertex< float >));
+		buffer[10] = static_cast< std::byte >(sizeof(double));
+
+		const auto & input = buffer;
+		MemoryStream stream{input};
+		Result result;
+		EXPECT_FALSE(Native{}.readStream(stream, result, {}));
 	}
 
 	TEST(VertexFactoryNative, badMagicIsRejected)

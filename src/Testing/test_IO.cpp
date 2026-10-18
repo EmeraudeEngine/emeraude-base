@@ -823,6 +823,57 @@ TEST(IOFileUtils, aRefusedWriteKeepsTheExistingFile)
 	std::filesystem::remove_all(directory, errorCode);
 }
 
+TEST(IOFileUtils, theRefusalsDataCanReach)
+{
+	/* The coverage pass (2026-10-18): the refusals a path or a range from data can trigger. */
+	using namespace EmEn::Base;
+
+	std::error_code errorCode;
+	const auto directory = Testing::uniqueTemporaryPath("emeraude_io_refusals");
+	ASSERT_TRUE(std::filesystem::create_directories(directory / "full", errorCode)) << errorCode.message();
+
+	const auto file = directory / "full" / "data.bin";
+	ASSERT_TRUE(IO::filePutContents(file, std::string_view{"0123456789"}));
+
+	/* Erasing: a non-empty directory without recursion, a directory as a file, a file as a directory. */
+	EXPECT_FALSE(IO::eraseDirectory(directory / "full", false));
+	EXPECT_TRUE(IO::fileExists(file));
+	EXPECT_FALSE(IO::eraseFile(directory / "full"));
+	EXPECT_FALSE(IO::eraseDirectory(file, true));
+	EXPECT_TRUE(IO::fileExists(file));
+
+	/* Creating under a file, writing into a directory. */
+	EXPECT_FALSE(IO::createDirectory(file / "child"));
+	EXPECT_FALSE(IO::filePutContents(directory / "full", std::string_view{"x"}));
+
+	/* Ranges: past the end, overflowing, empty. */
+	std::vector< std::byte > range;
+	EXPECT_TRUE(IO::fileGetRange(file, 2, 3, range));
+	EXPECT_EQ(range.size(), 3U);
+	EXPECT_FALSE(IO::fileGetRange(file, 8, 3, range));
+	EXPECT_TRUE(range.empty());
+	EXPECT_FALSE(IO::fileGetRange(file, std::numeric_limits< uint64_t >::max(), 2, range));
+	EXPECT_FALSE(IO::fileGetRange(file, 0, 0, range));
+
+	/* An empty file reads as empty, successfully. */
+	ASSERT_TRUE(IO::createFile(directory / "empty.bin"));
+	std::string content{"untouched"};
+	EXPECT_TRUE(IO::fileGetContents(directory / "empty.bin", content));
+	EXPECT_TRUE(content.empty());
+
+	/* The FileIO writers: an existing file without overwrite, a read-only sound format. */
+	const auto cube = VertexFactory::ShapeGenerator::generateCuboid< float >(1.0F);
+	EXPECT_FALSE(VertexFactory::FileIO::write(cube, file, false));
+	const WaveFactory::Wave< int16_t > wave{};
+	EXPECT_FALSE(WaveFactory::FileIO::write(wave, file, false));
+	EXPECT_FALSE(WaveFactory::FileIO::write(wave, directory / "sound.json", true));
+	EXPECT_FALSE(WaveFactory::FileIO::write(wave, directory / "sound.mid", true));
+	EXPECT_EQ(IO::filesize(file), 10U);
+	EXPECT_FALSE(IO::exists(directory / "sound.json"));
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
 TEST(IOFileUtils, filesizeOfADirectoryIsZero)
 {
 	/* MSVC's file_size() answers a directory's size with no error (Windows peer, 2026-10-18: 524288 for %TEMP%). */

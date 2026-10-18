@@ -572,3 +572,49 @@ TEST(ZipArchive, aNonASCIIPathAndEntryNameRoundTrip)
 	expectTempDirRemoved(dir);
 }
 
+TEST(ZipArchive, extractionRefusalsLeaveTheDestinationAlone)
+{
+	/* The coverage pass (2026-10-18): the extraction refusals an archive or a destination can trigger. */
+	const auto dir = freshTempDir("emeraude_zip_extraction_refusals");
+
+	writeZip(dir / "two.zip", {{.name = "a.txt", .data = "first"}, {.name = "sub/b.txt", .data = "second"}});
+
+	{
+		const ZipReader closed{dir / "two.zip"};
+		std::vector< char > buffer;
+		EXPECT_FALSE(closed.extract("a.txt", buffer));
+
+		ZipReader reader{dir / "two.zip"};
+		ASSERT_TRUE(reader.open());
+
+		/* An entry that is not in the archive. */
+		EXPECT_FALSE(reader.extract("missing.txt", buffer));
+		EXPECT_FALSE(reader.extract("missing.txt", dir / "out", false));
+
+		/* A destination that is a FILE. */
+		writeFile(dir / "occupied", "a file");
+		EXPECT_FALSE(reader.extractAll(dir / "occupied", false));
+
+		/* A FILE where the entry's directory should be. */
+		std::error_code errorCode;
+		std::filesystem::create_directories(dir / "blocked", errorCode);
+		writeFile(dir / "blocked" / "sub", "a file");
+		EXPECT_FALSE(reader.extract("sub/b.txt", dir / "blocked", false));
+
+		/* An existing file is kept without overwrite, replaced with it. */
+		std::filesystem::create_directories(dir / "kept", errorCode);
+		writeFile(dir / "kept" / "a.txt", "older");
+		EXPECT_FALSE(reader.extract("a.txt", dir / "kept", false));
+
+		std::string content;
+		ASSERT_TRUE(EmEn::Base::IO::fileGetContents(dir / "kept" / "a.txt", content));
+		EXPECT_EQ(content, "older");
+
+		EXPECT_TRUE(reader.extract("a.txt", dir / "kept", true));
+		ASSERT_TRUE(EmEn::Base::IO::fileGetContents(dir / "kept" / "a.txt", content));
+		EXPECT_EQ(content, "first");
+	}
+
+	expectTempDirRemoved(dir);
+}
+
