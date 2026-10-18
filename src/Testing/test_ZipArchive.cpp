@@ -459,3 +459,31 @@ TEST(ZipArchive, declaredSizeThePayloadCannotBackIsRefused)
 	expectTempDirRemoved(dir);
 }
 
+TEST(ZipArchive, reopeningListsEachEntryOnceAndAnEmptyArchiveOpens)
+{
+	/* A second open() read the entry list again on top of itself; a valid empty archive answered false while staying
+	 * open (owner decision: it opens). */
+	const auto dir = freshTempDir("emeraude_zip_reopen");
+	const auto archive = dir / "one.zip";
+	const auto empty = dir / "empty.zip";
+
+	writeZip(archive, {{.name = "a.txt", .data = "hello"}});
+	writeZip(empty, {});
+
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+		ASSERT_TRUE(reader.open());
+		EXPECT_EQ(reader.entries().size(), 1U);
+
+		ZipReader emptyReader{empty};
+		EXPECT_TRUE(ZipReader::isArchiveFile(empty));
+		EXPECT_TRUE(emptyReader.open());
+		EXPECT_TRUE(emptyReader.isOpen());
+		EXPECT_TRUE(emptyReader.entries().empty());
+		EXPECT_TRUE(emptyReader.extractAll(dir / "out", false));
+	}
+
+	expectTempDirRemoved(dir);
+}
+

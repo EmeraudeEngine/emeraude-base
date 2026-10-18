@@ -1564,6 +1564,24 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## IO — the FileIO writers write aside; ZipReader re-opens cleanly and opens an empty archive (2026-10-18)
+
+Found by the coverage pass (`IOFileUtils.*`, `ZipArchive.*`):
+- **A refused write destroyed the existing file**: `PixelFactory`, `VertexFactory` and `WaveFactory` `FileIO::write()`
+  opened — truncated — the target BEFORE refusing an extension (.bmp, .tif, .xyz), a precision (float -> PNG), a
+  read-only format (.md2) or an encoder failure (an invalid pixmap / wave): with `overwrite`, "precious content" became
+  0 bytes; a refused new file was left empty. Owner decision: the writers encode into a `MemoryStream`, then
+  `IO::filePutContentsAside()` writes a temporary sibling (`IO::temporarySiblingPath()`: "<name>.writing-<process
+  token>-<counter>", unique per call — two writers of one target never share it) and `IO::renameFile()` replaces the
+  target only once it is whole; any failure removes the temporary file. Cost: one in-memory copy of the encoded file.
+  A side effect: those writers no longer open the target at all, a FIFO there is replaced, not blocked on.
+- `ZipReader::open()` called twice read the entry list again on top of itself (each entry listed twice): it closes
+  first now. A valid EMPTY archive answered false while staying open (`isOpen()` true, `isArchiveFile()` true): it
+  opens (owner decision), `extractAll()` succeeds with nothing to write.
+- `IO::filesize()` of a DIRECTORY: MSVC's `file_size()` answers its size with no error (implementation-defined;
+  libstdc++ fails with EISDIR) — a regular file is checked first (Windows peer, 2026-10-18).
+- The writer and zip tests failed on the former code; the directory size is proven red by the Windows run.
+
 ## IO — every reader refuses what is not a regular file; four contracts kept (2026-10-18)
 
 Found by the coverage pass (`IOFileUtils.*`):

@@ -22,6 +22,8 @@ chosen by the application (the captures directory), less often by data: the risk
 - Route: `FileStream` (write mode), `IO::createFile()`, `IO::filePutContents()` (both overloads),
   `ZipReader::extract()`, `INIParser::write()`, `HTTPSClient`'s download file; `ZipWriter::openArchive()` (libzip
   opens the path itself: the check alone).
+- Not needed for the three `FileIO::write()` (Pixel / Vertex / Wave): since 2026-10-18 they write aside
+  (`IO::filePutContentsAside()`) and rename over the target, which they never open.
 - Tests: the FIFO harness of `test_IO.cpp` (`FifoForOneTest`) works for a writer too (open the READ end
   non-blocking to release a blocked writer).
 

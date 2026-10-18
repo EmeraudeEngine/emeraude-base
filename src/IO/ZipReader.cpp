@@ -104,6 +104,10 @@ namespace EmEn::Base::IO
 	bool
 	ZipReader::open () noexcept
 	{
+		/* NOTE: A second open() starts from a closed reader: the entry list used to be read again on top of itself (each
+		 * entry listed twice, 2026-10-18). */
+		this->close();
+
 		if ( !IO::exists(m_filepath) )
 		{
 			std::cerr << ClassId << " : The archive file " << toU8String(m_filepath) << " doesn't exists !" "\n";
@@ -120,7 +124,9 @@ namespace EmEn::Base::IO
 
 		this->readArchive();
 
-		return !m_entryNames.empty();
+		/* NOTE: A valid archive without an entry is open (owner decision, 2026-10-18): it used to answer false while
+		 * staying open, against isArchiveFile(). */
+		return true;
 	}
 
 	void

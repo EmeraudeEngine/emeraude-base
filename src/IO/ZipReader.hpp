@@ -76,8 +76,9 @@ namespace EmEn::Base::IO
 			}
 
 			/**
-			 * @brief Opens the archive.
-			 * @return bool
+			 * @brief Opens the archive (closing it first when already open) and lists its entries.
+			 * @note A valid archive without an entry opens: true, entries() empty.
+			 * @return bool False when the file is missing, is not a regular file, or is not a readable archive.
 			 */
 			[[nodiscard]]
 			bool open () noexcept;

@@ -219,7 +219,8 @@ namespace EmEn::Base::IO
 	 *
 	 * @param filepath Path to the file.
 	 * @return Size of the file in bytes, or 0 if an error occurs.
-	 * @note Returns 0 if the file does not exist or cannot be accessed.
+	 * @note Returns 0 if the file does not exist, cannot be accessed, or is not a regular file (a directory: MSVC's
+	 *	   file_size() answers its size).
 	 */
 	[[nodiscard]]
 	size_t filesize (const std::filesystem::path & filepath) noexcept;
@@ -731,6 +732,60 @@ namespace EmEn::Base::IO
 		if ( !file ) [[unlikely]]
 		{
 			Logging::error("IO", "filePutContents: write error on " + toU8String(filepath));
+
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * @brief Returns a path beside a file, unique to this call, to write that file aside before replacing it.
+	 * @note "<name>.writing-<process token>-<counter>": two writers of one target (two threads, two processes) never write
+	 * into the same temporary file.
+	 * @param filepath The final path.
+	 * @return std::filesystem::path
+	 */
+	[[nodiscard]]
+	std::filesystem::path temporarySiblingPath (const std::filesystem::path & filepath) noexcept;
+
+	/**
+	 * @brief Writes a whole file aside, then replaces the target with it: the target changes only once the new content
+	 * is written whole.
+	 * @note 2026-10-18 (owner decision): the FileIO writers opened — truncated — the target before refusing an extension
+	 * or failing to encode, an existing file was emptied. The bytes go to temporarySiblingPath(), committed by
+	 * renameFile() (atomic on POSIX, MoveFileExW replace on Windows); any failure removes the temporary file and leaves
+	 * the target untouched.
+	 * @tparam container_t A contiguous range type.
+	 * @param filepath Path to the file to write.
+	 * @param content The whole content.
+	 * @param createDirectories If true, creates parent directories if they don't exist. Default false.
+	 * @return bool False when the path is empty or names no file, the directories cannot be created, or the write or the
+	 * replacement fails (logged).
+	 */
+	template< std::ranges::contiguous_range container_t >
+	[[nodiscard]]
+	bool
+	filePutContentsAside (const std::filesystem::path & filepath, const container_t & content, bool createDirectories = false) noexcept
+	{
+		if ( filepath.empty() || !filepath.has_filename() ) [[unlikely]]
+		{
+			return false;
+		}
+
+		if ( createDirectories && !IO::createDirectory(filepath, true) ) [[unlikely]]
+		{
+			return false;
+		}
+
+		const auto temporaryPath = temporarySiblingPath(filepath);
+
+		if ( !filePutContents(temporaryPath, content) || !renameFile(temporaryPath, filepath) ) [[unlikely]]
+		{
+			if ( fileExists(temporaryPath) )
+			{
+				static_cast< void >(eraseFile(temporaryPath));
+			}
 
 			return false;
 		}

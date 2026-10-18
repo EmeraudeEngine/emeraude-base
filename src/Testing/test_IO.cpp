@@ -63,6 +63,10 @@
 #include "IO/ZipReader.hpp"
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
+#include "PixelFactory/FileIO.hpp"
+#include "VertexFactory/FileIO.hpp"
+#include "VertexFactory/ShapeGenerator.hpp"
+#include "WaveFactory/FileIO.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -699,6 +703,134 @@ TEST(IOFileUtils, readersRefuseADirectory)
 	EXPECT_FALSE(EmEn::Base::FastJSON::getRootFromFile(directory, 16, true).has_value());
 	EXPECT_FALSE(EmEn::Base::INIParser{}.read(directory));
 	EXPECT_FALSE(EmEn::Base::IO::ZipReader::isArchiveFile(directory));
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
+namespace
+{
+	/** @brief Counts the write-aside temporary files left in a directory. */
+	[[nodiscard]]
+	size_t
+	countWritingLeftovers (const std::filesystem::path & directory)
+	{
+		size_t count = 0;
+
+		static_cast< void >(EmEn::Base::IO::forEachDirectoryEntry(directory, false, [&count] (const std::filesystem::directory_entry & entry) {
+			if ( EmEn::Base::IO::toU8String(entry.path().filename()).find(".writing-") != std::string::npos )
+			{
+				++count;
+			}
+
+			return true;
+		}));
+
+		return count;
+	}
+}
+
+TEST(IOFileUtils, aWriteAsideReplacesWholeOrNotAtAll)
+{
+	std::error_code errorCode;
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_aside");
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	const auto target = directory / "target.bin";
+	std::string content;
+
+	ASSERT_TRUE(EmEn::Base::IO::filePutContentsAside(target, std::string_view{"first"}));
+	ASSERT_TRUE(EmEn::Base::IO::fileGetContents(target, content));
+	EXPECT_EQ(content, "first");
+
+	ASSERT_TRUE(EmEn::Base::IO::filePutContentsAside(target, std::string_view{"second, longer"}));
+	ASSERT_TRUE(EmEn::Base::IO::fileGetContents(target, content));
+	EXPECT_EQ(content, "second, longer");
+
+	/* A target that cannot be replaced (a directory holding a file): refused, the directory and its file untouched. */
+	const auto occupied = directory / "occupied";
+	ASSERT_TRUE(std::filesystem::create_directories(occupied, errorCode)) << errorCode.message();
+	ASSERT_TRUE(EmEn::Base::IO::filePutContents(occupied / "inside.bin", std::string_view{"inside"}));
+
+	EXPECT_FALSE(EmEn::Base::IO::filePutContentsAside(occupied, std::string_view{"x"}));
+	EXPECT_TRUE(EmEn::Base::IO::directoryExists(occupied));
+	EXPECT_EQ(EmEn::Base::IO::filesize(occupied / "inside.bin"), 6U);
+
+	/* Each call writes aside under its own name, beside the target; nothing is left behind. */
+	const auto first = EmEn::Base::IO::temporarySiblingPath(target);
+	const auto second = EmEn::Base::IO::temporarySiblingPath(target);
+	EXPECT_NE(first, second);
+	EXPECT_EQ(first.parent_path(), directory);
+	EXPECT_EQ(countWritingLeftovers(directory), 0U);
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
+TEST(IOFileUtils, aRefusedWriteKeepsTheExistingFile)
+{
+	/* The three FileIO writers opened — truncated — the target before refusing an extension or failing to encode: an
+	 * existing file was emptied, a new one left empty. They encode in memory and write aside now (owner decision). */
+	using namespace EmEn::Base;
+
+	std::error_code errorCode;
+	const auto directory = Testing::uniqueTemporaryPath("emeraude_io_refused_writes");
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	const std::string precious{"precious content"};
+	std::vector< std::filesystem::path > kept;
+
+	const auto keep = [&] (const char * name) {
+		const auto path = directory / name;
+		static_cast< void >(IO::filePutContents(path, std::string_view{precious}));
+		kept.emplace_back(path);
+
+		return path;
+	};
+
+	const PixelFactory::Pixmap< uint8_t > image{4U, 4U, PixelFactory::ChannelMode::RGB};
+	const PixelFactory::Pixmap< float > floatImage{4U, 4U, PixelFactory::ChannelMode::RGB};
+	const PixelFactory::Pixmap< uint8_t > invalidImage{};
+	const auto cube = VertexFactory::ShapeGenerator::generateCuboid< float >(1.0F);
+	const WaveFactory::Wave< int16_t > invalidWave{};
+
+	EXPECT_FALSE(PixelFactory::FileIO::write(image, keep("image.bmp"), true));
+	EXPECT_FALSE(PixelFactory::FileIO::write(floatImage, keep("image.png"), true));
+	EXPECT_FALSE(PixelFactory::FileIO::write(invalidImage, keep("invalid.png"), true));
+	EXPECT_FALSE(VertexFactory::FileIO::write(cube, keep("shape.xyz"), true));
+	EXPECT_FALSE(VertexFactory::FileIO::write(cube, keep("shape.md2"), true));
+	EXPECT_FALSE(WaveFactory::FileIO::write(invalidWave, keep("sound.wav"), true));
+
+	for ( const auto & path : kept )
+	{
+		std::string content;
+		EXPECT_TRUE(IO::fileGetContents(path, content));
+		EXPECT_EQ(content, precious) << IO::toU8String(path);
+	}
+
+	/* A refused NEW file is not created at all. */
+	EXPECT_FALSE(PixelFactory::FileIO::write(invalidImage, directory / "new.png", true));
+	EXPECT_FALSE(IO::exists(directory / "new.png"));
+
+	/* A successful overwrite replaces the content. */
+	const auto replaced = keep("replaced.png");
+	EXPECT_TRUE(PixelFactory::FileIO::write(image, replaced, true));
+
+	PixelFactory::Pixmap< uint8_t > readBack;
+	EXPECT_TRUE(PixelFactory::FileIO::read(replaced, readBack));
+	EXPECT_EQ(readBack.width(), 4U);
+
+	EXPECT_EQ(countWritingLeftovers(directory), 0U);
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
+TEST(IOFileUtils, filesizeOfADirectoryIsZero)
+{
+	/* MSVC's file_size() answers a directory's size with no error (Windows peer, 2026-10-18: 524288 for %TEMP%). */
+	std::error_code errorCode;
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_filesize_dir");
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	EXPECT_EQ(EmEn::Base::IO::filesize(directory), 0U);
 
 	std::filesystem::remove_all(directory, errorCode);
 }

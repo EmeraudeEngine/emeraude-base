@@ -34,6 +34,9 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <random>
 #include <string>
 
 /* Third-party inclusions. */
@@ -196,6 +199,30 @@ namespace EmEn::Base::IO
 		return true;
 	}
 
+	std::filesystem::path
+	temporarySiblingPath (const std::filesystem::path & filepath) noexcept
+	{
+		/* NOTE: Drawn once per process from std::random_device and the clock (no seeded draw: no PortableRandom needed). */
+		static const std::string processToken = [] {
+			std::random_device device;
+			const auto clockBits = static_cast< uint64_t >(std::chrono::steady_clock::now().time_since_epoch().count());
+			const auto value = ((static_cast< uint64_t >(device()) << 32U) | static_cast< uint64_t >(device())) ^ clockBits;
+			constexpr std::string_view Digits{"0123456789abcdef"};
+			std::string token(16, '0');
+
+			for ( size_t index = 0; index < token.size(); ++index )
+			{
+				token[index] = Digits[(value >> (index * 4U)) & 0xFU];
+			}
+
+			return token;
+		}();
+
+		static std::atomic< uint64_t > counter{0};
+
+		return filepath.parent_path() / u8path(toU8String(filepath.filename()) + ".writing-" + processToken + "-" + std::to_string(counter.fetch_add(1, std::memory_order_relaxed)));
+	}
+
 	bool
 	fileExists (const std::filesystem::path & filepath) noexcept
 	{
@@ -299,8 +326,18 @@ namespace EmEn::Base::IO
 	filesize (const std::filesystem::path & filepath) noexcept
 	{
 		std::error_code errorCode;
+		const auto systemFilepath = systemPath(filepath);
 
-		const auto size = std::filesystem::file_size(systemPath(filepath), errorCode);
+		/* NOTE: file_size() of an existing path that is not a regular file is implementation-defined: libstdc++ fails
+		 * with EISDIR, MSVC answers a DIRECTORY's size with no error (Windows peer, 2026-10-18: 524288 for %TEMP%). */
+		if ( std::filesystem::exists(systemFilepath, errorCode) && !std::filesystem::is_regular_file(systemFilepath, errorCode) ) [[unlikely]]
+		{
+			Logging::error("IO", std::string{"IO::filesize(), "} + toU8String(filepath) + " is not a regular file.");
+
+			return 0;
+		}
+
+		const auto size = std::filesystem::file_size(systemFilepath, errorCode);
 
 		/* NOTE: On an error, file_size() answers static_cast< uintmax_t >(-1): the contract is 0 (2026-10-18: a missing
 		 * file was 18446744073709551615 bytes). */

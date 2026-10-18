@@ -42,6 +42,7 @@
 #include "FileFormatSTL.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
+#include "IO/MemoryStream.hpp"
 
 namespace EmEn::Base::VertexFactory::FileIO
 {
@@ -155,14 +156,15 @@ namespace EmEn::Base::VertexFactory::FileIO
 			return false;
 		}
 
-		IO::FileStream stream{filepath, IO::FileStream::Mode::Write};
+		/* NOTE: Encoded in memory, then written aside and renamed over the target (owner decision, 2026-10-18): the target
+		 * used to be opened — truncated — before an extension was refused or an encoder failed, an existing file was
+		 * emptied. The target changes only once the new content is whole. */
+		std::vector< std::byte > encoded;
+		IO::MemoryStream stream{encoded};
 
-		if ( !stream.isOpen() )
-		{
-			Logging::error("VertexFactory::FileIO", std::string{"write(), unable to open \'"} + IO::toU8String(filepath) + "\' for writing !");
-
-			return false;
-		}
+		const auto commit = [&filepath, &encoded] (bool encodedWhole) {
+			return encodedWhole && IO::filePutContentsAside(filepath, encoded);
+		};
 
 		const auto extension = IO::getFileExtension(filepath, true);
 
@@ -170,28 +172,28 @@ namespace EmEn::Base::VertexFactory::FileIO
 		{
 			FileFormatNative< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.writeStream(stream, shape, writeOptions);
+			return commit(fileFormat.writeStream(stream, shape, writeOptions));
 		}
 
 		if ( extension == "obj" )
 		{
 			FileFormatOBJ< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.writeStream(stream, shape, writeOptions);
+			return commit(fileFormat.writeStream(stream, shape, writeOptions));
 		}
 
 		if ( extension == "stl" )
 		{
 			FileFormatSTL< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.writeStream(stream, shape, writeOptions);
+			return commit(fileFormat.writeStream(stream, shape, writeOptions));
 		}
 
 		if ( extension == "mdl" || extension == "md2" || extension == "md3" || extension == "md5mesh" )
 		{
 			FileFormatMDx< vertex_data_t, index_data_t > fileFormat{};
 
-			return fileFormat.writeStream(stream, shape, writeOptions);
+			return commit(fileFormat.writeStream(stream, shape, writeOptions));
 		}
 
 		Logging::error("VertexFactory::FileIO", std::string{"write(), the file \'"} + IO::toU8String(filepath) + "\' format is not handled !");

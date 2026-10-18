@@ -42,6 +42,7 @@
 #include "IOCommon.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
+#include "IO/MemoryStream.hpp"
 #include "Pixmap.hpp"
 
 namespace EmEn::Base::PixelFactory::FileIO
@@ -201,14 +202,15 @@ namespace EmEn::Base::PixelFactory::FileIO
 			return false;
 		}
 
-		IO::FileStream stream{filepath, IO::FileStream::Mode::Write};
+		/* NOTE: Encoded in memory, then written aside and renamed over the target (owner decision, 2026-10-18): the target
+		 * used to be opened — truncated — before an extension was refused or an encoder failed, an existing file was
+		 * emptied. The target changes only once the new content is whole. */
+		std::vector< std::byte > encoded;
+		IO::MemoryStream stream{encoded};
 
-		if ( !stream.isOpen() )
-		{
-			std::cerr << "PixelFactory::FileIO::write(), unable to open '" << IO::toU8String(filepath) << "' for writing !" "\n";
-
-			return false;
-		}
+		const auto commit = [&filepath, &encoded] (bool encodedWhole) {
+			return encodedWhole && IO::filePutContentsAside(filepath, encoded);
+		};
 
 		const auto extension = IO::getFileExtension(filepath, true);
 
@@ -218,7 +220,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			{
 				const FileFormatJpeg< pixel_data_t, dimension_t > fileFormat;
 
-				return fileFormat.writeStream(stream, pixmap, options);
+				return commit(fileFormat.writeStream(stream, pixmap, options));
 			}
 			else
 			{
@@ -234,7 +236,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			{
 				const FileFormatPNG< pixel_data_t, dimension_t > fileFormat;
 
-				return fileFormat.writeStream(stream, pixmap, options);
+				return commit(fileFormat.writeStream(stream, pixmap, options));
 			}
 			else
 			{
@@ -250,7 +252,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			{
 				const FileFormatTarga< pixel_data_t, dimension_t > fileFormat;
 
-				return fileFormat.writeStream(stream, pixmap, options);
+				return commit(fileFormat.writeStream(stream, pixmap, options));
 			}
 			else
 			{
@@ -266,7 +268,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			{
 				const FileFormatWebP< pixel_data_t, dimension_t > fileFormat;
 
-				return fileFormat.writeStream(stream, pixmap, options);
+				return commit(fileFormat.writeStream(stream, pixmap, options));
 			}
 			else
 			{
@@ -280,7 +282,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 		{
 			const FileFormatHDR< pixel_data_t, dimension_t > fileFormat;
 
-			return fileFormat.writeStream(stream, pixmap, options);
+			return commit(fileFormat.writeStream(stream, pixmap, options));
 		}
 
 		std::cerr << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' format is not handled !" "\n";
