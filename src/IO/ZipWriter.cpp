@@ -191,20 +191,18 @@ namespace EmEn::Base::IO
 	bool
 	ZipWriter::readSource (const std::filesystem::path & filepath, std::vector< char > & fileContent) noexcept
 	{
-		std::ifstream file{filepath, std::ios::binary};
+		/* NOTE: Through IO::openInputFile(): a FIFO blocked the open forever (2026-10-18). */
+		std::ifstream file;
 
-		if ( !file.is_open() )
+		if ( !IO::openInputFile(filepath, file) )
 		{
 			return false;
 		}
 
-		/* NOTE: Read the file size. */
-		file.seekg(0, std::ifstream::end);
-		const std::streamoff bytes = file.tellg();
-		file.seekg(0, std::ifstream::beg);
+		/* NOTE: -1 when the size is unknown: converted to a size, it would request an impossible allocation. */
+		const std::streamoff bytes = IO::fileSizeFromStream(file);
 
-		/* NOTE: tellg() answers -1 on failure: converted to a size, it would request an impossible allocation. */
-		if ( bytes < 0 || !file )
+		if ( bytes < 0 )
 		{
 			return false;
 		}

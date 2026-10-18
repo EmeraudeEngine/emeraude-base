@@ -178,6 +178,40 @@ namespace EmEn::Base::IO
 	bool fileExists (const std::filesystem::path & filepath) noexcept;
 
 	/**
+	 * @brief Checks that a path names a regular file before something opens it for reading (a symbolic link to one is
+	 * followed).
+	 * @note A FIFO without a writer blocks an open FOREVER, and a device, a socket or a directory is no file to read: a
+	 * path that comes from data must never reach an open on them (2026-10-18). openInputFile() calls this; a library
+	 * that opens the path itself (libzip) is called after it.
+	 * @param filepath Path to the file.
+	 * @return bool False when the path is empty, missing, inaccessible, or not a regular file (the last one logged).
+	 */
+	[[nodiscard]]
+	bool isReadableRegularFile (const std::filesystem::path & filepath) noexcept;
+
+	/**
+	 * @brief Opens a file for reading, refusing anything but a regular file (a symbolic link to one is followed).
+	 * @note Every reader of the library opens through this (isReadableRegularFile(), then the open). The check and the
+	 * open are two system calls: swapping the file for a FIFO between them needs write access to its directory
+	 * already.
+	 * @param filepath Path to the file.
+	 * @param[out] stream The stream to open (closed first).
+	 * @param mode The open mode; std::ios::in is added. Default binary.
+	 * @return bool False when the path is empty, missing or not a regular file (the last one logged), or the open fails.
+	 */
+	[[nodiscard]]
+	bool openInputFile (const std::filesystem::path & filepath, std::ifstream & stream, std::ios::openmode mode = std::ios::binary) noexcept;
+
+	/**
+	 * @brief Returns the size of a file opened for reading, the stream left at its beginning.
+	 * @note A pseudo-file (/proc) cannot seek to its end, or claims 0 bytes while it holds some: -1, the size is unknown.
+	 * @param stream An open input stream.
+	 * @return std::streamoff The size in bytes, or -1 when it is unknown.
+	 */
+	[[nodiscard]]
+	std::streamoff fileSizeFromStream (std::ifstream & stream) noexcept;
+
+	/**
 	 * @brief Returns the size of a file in bytes.
 	 *
 	 * Retrieves the size of the specified file using the filesystem API.
@@ -223,7 +257,7 @@ namespace EmEn::Base::IO
 	 * @param path Path to the directory to check.
 	 * @return True if the path exists and is a directory, false otherwise.
 	 * @note Returns false if the path is empty or points to a non-directory.
-	 *	   Error messages are suppressed for non-existent directories (error code 2).
+	 *	   Error messages are suppressed for a missing path and for a path crossing a file (ENOTDIR).
 	 */
 	[[nodiscard]]
 	bool directoryExists (const std::filesystem::path & path) noexcept;
@@ -235,8 +269,8 @@ namespace EmEn::Base::IO
 	 *
 	 * @param path Path to the directory to check.
 	 * @return True if the directory is empty, false otherwise.
-	 * @note Returns false if the path is empty or an error occurs.
-	 *	   The directory must exist for this function to work correctly.
+	 * @note Returns false if the path is empty, is not a directory (an empty FILE is no empty directory), or an error
+	 *	   occurs.
 	 */
 	[[nodiscard]]
 	bool isDirectoryContentEmpty (const std::filesystem::path & path) noexcept;
@@ -383,7 +417,8 @@ namespace EmEn::Base::IO
 	 * @param removeFileSection If true, treats the last component as a filename and creates
 	 *		only the parent directory path. Useful when path includes a filename. Default false.
 	 * @return True if the directory was created or already exists, false on error.
-	 * @note Returns false if the path is empty or directory creation fails.
+	 * @note Returns false if the path is empty or directory creation fails. With removeFileSection, a bare file name
+	 *	   (no parent: the current directory) needs nothing created: true.
 	 */
 	bool createDirectory (const std::filesystem::path & path, bool removeFileSection = false) noexcept;
 
@@ -494,7 +529,8 @@ namespace EmEn::Base::IO
 	 * @param[out] content String that will be filled with the file contents.
 	 *		The string is resized to match the file size.
 	 * @return True if the file was successfully read, false otherwise.
-	 * @note Returns false if the path is empty, file cannot be opened, or read fails.
+	 * @note Returns false if the path is empty, is not a regular file (openInputFile()), its size is unknown (a
+	 *	   pseudo-file such as /proc: refused explicitly, owner decision 2026-10-18), or the read fails.
 	 *	   Errors are logged to stderr.
 	 * @see fileGetContents(const std::filesystem::path&, std::vector<data_t>&)
 	 */
@@ -529,7 +565,8 @@ namespace EmEn::Base::IO
 	 * @param[out] content Vector that will be filled with the file contents.
 	 *		The vector is resized to fit the file data, accounting for element size.
 	 * @return True if the file was successfully read, false otherwise.
-	 * @note Returns false if the path is empty, file cannot be opened, or read fails.
+	 * @note Returns false if the path is empty, is not a regular file (openInputFile()), its size is unknown (a
+	 *	   pseudo-file such as /proc), or the read fails.
 	 *	   If file size is not evenly divisible by sizeof(data_t), the vector is
 	 *	   sized up to accommodate partial elements. Errors are logged to stderr.
 	 * @see fileGetContents(const std::filesystem::path&, std::string&)
@@ -543,26 +580,23 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ifstream file{systemPath(filepath), std::ios::binary | std::ios::ate};
+		std::ifstream file;
 
-		if ( !file.is_open() ) [[unlikely]]
+		if ( !openInputFile(filepath, file) ) [[unlikely]]
 		{
 			Logging::error("IO", "fileGetContents: cannot open " + toU8String(filepath));
 
 			return false;
 		}
 
-		/* NOTE: Read the file size. */
-		const auto bytes = file.tellg();
+		const auto bytes = fileSizeFromStream(file);
 
 		if ( bytes < 0 ) [[unlikely]]
 		{
-			Logging::error("IO", "fileGetContents: cannot read the size of " + toU8String(filepath));
+			Logging::error("IO", "fileGetContents: the size of " + toU8String(filepath) + " is unknown (a pseudo-file is not read whole)");
 
 			return false;
 		}
-
-		file.seekg(0, std::ifstream::beg);
 
 		content.resize((static_cast< size_t >(bytes) / sizeof(data_t)) + (static_cast< size_t >(bytes) % sizeof(data_t) != 0 ? 1U : 0U));
 
@@ -601,16 +635,16 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ifstream file{systemPath(filepath), std::ios::binary | std::ios::ate};
+		std::ifstream file;
 
-		if ( !file.is_open() ) [[unlikely]]
+		if ( !openInputFile(filepath, file) ) [[unlikely]]
 		{
 			Logging::error("IO", "fileGetRange: cannot open " + toU8String(filepath));
 
 			return false;
 		}
 
-		const std::streamoff fileSize = file.tellg();
+		const std::streamoff fileSize = fileSizeFromStream(file);
 
 		if ( fileSize < 0 ) [[unlikely]]
 		{

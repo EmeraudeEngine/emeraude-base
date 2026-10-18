@@ -24,11 +24,15 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+/* Project configuration. */
+#include "emeraude_platform.hpp"
+
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -36,14 +40,27 @@
 #include <limits>
 #include <string>
 #include <string_view>
+#include <stop_token>
 #include <system_error>
+#include <thread>
 #include <vector>
+
+/* Third-party inclusions. */
+#if IS_LINUX || IS_MACOS
+	#include <fcntl.h>
+	#include <sys/stat.h>
+	#include <unistd.h>
+#endif
 
 /* Local inclusions. */
 #include "TemporaryPath.hpp"
+#include "Animation/MD5AnimParser.hpp"
+#include "FastJSON.hpp"
+#include "INIParser.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
+#include "IO/ZipReader.hpp"
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
 
@@ -581,3 +598,247 @@ TEST(IORenameFile, refusesEmptyAndMissingPaths)
 
 	EXPECT_FALSE(EmEn::Base::IO::renameFile(directory / "emeraude-io-no-such-file", directory / "emeraude-io-target"));
 }
+
+/* The coverage pass (2026-10-18): the contracts of filesize(), createDirectory(), isDirectoryContentEmpty(),
+ * directoryExists() and fileGetContents(), and the readers refusing what is not a regular file. */
+TEST(IOFileUtils, filesizeIsZeroOnAnError)
+{
+	/* file_size() answers static_cast< uintmax_t >(-1) on an error: a missing file was 18446744073709551615 bytes. */
+	const auto missing = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_no_such_file.bin");
+
+	EXPECT_EQ(EmEn::Base::IO::filesize(missing), 0U);
+	EXPECT_EQ(EmEn::Base::IO::filesize(missing.parent_path()), 0U);
+}
+
+TEST(IOFileUtils, aBareFileNameNeedsNoDirectoryCreated)
+{
+	/* create_directories("") is EINVAL: filePutContents("out.json", …, createDirectories = true) failed. */
+	std::error_code errorCode;
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_bare_name");
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	const auto previous = std::filesystem::current_path(errorCode);
+	ASSERT_FALSE(errorCode) << errorCode.message();
+	std::filesystem::current_path(directory, errorCode);
+	ASSERT_FALSE(errorCode) << errorCode.message();
+
+	const bool created = EmEn::Base::IO::createDirectory("out.json", true);
+	const bool written = EmEn::Base::IO::filePutContents("out.json", std::string_view{"{}"}, false, true);
+
+	std::filesystem::current_path(previous, errorCode);
+	ASSERT_FALSE(errorCode) << errorCode.message();
+
+	EXPECT_TRUE(created);
+	EXPECT_TRUE(written);
+	EXPECT_EQ(EmEn::Base::IO::filesize(directory / "out.json"), 2U);
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
+TEST(IOFileUtils, anEmptyFileIsNoEmptyDirectory)
+{
+	std::error_code errorCode;
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_empty_dir");
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	const auto emptyFile = directory / "empty.bin";
+	ASSERT_TRUE(EmEn::Base::IO::createFile(emptyFile));
+
+	/* is_empty() is true for an empty FILE too. */
+	EXPECT_FALSE(EmEn::Base::IO::isDirectoryContentEmpty(emptyFile));
+	EXPECT_FALSE(EmEn::Base::IO::isDirectoryContentEmpty(directory));
+	EXPECT_FALSE(EmEn::Base::IO::isDirectoryContentEmpty(directory / "missing"));
+
+	ASSERT_TRUE(EmEn::Base::IO::eraseFile(emptyFile));
+	EXPECT_TRUE(EmEn::Base::IO::isDirectoryContentEmpty(directory));
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
+TEST(IOFileUtils, aPathThroughAFileIsSimplyNoDirectory)
+{
+	/* ENOTDIR (and Windows' ERROR_PATH_NOT_FOUND for a missing parent) used to be logged as errors. */
+	std::error_code errorCode;
+	const auto file = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_not_a_dir.bin");
+	ASSERT_TRUE(EmEn::Base::IO::filePutContents(file, std::string_view{"x"}));
+
+	int calls{0};
+	EmEn::Base::Logging::setSink([&calls] (EmEn::Base::Severity /*severity*/, const char * /*tag*/, std::string_view /*message*/) {
+		++calls;
+	});
+
+	const bool throughFile = EmEn::Base::IO::directoryExists(file / "child");
+	const bool missingParents = EmEn::Base::IO::directoryExists(file.parent_path() / "emeraude_io_no_such_parent" / "a" / "b");
+
+	EmEn::Base::Logging::setSink(nullptr);
+
+	EXPECT_FALSE(throughFile);
+	EXPECT_FALSE(missingParents);
+	EXPECT_EQ(calls, 0);
+
+	std::filesystem::remove(file, errorCode);
+}
+
+TEST(IOFileUtils, readersRefuseADirectory)
+{
+	std::error_code errorCode;
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_dir_as_file");
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	std::string text;
+	std::vector< uint8_t > bytes;
+	std::vector< std::byte > range;
+	std::ifstream stream;
+
+	EXPECT_FALSE(EmEn::Base::IO::isReadableRegularFile(directory));
+	EXPECT_FALSE(EmEn::Base::IO::openInputFile(directory, stream));
+	EXPECT_FALSE(EmEn::Base::IO::fileGetContents(directory, text));
+	EXPECT_FALSE(EmEn::Base::IO::fileGetContents(directory, bytes));
+	EXPECT_FALSE(EmEn::Base::IO::fileGetRange(directory, 0, 1, range));
+	EXPECT_FALSE(EmEn::Base::IO::FileStream(directory, EmEn::Base::IO::FileStream::Mode::Read).isOpen());
+	EXPECT_FALSE(EmEn::Base::FastJSON::getRootFromFile(directory, 16, true).has_value());
+	EXPECT_FALSE(EmEn::Base::INIParser{}.read(directory));
+	EXPECT_FALSE(EmEn::Base::IO::ZipReader::isArchiveFile(directory));
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+
+#if IS_LINUX
+TEST(IOFileUtils, aPseudoFileIsRefusedNotReadEmpty)
+{
+	/* /proc claims 0 bytes or cannot seek to its end: refused explicitly (owner decision), never read as empty. */
+	std::string text{"untouched"};
+
+	EXPECT_FALSE(EmEn::Base::IO::fileGetContents("/proc/self/status", text));
+	EXPECT_EQ(text, "untouched");
+}
+#endif
+
+#if IS_LINUX || IS_MACOS
+namespace
+{
+	/**
+	 * @brief A FIFO for one test. If a reader blocks on it, a writer opened (non-blocking) after one second releases
+	 * it: the former code fails the test instead of hanging the suite.
+	 */
+	class FifoForOneTest final
+	{
+		public:
+
+			explicit
+			FifoForOneTest (std::string_view leaf)
+				: m_path{EmEn::Base::Testing::uniqueTemporaryPath(leaf)},
+				m_created{::mkfifo(m_path.c_str(), 0600) == 0}
+			{
+				m_releaser = std::jthread{[path = m_path] (const std::stop_token & stopToken) {
+					const auto start = std::chrono::steady_clock::now();
+
+					while ( !stopToken.stop_requested() )
+					{
+						if ( std::chrono::steady_clock::now() - start >= std::chrono::seconds{1} )
+						{
+							/* NOTE: Succeeds only while a reader waits in its open(). */
+							const int descriptor = ::open(path.c_str(), O_WRONLY | O_NONBLOCK);
+
+							if ( descriptor >= 0 )
+							{
+								::close(descriptor);
+
+								return;
+							}
+						}
+
+						std::this_thread::sleep_for(std::chrono::milliseconds{20});
+					}
+				}};
+			}
+
+			FifoForOneTest (const FifoForOneTest &) = delete;
+			FifoForOneTest (FifoForOneTest &&) = delete;
+			FifoForOneTest & operator= (const FifoForOneTest &) = delete;
+			FifoForOneTest & operator= (FifoForOneTest &&) = delete;
+
+			~FifoForOneTest ()
+			{
+				m_releaser.request_stop();
+				m_releaser.join();
+
+				std::error_code errorCode;
+				std::filesystem::remove(m_path, errorCode);
+			}
+
+			[[nodiscard]]
+			const std::filesystem::path &
+			path () const noexcept
+			{
+				return m_path;
+			}
+
+			[[nodiscard]]
+			bool
+			created () const noexcept
+			{
+				return m_created;
+			}
+
+		private:
+
+			std::filesystem::path m_path;
+			std::jthread m_releaser;
+			bool m_created{false};
+	};
+
+	/** @brief Runs a read on a fresh FIFO: it must be refused at once (a blocked open waits for the releaser, 1 s). */
+	template< typename read_t >
+	void
+	expectRefusedAtOnce (std::string_view leaf, read_t && read)
+	{
+		const FifoForOneTest fifo{leaf};
+		ASSERT_TRUE(fifo.created());
+
+		const auto start = std::chrono::steady_clock::now();
+		const bool accepted = std::forward< read_t >(read)(fifo.path());
+		const auto elapsed = std::chrono::steady_clock::now() - start;
+
+		EXPECT_FALSE(accepted);
+		EXPECT_LT(elapsed, std::chrono::milliseconds{500}) << "the open blocked on the FIFO";
+	}
+}
+
+TEST(IOFileUtils, readersRefuseAFifoWithoutBlocking)
+{
+	/* A FIFO without a writer blocked std::ifstream::open() FOREVER: a path from data could freeze a loading thread. */
+	expectRefusedAtOnce("emeraude_io_fifo_string", [] (const std::filesystem::path & path) {
+		std::string content;
+		return EmEn::Base::IO::fileGetContents(path, content);
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_vector", [] (const std::filesystem::path & path) {
+		std::vector< uint8_t > content;
+		return EmEn::Base::IO::fileGetContents(path, content);
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_range", [] (const std::filesystem::path & path) {
+		std::vector< std::byte > content;
+		return EmEn::Base::IO::fileGetRange(path, 0, 1, content);
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_stream", [] (const std::filesystem::path & path) {
+		return EmEn::Base::IO::FileStream{path, EmEn::Base::IO::FileStream::Mode::Read}.isOpen();
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_json", [] (const std::filesystem::path & path) {
+		return EmEn::Base::FastJSON::getRootFromFile(path, 16, true).has_value();
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_ini", [] (const std::filesystem::path & path) {
+		return EmEn::Base::INIParser{}.read(path);
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_md5anim", [] (const std::filesystem::path & path) {
+		return !EmEn::Base::Animation::MD5AnimParser< float >::parse(path, "clip").empty();
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_zip", [] (const std::filesystem::path & path) {
+		return EmEn::Base::IO::ZipReader::isArchiveFile(path);
+	});
+	expectRefusedAtOnce("emeraude_io_fifo_zip_open", [] (const std::filesystem::path & path) {
+		EmEn::Base::IO::ZipReader reader{path};
+		return reader.open();
+	});
+}
+#endif
+

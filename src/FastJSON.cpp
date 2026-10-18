@@ -160,9 +160,10 @@ namespace EmEn::Base::FastJSON
 	std::optional< Json::Value >
 	getRootFromFile (const std::filesystem::path & filepath, int stackLimit, bool quiet)
 	{
-		std::ifstream file{filepath, std::ifstream::binary};
+		/* NOTE: Through IO::openInputFile(): a FIFO blocked the open forever (2026-10-18). */
+		std::ifstream file;
 
-		if ( !file.is_open() )
+		if ( !IO::openInputFile(filepath, file) )
 		{
 			if ( !quiet )
 			{

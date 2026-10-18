@@ -1564,6 +1564,32 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## IO — every reader refuses what is not a regular file; four contracts kept (2026-10-18)
+
+Found by the coverage pass (`IOFileUtils.*`):
+- **A FIFO without a writer blocked `std::ifstream::open()` FOREVER**: a path from data (a store, a settings file, a
+  dropped file) could freeze a loading thread. 7 of the 9 readers tested blocked; `FileStream` and `INIParser` opened
+  a DIRECTORY as a file. Owner decision: one helper for every reader — `IO::isReadableRegularFile()` (a symbolic link
+  to a regular file is followed; a FIFO, a device, a socket or a directory is refused and logged; a missing file stays
+  silent, the caller's to report) and `IO::openInputFile()` (the check, then the open). Through it: `fileGetContents()`
+  (both), `fileGetRange()`, `FileStream`, `FastJSON::getRootFromFile()`, `INIParser::read()`, `MD5AnimParser::parse()`,
+  `ZipWriter::readSource()`, `HTTPServer`'s file body; `ZipReader` checks before libzip opens the path itself. The
+  check and the open are two calls: swapping the file for a FIFO between them needs write access to its directory.
+  The writers have the same defect: `docs/todo/writers-refuse-non-regular-files.md`; the engine's own readers:
+  engine `docs/todo/readers-through-io-open-input-file.md`.
+- **A pseudo-file is refused explicitly** (owner decision): /proc cannot seek to its end, or claims 0 bytes while it
+  holds some — `IO::fileSizeFromStream()` answers -1, `fileGetContents()` says "the size is unknown" (it used to fail
+  as "unable to read"). Read /proc line by line with a stream (the engine does).
+- `filesize()` answered `static_cast< uintmax_t >(-1)` on an error (a missing file was 18446744073709551615 bytes); its
+  contract is 0.
+- `createDirectory(path, true)` on a bare file name called `create_directories("")`, EINVAL: `filePutContents("out.json",
+  …, createDirectories = true)` failed. No parent = the current directory = nothing to create.
+- `isDirectoryContentEmpty()` answered true for an empty FILE (`std::filesystem::is_empty()` does).
+- `directoryExists()` logged a path crossing a file (ENOTDIR) as an error, and on Windows a missing parent
+  (ERROR_PATH_NOT_FOUND, 3 — only 2 was silenced): both compared through `std::errc` now.
+- The tests failed on the former code (the FIFO ones by timing: a releaser opens the write end after 1 s, so a
+  regression fails instead of hanging the suite — POSIX only, Windows has no FIFO in the file system).
+
 ## PixelFactory — a proportional pixmap font keeps each glyph's aspect; the text advances in pixels (2026-10-18)
 
 Found by the coverage pass (`PixelFactoryFont.*`, `PixelFactoryTextProcessor.*`), two defects that hid each other:

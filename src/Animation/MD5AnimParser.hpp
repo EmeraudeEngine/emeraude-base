@@ -70,9 +70,10 @@ namespace EmEn::Base::Animation
 			AnimationClip< precision_t >
 			parse (const std::filesystem::path & filepath, const std::string & clipName) noexcept
 			{
-				std::ifstream file(filepath);
+				/* NOTE: Through IO::openInputFile(): a FIFO blocked the open forever (2026-10-18). Text mode, as before. */
+				std::ifstream file;
 
-				if ( !file.is_open() )
+				if ( !IO::openInputFile(filepath, file, std::ios::in) )
 				{
 					std::cerr << "[MD5AnimParser] Failed to open '" << IO::toU8String(filepath) << "' !\n";
 

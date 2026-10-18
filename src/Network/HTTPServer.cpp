@@ -37,6 +37,7 @@
 
 /* Local inclusions. */
 #include "ConditionVariable.hpp"
+#include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 #include "Mutex.hpp"
 #include "String.hpp"
@@ -460,10 +461,11 @@ namespace EmEn::Base::Network
 		if ( m_request.method != "HEAD" && length > 0 )
 		{
 			FileBody fileBody;
-			fileBody.file.open(filepath, std::ios::binary);
 			fileBody.remaining = length;
 
-			if ( !fileBody.file.is_open() )
+			/* NOTE: Through IO::openInputFile(), like every reader of the library: the regular-file check above runs
+			 * again right before the open. */
+			if ( !IO::openInputFile(filepath, fileBody.file) )
 			{
 				this->respondEmpty(404);
 

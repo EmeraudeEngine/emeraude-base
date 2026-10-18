@@ -55,7 +55,8 @@ namespace EmEn::Base::IO
 	bool
 	ZipReader::isArchiveFile (const std::filesystem::path & filepath) noexcept
 	{
-		if ( !IO::exists(filepath) )
+		/* NOTE: libzip opens the path itself: a FIFO blocked that open forever (2026-10-18). */
+		if ( !IO::isReadableRegularFile(filepath) )
 		{
 			return false;
 		}
@@ -343,6 +344,12 @@ namespace EmEn::Base::IO
 	bool
 	ZipReader::openArchive () noexcept
 	{
+		/* NOTE: libzip opens the path itself: a FIFO blocked that open forever (2026-10-18). */
+		if ( !IO::isReadableRegularFile(m_filepath) )
+		{
+			return false;
+		}
+
 #if IS_WINDOWS
 		zip_error_t zipError;
 		zip_error_init(&zipError);

@@ -34,6 +34,7 @@
 
 /* Local inclusions for inheritances. */
 #include "ByteStream.hpp"
+#include "IO.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -62,9 +63,8 @@ namespace EmEn::Base::IO
 			{
 				if ( mode == Mode::Read )
 				{
-					m_input.open(filepath, std::ios::binary);
-
-					if ( m_input.is_open() )
+					/* NOTE: Through IO::openInputFile(): a FIFO blocked the open forever (2026-10-18). */
+					if ( IO::openInputFile(filepath, m_input) )
 					{
 						m_input.seekg(0, std::ios::end);
 

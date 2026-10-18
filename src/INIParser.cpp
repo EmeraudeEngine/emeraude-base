@@ -29,6 +29,9 @@
 /* STL inclusions. */
 #include <fstream>
 
+/* Local inclusions. */
+#include "IO/IO.hpp"
+
 namespace EmEn::Base
 {
 	void
@@ -100,9 +103,10 @@ namespace EmEn::Base
 	bool
 	INIParser::read (const std::filesystem::path & filepath) noexcept
 	{
-		std::ifstream file{filepath};
+		/* NOTE: Through IO::openInputFile(): a FIFO blocked the open forever (2026-10-18). Text mode, as before. */
+		std::ifstream file;
 
-		if ( !file.is_open() )
+		if ( !IO::openInputFile(filepath, file, std::ios::in) )
 		{
 			return false;
 		}

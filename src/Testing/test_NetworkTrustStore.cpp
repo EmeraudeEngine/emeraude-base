@@ -153,8 +153,9 @@ TEST(NetworkTrustStore, bundleFileUnderANonASCIIDirectory)
 
 	std::filesystem::copy_file(AssetsDirectory / "tls-test-ca.pem", bundleFilepath, error);
 
-	/* NOTE: The directory goes on this path too: an early return left it behind (three empty ones in a Windows %TEMP%,
-	 * from an interrupted run on 2026-10-12). */
+	/* NOTE: The directory goes on this path too: an early return left it behind. Three of them were found in a Windows
+	 * %TEMP% (2026-10-17), each still holding its copied tls-test-ca.pem, dated 2026-10-10: runs interrupted after the
+	 * copy, before the removal below. */
 	if ( error )
 	{
 		std::error_code ignored;

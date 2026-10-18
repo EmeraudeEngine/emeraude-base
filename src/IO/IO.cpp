@@ -224,6 +224,77 @@ namespace EmEn::Base::IO
 		return result;
 	}
 
+	bool
+	isReadableRegularFile (const std::filesystem::path & filepath) noexcept
+	{
+		if ( filepath.empty() ) [[unlikely]]
+		{
+			return false;
+		}
+
+		std::error_code errorCode;
+		const auto status = std::filesystem::status(systemPath(filepath), errorCode);
+
+		/* NOTE: A missing file or an inaccessible path is the caller's to report (an optional file is no anomaly). */
+		if ( !std::filesystem::exists(status) || errorCode ) [[unlikely]]
+		{
+			return false;
+		}
+
+		if ( !std::filesystem::is_regular_file(status) ) [[unlikely]]
+		{
+			Logging::error("IO", std::string{"IO::isReadableRegularFile(), "} + toU8String(filepath) + " is not a regular file (a FIFO, a device, a socket or a directory): refused.");
+
+			return false;
+		}
+
+		return true;
+	}
+
+	bool
+	openInputFile (const std::filesystem::path & filepath, std::ifstream & stream, std::ios::openmode mode) noexcept
+	{
+		if ( stream.is_open() )
+		{
+			stream.close();
+		}
+
+		if ( !isReadableRegularFile(filepath) )
+		{
+			return false;
+		}
+
+		stream.open(systemPath(filepath), mode | std::ios::in);
+
+		return stream.is_open();
+	}
+
+	std::streamoff
+	fileSizeFromStream (std::ifstream & stream) noexcept
+	{
+		stream.seekg(0, std::ios::end);
+
+		const std::streamoff bytes = stream.tellg();
+
+		stream.clear();
+		stream.seekg(0, std::ios::beg);
+
+		if ( bytes < 0 || !stream ) [[unlikely]]
+		{
+			return -1;
+		}
+
+		/* NOTE: A pseudo-file can claim 0 bytes and hold some. */
+		if ( bytes == 0 && stream.peek() != std::ifstream::traits_type::eof() ) [[unlikely]]
+		{
+			return -1;
+		}
+
+		stream.clear();
+
+		return bytes;
+	}
+
 	size_t
 	filesize (const std::filesystem::path & filepath) noexcept
 	{
@@ -231,12 +302,16 @@ namespace EmEn::Base::IO
 
 		const auto size = std::filesystem::file_size(systemPath(filepath), errorCode);
 
-		if ( errorCode.value() > 0 ) [[unlikely]]
+		/* NOTE: On an error, file_size() answers static_cast< uintmax_t >(-1): the contract is 0 (2026-10-18: a missing
+		 * file was 18446744073709551615 bytes). */
+		if ( errorCode ) [[unlikely]]
 		{
 			Logging::error("IO", std::string{"IO::filesize(), unable to get the size of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+
+			return 0;
 		}
 
-		return size;
+		return static_cast< size_t >(size);
 	}
 
 	bool
@@ -301,10 +376,11 @@ namespace EmEn::Base::IO
 
 		const auto result = std::filesystem::is_directory(systemPath(path), errorCode);
 
-		if ( errorCode.value() > 0 ) [[unlikely]]
+		if ( errorCode ) [[unlikely]]
 		{
-			/* NOTE: We don't need to print the error message if the directory do not exist. */
-			if ( errorCode.value() != 2 ) [[unlikely]]
+			/* NOTE: A missing path, or one crossing a file (ENOTDIR; Windows answers ERROR_PATH_NOT_FOUND for a missing
+			 * parent), is simply no directory: no error to print. */
+			if ( errorCode != std::errc::no_such_file_or_directory && errorCode != std::errc::not_a_directory ) [[unlikely]]
 			{
 				Logging::error("IO", std::string{"IO::directoryExists(), unable to check if the path "} + toU8String(path) + " is a directory (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
 			}
@@ -323,13 +399,21 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
+		/* NOTE: is_empty() answers true for an empty FILE too: an empty file is no empty directory. */
+		if ( !directoryExists(path) )
+		{
+			return false;
+		}
+
 		std::error_code errorCode;
 
 		const auto result = std::filesystem::is_empty(systemPath(path), errorCode);
 
-		if ( errorCode.value() > 0 ) [[unlikely]]
+		if ( errorCode ) [[unlikely]]
 		{
 			Logging::error("IO", std::string{"IO::isDirectoryContentEmpty(), unable to check the content of directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+
+			return false;
 		}
 
 		return result;
@@ -387,6 +471,13 @@ namespace EmEn::Base::IO
 		if ( removeFileSection )
 		{
 			const auto parentPath = path.parent_path();
+
+			/* NOTE: A bare file name lives in the current directory: nothing to create (create_directories("") is
+			 * EINVAL, 2026-10-18: filePutContents("out.json", …, createDirectories = true) failed). */
+			if ( parentPath.empty() )
+			{
+				return true;
+			}
 
 			std::filesystem::create_directories(systemPath(parentPath), errorCode);
 		}
@@ -578,26 +669,23 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		std::ifstream file{systemPath(filepath), std::ios::binary | std::ios::ate};
+		std::ifstream file;
 
-		if ( !file.is_open() ) [[unlikely]]
+		if ( !openInputFile(filepath, file) ) [[unlikely]]
 		{
 			Logging::error("IO", std::string{"IO::fileGetContents(), unable to read "} + toU8String(filepath) + " file.");
 
 			return false;
 		}
 
-		/* NOTE: Read the file size. */
-		const auto bytes = file.tellg();
+		const auto bytes = fileSizeFromStream(file);
 
 		if ( bytes < 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::fileGetContents(), unable to get the size of "} + toU8String(filepath) + " file.");
+			Logging::error("IO", std::string{"IO::fileGetContents(), the size of "} + toU8String(filepath) + " is unknown (a pseudo-file is not read whole).");
 
 			return false;
 		}
-
-		file.seekg(0, std::ifstream::beg);
 
 		content.resize(static_cast< size_t >(bytes));
 
