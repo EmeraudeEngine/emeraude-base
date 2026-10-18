@@ -46,6 +46,8 @@ namespace EmEn::Base::PixelFactory
 	static constexpr auto DefaultFontSize{16U};
 	static constexpr auto ASCIICount{256U};
 	static constexpr auto FontMapDivisor{16U};
+	/** @brief A proportional pixmap font spaces its glyphs by one pixel per this many pixels of height. */
+	static constexpr auto PixmapLetterSpacingStep{16U};
 
 	/**
 	 * @brief Font format type.
@@ -81,14 +83,17 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Completes the glyph array with a function calling each character.
 			 * @param getGlyph A function to get the pixmap for the current character.
 			 * @param fixedWidth Declares the font with a fixed width.
+			 * @param letterSpacing The pixels a text layout adds after each glyph (0 when the glyphs carry their own
+			 * advance).
 			 * @return bool
 			 */
 			template< typename GetGlyphFunc >
 			[[nodiscard]]
 			bool
-			writeGlyphData (GetGlyphFunc && getGlyph, bool fixedWidth)
+			writeGlyphData (const GetGlyphFunc & getGlyph, bool fixedWidth, uint32_t letterSpacing)
 			{
 				m_fixedWidth = fixedWidth;
+				m_letterSpacing = letterSpacing;
 				m_widestChar = 0;
 
 				for ( size_t index = 0; index < ASCIICount; index++ )
@@ -147,6 +152,18 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Returns the pixels a text layout adds after each glyph.
+			 * @note 0 when the glyphs carry their own advance (a TrueType cell, a fixed-width cell).
+			 * @return uint32_t
+			 */
+			[[nodiscard]]
+			uint32_t
+			letterSpacing () const noexcept
+			{
+				return m_letterSpacing;
+			}
+
+			/**
 			 * @brief Returns the height of characters.
 			 * @return uint32_t
 			 */
@@ -193,6 +210,7 @@ namespace EmEn::Base::PixelFactory
 
 			std::array< Pixmap< precision_t >, ASCIICount > m_glyphs;
 			uint32_t m_widestChar{0};
+			uint32_t m_letterSpacing{0};
 			uint32_t m_height{0};
 			bool m_fixedWidth{false};
 	};
@@ -288,9 +306,6 @@ namespace EmEn::Base::PixelFactory
 				const auto glyphWidth = static_cast< uint32_t >(charsMap.width() / FontMapDivisor);
 				const auto glyphHeight = static_cast< uint32_t >(charsMap.height() / FontMapDivisor);
 
-				const auto ratio = static_cast< float >(glyphWidth) / static_cast< float >(glyphHeight);
-				const auto targetWidth = static_cast< uint32_t >(std::round(static_cast< float >(fontSize) * ratio));
-
 				return glyphArray.writeGlyphData([&] (size_t index) {
 					const auto coordX = static_cast< uint32_t >(index) % FontMapDivisor;
 					const auto coordY = static_cast< uint32_t >(std::floor(index / FontMapDivisor)); // Vulkan API
@@ -302,6 +317,7 @@ namespace EmEn::Base::PixelFactory
 						glyphWidth, glyphHeight
 					});
 
+					/* NOTE: The crop drops the glyph's side bearings: the array's letter spacing gives the gap back. */
 					if ( !fixedWidth )
 					{
 						glyph = Processor< precision_t >::crop(glyph, Font::getUsableWidth(glyph));
@@ -313,8 +329,13 @@ namespace EmEn::Base::PixelFactory
 						return glyph;
 					}
 
-					return Processor< precision_t >::resize(glyph, targetWidth, fontSize);
-				}, fixedWidth);
+					/* NOTE: Scaled with ITS OWN aspect ratio: every glyph used to take the CELL's width, so a proportional
+					 * font below its cell size came out monospaced and stretched ('i' and '.' as wide as 'W' at 16 and 24 px,
+					 * the engine's FontResource sizes — 2026-10-17). A fixed-width glyph keeps the cell's width anyway. */
+					const auto scaledWidth = static_cast< uint32_t >(std::max(1.0F, std::round(static_cast< float >(glyph.width()) * static_cast< float >(fontSize) / static_cast< float >(glyph.height()))));
+
+					return Processor< precision_t >::resize(glyph, scaledWidth, fontSize);
+				}, fixedWidth, fixedWidth ? 0U : std::max(1U, fontSize / PixmapLetterSpacingStep));
 			}
 
 			/**
@@ -336,7 +357,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( closestSize == 0UL )
 					{
-						std::cerr << "[ERROR] Font::glyphs(), the font size " << closestSize << " is not loaded !" "\n";
+						std::cerr << "[ERROR] Font::glyphs(), the font size " << size << " is not loaded (no size is) !" "\n";
 
 						return nullptr;
 					}

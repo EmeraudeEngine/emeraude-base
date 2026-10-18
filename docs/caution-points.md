@@ -1564,6 +1564,29 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## PixelFactory — a proportional pixmap font keeps each glyph's aspect; the text advances in pixels (2026-10-18)
+
+Found by the coverage pass (`PixelFactoryFont.*`, `PixelFactoryTextProcessor.*`), two defects that hid each other:
+- `Font::parsePixmap()` resized every proportional glyph to the CELL's aspect: at any size but the cell's, the font came
+  out monospaced and stretched ('i' and '.' as wide as 'W'). The engine's default font (`FontResource::load()`, an
+  embedded bitmap with 16-px cells) was right at 16 px only, stretched at 24 and 32; on the 32-px-cell
+  `fixed-font.tga`, 16 and 24 were. Each glyph is now scaled with its own aspect ratio (at least 1 px wide); a
+  fixed-width glyph keeps the cell's width.
+- `TextProcessor` laid every character on a grid of the WIDEST glyph's width: a cropped proportional glyph sat in a
+  cell as wide as 'W', the text letter-spaced like a monospaced font (the engine `Notifier`, 16 px: "U n a b l e").
+  The pen advances in pixels now: a proportional font by each glyph's width plus the array's `letterSpacing()`, a
+  fixed-width font by its cell (the same grid as before). Word wrapping is measured in pixels; the LAST word of a text
+  wraps whole too (it used to be cut where the row ended: the space search ignored a word without a space after it),
+  and a line feed ends a word.
+- `ASCIIGlyphArray::letterSpacing()`: the crop of a proportional pixmap glyph drops its side bearings, so its array
+  carries one pixel of spacing per 16 pixels of height (`PixmapLetterSpacingStep`); a TrueType cell is as wide as its
+  advance and a fixed-width cell includes its margins: 0. `TextMetrics::maxColumns` is gone (a pixel layout has no
+  column count).
+- The space is the font's own: the empty cell's half width (8 px at 16 on the engine font). `fixed-font.tga`'s space
+  cell holds ONE stray pixel of value 1, so `getUsableWidth()` crops it to a 1-2 px glyph: that test asset spaces its
+  words badly in a proportional layout; the engine font is not affected.
+- The proportional tests failed on the former code; the fixed-width grid test passes on both (the grid is unchanged).
+
 ## PixelFactory — the PNG reader bounds the declared size and refuses a short read (2026-10-17)
 
 Found by the coverage pass (`PixelFactoryFileFormats.png*`):

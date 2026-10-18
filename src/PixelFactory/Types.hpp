@@ -163,7 +163,6 @@ namespace EmEn::Base::PixelFactory
 	{
 		dimension_t lineHeight{0};
 		dimension_t lineSpace{0};
-		dimension_t maxColumns{0};
 		dimension_t maxRows{0};
 	};
 

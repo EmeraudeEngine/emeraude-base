@@ -199,17 +199,22 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
+				/* NOTE: The pen advances in PIXELS: a proportional font by each glyph's own width plus the font's letter
+				 * spacing, a fixed-width one by its cell (2026-10-18: every character used to take the widest glyph's
+				 * cell, a proportional font came out letter-spaced like a monospaced one). */
+				const auto areaWidth = static_cast< dimension_t >(m_rectangle.width());
+
 				/* Text buffer position. */
-				dimension_t currentChar = 0;
+				size_t currentChar = 0;
 
 				for ( dimension_t currentRow = 0; currentRow < m_textMetrics.maxRows; ++currentRow )
 				{
-					dimension_t currentColumn = 0;
+					dimension_t penX = 0;
 
 					for ( ; currentChar < text.size(); ++currentChar )
 					{
 						/* NOTE: currentChar < text.size(): the loop condition. */
-						auto ASCIICode = text[currentChar];
+						const auto ASCIICode = text[currentChar];
 
 						/* NOTE: Check for a new line feed. */
 						if ( ASCIICode == '\n' )
@@ -223,37 +228,31 @@ namespace EmEn::Base::PixelFactory
 						if ( ASCIICode == ' ' )
 						{
 							/* NOTE: Do not print a space at a beginning of a line. */
-							if ( currentColumn == 0 )
+							if ( penX == 0 )
 							{
 								continue;
 							}
 
-							/* NOTE: Check if the next word can fit in the row. */
-							const auto nextSeparator = text.find_first_of(' ', currentChar + 1);
+							/* NOTE: The space and the next word go to the next row when they overflow this one, unless the
+							 * word is wider than a whole row (it is cut where the row ends instead). */
+							const auto wordWidth = this->wordWidth(text, currentChar + 1);
 
-							if ( nextSeparator != std::string::npos )
+							if ( wordWidth <= areaWidth && penX + this->advance(' ') + wordWidth > areaWidth )
 							{
-								const auto nextWordLength = nextSeparator - currentChar;
-								const auto spaceLeft = m_textMetrics.maxColumns - currentColumn;
-
-								if ( nextWordLength < m_textMetrics.maxColumns && spaceLeft < nextWordLength )
-								{
-									break;
-								}
+								break;
 							}
 						}
 
-						this->blitCharacter(ASCIICode, currentColumn, currentRow);
-
-						++currentColumn;
-
-						if ( currentColumn >= m_textMetrics.maxColumns )
+						/* NOTE: A character that overflows the row goes to the next one, unless it starts the row (wider
+						 * than the area: drawn clipped). */
+						if ( penX > 0 && penX + this->cellWidth(ASCIICode) > areaWidth )
 						{
-							currentColumn = 0;
-							++currentChar;
-
 							break;
 						}
+
+						this->blitCharacter(ASCIICode, penX, currentRow);
+
+						penX += this->advance(ASCIICode);
 					}
 
 					/* NOTE: No more text to print. */
@@ -269,22 +268,81 @@ namespace EmEn::Base::PixelFactory
 		private:
 
 			/**
+			 * @brief Returns the width a character occupies on a row: the fixed-width cell, or the glyph's own width.
+			 * @pre A font is selected.
+			 * @param ASCIICode The ASCII code of the character.
+			 * @return dimension_t
+			 */
+			[[nodiscard]]
+			dimension_t
+			cellWidth (char ASCIICode) const noexcept
+			{
+				if ( m_selectedFont->isFixedWidth() )
+				{
+					return static_cast< dimension_t >(m_selectedFont->widestChar());
+				}
+
+				/* NOTE: The glyph table is indexed by the BYTE value (a char above 127 is negative where char is signed). */
+				return static_cast< dimension_t >(m_selectedFont->glyph(static_cast< uint8_t >(ASCIICode)).width());
+			}
+
+			/**
+			 * @brief Returns how far the pen moves after a character: its cell width plus the font's letter spacing.
+			 * @pre A font is selected.
+			 * @param ASCIICode The ASCII code of the character.
+			 * @return dimension_t
+			 */
+			[[nodiscard]]
+			dimension_t
+			advance (char ASCIICode) const noexcept
+			{
+				return this->cellWidth(ASCIICode) + static_cast< dimension_t >(m_selectedFont->letterSpacing());
+			}
+
+			/**
+			 * @brief Returns the width of the word starting at an offset, up to the next space, line feed or the end of
+			 * the text (the letter spacing after its last character excluded).
+			 * @pre A font is selected.
+			 * @param text A reference to the text.
+			 * @param offset The offset of the word's first character.
+			 * @return dimension_t
+			 */
+			[[nodiscard]]
+			dimension_t
+			wordWidth (const std::string & text, size_t offset) const noexcept
+			{
+				dimension_t width = 0;
+
+				for ( auto index = offset; index < text.size() && text[index] != ' ' && text[index] != '\n'; ++index )
+				{
+					width += this->advance(text[index]);
+				}
+
+				if ( width > 0 )
+				{
+					width -= static_cast< dimension_t >(m_selectedFont->letterSpacing());
+				}
+
+				return width;
+			}
+
+			/**
 			 * @brief Blit a character on the target pixmap.
 			 * @param ASCIICode The ASCII code of the character.
-			 * @param column The column inside the area.
+			 * @param penX The horizontal pen position inside the area, in pixels.
 			 * @param row The row inside the area.
 			 * @return bool
 			 */
 			bool
-			blitCharacter (char ASCIICode, dimension_t column, dimension_t row) noexcept
+			blitCharacter (char ASCIICode, dimension_t penX, dimension_t row) noexcept
 			{
 				/* NOTE: The glyph table is indexed by the BYTE value (a char above 127 is negative where char is signed). */
 				const auto & glyph = m_selectedFont->glyph(static_cast< uint8_t >(ASCIICode));
 
 				/* Compute the glyph origin on the pixmap. It stays SIGNED: the text area may start left of or above the
-				 * pixmap, and blendFreePixel() clips. The column and row offsets are bounded by the area size
-				 * (updateMetrics()), so they fit an int32_t. */
-				const auto originX = m_rectangle.left() + static_cast< int32_t >(column * m_selectedFont->widestChar());
+				 * pixmap, and blendFreePixel() clips. The pen and row offsets are bounded by the area size (write(),
+				 * updateMetrics()), so they fit an int32_t. */
+				const auto originX = m_rectangle.left() + static_cast< int32_t >(penX);
 				const auto originY = m_rectangle.top() + static_cast< int32_t >(row * m_textMetrics.lineHeight);
 
 				/* NOTE: Use blendFreePixel for bounds-safe pixel operations during resize transitions. */
@@ -333,13 +391,10 @@ namespace EmEn::Base::PixelFactory
 
 				m_textMetrics.lineHeight = m_selectedFont->height() + m_textMetrics.lineSpace;
 
-				/* NOTE: AARectangle::width() / height() are never negative. A font without width or a zero line height
-				 * fits no character (it used to divide by zero). Integer division already rounds down. */
-				const auto areaWidth = static_cast< dimension_t >(m_rectangle.width());
+				/* NOTE: AARectangle::height() is never negative. A zero line height fits no row (it used to divide by
+				 * zero). Integer division already rounds down. */
 				const auto areaHeight = static_cast< dimension_t >(m_rectangle.height());
-				const auto charWidth = m_selectedFont->widestChar();
 
-				m_textMetrics.maxColumns = charWidth > 0 ? areaWidth / charWidth : 0;
 				m_textMetrics.maxRows = m_textMetrics.lineHeight > 0 ? areaHeight / m_textMetrics.lineHeight : 0;
 			}
 

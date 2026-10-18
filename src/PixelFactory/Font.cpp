@@ -407,7 +407,7 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			return padded;
-		}, fixedWidth);
+		}, fixedWidth, 0U); // No letter spacing: each cell is as wide as its glyph's advance.
 	}
 
 	/* Explicit instantiation — the ONLY place FreeType symbols enter the binary. Fonts are 8-bit

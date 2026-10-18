@@ -5,7 +5,8 @@
 During window resize, Pixmap dimensions can change between frames. `TextProcessor` must be resilient:
 
 **Implemented protection:**
-1. `TextProcessor::setPixmap()` calls `updateMetrics()` to recalculate `maxColumns`/`maxRows`
+1. `TextProcessor::setPixmap()` calls `updateMetrics()` to recalculate `maxRows`; the row width is read from the
+   rectangle at each `write()` (the layout is in pixels since 2026-10-18, there is no column count)
 2. `blitCharacter()` uses `blendFreePixel()` (ignores out-of-bounds pixels) instead of `blendPixel()` (assert)
 3. Notifier checks `pixmap.width() == 0 || pixmap.height() == 0` before rendering
 
