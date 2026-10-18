@@ -487,3 +487,54 @@ TEST(ZipArchive, reopeningListsEachEntryOnceAndAnEmptyArchiveOpens)
 	expectTempDirRemoved(dir);
 }
 
+TEST(ZipArchive, aFailedCreationLeavesNoArchiveAndNamesAreUnique)
+{
+	/* zip_close() — the deleter — WROTE the archive: a source that vanished left a partial archive while create()
+	 * answered false, and a commit that failed answered true. Two sources under one entry name kept the last one
+	 * silently (owner decision: refused). */
+	const auto dir = freshTempDir("emeraude_zip_failed_creation");
+
+	writeFile(dir / "a.txt", "first");
+	writeFile(dir / "b.txt", "second");
+	writeFile(dir / "gone.txt", "vanishes");
+
+	{
+		ZipWriter writer{dir / "partial.zip"};
+		ASSERT_TRUE(writer.addFilepathToSources(dir / "a.txt", "a.txt"));
+		ASSERT_TRUE(writer.addFilepathToSources(dir / "gone.txt", "gone.txt"));
+
+		std::error_code errorCode;
+		std::filesystem::remove(dir / "gone.txt", errorCode);
+
+		EXPECT_FALSE(writer.create());
+		EXPECT_FALSE(std::filesystem::exists(dir / "partial.zip", errorCode));
+	}
+
+	{
+		/* The commit cannot create its file: a directory that does not exist. */
+		ZipWriter writer{dir / "missing" / "out.zip"};
+		ASSERT_TRUE(writer.addFilepathToSources(dir / "a.txt", "a.txt"));
+
+		std::error_code errorCode;
+		EXPECT_FALSE(writer.create());
+		EXPECT_FALSE(std::filesystem::exists(dir / "missing" / "out.zip", errorCode));
+	}
+
+	{
+		ZipWriter writer{dir / "unique.zip"};
+		ASSERT_TRUE(writer.addFilepathToSources(dir / "a.txt", "same.txt"));
+		EXPECT_FALSE(writer.addFilepathToSources(dir / "b.txt", "same.txt"));
+		ASSERT_TRUE(writer.create());
+
+		ZipReader reader{dir / "unique.zip"};
+		ASSERT_TRUE(reader.open());
+		ASSERT_EQ(reader.entries().size(), 1U);
+
+		std::vector< char > buffer;
+		ASSERT_TRUE(reader.extract("same.txt", buffer));
+		EXPECT_EQ(std::string(buffer.begin(), buffer.end()), "first");
+	}
+
+	expectTempDirRemoved(dir);
+}
+

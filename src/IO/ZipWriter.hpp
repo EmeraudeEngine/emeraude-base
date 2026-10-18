@@ -61,7 +61,7 @@ namespace EmEn::Base::IO
 			void
 			setFilepath (const std::filesystem::path & filepath) noexcept
 			{
-				this->closeArchive();
+				this->discardArchive();
 
 				m_filepath = filepath;
 			}
@@ -104,20 +104,16 @@ namespace EmEn::Base::IO
 			bool addDirectoryToSources (const std::filesystem::path & path) noexcept;
 
 			/**
-			 * @brief Creates the archive.
+			 * @brief Creates the archive from the sources, then forgets them.
+			 * @note The archive appears on disk only when it is written whole: a source that cannot be read, or a
+			 * failed final write (the commit, zip_close()), leaves NO file (2026-10-18: a partial archive was left, and a
+			 * failed commit answered true). Each source is read by libzip from its file while writing (memory stays
+			 * bounded, owner decision, 2026-10-18), after an IO::isReadableRegularFile() check.
 			 * @return bool
 			 */
 			bool create () noexcept;
 
 		private:
-
-			/**
-			 * @brief Read the date of a source file to get it ready for the zip archive.
-			 * @param filepath A reference to a path.
-			 * @param fileContent A writable reference to a vector.
-			 * @return bool
-			 */
-			static bool readSource (const std::filesystem::path & filepath, std::vector< char > & fileContent) noexcept;
 
 			/**
 			 * @brief Opens the ZIP archive.
@@ -127,9 +123,24 @@ namespace EmEn::Base::IO
 			bool openArchive () noexcept;
 
 			/**
-			 * @brief Closes the archive and release LibZip resources.
+			 * @brief Writes the archive (zip_close()) and forgets the sources.
+			 * @return bool False when the write fails: nothing is left on disk.
 			 */
-			void closeArchive () noexcept;
+			[[nodiscard]]
+			bool commitArchive () noexcept;
+
+			/**
+			 * @brief Drops the archive without writing anything, and forgets the sources.
+			 */
+			void discardArchive () noexcept;
+
+			/**
+			 * @brief Checks whether an entry name is already taken by a source.
+			 * @param entryName A reference to a string.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool entryNameExists (const std::string & entryName) const noexcept;
 
 			/**
 			 * @brief Checks whether a filepath exists in source.
@@ -139,7 +150,9 @@ namespace EmEn::Base::IO
 			[[nodiscard]]
 			bool sourceExists (const std::filesystem::path & filepath) const noexcept;
 
-			std::unique_ptr< zip_t, decltype(&zip_close) > m_zip{nullptr, &zip_close};
+			/* NOTE: Released with zip_discard(): zip_close() WRITES the archive, it is called on purpose by commitArchive()
+			 * only (a failed create() used to leave a partial archive through this deleter). */
+			std::unique_ptr< zip_t, decltype(&zip_discard) > m_zip{nullptr, &zip_discard};
 			std::filesystem::path m_filepath;
 			std::vector< std::pair< std::filesystem::path, std::string > > m_sources;
 	};

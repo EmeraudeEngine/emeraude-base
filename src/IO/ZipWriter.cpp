@@ -31,8 +31,9 @@
 
 /* STL inclusions. */
 #include <algorithm>
-#include <fstream>
 #include <iostream>
+#include <tuple>
+#include <utility>
 
 /* Local inclusions. */
 #include "IO.hpp"
@@ -66,6 +67,15 @@ namespace EmEn::Base::IO
 		if ( ZipWriter::sourceExists(path) )
 		{
 			std::cerr << ClassId << " : The file " << toU8String(path) << " already exists in source !" "\n";
+
+			return false;
+		}
+
+		/* NOTE: Two sources under one entry name used to keep the LAST one silently (ZIP_FL_OVERWRITE): refused (owner
+		 * decision, 2026-10-18). */
+		if ( this->entryNameExists(entryName) )
+		{
+			std::cerr << ClassId << " : The entry name " << entryName << " is already taken in source !" "\n";
 
 			return false;
 		}
@@ -114,7 +124,18 @@ namespace EmEn::Base::IO
 				return true;
 			}
 
-			m_sources.emplace_back(entry.path(), toGenericU8String(relativePath));
+			auto entryName = toGenericU8String(relativePath);
+
+			if ( this->entryNameExists(entryName) )
+			{
+				std::cerr << ClassId << " : The entry name " << entryName << " is already taken in source !" "\n";
+
+				duplicate = true;
+
+				return false;
+			}
+
+			m_sources.emplace_back(entry.path(), std::move(entryName));
 
 			return true;
 		});
@@ -139,84 +160,50 @@ namespace EmEn::Base::IO
 			return false;
 		}
 
-		bool success = true;
-
-		std::vector< std::vector< char > > fileBuffers;
-		fileBuffers.reserve(m_sources.size());
-
 		for ( const auto & [filepath, entryName] : m_sources )
 		{
-			fileBuffers.emplace_back();
-
-			/* Read the file content. */
-			if ( !ZipWriter::readSource(filepath, fileBuffers.back()) )
+			/* NOTE: libzip opens the file itself when it writes: the regular-file check comes right before. */
+			if ( !IO::isReadableRegularFile(filepath) )
 			{
-				std::cerr << ClassId << " : Unable to open file " << toU8String(filepath) << " !" "\n";
+				std::cerr << ClassId << " : Unable to read the source " << toU8String(filepath) << " !" "\n";
 
-				success = false;
+				this->discardArchive();
 
-				break;
+				return false;
 			}
 
-			auto & buffer = fileBuffers.back();
-
-			/* Set source. */
-			zip_source * source = zip_source_buffer(m_zip.get(), buffer.data(), buffer.size(), 0);
+			/* NOTE: A file source: libzip reads it while writing the archive, one source at a time (every source used to
+			 * be read into memory first and kept until the end). */
+#if IS_WINDOWS
+			zip_source_t * source = zip_source_win32w(m_zip.get(), filepath.wstring().c_str(), 0, ZIP_LENGTH_TO_END);
+#else
+			zip_source_t * source = zip_source_file(m_zip.get(), toU8String(filepath).c_str(), 0, ZIP_LENGTH_TO_END);
+#endif
 
 			if ( source == nullptr )
 			{
-				std::cerr << ClassId << " : Failed to create source buffer ! Error : " << zip_strerror(m_zip.get()) << "\n";
+				std::cerr << ClassId << " : Failed to create the source of " << toU8String(filepath) << " ! Error : " << zip_strerror(m_zip.get()) << "\n";
 
-				success = false;
+				this->discardArchive();
 
-				break;
+				return false;
 			}
 
-			/* Add the source to archive. */
-			if ( const auto index = zip_file_add(m_zip.get(), entryName.data(), source, ZIP_FL_OVERWRITE); index < 0 )
+			/* NOTE: The entry names are unique (checked when the sources are added): no overwrite flag. */
+			if ( zip_file_add(m_zip.get(), entryName.c_str(), source, 0) < 0 )
 			{
-				std::cerr << ClassId << " : Failed to add file to archive ! Error : " << zip_strerror(m_zip.get()) << "\n";
+				std::cerr << ClassId << " : Failed to add " << entryName << " to the archive ! Error : " << zip_strerror(m_zip.get()) << "\n";
 
-				success = false;
+				/* NOTE: A source that was not added still belongs to the caller. */
+				zip_source_free(source);
 
-				break;
+				this->discardArchive();
+
+				return false;
 			}
 		}
 
-		this->closeArchive();
-
-		return success;
-	}
-
-	bool
-	ZipWriter::readSource (const std::filesystem::path & filepath, std::vector< char > & fileContent) noexcept
-	{
-		/* NOTE: Through IO::openInputFile(): a FIFO blocked the open forever (2026-10-18). */
-		std::ifstream file;
-
-		if ( !IO::openInputFile(filepath, file) )
-		{
-			return false;
-		}
-
-		/* NOTE: -1 when the size is unknown: converted to a size, it would request an impossible allocation. */
-		const std::streamoff bytes = IO::fileSizeFromStream(file);
-
-		if ( bytes < 0 )
-		{
-			return false;
-		}
-
-		fileContent.resize(static_cast< size_t >(bytes));
-
-		if ( !file.read(fileContent.data(), static_cast< std::streamsize >(fileContent.size())) )
-		{
-			return false;
-		}
-
-		file.close();
-
-		return true;
+		return this->commitArchive();
 	}
 
 	bool
@@ -271,11 +258,47 @@ namespace EmEn::Base::IO
 		return true;
 	}
 
+	bool
+	ZipWriter::commitArchive () noexcept
+	{
+		m_sources.clear();
+
+		if ( !m_zip )
+		{
+			return false;
+		}
+
+		/* NOTE: zip_close() writes the archive: on success it frees the handle, on failure the handle stays ours (freed
+		 * by zip_discard() through the deleter) and libzip leaves no file. Its result used to be ignored: a write that
+		 * failed answered true (2026-10-18). */
+		if ( zip_close(m_zip.get()) != 0 )
+		{
+			std::cerr << ClassId << " : Unable to write the archive " << toU8String(m_filepath) << " ! Error : " << zip_strerror(m_zip.get()) << "\n";
+
+			m_zip.reset();
+
+			return false;
+		}
+
+		/* NOTE: A successful zip_close() freed the handle: the pointer is dropped, not freed again. */
+		std::ignore = m_zip.release();
+
+		return true;
+	}
+
 	void
-	ZipWriter::closeArchive () noexcept
+	ZipWriter::discardArchive () noexcept
 	{
 		m_zip.reset();
 
 		m_sources.clear();
+	}
+
+	bool
+	ZipWriter::entryNameExists (const std::string & entryName) const noexcept
+	{
+		return std::ranges::any_of(m_sources, [&entryName] (const std::pair< std::filesystem::path, std::string > & source) {
+			return source.second == entryName;
+		});
 	}
 }

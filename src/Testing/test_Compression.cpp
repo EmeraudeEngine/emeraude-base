@@ -303,8 +303,10 @@ TEST(Compression, LZMAStreamClassesAreReusable)
 {
 	/* A finished liblzma stream produces nothing more: a second call on the same object answered TRUE with 0 bytes
 	 * (owner decision, 2026-10-18: every call after the first starts a fresh stream). */
-	const auto first = createSource(1024UL);
-	const auto second = createSource(3000UL);
+	/* NOTE: 6 KiB per unit: 96 and 144 KiB. The defect does not depend on the size; the first version (6 and 18 MiB)
+	 * took 4.8 s on its own on the macOS peer, 7.4 s here. */
+	const auto first = createSource(16UL);
+	const auto second = createSource(24UL);
 
 	for ( const uint32_t threads : {0U, 4U} )
 	{

@@ -1564,6 +1564,21 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## IO — ZipWriter writes an archive whole or not at all, from file sources, under unique names (2026-10-18)
+
+Found by the coverage pass (`ZipArchive.aFailedCreationLeavesNoArchiveAndNamesAreUnique`):
+- The handle's deleter was `zip_close()` — the call that WRITES the archive. A source that could not be read made
+  `create()` answer false AFTER the deleter had committed the entries already added: a partial archive on disk. And the
+  final `zip_close()`'s result was never read: a commit that failed (a directory without write permission, a missing
+  directory) answered TRUE with no archive. The handle is released with `zip_discard()` now; `commitArchive()` calls
+  `zip_close()` on purpose and checks it (on failure libzip leaves no file, the handle is discarded).
+- Two sources under one entry name were both accepted and the archive kept the LAST one silently (`ZIP_FL_OVERWRITE`):
+  refused at `addFilepathToSources()` / `addDirectoryToSources()` (owner decision), like a duplicate source path.
+- Every source was read into memory and kept until the commit (libzip reads its buffers in `zip_close()`): a 256 MiB
+  source peaked at 266 MB. Owner decision: libzip FILE sources (`zip_source_file()`, `zip_source_win32w()` on Windows),
+  read while writing — 3.6 MB peak, the same archive, the same time; `IO::isReadableRegularFile()` right before each.
+- `ZipWriter` has no user in the cascade. The test failed on the former code (all three points).
+
 ## Compression — the LZMA stream classes are reusable; the Compressor's threads are clamped (2026-10-18)
 
 Found by the coverage pass (`Compression.LZMAStreamClassesAreReusable`):
