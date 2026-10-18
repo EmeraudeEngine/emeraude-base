@@ -175,6 +175,8 @@ namespace EmEn::Base::IO
 			/* NOTE: A file source: libzip reads it while writing the archive, one source at a time (every source used to
 			 * be read into memory first and kept until the end). */
 #if IS_WINDOWS
+			/* NOTE: The temporary wstring lives for this statement only: libzip copies the name when it creates the
+			 * source. Never keep that c_str() (Windows peer, 2026-10-18). */
 			zip_source_t * source = zip_source_win32w(m_zip.get(), filepath.wstring().c_str(), 0, ZIP_LENGTH_TO_END);
 #else
 			zip_source_t * source = zip_source_file(m_zip.get(), toU8String(filepath).c_str(), 0, ZIP_LENGTH_TO_END);

@@ -36,6 +36,7 @@
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "TemporaryPath.hpp"
 #include "PixelFactory/FileIO.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Processor.hpp"
@@ -1503,3 +1504,121 @@ TEST(PixelFactoryProcessor, moveExtremeDirections)
 		EXPECT_TRUE(std::ranges::all_of(vertical.data(), [] (uint8_t element) { return element == 0; })) << "direction " << direction;
 	}
 }
+
+/* The channel conversions keep the alpha (the coverage pass, 2026-10-18). */
+namespace
+{
+	/** @brief A 2 x 2 pixmap with every pixel set from the given components. */
+	template< typename pixel_data_t >
+	[[nodiscard]]
+	Pixmap< pixel_data_t >
+	uniform (ChannelMode mode, std::initializer_list< pixel_data_t > components)
+	{
+		Pixmap< pixel_data_t > pixmap{2U, 2U, mode};
+
+		for ( size_t pixelIndex = 0; pixelIndex < pixmap.pixelCount(); ++pixelIndex )
+		{
+			std::ranges::copy(components, pixmap.pixelPointer(pixelIndex));
+		}
+
+		return pixmap;
+	}
+}
+
+TEST(PixelFactoryProcessor, channelConversionsKeepTheAlpha)
+{
+	/* toRGBA() overwrote a GrayscaleAlpha source's alpha (every texture the engine loads goes through it: a gray + alpha
+	 * MASK texture rendered opaque); toGrayscale() returned a GrayscaleAlpha unchanged, two channels. */
+	const auto grayAlpha = uniform< uint8_t >(ChannelMode::GrayscaleAlpha, {120, 30});
+	const auto rgb = uniform< uint8_t >(ChannelMode::RGB, {200, 100, 50});
+	const auto rgba = uniform< uint8_t >(ChannelMode::RGBA, {200, 100, 50, 64});
+
+	const auto fromGrayAlpha = Processor< uint8_t >::toRGBA(grayAlpha);
+	ASSERT_EQ(fromGrayAlpha.channelMode(), ChannelMode::RGBA);
+	EXPECT_EQ(fromGrayAlpha.pixelPointer(3)[3], 30);
+	EXPECT_EQ(fromGrayAlpha.pixelPointer(3)[0], 120);
+
+	/* The opacity is the alpha of a source WITHOUT one. */
+	const auto fromRGB = Processor< uint8_t >::toRGBA(rgb, 0.5F);
+	EXPECT_NEAR(fromRGB.pixelPointer(0)[3], 128, 1);
+
+	const auto gray = Processor< uint8_t >::toGrayscale(grayAlpha);
+	ASSERT_EQ(gray.channelMode(), ChannelMode::Grayscale);
+	EXPECT_EQ(gray.pixelPointer(1)[0], 120);
+
+	const auto grayAlphaFromRGBA = Processor< uint8_t >::toGrayscaleAlpha(rgba);
+	ASSERT_EQ(grayAlphaFromRGBA.channelMode(), ChannelMode::GrayscaleAlpha);
+	EXPECT_EQ(grayAlphaFromRGBA.pixelPointer(2)[0], Processor< uint8_t >::toGrayscale(rgba).pixelPointer(2)[0]);
+	EXPECT_EQ(grayAlphaFromRGBA.pixelPointer(2)[1], 64);
+	EXPECT_EQ(Processor< uint8_t >::toGrayscaleAlpha(rgb).pixelPointer(0)[1], 255);
+}
+
+TEST(PixelFactoryProcessor, readOptionsConvertWithoutLosingTheAlpha)
+{
+	const auto grayAlpha = uniform< uint8_t >(ChannelMode::GrayscaleAlpha, {120, 30});
+	const auto rgba = uniform< uint8_t >(ChannelMode::RGBA, {200, 100, 50, 64});
+
+	{
+		auto pixmap = rgba;
+		ASSERT_TRUE(applyReadOptions(pixmap, ReadOptions{.targetChannelMode = TargetChannelMode::GrayscaleAlpha}));
+		ASSERT_EQ(pixmap.channelMode(), ChannelMode::GrayscaleAlpha);
+		EXPECT_EQ(pixmap.pixelPointer(0)[1], 64);
+	}
+
+	{
+		auto pixmap = grayAlpha;
+		ASSERT_TRUE(applyReadOptions(pixmap, ReadOptions{.targetChannelMode = TargetChannelMode::Grayscale}));
+		EXPECT_EQ(pixmap.channelMode(), ChannelMode::Grayscale);
+	}
+
+	{
+		auto pixmap = grayAlpha;
+		ASSERT_TRUE(applyReadOptions(pixmap, ReadOptions{.targetChannelMode = TargetChannelMode::RGBA}));
+		ASSERT_EQ(pixmap.channelMode(), ChannelMode::RGBA);
+		EXPECT_EQ(pixmap.pixelPointer(0)[3], 30);
+	}
+
+	/* The premultiplication divides by the type's full scale (255 for every integer type: 40000 x 0.5 gave 28270). */
+	{
+		auto pixmap = uniform< uint16_t >(ChannelMode::RGBA, {40000, 20000, 10000, 32768});
+		ASSERT_TRUE(applyReadOptions(pixmap, ReadOptions{.premultiplyAlpha = true}));
+		EXPECT_NEAR(pixmap.pixelPointer(0)[0], 20000, 1);
+		EXPECT_NEAR(pixmap.pixelPointer(0)[2], 5000, 1);
+	}
+
+	{
+		auto pixmap = rgba;
+		ASSERT_TRUE(applyReadOptions(pixmap, ReadOptions{.premultiplyAlpha = true}));
+		EXPECT_EQ(pixmap.pixelPointer(0)[0], 50);
+	}
+}
+
+TEST(PixelFactoryProcessor, aGrayAlphaPNGReadAsRGBAKeepsItsAlpha)
+{
+	/* The engine's texture path: a gray + alpha PNG read with targetChannelMode = RGBA (the glTF sample
+	 * TextureLinearInterpolationTest's MASK labels rendered as an opaque black panel). */
+	const auto path = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_gray_alpha.png");
+
+	Pixmap< uint8_t > source{4U, 4U, ChannelMode::GrayscaleAlpha};
+
+	for ( size_t pixelIndex = 0; pixelIndex < source.pixelCount(); ++pixelIndex )
+	{
+		source.pixelPointer(pixelIndex)[0] = 200;
+		source.pixelPointer(pixelIndex)[1] = static_cast< uint8_t >(pixelIndex * 16U);
+	}
+
+	ASSERT_TRUE(FileIO::write(source, path, true));
+
+	Pixmap< uint8_t > loaded;
+	ASSERT_TRUE(FileIO::read(path, loaded, ReadOptions{.targetChannelMode = TargetChannelMode::RGBA}));
+	ASSERT_EQ(loaded.channelMode(), ChannelMode::RGBA);
+
+	for ( size_t pixelIndex = 0; pixelIndex < loaded.pixelCount(); ++pixelIndex )
+	{
+		EXPECT_EQ(loaded.pixelPointer(pixelIndex)[3], static_cast< uint8_t >(pixelIndex * 16U)) << pixelIndex;
+	}
+
+	std::error_code errorCode;
+	std::filesystem::remove(path, errorCode);
+}
+

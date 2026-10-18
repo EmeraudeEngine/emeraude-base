@@ -1564,6 +1564,22 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## PixelFactory — the channel conversions keep the alpha; a gray + alpha texture is no longer opaque (2026-10-18)
+
+Found by the coverage pass (`PixelFactoryProcessor.*Alpha*`, `readOptionsConvertWithoutLosingTheAlpha`):
+- `Processor::toRGBA()` set the `opacity` argument on EVERY pixel, overwriting the alpha of a `GrayscaleAlpha` source.
+  Every texture the engine loads is read with `targetChannelMode = RGBA` (glTF, FBX, USD, `ImageResource`, the image
+  viewer) and `TextureResource` calls `toRGBA()` too: a gray + alpha PNG lost its alpha. Seen in the engine: the glTF
+  sample TextureLinearInterpolationTest's labels (`alphaMode: MASK`, a gray + alpha PNG, 56 % transparent) rendered as
+  one opaque black panel. `opacity` is the alpha of a source WITHOUT one now.
+- `toGrayscale()` returned a `GrayscaleAlpha` unchanged (two channels for a one-channel request): it converts.
+- `applyReadOptions()`'s `GrayscaleAlpha` target went through `toGrayscale()` then `addAlphaChannel()`: an RGBA source
+  came back opaque. New `Processor::toGrayscaleAlpha()` (the luminance and the source's alpha).
+- The premultiplication divided by 255 for every integer type: a `uint16_t` 40000 x 0.5 gave 28270. It divides by the
+  type's full scale (64-bit product).
+- In the stores: 1 gray + alpha PNG of 7 754 (fully opaque), 2 in the glTF sample assets (both partly transparent).
+  The tests failed on the former code (23 assertions).
+
 ## IO — ZipWriter writes an archive whole or not at all, from file sources, under unique names (2026-10-18)
 
 Found by the coverage pass (`ZipArchive.aFailedCreationLeavesNoArchiveAndNamesAreUnique`):

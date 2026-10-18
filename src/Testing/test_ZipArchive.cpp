@@ -538,3 +538,37 @@ TEST(ZipArchive, aFailedCreationLeavesNoArchiveAndNamesAreUnique)
 	expectTempDirRemoved(dir);
 }
 
+TEST(ZipArchive, aNonASCIIPathAndEntryNameRoundTrip)
+{
+	/* The wide-char branches (zip_source_win32w for the sources, zip_source_win32w_create for the archive) are only
+	 * exercised by a name outside the ANSI code page (Windows peer, 2026-10-18). */
+	const auto dir = freshTempDir("emeraude_zip_\xCE\xA9_\xE6\x97\xA5");
+	const auto source = dir / EmEn::Base::IO::u8path("donn\xC3\xA9" "es-\xCE\xA9.txt");
+	const auto archive = dir / EmEn::Base::IO::u8path("archive-\xE6\x97\xA5.zip");
+	const std::string entryName{"dossier-\xCE\xA9/fichier-\xE6\x97\xA5.txt"};
+
+	writeFile(source, "contenu");
+
+	{
+		ZipWriter writer{archive};
+		ASSERT_TRUE(writer.addFilepathToSources(source, entryName));
+		ASSERT_TRUE(writer.create());
+	}
+
+	{
+		ZipReader reader{archive};
+		ASSERT_TRUE(reader.open());
+		ASSERT_EQ(reader.entries().size(), 1U);
+		EXPECT_EQ(reader.entries().front(), entryName);
+
+		std::vector< char > buffer;
+		ASSERT_TRUE(reader.extract(entryName, buffer));
+		EXPECT_EQ(std::string(buffer.begin(), buffer.end()), "contenu");
+
+		ASSERT_TRUE(reader.extractAll(dir / EmEn::Base::IO::u8path("sortie-\xCE\xA9"), false));
+		EXPECT_TRUE(EmEn::Base::IO::fileExists(dir / EmEn::Base::IO::u8path("sortie-\xCE\xA9") / EmEn::Base::IO::u8path(entryName)));
+	}
+
+	expectTempDirRemoved(dir);
+}
+

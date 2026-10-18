@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 /* Local inclusions. */
@@ -77,13 +78,10 @@ namespace EmEn::Base::PixelFactory
 					break;
 
 				case TargetChannelMode::GrayscaleAlpha :
-					if ( pixmap.channelMode() == ChannelMode::RGB || pixmap.channelMode() == ChannelMode::RGBA )
+					/* NOTE: The source's alpha is kept (an RGBA source used to lose it through toGrayscale()). */
+					if ( pixmap.channelMode() != ChannelMode::GrayscaleAlpha )
 					{
-						pixmap = Processor< pixel_data_t, dimension_t >::toGrayscale(pixmap);
-					}
-					if ( pixmap.channelMode() == ChannelMode::Grayscale )
-					{
-						pixmap = Processor< pixel_data_t, dimension_t >::addAlphaChannel(pixmap);
+						pixmap = Processor< pixel_data_t, dimension_t >::toGrayscaleAlpha(pixmap);
 					}
 					break;
 
@@ -126,11 +124,20 @@ namespace EmEn::Base::PixelFactory
 					{
 						data[offset + channel] = static_cast< pixel_data_t >(data[offset + channel] * alpha);
 					}
+					else if constexpr ( std::is_unsigned_v< pixel_data_t > )
+					{
+						/* NOTE: Divided by the type's full scale: 255 was right for uint8_t only, a uint16_t premultiplied
+						 * 40000 by 0.5 into 28270 (2026-10-18). 64 bits hold the product of two uint32_t. */
+						constexpr auto FullScale = static_cast< uint64_t >(std::numeric_limits< pixel_data_t >::max());
+
+						data[offset + channel] = static_cast< pixel_data_t >((static_cast< uint64_t >(data[offset + channel]) * static_cast< uint64_t >(alpha)) / FullScale);
+					}
 					else
 					{
-						data[offset + channel] = static_cast< pixel_data_t >(
-							static_cast< uint32_t >(data[offset + channel]) * static_cast< uint32_t >(alpha) / 255U
-						);
+						/* NOTE: A signed integer pixmap: its alpha in [0, max]. */
+						constexpr auto FullScale = static_cast< int64_t >(std::numeric_limits< pixel_data_t >::max());
+
+						data[offset + channel] = static_cast< pixel_data_t >((static_cast< int64_t >(data[offset + channel]) * static_cast< int64_t >(alpha)) / FullScale);
 					}
 				}
 			}

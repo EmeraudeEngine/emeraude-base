@@ -2255,7 +2255,7 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Returns a pixmap in grayscale mode.
+			 * @brief Returns a pixmap in grayscale mode (one channel: an alpha channel is dropped).
 			 * @param source A reference to a pixmap.
 			 * @param mode The conversion mode. Default LumaRec709.
 			 * @param option Additional parameter for specific mode. Default 0.
@@ -2272,7 +2272,9 @@ namespace EmEn::Base::PixelFactory
 					return {};
 				}
 
-				if ( source.channelMode() == ChannelMode::Grayscale || source.channelMode() == ChannelMode::GrayscaleAlpha )
+				/* NOTE: A GrayscaleAlpha source used to come back unchanged, two channels where one was asked
+				 * (2026-10-18). */
+				if ( source.channelMode() == ChannelMode::Grayscale )
 				{
 					return source;
 				}
@@ -2303,6 +2305,55 @@ namespace EmEn::Base::PixelFactory
 					for ( size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++ )
 					{
 						processPixel(pixelIndex);
+					}
+				}
+
+				return output;
+			}
+
+			/**
+			 * @brief Returns a pixmap in grayscale + alpha mode: the luminance, and the source's alpha (opaque when the source
+			 * has none).
+			 * @note RGBA -> GrayscaleAlpha used to go through toGrayscale() then addAlphaChannel(): the alpha came back
+			 * opaque (2026-10-18).
+			 * @param source A reference to a pixmap.
+			 * @param mode The conversion mode. Default Average (as toGrayscale()).
+			 * @param option Additional parameter for specific mode. Default 0.
+			 * @return Pixmap< pixel_data_t, dimension_t >
+			 */
+			[[nodiscard]]
+			static
+			Pixmap< pixel_data_t, dimension_t >
+			toGrayscaleAlpha (const Pixmap< pixel_data_t, dimension_t > & source, GrayscaleConversionMode mode = GrayscaleConversionMode::Average, int option = 0) noexcept
+			{
+				if ( !source.isValid() )
+				{
+					return {};
+				}
+
+				if ( source.channelMode() == ChannelMode::GrayscaleAlpha )
+				{
+					return source;
+				}
+
+				Pixmap< pixel_data_t, dimension_t > output{source.width(), source.height(), ChannelMode::GrayscaleAlpha};
+
+				const auto pixelCount = static_cast< size_t >(source.pixelCount());
+
+				for ( size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++ )
+				{
+					const auto color = source.pixel(pixelIndex);
+					auto * target = output.pixelPointer(pixelIndex);
+
+					if constexpr ( std::is_floating_point_v< pixel_data_t > )
+					{
+						target[0] = color.luminance(mode, option);
+						target[1] = color.alpha();
+					}
+					else
+					{
+						target[0] = color.template luminanceInteger< pixel_data_t >(mode, option);
+						target[1] = color.template alphaInteger< pixel_data_t >();
 					}
 				}
 
@@ -2344,7 +2395,7 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Returns a pixmap in RGBA mode.
 			 * @param source A reference to a pixmap.
-			 * @param opacity Alpha default value. Default 1.0.
+			 * @param opacity The alpha of a source WITHOUT alpha channel; a source's own alpha is kept. Default 1.0.
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
 			[[nodiscard]]
@@ -2369,7 +2420,13 @@ namespace EmEn::Base::PixelFactory
 				for ( size_t pixelIndex = 0; pixelIndex < pixelCount; pixelIndex++ )
 				{
 					auto color = source.pixel(pixelIndex);
-					color.setAlpha(opacity);
+
+					/* NOTE: The alpha of a GrayscaleAlpha source used to be overwritten: every texture the engine loads goes
+					 * through toRGBA(), a gray + alpha MASK texture rendered opaque (2026-10-18). */
+					if ( !source.hasAlphaChannel() )
+					{
+						color.setAlpha(opacity);
+					}
 
 					output.setPixel(pixelIndex, color);
 				}
