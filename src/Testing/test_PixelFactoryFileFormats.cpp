@@ -1438,3 +1438,47 @@ TEST(PixelFactoryFileFormats, pngWriterFiltersAndInterlacingRoundTrip)
 	}
 }
 
+TEST(PixelFactoryFileIO, readRefusesWhatItCannotDecode)
+{
+	/* The coverage pass (2026-10-18): the refusals of FileIO::read() were never run. */
+	using namespace EmEn::Base;
+	using namespace EmEn::Base::PixelFactory;
+
+	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_fileio_refusals");
+	std::error_code errorCode;
+	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
+
+	Pixmap< uint8_t > image;
+	EXPECT_FALSE(FileIO::read(directory / "missing.png", image));
+	EXPECT_FALSE(FileIO::read(directory, image));
+
+	/* An extension no codec handles, and a real PNG under it. */
+	const Pixmap< uint8_t > source{4U, 4U, ChannelMode::RGB};
+	ASSERT_TRUE(FileIO::write(source, directory / "image.png", true));
+	std::filesystem::copy_file(directory / "image.png", directory / "image.bmp", errorCode);
+	ASSERT_FALSE(errorCode) << errorCode.message();
+	EXPECT_FALSE(FileIO::read(directory / "image.bmp", image));
+
+	/* The extension is matched without case. */
+	std::filesystem::copy_file(directory / "image.png", directory / "IMAGE.PNG", errorCode);
+	EXPECT_TRUE(FileIO::read(directory / "IMAGE.PNG", image));
+	EXPECT_EQ(image.width(), 4U);
+
+	/* The 8-bit codecs refuse a floating-point pixmap; HDR is the floating-point one. */
+	Pixmap< float > floatImage;
+	EXPECT_FALSE(FileIO::read(directory / "image.png", floatImage));
+
+	for ( const char * extension : {"jpg", "tga", "webp", "tif"} )
+	{
+		const auto path = directory / (std::string{"image."} + extension);
+		ASSERT_TRUE(FileIO::write(source, path, true) || std::string_view{extension} == "tif") << extension;
+
+		if ( IO::fileExists(path) )
+		{
+			EXPECT_FALSE(FileIO::read(path, floatImage)) << extension;
+		}
+	}
+
+	std::filesystem::remove_all(directory, errorCode);
+}
+

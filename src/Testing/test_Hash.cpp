@@ -34,6 +34,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "Hash/CRC32.hpp"
 #include "Hash/Hash.hpp"
 #include "Hash/SHA1.hpp"
 #include "Hash/SHA256.hpp"
@@ -130,9 +131,9 @@ TEST(Hash, lengthFieldPastFourGigabits)
 	/* Ave robustus! The final block carried only the LOW 32 bits of the bit length: every input of 512 MiB or more
 	 * hashed wrong (found 2026-10-04: resource sharing's SHA-256 of a 1.6 GB archive disagreed with sha256sum).
 	 * Reference digests: Python hashlib over the same bytes. */
-	EXPECT_EQ((hashPastFourGigabits< class Hash::SHA1, 20 >()), "b28134b042220c2b14020c385afce20377858cf2");
-	EXPECT_EQ((hashPastFourGigabits< class Hash::SHA256, 32 >()), "403a955183d83bd37bd31dde74eb3b713fcf99b6ba1a87fa91aa5befe4f51280");
-	EXPECT_EQ((hashPastFourGigabits< class Hash::SHA512, 64 >()), "3bafe8be7ad46f6d84f47f4d1da9a72b58fc01332b644444456f01e6bd632fa7e7d2b8e81133ccb641f71c503204b1bd5ff6bb35410709e5493bcd16ec978066");
+	EXPECT_EQ((hashPastFourGigabits< Hash::SHA1, 20 >()), "b28134b042220c2b14020c385afce20377858cf2");
+	EXPECT_EQ((hashPastFourGigabits< Hash::SHA256, 32 >()), "403a955183d83bd37bd31dde74eb3b713fcf99b6ba1a87fa91aa5befe4f51280");
+	EXPECT_EQ((hashPastFourGigabits< Hash::SHA512, 64 >()), "3bafe8be7ad46f6d84f47f4d1da9a72b58fc01332b644444456f01e6bd632fa7e7d2b8e81133ccb641f71c503204b1bd5ff6bb35410709e5493bcd16ec978066");
 }
 
 TEST(Hash, typeEnumRoundTrip)
@@ -151,3 +152,29 @@ TEST(Hash, typeEnumRoundTrip)
 	EXPECT_EQ(Hash::to_HashType("SHA1"), Hash::HashType::SHA1);
 	EXPECT_EQ(Hash::to_string(Hash::HashType::SHA1), "SHA1");
 }
+
+TEST(Hash, crc32KnownAnswers)
+{
+	/* The coverage pass (2026-10-18): CRC32 was never run by the suite. The check value of CRC-32/ISO-HDLC (zlib, PNG). */
+	EXPECT_EQ(Hash::crc32("123456789"), "cbf43926");
+	EXPECT_EQ(Hash::crc32(""), "00000000");
+	EXPECT_EQ(Hash::crc32("The quick brown fox jumps over the lazy dog"), "414fa339");
+
+	/* Fed in pieces, it gives the same value; reset() starts over. */
+	const std::string message{"123456789"};
+	const std::vector< uint8_t > bytes(message.cbegin(), message.cend());
+	Hash::CRC32 hash{};
+	hash.update(bytes.data(), 4);
+	hash.update(bytes.data() + 4, bytes.size() - 4);
+	EXPECT_EQ(hash.value(), 0xCBF43926U);
+
+	std::array< uint8_t, 4 > digest{};
+	hash.final(digest);
+	EXPECT_EQ(digest, (std::array< uint8_t, 4 >{0xCB, 0xF4, 0x39, 0x26}));
+
+	hash.reset();
+	EXPECT_EQ(hash.value(), 0U);
+	hash.update(nullptr, 0);
+	EXPECT_EQ(hash.value(), 0U);
+}
+

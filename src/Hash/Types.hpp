@@ -27,14 +27,18 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdint>
 #include <string>
 
 namespace EmEn::Base::Hash
 {
 	/**
 	 * @brief Hash type supported by the engine.
+	 * @note Scoped (2026-10-18): the unscoped enumerators CRC32, MD5, SHA1, SHA256, SHA512 hid the classes of the same
+	 * names in this namespace — `Hash::SHA1 hasher;` did not compile beside this header (a test wrote
+	 * `class Hash::SHA1` to get around it).
 	 */
-	enum HashType
+	enum class HashType : uint8_t
 	{
 		Undefined,
 		CRC32,

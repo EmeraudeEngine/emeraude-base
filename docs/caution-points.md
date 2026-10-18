@@ -1564,6 +1564,15 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## Hash — HashType is scoped: the hash classes are usable by name again (2026-10-18)
+
+Found by the coverage pass (`Hash.crc32KnownAnswers`, the first test of `CRC32`, at 0 % before): `enum HashType` was
+UNSCOPED, so its enumerators `CRC32`, `MD5`, `SHA1`, `SHA256`, `SHA512` were names of the `Hash` namespace and hid the
+classes of the same names — `Hash::CRC32 hash{};` did not compile beside `Hash/Types.hpp` ("expected ';' before
+'hash'"), and a test had worked around it with `class Hash::SHA1` instead of fixing it. `enum class HashType : uint8_t`
+now (every use already wrote `HashType::X`; no user outside base's tests); the workaround is gone. CRC32 itself was
+right: the CRC-32/ISO-HDLC check value, piecewise updates and `reset()` are tested now.
+
 ## PixelFactory — the channel conversions keep the alpha; a gray + alpha texture is no longer opaque (2026-10-18)
 
 Found by the coverage pass (`PixelFactoryProcessor.*Alpha*`, `readOptionsConvertWithoutLosingTheAlpha`):
