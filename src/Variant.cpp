@@ -183,6 +183,12 @@ namespace EmEn::Base
 			{
 				out << "Null";
 			}
+			else if constexpr ( std::is_same_v< T, int8_t > || std::is_same_v< T, uint8_t > )
+			{
+				/* NOTE: An 8-bit integer is a NUMBER: streamed as is, it was a character ('A' for 65, a NUL byte for 0,
+				 * a raw byte for 200 — 2026-10-18). */
+				out << static_cast< int >(value);
+			}
 			else
 			{
 				out << value;

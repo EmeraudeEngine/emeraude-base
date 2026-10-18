@@ -28,9 +28,13 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <array>
 #include <cstdint>
+#include <set>
+#include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 
 /* Local inclusions. */
 #include "Variant.hpp"
@@ -193,5 +197,84 @@ namespace EmEn::Base
 		EXPECT_EQ(capture.count, 1);
 
 		Logging::setSink({});   /* restore the default sink */
+	}
+
+	/* ===== Every alternative (the coverage pass, 2026-10-18) ===== */
+
+	TEST(Variant, everyAlternativeKeepsItsTypeNameAndValue)
+	{
+		/* type() casts the storage index to Type: each alternative must come back under its own tag and name. */
+		const std::array< std::pair< Variant, Type >, 21 > cases{{
+			{Variant{}, Type::Null},
+			{Variant{int8_t{-8}}, Type::Integer8},
+			{Variant{uint8_t{8}}, Type::UnsignedInteger8},
+			{Variant{int16_t{-16}}, Type::Integer16},
+			{Variant{uint16_t{16}}, Type::UnsignedInteger16},
+			{Variant{int32_t{-32}}, Type::Integer32},
+			{Variant{uint32_t{32}}, Type::UnsignedInteger32},
+			{Variant{int64_t{-64}}, Type::Integer64},
+			{Variant{uint64_t{64}}, Type::UnsignedInteger64},
+			{Variant{1.5F}, Type::Float},
+			{Variant{2.5}, Type::Double},
+			{Variant{3.5L}, Type::LongDouble},
+			{Variant{true}, Type::Boolean},
+			{Variant{Math::Vector2F{1.0F, 2.0F}}, Type::Vector2Float},
+			{Variant{Math::Vector3F{1.0F, 2.0F, 3.0F}}, Type::Vector3Float},
+			{Variant{Math::Vector4F{1.0F, 2.0F, 3.0F, 4.0F}}, Type::Vector4Float},
+			{Variant{Math::Matrix2F{}}, Type::Matrix2Float},
+			{Variant{Math::Matrix3F{}}, Type::Matrix3Float},
+			{Variant{Math::Matrix4F{}}, Type::Matrix4Float},
+			{Variant{Math::CartesianFrameF{}}, Type::CartesianFrameFloat},
+			{Variant{PixelFactory::ColorF{0.25F, 0.5F, 0.75F, 1.0F}}, Type::Color}
+		}};
+
+		std::set< std::string > names;
+
+		for ( const auto & [variant, type] : cases )
+		{
+			EXPECT_EQ(variant.type(), type);
+			names.emplace(Variant::to_cstring(type));
+		}
+
+		EXPECT_EQ(names.size(), cases.size()) << "two types share a name";
+
+		EXPECT_EQ(cases[1].first.asInteger8(), -8);
+		EXPECT_EQ(cases[2].first.asUnsignedInteger8(), 8U);
+		EXPECT_EQ(cases[3].first.asInteger16(), -16);
+		EXPECT_EQ(cases[4].first.asUnsignedInteger16(), 16U);
+		EXPECT_EQ(cases[5].first.asInteger32(), -32);
+		EXPECT_EQ(cases[6].first.asUnsignedInteger32(), 32U);
+		EXPECT_EQ(cases[7].first.asInteger64(), -64);
+		EXPECT_EQ(cases[8].first.asUnsignedInteger64(), 64U);
+		EXPECT_EQ(cases[9].first.asFloat(), 1.5F);
+		EXPECT_EQ(cases[10].first.asDouble(), 2.5);
+		EXPECT_EQ(cases[11].first.asLongDouble(), 3.5L);
+		EXPECT_TRUE(cases[12].first.asBool());
+		EXPECT_EQ(cases[13].first.asVector2Float().y(), 2.0F);
+		EXPECT_EQ(cases[14].first.asVector3Float().z(), 3.0F);
+		EXPECT_EQ(cases[15].first.asVector4Float().w(), 4.0F);
+		EXPECT_EQ(cases[16].first.asMatrix2Float(), Math::Matrix2F{});
+		EXPECT_EQ(cases[17].first.asMatrix3Float(), Math::Matrix3F{});
+		EXPECT_EQ(cases[18].first.asMatrix4Float(), Math::Matrix4F{});
+		EXPECT_EQ(cases[19].first.asCartesianFrameFloat().position(), Math::CartesianFrameF{}.position());
+		EXPECT_EQ(cases[20].first.asColor().green(), 0.5F);
+	}
+
+	TEST(Variant, eightBitIntegersPrintAsNumbers)
+	{
+		/* Streamed as is, an 8-bit integer was a CHARACTER: 65 printed 'A', 0 a NUL byte, 200 a raw (invalid UTF-8) byte. */
+		const auto print = [] (const Variant & variant) {
+			std::ostringstream out;
+			out << variant;
+
+			return out.str();
+		};
+
+		EXPECT_EQ(print(Variant{int8_t{65}}), "65");
+		EXPECT_EQ(print(Variant{int8_t{-128}}), "-128");
+		EXPECT_EQ(print(Variant{uint8_t{0}}), "0");
+		EXPECT_EQ(print(Variant{uint8_t{200}}), "200");
+		EXPECT_EQ(print(Variant{int32_t{-7}}), "-7");
+		EXPECT_EQ(print(Variant{}), "Null");
 	}
 }

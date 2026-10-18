@@ -1564,6 +1564,14 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## Variant — an 8-bit integer prints as a number; the type order is checked at compile time (2026-10-18)
+
+Found by the coverage pass (`Variant.*`): `operator<<` streamed an `int8_t` / `uint8_t` as is, i.e. as a CHARACTER —
+`Integer8{65}` printed "A", `UnsignedInteger8{0}` a NUL byte, `{200}` a raw byte (invalid UTF-8 in a log). They print
+as numbers now. `type()` casts the storage index to `Type`: the order of the enumerators and of the `Storage`
+alternatives was a comment to keep in mind; 22 `static_assert`s check it now (a swap of two alternatives fails to
+compile). The printing test failed on the former code.
+
 ## IO — the FileIO writers write aside; ZipReader re-opens cleanly and opens an empty archive (2026-10-18)
 
 Found by the coverage pass (`IOFileUtils.*`, `ZipArchive.*`):

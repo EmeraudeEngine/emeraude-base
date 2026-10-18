@@ -27,7 +27,9 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstddef>
 #include <cstdint>
+#include <type_traits>
 #include <variant>
 
 /* Local inclusions. */
@@ -170,6 +172,31 @@ namespace EmEn::Base
 				Math::CartesianFrame< float >,
 				PixelFactory::Color< float >
 			>;
+
+			/* NOTE: type() casts m_data.index() to Type: the order of both is checked here, at compile time, instead of
+			 * being a comment to keep in mind (2026-10-18). */
+			static_assert(std::variant_size_v< Storage > == static_cast< size_t >(Type::Color) + 1U);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Null), Storage >, std::monostate >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Integer8), Storage >, int8_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::UnsignedInteger8), Storage >, uint8_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Integer16), Storage >, int16_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::UnsignedInteger16), Storage >, uint16_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Integer32), Storage >, int32_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::UnsignedInteger32), Storage >, uint32_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Integer64), Storage >, int64_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::UnsignedInteger64), Storage >, uint64_t >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Float), Storage >, float >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Double), Storage >, double >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::LongDouble), Storage >, long double >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Boolean), Storage >, bool >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Vector2Float), Storage >, Math::Vector< 2, float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Vector3Float), Storage >, Math::Vector< 3, float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Vector4Float), Storage >, Math::Vector< 4, float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Matrix2Float), Storage >, Math::Matrix< 2, float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Matrix3Float), Storage >, Math::Matrix< 3, float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Matrix4Float), Storage >, Math::Matrix< 4, float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::CartesianFrameFloat), Storage >, Math::CartesianFrame< float > >);
+			static_assert(std::is_same_v< std::variant_alternative_t< static_cast< size_t >(Type::Color), Storage >, PixelFactory::Color< float > >);
 
 		private:
 
