@@ -37,15 +37,24 @@
 namespace EmEn::Base::Compression::LZMA
 {
 	Decompressor::Decompressor (uint32_t maxThreads) noexcept
+		: m_maxThreads(maxThreads),
+		/* NOTE: m_stream and m_maxThreads are declared (initialized) before m_ready. */
+		m_ready(maxThreads > 0 ? this->initMT(maxThreads) : this->init())
 	{
-		if ( maxThreads > 0 )
-		{
-			m_ready = this->initMT(maxThreads);
-		}
-		else
-		{
-			m_ready = this->init();
-		}
+
+	}
+
+	bool
+	Decompressor::restart () noexcept
+	{
+		lzma_end(&m_stream);
+
+		const lzma_stream fresh = LZMA_STREAM_INIT;
+		m_stream = fresh;
+
+		m_ready = m_maxThreads > 0 ? this->initMT(m_maxThreads) : this->init();
+
+		return m_ready;
 	}
 
 	Decompressor::~Decompressor ()
@@ -149,10 +158,18 @@ namespace EmEn::Base::Compression::LZMA
 	{
 		size_t written = 0;
 
+		/* NOTE: Reusable (owner decision, 2026-10-18): every call after the first starts a fresh stream. */
+		if ( m_streamUsed && !this->restart() )
+		{
+			return false;
+		}
+
 		if ( !m_ready )
 		{
 			return false;
 		}
+
+		m_streamUsed = true;
 
 		lzma_action action = LZMA_RUN;
 

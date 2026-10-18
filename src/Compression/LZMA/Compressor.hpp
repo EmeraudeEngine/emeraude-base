@@ -106,6 +106,15 @@ namespace EmEn::Base::Compression::LZMA
 		private:
 
 			/**
+			 * @brief Ends the current stream and initializes a fresh one with the constructor's parameters.
+			 * @note Every call after the first starts here: a finished liblzma stream produces nothing more (a second call
+			 * used to answer true with 0 bytes, 2026-10-18), and a call that failed halfway left a stream in mid-flight.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool restart () noexcept;
+
+			/**
 			 * @brief Initializes the LZMA compressor in single thread mode.
 			 * @param preset The LZMA preset.
 			 * @return bool
@@ -132,6 +141,9 @@ namespace EmEn::Base::Compression::LZMA
 			bool compress (std::stringstream & input, std::stringstream & output) noexcept;
 
 			lzma_stream m_stream LZMA_STREAM_INIT;
+			uint32_t m_maxThreads{0};
+			uint32_t m_preset{LZMA_PRESET_DEFAULT};
 			bool m_ready{false};
+			bool m_streamUsed{false};
 	};
 }

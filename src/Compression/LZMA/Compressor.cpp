@@ -27,21 +27,32 @@
 #include "Compressor.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <iostream>
 
 namespace EmEn::Base::Compression::LZMA
 {
 	Compressor::Compressor (uint32_t maxThreads, uint32_t preset) noexcept
+		: m_maxThreads(maxThreads),
+		m_preset(preset),
+		/* NOTE: m_stream, m_maxThreads and m_preset are declared (initialized) before m_ready. */
+		m_ready(maxThreads > 0 ? this->initMT(maxThreads, preset) : this->init(preset))
 	{
-		if ( maxThreads > 0 )
-		{
-			m_ready = this->initMT(maxThreads, preset);
-		}
-		else
-		{
-			m_ready = this->init(preset);
-		}
+
+	}
+
+	bool
+	Compressor::restart () noexcept
+	{
+		lzma_end(&m_stream);
+
+		const lzma_stream fresh = LZMA_STREAM_INIT;
+		m_stream = fresh;
+
+		m_ready = m_maxThreads > 0 ? this->initMT(m_maxThreads, m_preset) : this->init(m_preset);
+
+		return m_ready;
 	}
 
 	Compressor::~Compressor ()
@@ -104,7 +115,10 @@ namespace EmEn::Base::Compression::LZMA
 	{
 		lzma_mt settings{};
 		settings.flags = 0;
-		settings.threads = std::max(std::min(1U, lzma_cputhreads()), maxThreads);
+		/* NOTE: At least one thread, at most the processor's (lzma_cputhreads() is 0 when unknown). The formula was
+		 * max(min(1, cpus), maxThreads): the request, uncapped — 2000 threads took 838 MB (2026-10-18; the Decompressor
+		 * was fixed on 2026-10-17, this one was missed). */
+		settings.threads = std::clamp(maxThreads, 1U, std::max(1U, lzma_cputhreads()));
 		settings.block_size = 8192 * 64;
 		settings.timeout = 0;
 		settings.preset = preset;
@@ -143,10 +157,18 @@ namespace EmEn::Base::Compression::LZMA
 	bool
 	Compressor::compress (std::stringstream & input, std::stringstream & output) noexcept
 	{
+		/* NOTE: Reusable (owner decision, 2026-10-18): every call after the first starts a fresh stream. */
+		if ( m_streamUsed && !this->restart() )
+		{
+			return false;
+		}
+
 		if ( !m_ready )
 		{
 			return false;
 		}
+
+		m_streamUsed = true;
 
 		lzma_action action = LZMA_RUN;
 

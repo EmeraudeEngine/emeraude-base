@@ -62,7 +62,7 @@ TARGETS=(
 # it and ASan / UBSan see none of its accesses (fuzz_http_response ran 520 M blind executions at 59 edges, 2026-10-17).
 # Such a target compiles its parser's own sources, instrumented; the archive's copies are then never pulled in.
 declare -A EXTRA_SOURCES=(
-	[fuzz_compression]="src/Compression/LZMA.cpp src/Compression/ZLIB.cpp"
+	[fuzz_compression]="src/Compression/LZMA.cpp src/Compression/LZMA/Decompressor.cpp src/Compression/ZLIB.cpp"
 	[fuzz_http_response]="src/Network/HTTPResponseParser.cpp src/Network/HTTPResponse.cpp src/Network/HTTPHeaders.cpp"
 	[fuzz_ini]="src/INIParser.cpp"
 	[fuzz_jpeg]="src/PixelFactory/FileFormatJpeg.cpp"

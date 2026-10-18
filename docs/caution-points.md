@@ -1564,6 +1564,22 @@ that comes from data is bounded below the operand's width BEFORE the shift.
 > the fuzzing campaign (`42a26bb`), so it has **no fuzz target**; the unit suite on a smaller host
 > is what caught it (`docs/todo/fuzz-hdr-target.md`).
 
+## Compression — the LZMA stream classes are reusable; the Compressor's threads are clamped (2026-10-18)
+
+Found by the coverage pass (`Compression.LZMAStreamClassesAreReusable`):
+- `LZMA::Compressor` / `LZMA::Decompressor` initialized their liblzma stream once, in the constructor: a finished
+  stream produces nothing more, so a SECOND `compressString()` / `decompressString()` on the same object answered TRUE
+  with 0 bytes (and the old decompressor even "accepted" a truncated input that way). Owner decision: reusable — every
+  call after the first goes through `restart()` (`lzma_end()`, a fresh `LZMA_STREAM_INIT`, the constructor's
+  parameters); a call that failed halfway no longer leaves a stream in mid-flight. The classes have no user in the
+  cascade (the free functions of `LZMA.cpp` serve); `fuzz_compression` now feeds one `Decompressor` kept across the
+  whole campaign.
+- `Compressor::initMT()` computed `max(min(1, cpus), maxThreads)`: the request, uncapped (2000 threads: 838 MB peak). The
+  Decompressor's identical formula was fixed on 2026-10-17 and this one was missed; both are `clamp(maxThreads, 1,
+  cpus)` now (the 2000-thread request runs 32 threads on the 32-thread bench: 700 MB, the encoder's per-thread memory
+  at preset 6).
+- The test failed on the former code (an empty second output; a truncated input accepted).
+
 ## Variant — an 8-bit integer prints as a number; the type order is checked at compile time (2026-10-18)
 
 Found by the coverage pass (`Variant.*`): `operator<<` streamed an `int8_t` / `uint8_t` as is, i.e. as a CHARACTER —
@@ -1583,6 +1599,9 @@ Found by the coverage pass (`IOFileUtils.*`, `ZipArchive.*`):
   token>-<counter>", unique per call — two writers of one target never share it) and `IO::renameFile()` replaces the
   target only once it is whole; any failure removes the temporary file. Cost: one in-memory copy of the encoded file.
   A side effect: those writers no longer open the target at all, a FIFO there is replaced, not blocked on.
+  Windows: replacing a file another program holds open WITHOUT `FILE_SHARE_DELETE` (a viewer showing that very PNG)
+  fails with a sharing violation where Linux succeeds — the write is then refused, the temporary file removed and the
+  old file kept (Windows peer, 2026-10-18; screenshots get unique names and never hit it).
 - `ZipReader::open()` called twice read the entry list again on top of itself (each entry listed twice): it closes
   first now. A valid EMPTY archive answered false while staying open (`isOpen()` true, `isArchiveFile()` true): it
   opens (owner decision), `extractAll()` succeeds with nothing to write.

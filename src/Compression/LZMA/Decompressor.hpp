@@ -117,6 +117,15 @@ namespace EmEn::Base::Compression::LZMA
 			bool init () noexcept;
 
 			/**
+			 * @brief Ends the current stream and initializes a fresh one with the constructor's parameters.
+			 * @note Every call after the first starts here: a finished liblzma stream produces nothing more (a second call
+			 * used to answer true with 0 bytes, 2026-10-18), and a call that failed halfway left a stream in mid-flight.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool restart () noexcept;
+
+			/**
 			 * @brief Initializes the LZMA decompressor in multithreads mode.
 			 * @param maxThreads The max number of threads.
 			 * @return bool
@@ -135,6 +144,8 @@ namespace EmEn::Base::Compression::LZMA
 			bool decompress (std::stringstream & input, std::stringstream & output, size_t maxOutput = std::numeric_limits< size_t >::max()) noexcept;
 
 			lzma_stream m_stream LZMA_STREAM_INIT;
+			uint32_t m_maxThreads{0};
 			bool m_ready{false};
+			bool m_streamUsed{false};
 	};
 }

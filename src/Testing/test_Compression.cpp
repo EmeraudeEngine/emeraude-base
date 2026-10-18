@@ -299,3 +299,35 @@ TEST(Compression, LZMAHeaderDeclaringALargeDictionaryIsRefused)
 	EXPECT_FALSE(decompressor.decompressString(stream, recovered));
 }
 
+TEST(Compression, LZMAStreamClassesAreReusable)
+{
+	/* A finished liblzma stream produces nothing more: a second call on the same object answered TRUE with 0 bytes
+	 * (owner decision, 2026-10-18: every call after the first starts a fresh stream). */
+	const auto first = createSource(1024UL);
+	const auto second = createSource(3000UL);
+
+	for ( const uint32_t threads : {0U, 4U} )
+	{
+		LZMA::Compressor compressor{threads, 6};
+		LZMA::Decompressor decompressor{threads};
+
+		std::string packedFirst;
+		std::string packedSecond;
+		ASSERT_TRUE(compressor.compressString(first, packedFirst)) << threads;
+		ASSERT_TRUE(compressor.compressString(second, packedSecond)) << threads;
+		EXPECT_FALSE(packedSecond.empty()) << threads;
+
+		std::string recovered;
+		ASSERT_TRUE(decompressor.decompressString(packedFirst, recovered)) << threads;
+		EXPECT_EQ(recovered, first) << threads;
+		ASSERT_TRUE(decompressor.decompressString(packedSecond, recovered)) << threads;
+		EXPECT_EQ(recovered, second) << threads;
+
+		/* A call that fails halfway leaves no stream in mid-flight for the next one. */
+		const std::string truncated = packedFirst.substr(0, packedFirst.size() / 2);
+		EXPECT_FALSE(decompressor.decompressString(truncated, recovered)) << threads;
+		ASSERT_TRUE(decompressor.decompressString(packedSecond, recovered)) << threads;
+		EXPECT_EQ(recovered, second) << threads;
+	}
+}
+

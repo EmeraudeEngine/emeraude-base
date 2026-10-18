@@ -4,7 +4,7 @@
  *
  * libFuzzer target for the Compression decompressors (Ave robustus! — A.3).
  * Feeds arbitrary bytes through LZMA::decompressString and ZLIB::decompressString under
- * ASan/UBSan. Decompressing hostile/truncated streams is the untrusted-input surface
+ * ASan/UBSan, and through ONE LZMA::Decompressor kept across the inputs (its restart() between calls, 2026-10-18). Decompressing hostile/truncated streams is the untrusted-input surface
  * (zip-bomb sizing, malformed headers, truncated payloads).
  */
 
@@ -15,6 +15,7 @@
 
 /* Local inclusions. */
 #include "Compression/LZMA.hpp"
+#include "Compression/LZMA/Decompressor.hpp"
 #include "Compression/ZLIB.hpp"
 
 extern "C" int
@@ -35,6 +36,14 @@ LLVMFuzzerTestOneInput (const uint8_t * data, size_t size)
 	{
 		std::string output;
 		(void)Compression::ZLIB::decompressString(input, output);
+	}
+
+	{
+		/* NOTE: One object for the whole campaign: every input after the first goes through restart(). */
+		static Compression::LZMA::Decompressor reused{};
+
+		std::string output;
+		(void)reused.decompressString(input, output);
 	}
 
 	return 0;
