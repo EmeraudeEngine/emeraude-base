@@ -63,6 +63,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 		 * ⚠️ The base used to sit at -halfSize while the apex came from the height, which made
 		 * the legs 5.9% longer than the base. Symmetric bounds are also what let the volumetric
 		 * vertex colour formula span the full [0,1] range. */
+		/* cppcheck-suppress suspiciousFloatingPointCast ; 0.25 is exact in every floating point type. */
 		const auto halfHeight = size * (std::sqrt(static_cast< vertex_data_t >(3)) * static_cast< vertex_data_t >(0.25));
 		const auto halfSize = size * static_cast< vertex_data_t >(0.5);
 
@@ -949,7 +950,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 			for ( index_data_t sliceIndex = 0; sliceIndex < slices; ++sliceIndex)
 			{
-				auto theta = sliceIndex == slices ? 0 : static_cast< vertex_data_t >(sliceIndex) * dTheta;
+				auto theta = static_cast< vertex_data_t >(sliceIndex) * dTheta;
 				auto sTheta = -std::sin(theta);
 				auto cTheta = std::cos(theta);
 

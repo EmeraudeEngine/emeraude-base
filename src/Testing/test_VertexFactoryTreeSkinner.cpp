@@ -346,8 +346,8 @@ TEST(VertexFactoryTreeSkinner, theBranchSwayIsContinuousAcrossTheJunctions)
 	struct Sample
 	{
 		Math::Vector< 3, float > position;
-		float phasorX;
-		float phasorY;
+		float phasorX{0.0F};
+		float phasorY{0.0F};
 	};
 
 	std::vector< Sample > samples;

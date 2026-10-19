@@ -31,6 +31,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <csetjmp>
@@ -70,7 +71,7 @@ namespace EmEn::Base::PixelFactory
 		{
 			jpeg_error_mgr pub;
 			std::jmp_buf escape;
-			char message[JMSG_LENGTH_MAX];
+			std::array< char, JMSG_LENGTH_MAX > message{};
 		};
 
 		[[noreturn]]
@@ -79,7 +80,7 @@ namespace EmEn::Base::PixelFactory
 		{
 			auto * manager = reinterpret_cast< ErrorManager * >(cinfo->err);
 
-			(*cinfo->err->format_message)(cinfo, manager->message);
+			(*cinfo->err->format_message)(cinfo, manager->message.data());
 
 			std::longjmp(manager->escape, 1);
 		}
@@ -143,7 +144,7 @@ namespace EmEn::Base::PixelFactory
 		EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 		if ( setjmp(error.escape) )
 		{
-			Logging::error("PixelFactory::FileFormatJpeg", std::string{"readStream(), "} + error.message);
+			Logging::error("PixelFactory::FileFormatJpeg", std::string{"readStream(), "} + error.message.data());
 
 			jpeg_destroy_decompress(&info);
 
@@ -263,7 +264,7 @@ namespace EmEn::Base::PixelFactory
 		EMERAUDE_BASE_SUPPRESS_SETJMP_C4611
 		if ( setjmp(error.escape) )
 		{
-			Logging::error("PixelFactory::FileFormatJpeg", std::string{"writeStream(), "} + error.message);
+			Logging::error("PixelFactory::FileFormatJpeg", std::string{"writeStream(), "} + error.message.data());
 
 			jpeg_destroy_compress(&info);
 			free(outBuffer);

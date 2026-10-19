@@ -1,0 +1,32 @@
+# cppcheck configuration of emeraude-base — the checks NOT gated (owner decision 2026-10-19, plan Ave Robustus II
+# P-W (2): "like clang-tidy", the style checks limited to the bug-prone and performance ones). Version: cppcheck 2.22.0.
+# The command line and the triage live in docs/static-analysis-ledger.md. A suppression of ONE site is inline, next to
+# the code, with its reason: // cppcheck-suppress <id> ; <reason>
+
+# Covered by clang-tidy (.clang-tidy) or by the paranoid compiler warnings: one gate per defect.
+functionStatic
+functionConst
+passedByValue
+constParameterReference
+constParameterPointer
+constVariableReference
+constVariablePointer
+shadowFunction
+shadowVariable
+funcArgNamesDifferentUnnamed
+
+# Taste, not defects (owner).
+useStlAlgorithm
+variableScope
+
+# A library: its public functions have no caller inside it.
+unusedFunction
+
+# Tooling noise: the system headers are not analysed, the checkers report is informational.
+missingInclude
+missingIncludeSystem
+checkersReport
+
+# Third-party code (FetchContent, submodules).
+*:*/_deps/*
+*:*/dependencies/*

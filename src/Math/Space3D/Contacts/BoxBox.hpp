@@ -203,7 +203,7 @@ namespace EmEn::Base::Math::Space3D
 			const auto segment = candidates[second].position - candidates[first].position;
 
 			size_t third = candidates.size();
-			size_t fourth = candidates.size();
+			size_t fourth = third;
 			precision_t thirdScore = 0;
 			precision_t fourthScore = 0;
 

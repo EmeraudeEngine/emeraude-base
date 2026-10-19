@@ -401,10 +401,10 @@ TEST(VertexFactoryShapeDecimator, DISABLED_PrintGoldenFingerprints)
 {
 	struct GoldenCase
 	{
-		const char * name;
+		const char * name{nullptr};
 		Shape< float, uint32_t > shape;
-		float ratio;
-		uint32_t normalMapResolution;
+		float ratio{0.0F};
+		uint32_t normalMapResolution{0};
 	};
 
 	std::vector< GoldenCase > cases;

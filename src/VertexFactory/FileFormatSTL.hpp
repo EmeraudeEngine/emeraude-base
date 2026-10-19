@@ -29,12 +29,15 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -117,53 +120,95 @@ namespace EmEn::Base::VertexFactory
 
 				/* NOTE: We default to Binary STL for saving as it is more compact. */
 
-				/* Write Header (80 bytes) */
-				char header[80] = {0};
-				const std::string headerStr = "Exported by Emeraude-Engine";
-				std::copy_n(headerStr.begin(), std::min(headerStr.size(), sizeof(header)), header);
-				stream.write(header, 80);
-
-				/* Write Triangle Count (4 bytes) */
-				const auto triangleCount = static_cast< uint32_t >(geometry.triangles().size());
-				stream.write(reinterpret_cast< const char * >(&triangleCount), sizeof(uint32_t));
-
-				/* Write Triangles */
-				for ( size_t triangleIndex = 0; triangleIndex < geometry.triangles().size(); ++triangleIndex )
+				/* The count field is 32 bits. */
+				if ( geometry.triangles().size() > std::numeric_limits< uint32_t >::max() )
 				{
-					const auto & triangle = geometry.triangles()[triangleIndex];
+					Logging::error("VertexFactory::FileFormatSTL", "writeStream(), more triangles than the format can count !");
 
-					/* Normal */
-					Math::Vector< 3, float > normal = {0.0f, 0.0f, 0.0f};
-					/* Try to get face normal if possible, otherwise zero */
-					/* Since we don't have easy access to computed face normal here without computation,
-					 * we can either compute it or write 0. STL standard allows 0. */
-					stream.write(reinterpret_cast< const char * >(&normal), 3 * sizeof(float));
+					return false;
+				}
 
-					/* Vertices */
-					for ( index_data_t v = 0; v < 3; ++v )
+				/* Header (80 bytes), then the triangle count (4 bytes). */
+				std::array< char, 80 > header{};
+				constexpr std::string_view Signature{"Exported by Emeraude-Engine"};
+				std::ranges::copy(Signature, header.begin());
+
+				const auto triangleCount = static_cast< uint32_t >(geometry.triangles().size());
+				std::array< char, sizeof(uint32_t) > countBytes{};
+				std::memcpy(countBytes.data(), &triangleCount, sizeof(uint32_t));
+
+				if ( !stream.write(header.data(), header.size()) || !stream.write(countBytes.data(), countBytes.size()) )
+				{
+					Logging::error("VertexFactory::FileFormatSTL", "writeStream(), unable to write the header !");
+
+					return false;
+				}
+
+				/* One 50-byte record per triangle: a zero normal (the format allows it, readers recompute it from the
+				 * winding), the 3 vertices, a zero attribute byte count. */
+				std::array< char, 50 > record{};
+
+				for ( const auto & triangle : geometry.triangles() )
+				{
+					record.fill(0);
+
+					for ( index_data_t corner = 0; corner < 3; ++corner )
 					{
-						const auto & vertex = geometry.vertex(triangle.vertexIndex(v));
-						const Math::Vector< 3, float > pos = vertex.position(); /* Assuming float position */
+						const auto & position = geometry.vertex(triangle.vertexIndex(corner)).position();
+						const auto first = 3 + (static_cast< size_t >(corner) * 3);
 
-						/* Convert to float explicitly if vertex_data_t is double */
-						auto x = static_cast< float >(pos.x());
-						auto y = static_cast< float >(pos.y());
-						auto z = static_cast< float >(pos.z());
-
-						stream.write(reinterpret_cast< const char * >(&x), sizeof(float));
-						stream.write(reinterpret_cast< const char * >(&y), sizeof(float));
-						stream.write(reinterpret_cast< const char * >(&z), sizeof(float));
+						writeFloat(record, first, static_cast< float >(position[Math::X]));
+						writeFloat(record, first + 1, static_cast< float >(position[Math::Y]));
+						writeFloat(record, first + 2, static_cast< float >(position[Math::Z]));
 					}
 
-					/* Attribute Byte Count (2 bytes) - usually 0 */
-					uint16_t attributeByteCount = 0;
-					stream.write(reinterpret_cast< const char * >(&attributeByteCount), sizeof(uint16_t));
+					if ( !stream.write(record.data(), record.size()) )
+					{
+						Logging::error("VertexFactory::FileFormatSTL", "writeStream(), unable to write a triangle !");
+
+						return false;
+					}
 				}
 
 				return true;
 			}
 
 		private:
+
+			/* NOTE: The binary STL format is little-endian; the floats are copied as the host stores them. Every target
+			 * of the cascade (x86-64, ARM64) is little-endian: a big-endian one must swap the bytes here first. */
+			static_assert(std::endian::native == std::endian::little, "FileFormatSTL reads and writes little-endian floats.");
+
+			/**
+			 * @brief Returns the n-th float of a binary STL triangle record.
+			 * @param record The 50-byte record.
+			 * @param index The float index, 0 to 11.
+			 * @return float
+			 */
+			[[nodiscard]]
+			static
+			float
+			readFloat (const std::array< char, 50 > & record, size_t index) noexcept
+			{
+				float value = 0.0F;
+
+				std::memcpy(&value, record.data() + (index * sizeof(float)), sizeof(float));
+
+				return value;
+			}
+
+			/**
+			 * @brief Writes the n-th float of a binary STL triangle record.
+			 * @param record The 50-byte record.
+			 * @param index The float index, 0 to 11.
+			 * @param value The value.
+			 */
+			static
+			void
+			writeFloat (std::array< char, 50 > & record, size_t index, float value) noexcept
+			{
+				std::memcpy(record.data() + (index * sizeof(float)), &value, sizeof(float));
+			}
 
 			/**
 			 * @brief Check if the file is ASCII or Binary.
@@ -300,9 +345,6 @@ namespace EmEn::Base::VertexFactory
 			bool
 			readAscii (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry) noexcept
 			{
-				const std::string line;
-				const std::string dummy;
-
 				/* Keep track of unique vertices to build indexed geometry */
 				/* Simple approach: Linear search or Map. For speed/simplicity in this context,
 				   we will just duplicate vertices for now or use a basic dedup if necessary.
@@ -453,20 +495,12 @@ namespace EmEn::Base::VertexFactory
 					vertices.reserve(static_cast< std::size_t >(triangleCount) * 3);
 					triangles.reserve(triangleCount);
 
+					/* One record: the normal (3 floats), the 3 vertices (9 floats), the attribute byte count (2 bytes). */
+					std::array< char, 50 > record{};
+
 					for ( uint32_t i = 0; i < triangleCount; ++i )
 					{
-						float n[3];
-						float v[3][3];
-						uint16_t attr;
-
-						/* Read Normal (3 floats) */
-						file.read(reinterpret_cast< char * >(n), 12);
-
-						/* Read Vertices (3 * 3 floats) */
-						file.read(reinterpret_cast< char * >(v), 36);
-
-						/* Read Attribute Byte Count (2 bytes) */
-						file.read(reinterpret_cast< char * >(&attr), 2);
+						file.read(record.data(), static_cast< std::streamsize >(record.size()));
 
 						if ( !file.good() )
 						{
@@ -476,18 +510,20 @@ namespace EmEn::Base::VertexFactory
 						auto baseIndex = static_cast< index_data_t >(vertices.size());
 
 						const Math::Vector< 3, vertex_data_t > normal = {
-							static_cast< vertex_data_t >(n[0]),
-							static_cast< vertex_data_t >(n[1]),
-							static_cast< vertex_data_t >(n[2])
+							static_cast< vertex_data_t >(readFloat(record, 0)),
+							static_cast< vertex_data_t >(readFloat(record, 1)),
+							static_cast< vertex_data_t >(readFloat(record, 2))
 						};
 
-						for ( auto & j : v )
+						for ( size_t corner = 0; corner < 3; ++corner )
 						{
+							const auto first = 3 + (corner * 3);
+
 							ShapeVertex< vertex_data_t > sv;
 							sv.setPosition(Math::Vector< 3, vertex_data_t >{
-								static_cast< vertex_data_t >(j[0]),
-								static_cast< vertex_data_t >(j[1]),
-								static_cast< vertex_data_t >(j[2])
+								static_cast< vertex_data_t >(readFloat(record, first)),
+								static_cast< vertex_data_t >(readFloat(record, first + 1)),
+								static_cast< vertex_data_t >(readFloat(record, first + 2))
 							});
 							sv.setNormal(normal);
 							vertices.push_back(sv);

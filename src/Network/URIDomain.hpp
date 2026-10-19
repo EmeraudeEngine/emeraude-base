@@ -245,10 +245,10 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Returns the URI domain base.
-			 * @return std::string
+			 * @return const std::string &
 			 */
 			[[nodiscard]]
-			std::string
+			const std::string &
 			base () const noexcept
 			{
 				return m_base;

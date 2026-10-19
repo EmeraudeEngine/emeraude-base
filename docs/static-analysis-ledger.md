@@ -1,8 +1,9 @@
-# clang-tidy ledger — emeraude-base
+# Static-analysis ledger — emeraude-base (clang-tidy, cppcheck)
 
 > Owner decision 2026-09-30, plan Ave Robustus § 3 (projet-alpha `docs/plans/ave-robustus.md`). The configuration is
 > this repository's `.clang-tidy`. Gate on every change: ZERO NEW finding on the touched translation units; a finding
 > is fixed, never silenced. A FULL run is a long process ordered by the owner; its results are recorded here.
+> Renamed from `clang-tidy-ledger.md` on 2026-10-19, when cppcheck joined the gate (§ cppcheck, at the end).
 
 ## How to run
 
@@ -31,6 +32,7 @@ TU, or review the diff of every header after a mass fix; `/usr/bin/grep -rn "(((
 
 | Module | Date | Findings by check | Notes |
 |---|---|---|---|
+| cppcheck lot (P-W (2), 2026-10-19): `Hash/SHA1.cpp` (`std::rotl` for the macro), `PixelFactory/FileFormatJpeg.cpp`, `VertexFactory/FileFormatSTL.hpp`, `WaveFactory/Synthesizer.hpp`, the cppcheck sites of § cppcheck and 17 test files | 2026-10-19 | clang-tidy 21.1.6 on the changed lines: 8 → 1. 7 fixed (avoid-c-arrays: the libjpeg message buffer is a `std::array`; misc-const-correctness ×2 in tests; modernize-use-ranges; readability-math-missing-parentheses ×2; constant-array-index in the SHA-1 rounds, now a range-for). 1 ON PURPOSE (below): the SHA-1 message schedule. | cppcheck sweep |
 | Never-instantiated template members (P-W (2), 2026-10-19): `Math/Vector.hpp`, `Quaternion.hpp`, `Matrix.hpp`, `CartesianFrame.hpp`, `OrientedCuboid.hpp`, `DeterminantAverage.hpp`, `Space2D/Triangle.hpp`, `PixelFactory/Color.hpp`, `Processor.hpp`, `Margin.hpp`, `VertexFactory/ShapeProcessor.hpp`, `ShapeAssembler.hpp`, `ShapeBuilder.hpp`, `Grid.hpp`, `XRayAnalyzer.hpp`, `Algorithms/Mandelbrot.hpp`, `DiamondSquare.hpp`, `Time/Elapsed/*`; tests `test_TemplateInstantiation.cpp` (new, the guard), `test_AlgorithmsMandelbrot.cpp` (new) and 10 test files | 2026-10-19 | clang-tidy 21.1.6 on the changed lines of the 12 touched TUs (the guard TU includes every header): 4, all fixed (readability-math-missing-parentheses ×2 in `Color::hue()`, cppcoreguidelines-pro-bounds-constant-array-index in a test, modernize-use-ranges in a test). 0 left. ⚠️ The root cause was a clang-tidy FIX: e96495d6f's const-correctness pass made two maps `const` inside a member nothing instantiated — a fix-it on a template body is unverified until the guard TU compiles it. | cppcheck sweep, caution-points § Templates |
 | `src/ConditionVariable.hpp` (new), `src/SharedMutex.hpp` (new), `src/Mutex.hpp` (the friendship), `src/ThreadSafety.hpp` (the shared-capability macros), test `test_Mutex.cpp` (Ave Robustus II P-W, D12) | 2026-10-16 | clang-tidy 21.1.6 on the changed lines: 4 → 3. 1 fixed (readability-math-missing-parentheses in the test); 3 ON PURPOSE: cppcoreguidelines-macro-usage on `EMEN_REQUIRES_SHARED`, `EMEN_ACQUIRE_SHARED`, `EMEN_RELEASE_SHARED` — a Clang attribute can only be spelled where the declaration is, never produced by a function, and the macro must expand to nothing on GCC / MSVC (the existing `EMEN_*` macros of the header have the same reason). `-Wthread-safety` proven to catch the misuses: a write under a `SharedMutexReadLock`, a read without a lock, an unannotated `ConditionVariable` predicate (3 warnings on a negative TU). | Ave Robustus II P-W |
 | `src/Time/EventTrait.hpp` (new: `TimerHandle`; `createTimer()` / `fire()` return it, Ave Robustus II P4), test `test_Time.cpp` | 2026-10-16 | clang-tidy 21.1.6: the header 0 on the changed lines. The test: 2 ON PURPOSE (bugprone-use-after-move, reported again by clang-analyzer-cplusplus.Move, in `aMovedHandleKeepsTheTimer`): the test asserts the moved-from handle is empty — the documented contract, as for `ScopedRegistration` and `Thread`. | base P4 timers |
@@ -74,6 +76,7 @@ Each with its file:line, its check and the reason (an owner decision).
 
 | File:line | Check | Reason |
 |---|---|---|
+| `src/Hash/SHA1.cpp` `transform()`, the message schedule | `cppcoreguidelines-pro-bounds-constant-array-index` | `W[t] = ROTL1(W[t-3] ^ W[t-8] ^ W[t-14] ^ W[t-16])` (FIPS 180-4 § 6.1.2) is an indexed recurrence by definition; the loop bounds prove the indices (16 ≤ t < 80 in an 80-word array). 2026-10-19. |
 | `src/Testing/test_VertexFactoryShapeGenerator.cpp` `gemCutsKeepTheirGeometry`, the princess fingerprint line | `modernize-use-designated-initializers` | Pre-existing on the line; only a value changed (2026-10-09, sumAbsNormal +6 after the normalize fix). The 12 fingerprint lines of that table share one positional format — rewriting one alone would break the table's reading. |
 | `src/Testing/test_VertexFactoryShapeSimplifier.cpp` `aRequestedStopTokenStopsTheDecimation`, `DISABLED_StopLatencyOnALargeMesh` (`std::stop_source stopSource`) | `misc-const-correctness` (×2) | A libstdc++ artefact: it declares `stop_source::request_stop()` `const`, the standard ([stopsource.general]) and MSVC / libc++ do not — a `const` source would not compile on Windows or macOS. 2026-10-08, confirmed by the owner. |
 | `src/Math/Space3D/TriangleMesh.hpp` `visit()` stack, `splitPosition()` bins | `cppcoreguidelines-pro-bounds-constant-array-index` | Bounded by construction: the query stack holds at most the depth (`MaxDepth + 2` slots, one push per inner level); a bin index is `min(bin, Bins - 1)`, a boundary loop runs in `[0, Bins - 1)`. A checked container would add a test per node of a per-query walk. 2026-10-02, as the engine keeps this check's bounded indices. |
@@ -88,3 +91,64 @@ Each with its file:line, its check and the reason (an owner decision).
 | `src/Testing/test_PortableRandom.cpp` `IntegerBoundsAndUniformity` counts | `cppcoreguidelines-pro-bounds-constant-array-index` | The index is `face - 1`, asserted in [1, 6] on the line above. 2026-10-02. |
 | `src/Testing/AsanDefaultOptions.cpp` `__asan_default_options` | `bugprone-reserved-identifier` | The name is ASan's documented hook, looked up by its runtime: it cannot be another. 2026-10-02. |
 | `src/Math/Space3D/OrientedBox.hpp` `axis(size_t index)` | `cppcoreguidelines-pro-bounds-constant-array-index` | An indexed accessor with `@pre index < 3`, used by the SAT loops of `Contacts/BoxBox.hpp`; three named accessors would make every loop heavier. Owner decision 2026-10-01: kept, as the engine keeps this check's bounded indices. |
+
+## cppcheck
+
+**Version: cppcheck 2.22.0** on the three OS (owner decision 2026-10-19). Debian's 2.17.1 cannot parse a
+`static_cast< T >(x)` default argument (the gem generators of `ShapeGenerator.hpp`) nor `a < static_cast< T >(-1) || a > ...`
+(`TriangleMesh.hpp`), and abandons the WHOLE translation unit at that `syntaxError`: every TU including those headers
+was only partly analysed. Linux: built from the tag (`cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=$HOME/.local
+-DUSE_MATCHCOMPILER=ON -DHAVE_RULES=OFF -DBUILD_GUI=OFF`, build, `cmake --install`; `~/.local/bin` first in `PATH`); macOS:
+Homebrew, `brew pin cppcheck`; Windows: the official installer (`C:\Program Files\Cppcheck`, not on the `PATH`).
+
+**Configuration**: `cppcheck-suppressions.txt` at the repository root — the checks NOT gated: those clang-tidy or the
+compiler already gate (`functionStatic`, `functionConst`, `passedByValue`, `const*`, `shadow*`,
+`funcArgNamesDifferentUnnamed`), taste (`useStlAlgorithm`, `variableScope`), `unusedFunction` (a library), the tooling
+noise, the third-party code. Owner decision: every error, warning, portability and performance check, and the
+bug-prone style ones, are gated. A suppression of ONE site is inline, on the line above, with its reason:
+`/* cppcheck-suppress <id> ; <reason> */`.
+
+**Gate**: zero finding on the touched TUs, as clang-tidy. The command (Linux; a Claude build directory's compile
+database, never `cmake-build-*`):
+
+```bash
+cppcheck --project=<build>/compile_commands.json --file-filter='*/emeraude-base/src/*' \
+	--library=googletest --library=posix --platform=unix64 -D__x86_64__ -D__linux__ -D__GNUC__=14 --std=c++20 \
+	--check-level=exhaustive --enable=all --inconclusive --inline-suppr \
+	--suppressions-list=cppcheck-suppressions.txt --cppcheck-build-dir=<scratch dir> -j $(nproc) \
+	--template='{file}:{line}:{column}: {severity}: {message} [{id}]' > cppcheck.out 2> cppcheck.txt
+```
+
+A touched TU alone: add `--file-filter='*<file name>'` once per file. ⚠️ cppcheck does not honour a `requires` clause:
+it evaluates a constrained member for every instantiation of its class (e.g. `rotateTowards()` for an `int` vector).
+
+**First full sweep (2026-10-19, 2.22.0)**: 673 findings with every check; 137 with the configuration; **0** after the
+lot. Fixed:
+- a member nothing instantiates is never compiled (2.17.1's `knownEmptyContainer`): the LSCM unwrap and 18 others,
+  base e683165 — and the template guard `test_TemplateInstantiation.cpp` (caution-points § Templates);
+- `uninitMemberVarNoCtor` ×30: every member initialized (ShapeProcessor's chart / loop records, TreeSkinner,
+  the MDx records, the libjpeg error manager, 8 test structures);
+- `invalidPointerCast` ×5: the binary STL records go through a 50-byte buffer (`std::memcpy`; a `static_assert` makes
+  the little-endian assumption explicit), and the writer now checks every write (it reported success on a stream that
+  refused them, test `VertexFactorySTL.binaryWriteReadsBackAndRefusesAFailingStream`);
+- `sizeofCalculation`: SHA-1's rotation macro → `std::rotl`; `knownArgument` / `knownConditionTrueFalse` for integral
+  instantiations: `Matrix::perspectiveProjection()` takes `requires floating point`;
+- dead code: `Processor::mirrorY()` returns `void` (it always returned true), the unreachable `sliceIndex == slices` of the
+  UV sphere, `Synthesizer::getEffectiveSampleCount()` (unused), the filter's `highpass` scoped to its loop, two unused
+  strings in the STL ASCII reader, a redundant cancel test in the decimator, 25 dead `is_integral` branches of
+  `test_MathCartesianFrame.cpp` (the suite runs float and double only; the upright billboard test runs both now);
+- `returnByReference`: `URIDomain::base()` returns a `const std::string &`; `useInitializationList` (`TimedEvent`);
+  `duplicateAssignExpression` (BoxBox, Gradient) written as a copy of the first value; copies kept for a const view
+  replaced by `std::as_const()` in the tests.
+
+Kept ON PURPOSE (inline, each with its reason): `accessMoved` ×19 in the tests (the moved-from state is the contract,
+as clang-tidy's use-after-move entries above); the generic `AARectangle` code (signed or unsigned `precision_t`, ×7);
+`Any`'s implicit converting constructor (as `std::any`'s) and `ArenaList`'s move constructor; `FlatHashMap::operator[]`
+(the pointer goes into the map, not into the returned pair); two `isIntersecting(...) > 0` (the three-argument overload
+returns a count); `HTTPServer::forEachConnection()`'s copy (the callback may shrink the set); `TimedEvent`'s wake-up
+test and the decimator's second cancel test (state another thread changes); the two `PortableRandom` full-range
+tests; `rotateTowards()` and `perspectiveProjection()` (requires clauses cppcheck ignores); two exact float casts
+(`ShapeGenerator`, `ShapeProcessor`); a reference member of an aggregate (`TreeParametricGrower`); four test patterns
+(a Pixmap copying its span, a registration the move assignment must undo, a copy's independence, a lock only the
+waiting thread holds).
+

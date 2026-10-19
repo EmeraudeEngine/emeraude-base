@@ -153,7 +153,9 @@ TEST(BaseAny, smallAndLargeValuesSurviveCopiesAndMoves)
 	Any smallMoved{std::move(small)};
 	Any heapMoved{std::move(heap)};
 	/* The moved-from state is part of the contract. */
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(small.hasValue());
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(heap.hasValue());
 	EXPECT_EQ(*anyCast< std::string >(&smallMoved), "inline");
 	EXPECT_EQ(anyCast< LargePayload >(&heapMoved)->values[7], 77U);

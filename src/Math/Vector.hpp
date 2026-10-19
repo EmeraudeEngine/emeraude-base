@@ -2112,6 +2112,7 @@ namespace EmEn::Base::Math
 
 					if ( Utility::isZero(axis.lengthSquared()) )
 					{
+						/* cppcheck-suppress knownConditionTrueFalse ; cppcheck ignores the requires clause: it evaluates this member for integral vectors it cannot be instantiated with. */
 						axis = crossProduct(current, std::abs(current[X]) < static_cast< precision_t >(0.9) ? positiveX() : positiveZ());
 					}
 				}

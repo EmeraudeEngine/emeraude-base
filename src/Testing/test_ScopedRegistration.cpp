@@ -141,11 +141,13 @@ TEST(BaseScopedRegistration, aMoveTransfersTheRegistration)
 		auto first = registry.add(1);
 		auto second = std::move(first);
 
+		/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 		EXPECT_FALSE(first.active());
 		EXPECT_TRUE(second.active());
 
 		/* The moved-from token ends here without unregistering. */
 		{
+			/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 			[[maybe_unused]] auto drop = std::move(first);
 		}
 
@@ -164,10 +166,12 @@ TEST(BaseScopedRegistration, aMoveAssignmentUndoesTheReplacedRegistration)
 	auto token = registry.add(1);
 	auto other = registry.add(2);
 
+	/* cppcheck-suppress redundantInitialization ; the first registration is what the move assignment must undo. */
 	token = std::move(other);
 
 	EXPECT_EQ(registry.values(), std::vector< int >{2});
 	EXPECT_EQ(registry.removals(), 1);
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(other.active());
 	EXPECT_TRUE(token.active());
 

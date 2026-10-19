@@ -1379,6 +1379,7 @@ namespace
 			element = static_cast< pixel_data_t >(value++);
 		}
 
+		/* cppcheck-suppress returnDanglingLifetime ; the Pixmap COPIES the span into its own storage. */
 		return Pixmap< pixel_data_t >{5, 4, ChannelMode::RGB, std::span< const pixel_data_t >{data}};
 	}
 

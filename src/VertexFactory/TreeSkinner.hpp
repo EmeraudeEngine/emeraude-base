@@ -372,8 +372,8 @@ namespace EmEn::Base::VertexFactory
 			{
 				const TreeSkeleton< vertex_data_t > & skeleton;
 				const OcclusionField & occlusion;
-				vertex_data_t baseHeight;
-				vertex_data_t treeHeight;
+				vertex_data_t baseHeight{0};
+				vertex_data_t treeHeight{0};
 				/* The wind hierarchy (owner decision 2026-09-23, "hierarchie continue"), per segment: the distance
 				 * along the skeleton from the trunk to the segment START, and the phase of its first-order
 				 * ancestor. Both are continuous across a junction, which is what keeps a child on its parent. */

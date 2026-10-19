@@ -64,9 +64,9 @@ namespace EmEn::Base::Time
 			 * @param once Declare to stop after one interval elapsed. Default false.
 			 */
 			TimedEvent (std::function< bool (TimerID) > function, rep_t granularity, bool once = false) noexcept
-				: m_granularity(granularity), m_function(std::move(function))
+				: m_granularity(granularity), m_function(std::move(function)), m_onlyOnce(once)
 			{
-				m_onlyOnce = once;
+
 			}
 
 			/**
@@ -422,6 +422,7 @@ namespace EmEn::Base::Time
 					});
 
 					/* NOTE: If we wake up because the timer is destroyed, we exit the loop. */
+					/* cppcheck-suppress knownConditionTrueFalse ; the wait above returns when the destructor clears it (cppcheck does not follow the predicate). */
 					if ( !m_isProcessCreated )
 					{
 						break;

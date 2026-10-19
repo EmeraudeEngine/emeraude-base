@@ -307,4 +307,4 @@ JSF AV C++, MISRA C++:2023). It is a base rule for every new addition; existing 
     a switch that does not cover a large external enum (`VkFormat`, `VkResult`) keeps its `default:`.
 
 clang-tidy keeps `cppcoreguidelines-owning-memory`, `-special-member-functions`, `-pro-type-member-init` and
-`-no-malloc` at zero new finding on the touched TUs (`docs/clang-tidy-ledger.md`).
+`-no-malloc` at zero new finding on the touched TUs (`docs/static-analysis-ledger.md`).

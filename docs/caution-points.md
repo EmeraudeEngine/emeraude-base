@@ -1849,3 +1849,12 @@ What changed in behaviour (no code in the cascade called any of these before):
 - **Time/Elapsed**: `ScopeCPUTime`, `PrintScopeCPUTime`, `ScopeRealTime`, `RealTime` count a clock that went back as zero
   instead of wrapping a negative duration into a `uint64_t`; one formula for any `CLOCKS_PER_SEC` dividing 10⁹.
 
+
+## cppcheck — a `syntaxError` abandons the whole translation unit; 2.22.0, not Debian's 2.17.1 (2026-10-19)
+
+cppcheck stops analysing a TU at its first `syntaxError`: the error is one line in the report, the silence after it
+is every check of every header that TU includes. Debian's 2.17.1 cannot parse a `static_cast< T >(x)` default argument
+(the gem generators of `VertexFactory/ShapeGenerator.hpp`) nor `a < static_cast< T >(-1) || a > ...`
+(`Math/Space3D/TriangleMesh.hpp`): 371 findings in base with it, 673 with 2.22.0, which parses both. The tool is pinned
+to 2.22.0 (owner decision); never rewrite correct code to please an older parser. Any `syntaxError` in a sweep is a
+tool gap to report first, not a finding to triage — `docs/static-analysis-ledger.md` § cppcheck.

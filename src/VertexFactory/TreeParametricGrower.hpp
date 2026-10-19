@@ -183,6 +183,7 @@ namespace EmEn::Base::VertexFactory
 			struct GrowthState final
 			{
 				TreeSkeleton< vertex_data_t > & skeleton;
+				/* cppcheck-suppress uninitMemberVarNoCtor ; a reference member: an aggregate that leaves it out does not compile. */
 				Randomizer< vertex_data_t > & randomizer;
 				uint32_t nextBranchIndex{0};
 			};

@@ -108,6 +108,7 @@ namespace EmEn::Base::Math::Space2D
 	{
 		StaticVector< Point< precision_t >, 4 > intersections;
 
+		/* cppcheck-suppress comparisonOfFuncReturningBoolError ; the three-argument overload returns the intersection COUNT (uint32_t), not this bool. */
 		return isIntersecting(line, rectangle, intersections) > 0;
 	}
 

@@ -94,7 +94,7 @@ namespace EmEn::Base::PixelFactory
 				position = Math::clampToUnit(position);
 
 				auto itStart = m_points.cend();
-				auto itEnd = m_points.cend();
+				auto itEnd = itStart;
 
 				for ( auto pointIt = m_points.cbegin(); pointIt != m_points.cend(); ++pointIt )
 				{

@@ -1147,6 +1147,7 @@ namespace EmEn::Base::Network
 	HTTPServer::forEachConnection (const std::function< void (HTTPServerConnection &) > & function) const noexcept
 	{
 		/* NOTE: a copy — the function may close a connection, which removes it from the set. */
+		/* cppcheck-suppress redundantCopyLocalConst ; the copy is the point: iterating the live set while it shrinks is invalid. */
 		const auto connections = m_connections;
 
 		for ( const auto & connection : connections )

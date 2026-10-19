@@ -2218,7 +2218,6 @@ namespace EmEn::Base::WaveFactory
 				/* State variable filter state. */
 				float lowpass = 0.0F;
 				float bandpass = 0.0F;
-				float highpass = 0.0F;
 
 				constexpr float Q = 5.0F;  /* Resonance. */
 
@@ -2239,7 +2238,7 @@ namespace EmEn::Base::WaveFactory
 					const auto inputSample = Synthesizer::fromSampleFormat(data[sampleIndex]);
 
 					/* State variable filter. */
-					highpass = inputSample - lowpass - bandpass / Q;
+					const auto highpass = inputSample - lowpass - (bandpass / Q);
 					bandpass += f * highpass;
 					lowpass += f * bandpass;
 
@@ -2303,7 +2302,6 @@ namespace EmEn::Base::WaveFactory
 				float envelope = 0.0F;
 				float lowpass = 0.0F;
 				float bandpass = 0.0F;
-				float highpass = 0.0F;
 
 				constexpr float Q = 4.0F;
 
@@ -2332,7 +2330,7 @@ namespace EmEn::Base::WaveFactory
 					const auto f = 2.0F * fastSinRadians(std::numbers::pi_v< float > * sweepFreq / sampleRateFloat);
 
 					/* State variable filter. */
-					highpass = inputSample - lowpass - bandpass / Q;
+					const auto highpass = inputSample - lowpass - (bandpass / Q);
 					bandpass += f * highpass;
 					lowpass += f * bandpass;
 
@@ -2806,18 +2804,6 @@ namespace EmEn::Base::WaveFactory
 					: std::min(m_regionOffset + m_regionLength, totalSamples);
 
 				return {start, end};
-			}
-
-			/**
-			 * @brief Gets the effective sample count for the current region.
-			 * @return size_t The number of samples in the effective range.
-			 */
-			[[nodiscard]]
-			size_t
-			getEffectiveSampleCount () const noexcept
-			{
-				const auto [start, end] = this->getEffectiveRange();
-				return end - start;
 			}
 
 			/** @brief The longest time an effect parameter may hold, in seconds: the longest SFX script (30 minutes). */

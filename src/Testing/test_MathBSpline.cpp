@@ -50,7 +50,7 @@ namespace
 
 	struct Sample
 	{
-		float time;
+		float time{0.0F};
 		Vector< 3, float > position;
 	};
 

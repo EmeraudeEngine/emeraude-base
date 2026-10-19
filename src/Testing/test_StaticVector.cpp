@@ -214,6 +214,7 @@ namespace EmEn::Base
 		ASSERT_EQ(s2.size(), 2);
 		ASSERT_EQ(s2[0], 10);
 
+		/* cppcheck-suppress unreadVariable ; the write to the copy must not reach the original (checked next). */
 		s2[0] = 99;
 		ASSERT_EQ(s1[0], 10);
 	}
@@ -243,6 +244,7 @@ namespace EmEn::Base
 
 		ASSERT_EQ(s2.size(), 2);
 		ASSERT_EQ(s2[0], "hello");
+		/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 		ASSERT_TRUE(s1.empty());
 	}
 
@@ -257,6 +259,7 @@ namespace EmEn::Base
 
 		ASSERT_EQ(s2.size(), 2);
 		ASSERT_EQ(s2[0], "hello");
+		/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 		ASSERT_TRUE(s1.empty());
 	}
 
@@ -483,6 +486,7 @@ namespace EmEn::Base
 		ASSERT_EQ(s2.size(), 2);
 		ASSERT_EQ(s2[0], "hello");
 		ASSERT_EQ(s2[1], "world");
+		/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 		ASSERT_EQ(s1.size(), s2_original_size);
 	}
 

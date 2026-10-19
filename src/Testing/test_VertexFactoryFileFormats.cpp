@@ -124,8 +124,7 @@ namespace EmEn::Base::VertexFactory
 		std::memcpy(buffer.data() + HeaderBytes, &vertex, sizeof(ShapeVertex< float >));
 
 		/* ⚠️ A CONST buffer: bound to a non-const vector, MemoryStream opens for WRITING. */
-		const auto input = buffer;
-		MemoryStream stream{input};
+		MemoryStream stream{std::as_const(buffer)};
 		Native format;
 		Result result;
 		ASSERT_TRUE(format.readStream(stream, result, {}));
@@ -154,8 +153,7 @@ namespace EmEn::Base::VertexFactory
 		std::memcpy(buffer.data() + HeaderBytes + VersionTwoVertexBytes, &second, VersionTwoVertexBytes);
 
 		/* ⚠️ A CONST buffer: bound to a non-const vector, MemoryStream opens for WRITING. */
-		const auto input = buffer;
-		MemoryStream stream{input};
+		MemoryStream stream{std::as_const(buffer)};
 		Native format;
 		Result result;
 		ASSERT_TRUE(format.readStream(stream, result, {}));
@@ -387,6 +385,50 @@ namespace EmEn::Base::VertexFactory
 		STL format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+	}
+
+	/* 2026-10-19 (cppcheck invalidPointerCast): the binary records go through a 50-byte buffer, no float pointer cast;
+	 * the writer checks every write (it returned true on a stream that refused them). */
+	TEST(VertexFactorySTL, binaryWriteReadsBackAndRefusesAFailingStream)
+	{
+		const auto cube = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 2.0F, 3.0F);
+
+		ASSERT_TRUE(cube.isValid());
+
+		std::vector< std::byte > buffer;
+
+		{
+			MemoryStream output{buffer};
+			const STL format;
+
+			ASSERT_TRUE(format.writeStream(output, cube, {}));
+		}
+
+		ASSERT_EQ(buffer.size(), STLHeaderBytes + (cube.triangles().size() * STLTriangleBytes));
+
+		MemoryStream input{std::as_const(buffer)};
+		STL format;
+		Result result;
+
+		ASSERT_TRUE(format.readStream(input, result, {}));
+		ASSERT_EQ(result.shape.triangles().size(), cube.triangles().size());
+
+		for ( size_t triangleIndex = 0; triangleIndex < cube.triangles().size(); ++triangleIndex )
+		{
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				const auto & expected = cube.vertex(cube.triangles()[triangleIndex].vertexIndex(corner)).position();
+				const auto & actual = result.shape.vertex(result.shape.triangles()[triangleIndex].vertexIndex(corner)).position();
+
+				EXPECT_EQ(actual, expected) << "triangle " << triangleIndex << " corner " << corner;
+			}
+		}
+
+		/* A read-only stream refuses the writes: the writer must say so. */
+		const std::vector< std::byte > readOnly;
+		MemoryStream refusing{readOnly};
+
+		EXPECT_FALSE(format.writeStream(refusing, cube, {}));
 	}
 
 	TEST(VertexFactorySTL, countLargerThanPayloadIsRejected)

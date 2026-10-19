@@ -1166,6 +1166,7 @@ namespace EmEn::Base::VertexFactory
 					totalArea += (flat.width + padding) * (flat.height + padding);
 				}
 
+				/* cppcheck-suppress suspiciousFloatingPointCast ; a heuristic slack factor, its float rounding is irrelevant. */
 				const auto binWidth = std::sqrt(totalArea) * static_cast< vertex_data_t >(1.3);
 
 				vertex_data_t currentX = 0;
@@ -1920,9 +1921,9 @@ namespace EmEn::Base::VertexFactory
 
 				struct ChartRect
 				{
-					size_t index;
-					vertex_data_t width;
-					vertex_data_t height;
+					size_t index{0};
+					vertex_data_t width{0};
+					vertex_data_t height{0};
 					vertex_data_t offsetX{0};
 					vertex_data_t offsetY{0};
 				};
@@ -2025,8 +2026,8 @@ namespace EmEn::Base::VertexFactory
 				/* Build a spatial index of loop endpoints for fast nearest-neighbor lookup. */
 				struct Endpoint
 				{
-					size_t loopIdx;
-					bool isFront; /* true = front of loop, false = back */
+					size_t loopIdx{0};
+					bool isFront{false}; /* true = front of loop, false = back */
 					Math::Vector< 3, vertex_data_t > position;
 				};
 

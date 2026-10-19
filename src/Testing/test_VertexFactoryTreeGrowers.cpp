@@ -205,7 +205,7 @@ TEST(VertexFactoryTreeParametricGrower, theShippedSpeciesGrowWithinTheirCeiling)
 {
 	struct Species final
 	{
-		const char * name;
+		const char * name{nullptr};
 		TreeParameters< float > parameters;
 	};
 

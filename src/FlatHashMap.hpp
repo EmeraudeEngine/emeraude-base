@@ -196,6 +196,7 @@ namespace EmEn::Base
 			value_t &
 			operator[] (const key_t & key) noexcept
 			{
+				/* cppcheck-suppress returnTempReference ; first is a pointer INTO the map's storage, not into the returned pair. */
 				return *this->tryEmplace(key, value_t{}).first;
 			}
 

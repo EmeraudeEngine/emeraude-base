@@ -225,9 +225,7 @@ namespace EmEn::Base::WaveFactory
 	{
 		auto mutable_buffer = makeMidi(0, 1, 480, minimalTrackPayload());
 		mutable_buffer[0] = static_cast< std::byte >('X');
-		const std::vector< std::byte > buffer = mutable_buffer;
-
-		MemoryStream stream{buffer};
+		MemoryStream stream{std::as_const(mutable_buffer)};
 		FileFormatMIDI< int16_t > format;
 		Wave< int16_t > wave;
 
@@ -584,8 +582,7 @@ namespace EmEn::Base::WaveFactory
 
 		ASSERT_FALSE(encoded.empty());
 
-		const std::vector< std::byte > toRead = encoded;
-		MemoryStream in{toRead};
+		MemoryStream in{std::as_const(encoded)};
 		FileFormatSNDFile< int16_t > format;
 		Wave< int16_t > decoded;
 		ASSERT_TRUE(format.readStream(in, decoded, {}));

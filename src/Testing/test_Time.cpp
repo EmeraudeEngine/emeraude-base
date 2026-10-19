@@ -280,7 +280,9 @@ namespace EmEn::Base::Time
 
 		auto second = std::move(first);
 
+		/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 		EXPECT_FALSE(first.valid());
+		/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 		EXPECT_EQ(first.id(), 0U);
 		EXPECT_TRUE(second.valid());
 		EXPECT_EQ(second.id(), timerID);

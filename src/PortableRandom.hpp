@@ -133,6 +133,7 @@ namespace EmEn::Base::PortableRandom
 			const auto range = static_cast< uint32_t >(static_cast< uint32_t >(span) + 1U);
 
 			/* The full 32-bit range: every draw is valid. */
+			/* cppcheck-suppress knownConditionTrueFalse ; always false for an integer narrower than 32 bits, true for the full 32-bit range. */
 			if ( range == 0U )
 			{
 				return static_cast< integer_t >(static_cast< unsigned_t >(static_cast< unsigned_t >(minimum) + static_cast< unsigned_t >(draw32(generator))));
@@ -152,6 +153,7 @@ namespace EmEn::Base::PortableRandom
 		{
 			const auto range = static_cast< uint64_t >(static_cast< uint64_t >(span) + 1U);
 
+			/* cppcheck-suppress knownConditionTrueFalse ; true only for the full 64-bit range of a 64-bit type. */
 			if ( range == 0U )
 			{
 				return static_cast< integer_t >(static_cast< unsigned_t >(static_cast< unsigned_t >(minimum) + static_cast< unsigned_t >(draw64(generator))));

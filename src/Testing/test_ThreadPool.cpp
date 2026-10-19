@@ -117,6 +117,7 @@ TEST(ThreadPoolTask, MoveConstructor)
 
 	ThreadPool::Task task2{std::move(task1)};
 
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_TRUE(task1.empty());
 	EXPECT_FALSE(task2.empty());
 
@@ -136,6 +137,7 @@ TEST(ThreadPoolTask, MoveAssignment)
 
 	task2 = std::move(task1);
 
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_TRUE(task1.empty());
 	EXPECT_FALSE(task2.empty());
 
@@ -170,7 +172,9 @@ TEST(ThreadPoolTask, IsSmallResetOnMoveAndClear)
 	/* Regression: moved-from tasks are empty; isSmall() must not report a stale true. */
 	ThreadPool::Task task2{std::move(task1)};
 
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_TRUE(task1.empty());
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(task1.isSmall());
 	EXPECT_TRUE(task2.isSmall());
 
@@ -178,7 +182,9 @@ TEST(ThreadPoolTask, IsSmallResetOnMoveAndClear)
 	ThreadPool::Task task3;
 	task3 = std::move(task2);
 
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_TRUE(task2.empty());
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(task2.isSmall());
 	EXPECT_TRUE(task3.isSmall());
 }
@@ -1446,9 +1452,12 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 
 	struct DrawOperation
 	{
-		int type;
-		int32_t x1, y1, x2, y2;
-		int32_t radius;
+		int type{0};
+		int32_t x1{0};
+		int32_t y1{0};
+		int32_t x2{0};
+		int32_t y2{0};
+		int32_t radius{0};
 		Color< float > color;
 	};
 

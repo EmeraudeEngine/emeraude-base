@@ -246,7 +246,6 @@ namespace
 	std::filesystem::path
 	patternFile (size_t size)
 	{
-		std::error_code ec;
 		auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-httpserver-test-" + std::to_string(size) + ".bin");
 		std::string content(size, '\0');
 

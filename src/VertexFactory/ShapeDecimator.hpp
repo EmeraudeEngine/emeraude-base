@@ -336,13 +336,14 @@ namespace EmEn::Base::VertexFactory
 
 				auto output = buildOutputShape(vertices, triangles, cornerUVs);
 
+				/* cppcheck-suppress identicalConditionAfterEarlyExit ; a stop request may arrive during buildOutputShape(): the flag is read again. */
 				if ( this->isCancelled() )
 				{
 					return {};
 				}
 
 				/* Normal map baking: generate lightmap UVs, then bake high-poly normals. */
-				if ( m_normalMapResolution > 0 && !this->isCancelled() )
+				if ( m_normalMapResolution > 0 )
 				{
 					ShapeProcessor< vertex_data_t, index_data_t > processor{output};
 					processor.generateLightmapUV();
@@ -461,6 +462,7 @@ namespace EmEn::Base::VertexFactory
 
 					ArenaList (const ArenaList &) = delete;
 					ArenaList & operator= (const ArenaList &) = delete;
+					/* cppcheck-suppress noExplicitConstructor ; a move constructor, never explicit. */
 					ArenaList (ArenaList &&) noexcept = default;
 					ArenaList & operator= (ArenaList &&) noexcept = default;
 

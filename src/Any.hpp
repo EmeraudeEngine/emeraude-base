@@ -109,6 +109,7 @@ namespace EmEn::Base
 			 */
 			template< typename value_t >
 			requires (!std::is_same_v< std::decay_t< value_t >, Any > && std::is_copy_constructible_v< std::decay_t< value_t > >)
+			/* cppcheck-suppress noExplicitConstructor ; implicit on purpose, as std::any's converting constructor. */
 			Any (value_t && value) noexcept
 			{
 				this->construct< std::decay_t< value_t > >(std::forward< value_t >(value));

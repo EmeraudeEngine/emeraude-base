@@ -131,54 +131,44 @@ TYPED_TEST(MathCartesianFrame, CartesianFrameDefault)
 
 TYPED_TEST(MathCartesianFrame, CartesianFrameYaw90)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto cartesianFrame = CartesianFrame< TypeParam >{};
+	cartesianFrame.yaw(Radian< TypeParam >(-90), true);
 
-		ASSERT_EQ(true, true);
+	/* Check the position */
+	{
+		constexpr auto Origin = Vector< 3, TypeParam >::origin();
+
+		ASSERT_EQ(cartesianFrame.position(), Origin);
 	}
-	else
+
+	/* Check the local X axis. */
 	{
-		auto cartesianFrame = CartesianFrame< TypeParam >{};
-		cartesianFrame.yaw(Radian< TypeParam >(-90), true);
+		constexpr auto Axis = Vector< 3, TypeParam >::positiveZ();
+		constexpr auto AxisInv = Vector< 3, TypeParam >::negativeZ();
 
-		/* Check the position */
-		{
-			constexpr auto Origin = Vector< 3, TypeParam >::origin();
+		ASSERT_EQ(cartesianFrame.XAxis(), Axis);
+		ASSERT_EQ(cartesianFrame.rightVector(), Axis);
+		ASSERT_EQ(cartesianFrame.leftVector(), AxisInv);
+	}
 
-			ASSERT_EQ(cartesianFrame.position(), Origin);
-		}
+	/* Check the local Y axis. */
+	{
+		constexpr auto Axis = Vector< 3, TypeParam >::positiveY();
+		constexpr auto AxisInv = Vector< 3, TypeParam >::negativeY();
 
-		/* Check the local X axis. */
-		{
-			constexpr auto Axis = Vector< 3, TypeParam >::positiveZ();
-			constexpr auto AxisInv = Vector< 3, TypeParam >::negativeZ();
+		ASSERT_EQ(cartesianFrame.YAxis(), Axis);
+		ASSERT_EQ(cartesianFrame.upwardVector(), Axis);
+		ASSERT_EQ(cartesianFrame.downwardVector(), AxisInv);
+	}
 
-			ASSERT_EQ(cartesianFrame.XAxis(), Axis);
-			ASSERT_EQ(cartesianFrame.rightVector(), Axis);
-			ASSERT_EQ(cartesianFrame.leftVector(), AxisInv);
-		}
+	/* Check the local Z axis. */
+	{
+		constexpr auto Axis = Vector< 3, TypeParam >::negativeX();
+		constexpr auto AxisInv = Vector< 3, TypeParam >::positiveX();
 
-		/* Check the local Y axis. */
-		{
-			constexpr auto Axis = Vector< 3, TypeParam >::positiveY();
-			constexpr auto AxisInv = Vector< 3, TypeParam >::negativeY();
-
-			ASSERT_EQ(cartesianFrame.YAxis(), Axis);
-			ASSERT_EQ(cartesianFrame.upwardVector(), Axis);
-			ASSERT_EQ(cartesianFrame.downwardVector(), AxisInv);
-		}
-
-		/* Check the local Z axis. */
-		{
-			constexpr auto Axis = Vector< 3, TypeParam >::negativeX();
-			constexpr auto AxisInv = Vector< 3, TypeParam >::positiveX();
-
-			ASSERT_EQ(cartesianFrame.ZAxis(), Axis);
-			ASSERT_EQ(cartesianFrame.backwardVector(), Axis);
-			ASSERT_EQ(cartesianFrame.forwardVector(), AxisInv);
-		}
+		ASSERT_EQ(cartesianFrame.ZAxis(), Axis);
+		ASSERT_EQ(cartesianFrame.backwardVector(), Axis);
+		ASSERT_EQ(cartesianFrame.forwardVector(), AxisInv);
 	}
 }
 
@@ -240,53 +230,43 @@ TYPED_TEST(MathCartesianFrame, PoleRollConventionIsPinned)
 
 TYPED_TEST(MathCartesianFrame, CartesianFrameTransformation)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
+	/* Check scaling. */
 	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+		constexpr auto Reference = Matrix< 4, TypeParam >{{static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
+														   static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
+														   static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0),
+														   static_cast< TypeParam >(1.2), static_cast< TypeParam >(-1.3), static_cast< TypeParam >(3.2), static_cast< TypeParam >(1.0)}};
 
-		ASSERT_EQ(true, true);
+		auto cartesianFrame = CartesianFrame< TypeParam >{};
+		cartesianFrame.setPosition(static_cast< TypeParam >(1.2), static_cast< TypeParam >(-1.3), static_cast< TypeParam >(3.2));
+		cartesianFrame.setScalingFactor(static_cast< TypeParam >(2.0));
+
+		const auto modelMatrixA = cartesianFrame.getModelMatrix();
+
+		ASSERT_EQ(modelMatrixA, Reference);
+
+		const auto modelMatrixB = cartesianFrame.getModelMatrix() * Matrix< 4, TypeParam >{};
+
+		ASSERT_EQ(modelMatrixB, Reference);
 	}
-	else
+
 	{
-		/* Check scaling. */
-		{
-			constexpr auto Reference = Matrix< 4, TypeParam >{{static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
-															   static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
-															   static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0),
-															   static_cast< TypeParam >(1.2), static_cast< TypeParam >(-1.3), static_cast< TypeParam >(3.2), static_cast< TypeParam >(1.0)}};
+		constexpr auto Reference = Matrix< 4, TypeParam >{{static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
+														   static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
+														   static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0),
+														   static_cast< TypeParam >(0.0), static_cast< TypeParam >(-2.6), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1.0)}};
 
-			auto cartesianFrame = CartesianFrame< TypeParam >{};
-			cartesianFrame.setPosition(static_cast< TypeParam >(1.2), static_cast< TypeParam >(-1.3), static_cast< TypeParam >(3.2));
-			cartesianFrame.setScalingFactor(static_cast< TypeParam >(2.0));
+		const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{static_cast< TypeParam >(0.0), static_cast< TypeParam >(-1.5), static_cast< TypeParam >(0.0)}, static_cast< TypeParam >(2.0)};
+		const auto frameB = CartesianFrame< TypeParam >{static_cast< TypeParam >(0.0F), static_cast< TypeParam >(-0.55F), static_cast< TypeParam >(0.0F)};
+		const auto modelMatrix = frameA.getModelMatrix() * frameB.getModelMatrix();
+		const auto scaling = frameA.scalingFactor() * frameB.scalingFactor();
 
-			const auto modelMatrixA = cartesianFrame.getModelMatrix();
-
-			ASSERT_EQ(modelMatrixA, Reference);
-
-			const auto modelMatrixB = cartesianFrame.getModelMatrix() * Matrix< 4, TypeParam >{};
-
-			ASSERT_EQ(modelMatrixB, Reference);
-		}
+		assertMatrixNear(modelMatrix, Reference);
 
 		{
-			constexpr auto Reference = Matrix< 4, TypeParam >{{static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
-															   static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0),
-															   static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(0.0),
-															   static_cast< TypeParam >(0.0), static_cast< TypeParam >(-2.6), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1.0)}};
+			const CartesianFrame< TypeParam > rebuiltFrame{modelMatrix, scaling};
 
-			const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{static_cast< TypeParam >(0.0), static_cast< TypeParam >(-1.5), static_cast< TypeParam >(0.0)}, static_cast< TypeParam >(2.0)};
-			const auto frameB = CartesianFrame< TypeParam >{static_cast< TypeParam >(0.0F), static_cast< TypeParam >(-0.55F), static_cast< TypeParam >(0.0F)};
-			const auto modelMatrix = frameA.getModelMatrix() * frameB.getModelMatrix();
-			const auto scaling = frameA.scalingFactor() * frameB.scalingFactor();
-
-			assertMatrixNear(modelMatrix, Reference);
-
-			{
-				CartesianFrame< TypeParam > rebuiltFrame{modelMatrix, scaling};
-
-				assertMatrixNear(rebuiltFrame.getModelMatrix(), Reference);
-			}
+			assertMatrixNear(rebuiltFrame.getModelMatrix(), Reference);
 		}
 	}
 }
@@ -329,31 +309,21 @@ TYPED_TEST(MathCartesianFrame, ConstructorWithCoordinates)
 
 TYPED_TEST(MathCartesianFrame, ConstructorFromMatrix)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	// Create a known model matrix (translation + rotation)
+	auto originalFrame = CartesianFrame< TypeParam >{};
+	originalFrame.setPosition(static_cast< TypeParam >(1.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(3.0));
+	originalFrame.yaw(Radian< TypeParam >(45), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		// Create a known model matrix (translation + rotation)
-		auto originalFrame = CartesianFrame< TypeParam >{};
-		originalFrame.setPosition(static_cast< TypeParam >(1.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(3.0));
-		originalFrame.yaw(Radian< TypeParam >(45), true);
+	const auto modelMatrix = originalFrame.getModelMatrix();
+	const auto scale = Vector< 3, TypeParam >{static_cast< TypeParam >(2.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(2.0)};
 
-		const auto modelMatrix = originalFrame.getModelMatrix();
-		const auto scale = Vector< 3, TypeParam >{static_cast< TypeParam >(2.0), static_cast< TypeParam >(2.0), static_cast< TypeParam >(2.0)};
+	// Reconstruct frame from matrix
+	const auto rebuiltFrame = CartesianFrame< TypeParam >{modelMatrix, scale};
 
-		// Reconstruct frame from matrix
-		const auto rebuiltFrame = CartesianFrame< TypeParam >{modelMatrix, scale};
-
-		ASSERT_NEAR(rebuiltFrame.position()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(rebuiltFrame.position()[Y], static_cast< TypeParam >(2.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(rebuiltFrame.position()[Z], static_cast< TypeParam >(3.0), static_cast< TypeParam >(1e-5));
-		ASSERT_EQ(rebuiltFrame.scalingFactor(), scale);
-	}
+	ASSERT_NEAR(rebuiltFrame.position()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rebuiltFrame.position()[Y], static_cast< TypeParam >(2.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rebuiltFrame.position()[Z], static_cast< TypeParam >(3.0), static_cast< TypeParam >(1e-5));
+	ASSERT_EQ(rebuiltFrame.scalingFactor(), scale);
 }
 
 TYPED_TEST(MathCartesianFrame, ConstructorWithVectors)
@@ -463,69 +433,39 @@ TYPED_TEST(MathCartesianFrame, SetScalingXYZFactors)
 
 TYPED_TEST(MathCartesianFrame, SetBackwardVector)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	const Vector< 3, TypeParam > newBackward{1.0, 0.0, 0.0};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		const Vector< 3, TypeParam > newBackward{1.0, 0.0, 0.0};
+	frame.setBackwardVector(newBackward);
 
-		frame.setBackwardVector(newBackward);
-
-		// Backward should be normalized
-		ASSERT_NEAR(frame.backwardVector().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(frame.backwardVector()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-	}
+	// Backward should be normalized
+	ASSERT_NEAR(frame.backwardVector().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(frame.backwardVector()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
 }
 
 TYPED_TEST(MathCartesianFrame, SetOrientationVectors)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	const Vector< 3, TypeParam > backward{1.0, 0.0, 0.0};
+	const Vector< 3, TypeParam > downward{0.0, 1.0, 0.0};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		const Vector< 3, TypeParam > backward{1.0, 0.0, 0.0};
-		const Vector< 3, TypeParam > downward{0.0, 1.0, 0.0};
+	frame.setOrientationVectors(backward, downward);
 
-		frame.setOrientationVectors(backward, downward);
-
-		// Vectors should be normalized
-		ASSERT_NEAR(frame.backwardVector().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(frame.downwardVector().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-	}
+	// Vectors should be normalized
+	ASSERT_NEAR(frame.backwardVector().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(frame.downwardVector().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
 }
 
 TYPED_TEST(MathCartesianFrame, SetOrientationFromFrame)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto sourceFrame = CartesianFrame< TypeParam >{};
+	sourceFrame.yaw(Radian< TypeParam >(45), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto sourceFrame = CartesianFrame< TypeParam >{};
-		sourceFrame.yaw(Radian< TypeParam >(45), true);
+	auto targetFrame = CartesianFrame< TypeParam >{};
+	targetFrame.setOrientationVectors(sourceFrame);
 
-		auto targetFrame = CartesianFrame< TypeParam >{};
-		targetFrame.setOrientationVectors(sourceFrame);
-
-		ASSERT_EQ(targetFrame.YAxis(), sourceFrame.YAxis());
-		ASSERT_EQ(targetFrame.ZAxis(), sourceFrame.ZAxis());
-	}
+	ASSERT_EQ(targetFrame.YAxis(), sourceFrame.YAxis());
+	ASSERT_EQ(targetFrame.ZAxis(), sourceFrame.ZAxis());
 }
 
 // ============================================================================
@@ -544,24 +484,14 @@ TYPED_TEST(MathCartesianFrame, TranslateWorld)
 
 TYPED_TEST(MathCartesianFrame, TranslateLocal)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.yaw(Radian< TypeParam >(90), true); // Rotate 90 degrees around Y
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.yaw(Radian< TypeParam >(90), true); // Rotate 90 degrees around Y
+	// Translate 1 unit in local Z (which should be world X after rotation)
+	frame.translate(static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1.0), true);
 
-		// Translate 1 unit in local Z (which should be world X after rotation)
-		frame.translate(static_cast< TypeParam >(0.0), static_cast< TypeParam >(0.0), static_cast< TypeParam >(1.0), true);
-
-		// Position should have changed based on local axes
-		ASSERT_GT(std::abs(frame.position()[X]), static_cast< TypeParam >(0.5));
-	}
+	// Position should have changed based on local axes
+	ASSERT_GT(std::abs(frame.position()[X]), static_cast< TypeParam >(0.5));
 }
 
 TYPED_TEST(MathCartesianFrame, TranslateXYZ)
@@ -583,41 +513,21 @@ TYPED_TEST(MathCartesianFrame, TranslateXYZ)
 
 TYPED_TEST(MathCartesianFrame, PitchLocal)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.pitch(Radian< TypeParam >(90), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.pitch(Radian< TypeParam >(90), true);
-
-		// After 90 degree pitch, backward should point upward
-		ASSERT_NEAR(frame.backwardVector()[Y], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
-	}
+	// After 90 degree pitch, backward should point upward
+	ASSERT_NEAR(frame.backwardVector()[Y], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
 }
 
 TYPED_TEST(MathCartesianFrame, PitchWorld)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(0.0, 1.0, 0.0);
+	frame.pitch(Radian< TypeParam >(90), false);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(0.0, 1.0, 0.0);
-		frame.pitch(Radian< TypeParam >(90), false);
-
-		// Position should rotate around world X axis
-		ASSERT_GT(std::abs(frame.position()[Z]), static_cast< TypeParam >(0.5));
-	}
+	// Position should rotate around world X axis
+	ASSERT_GT(std::abs(frame.position()[Z]), static_cast< TypeParam >(0.5));
 }
 
 // ============================================================================
@@ -626,41 +536,21 @@ TYPED_TEST(MathCartesianFrame, PitchWorld)
 
 TYPED_TEST(MathCartesianFrame, RollLocal)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.roll(Radian< TypeParam >(90), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.roll(Radian< TypeParam >(90), true);
-
-		// After 90 degree roll, downward should point left
-		ASSERT_NEAR(frame.upwardVector()[X], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
-	}
+	// After 90 degree roll, downward should point left
+	ASSERT_NEAR(frame.upwardVector()[X], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
 }
 
 TYPED_TEST(MathCartesianFrame, RollWorld)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(0.0, 1.0, 0.0);
+	frame.roll(Radian< TypeParam >(90), false);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(0.0, 1.0, 0.0);
-		frame.roll(Radian< TypeParam >(90), false);
-
-		// Position should rotate around world Z axis
-		ASSERT_GT(std::abs(frame.position()[X]), static_cast< TypeParam >(0.5));
-	}
+	// Position should rotate around world Z axis
+	ASSERT_GT(std::abs(frame.position()[X]), static_cast< TypeParam >(0.5));
 }
 
 // ============================================================================
@@ -669,23 +559,13 @@ TYPED_TEST(MathCartesianFrame, RollWorld)
 
 TYPED_TEST(MathCartesianFrame, RotateArbitraryAxis)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	const Vector< 3, TypeParam > axis{0.0, 1.0, 0.0};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		const Vector< 3, TypeParam > axis{0.0, 1.0, 0.0};
+	frame.rotate(Radian< TypeParam >(90), axis, true);
 
-		frame.rotate(Radian< TypeParam >(90), axis, true);
-
-		// Should behave like yaw
-		ASSERT_NEAR(frame.backwardVector()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
-	}
+	// Should behave like yaw
+	ASSERT_NEAR(frame.backwardVector()[X], static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
 }
 
 // ============================================================================
@@ -694,53 +574,33 @@ TYPED_TEST(MathCartesianFrame, RotateArbitraryAxis)
 
 TYPED_TEST(MathCartesianFrame, LookAtTarget)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(0.0, 0.0, 0.0);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(0.0, 0.0, 0.0);
+	const Vector< 3, TypeParam > target{0.0, 0.0, 10.0};
 
-		const Vector< 3, TypeParam > target{0.0, 0.0, 10.0};
+	// flipAxis = false: backward = position - target, so backward points away from target
+	frame.lookAt(target, false);
 
-		// flipAxis = false: backward = position - target, so backward points away from target
-		frame.lookAt(target, false);
+	// Backward should point in -Z direction (away from target at +Z)
+	ASSERT_NEAR(frame.backwardVector()[Z], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
 
-		// Backward should point in -Z direction (away from target at +Z)
-		ASSERT_NEAR(frame.backwardVector()[Z], TypeParam{-1.0}, static_cast< TypeParam >(0.01));
-
-		// Forward should point in +Z direction (toward target at +Z)
-		ASSERT_NEAR(frame.forwardVector()[Z], static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
-	}
+	// Forward should point in +Z direction (toward target at +Z)
+	ASSERT_NEAR(frame.forwardVector()[Z], static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
 }
 
 TYPED_TEST(MathCartesianFrame, LookAtTargetFlipped)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(0.0, 0.0, 0.0);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(0.0, 0.0, 0.0);
+	const Vector< 3, TypeParam > target{0.0, 0.0, 10.0};
 
-		const Vector< 3, TypeParam > target{0.0, 0.0, 10.0};
+	// flipAxis = true means Z+ points toward target
+	frame.lookAt(target, true);
 
-		// flipAxis = true means Z+ points toward target
-		frame.lookAt(target, true);
-
-		// Backward vector (Z+) should point toward target
-		ASSERT_NEAR(frame.backwardVector()[Z], static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
-	}
+	// Backward vector (Z+) should point toward target
+	ASSERT_NEAR(frame.backwardVector()[Z], static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
 }
 
 // ============================================================================
@@ -843,117 +703,67 @@ TYPED_TEST(MathCartesianFrame, EulerAnglesOfAComposedRotationFollowTheZYXOrder)
 
 TYPED_TEST(MathCartesianFrame, GetViewMatrix)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(1.0, 2.0, 3.0);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(1.0, 2.0, 3.0);
+	const auto viewMatrix = frame.getViewMatrix();
 
-		const auto viewMatrix = frame.getViewMatrix();
-
-		// View matrix should be inverse of model matrix (without scaling)
-		// Check that translation is negated and rotated
-		ASSERT_NE(viewMatrix[M4x4Col3Row0], static_cast< TypeParam >(1.0));
-	}
+	// View matrix should be inverse of model matrix (without scaling)
+	// Check that translation is negated and rotated
+	ASSERT_NE(viewMatrix[M4x4Col3Row0], static_cast< TypeParam >(1.0));
 }
 
 TYPED_TEST(MathCartesianFrame, GetInfinityViewMatrix)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(1.0, 2.0, 3.0);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(1.0, 2.0, 3.0);
+	const auto infinityViewMatrix = frame.getInfinityViewMatrix();
 
-		const auto infinityViewMatrix = frame.getInfinityViewMatrix();
-
-		// Infinity view matrix should have no translation
-		ASSERT_NEAR(infinityViewMatrix[M4x4Col3Row0], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(infinityViewMatrix[M4x4Col3Row1], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(infinityViewMatrix[M4x4Col3Row2], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
-	}
+	// Infinity view matrix should have no translation
+	ASSERT_NEAR(infinityViewMatrix[M4x4Col3Row0], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(infinityViewMatrix[M4x4Col3Row1], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(infinityViewMatrix[M4x4Col3Row2], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
 }
 
 TYPED_TEST(MathCartesianFrame, GetInvertedModelMatrix)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(1.0, 2.0, 3.0);
+	frame.setScalingFactor(2.0);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(1.0, 2.0, 3.0);
-		frame.setScalingFactor(2.0);
+	const auto modelMatrix = frame.getModelMatrix();
+	const auto invertedMatrix = frame.getInvertedModelMatrix();
 
-		const auto modelMatrix = frame.getModelMatrix();
-		const auto invertedMatrix = frame.getInvertedModelMatrix();
+	// Product should be identity (approximately)
+	const auto product = modelMatrix * invertedMatrix;
 
-		// Product should be identity (approximately)
-		const auto product = modelMatrix * invertedMatrix;
-
-		assertMatrixNear(product, Matrix< 4, TypeParam >{});
-	}
+	assertMatrixNear(product, Matrix< 4, TypeParam >{});
 }
 
 TYPED_TEST(MathCartesianFrame, GetRotationMatrix3)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.yaw(Radian< TypeParam >(45), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.yaw(Radian< TypeParam >(45), true);
+	const auto rotMatrix = frame.getRotationMatrix3();
 
-		const auto rotMatrix = frame.getRotationMatrix3();
-
-		// Rotation matrix should have determinant of 1 (or -1)
-		const auto det = rotMatrix.determinant();
-		ASSERT_NEAR(std::abs(det), static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
-	}
+	// Rotation matrix should have determinant of 1 (or -1)
+	const auto det = rotMatrix.determinant();
+	ASSERT_NEAR(std::abs(det), static_cast< TypeParam >(1.0), static_cast< TypeParam >(0.01));
 }
 
 TYPED_TEST(MathCartesianFrame, GetRotationMatrix4)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.yaw(Radian< TypeParam >(45), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.yaw(Radian< TypeParam >(45), true);
+	const auto rotMatrix = frame.getRotationMatrix4();
 
-		const auto rotMatrix = frame.getRotationMatrix4();
-
-		// Translation should be zero
-		ASSERT_NEAR(rotMatrix[M4x4Col3Row0], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(rotMatrix[M4x4Col3Row1], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(rotMatrix[M4x4Col3Row2], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
-	}
+	// Translation should be zero
+	ASSERT_NEAR(rotMatrix[M4x4Col3Row0], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rotMatrix[M4x4Col3Row1], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(rotMatrix[M4x4Col3Row2], static_cast< TypeParam >(0.0), static_cast< TypeParam >(1e-5));
 }
 
 // ============================================================================
@@ -983,55 +793,35 @@ TYPED_TEST(MathCartesianFrame, ResetFrame)
 
 TYPED_TEST(MathCartesianFrame, ResetRotation)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(10.0, 20.0, 30.0);
+	frame.yaw(Radian< TypeParam >(45), true);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
-		frame.setPosition(10.0, 20.0, 30.0);
-		frame.yaw(Radian< TypeParam >(45), true);
+	frame.resetRotation();
 
-		frame.resetRotation();
+	// Position should remain unchanged
+	ASSERT_NEAR(frame.position()[X], static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
 
-		// Position should remain unchanged
-		ASSERT_NEAR(frame.position()[X], static_cast< TypeParam >(10.0), static_cast< TypeParam >(1e-5));
+	// Rotation should be reset
+	const auto expectedY = Vector< 3, TypeParam >::positiveY();
+	ASSERT_EQ(frame.YAxis(), expectedY);
 
-		// Rotation should be reset
-		const auto expectedY = Vector< 3, TypeParam >::positiveY();
-		ASSERT_EQ(frame.YAxis(), expectedY);
-
-		const auto expectedZ = Vector< 3, TypeParam >::positiveZ();
-		ASSERT_EQ(frame.ZAxis(), expectedZ);
-	}
+	const auto expectedZ = Vector< 3, TypeParam >::positiveZ();
+	ASSERT_EQ(frame.ZAxis(), expectedZ);
 }
 
 TYPED_TEST(MathCartesianFrame, NormalizeFrame)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	auto frame = CartesianFrame< TypeParam >{};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< TypeParam >{};
+	// Manually set non-normalized vectors
+	frame.setOrientationVectors(Vector< 3, TypeParam >{2.0, 0.0, 0.0}, Vector< 3, TypeParam >{0.0, 3.0, 0.0});
 
-		// Manually set non-normalized vectors
-		frame.setOrientationVectors(Vector< 3, TypeParam >{2.0, 0.0, 0.0}, Vector< 3, TypeParam >{0.0, 3.0, 0.0});
+	frame.normalize();
 
-		frame.normalize();
-
-		// Vectors should be normalized
-		ASSERT_NEAR(frame.YAxis().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(frame.ZAxis().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
-	}
+	// Vectors should be normalized
+	ASSERT_NEAR(frame.YAxis().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(frame.ZAxis().length(), static_cast< TypeParam >(1.0), static_cast< TypeParam >(1e-5));
 }
 
 // ============================================================================
@@ -1040,135 +830,92 @@ TYPED_TEST(MathCartesianFrame, NormalizeFrame)
 
 TYPED_TEST(MathCartesianFrame, LinearInterpolation)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
+	const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
-		const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
+	const auto interpolated = CartesianFrame< TypeParam >::linearInterpolation(frameA, frameB, static_cast< TypeParam >(0.5));
 
-		const auto interpolated = CartesianFrame< TypeParam >::linearInterpolation(frameA, frameB, static_cast< TypeParam >(0.5));
-
-		ASSERT_NEAR(interpolated.position()[X], static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(interpolated.position()[Y], static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
-		ASSERT_NEAR(interpolated.position()[Z], static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
-	}
+	ASSERT_NEAR(interpolated.position()[X], static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(interpolated.position()[Y], static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
+	ASSERT_NEAR(interpolated.position()[Z], static_cast< TypeParam >(5.0), static_cast< TypeParam >(1e-5));
 }
 
 TYPED_TEST(MathCartesianFrame, LinearInterpolationEndpoints)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
+	const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
-		const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
+	// At t=0, should equal frameA
+	const auto interpolatedA = CartesianFrame< TypeParam >::linearInterpolation(frameA, frameB, static_cast< TypeParam >(0.0));
+	ASSERT_EQ(interpolatedA.position(), frameA.position());
 
-		// At t=0, should equal frameA
-		const auto interpolatedA = CartesianFrame< TypeParam >::linearInterpolation(frameA, frameB, static_cast< TypeParam >(0.0));
-		ASSERT_EQ(interpolatedA.position(), frameA.position());
-
-		// At t=1, should equal frameB
-		const auto interpolatedB = CartesianFrame< TypeParam >::linearInterpolation(frameA, frameB, static_cast< TypeParam >(1.0));
-		ASSERT_EQ(interpolatedB.position(), frameB.position());
-	}
+	// At t=1, should equal frameB
+	const auto interpolatedB = CartesianFrame< TypeParam >::linearInterpolation(frameA, frameB, static_cast< TypeParam >(1.0));
+	ASSERT_EQ(interpolatedB.position(), frameB.position());
 }
 
 TYPED_TEST(MathCartesianFrame, CosineInterpolation)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
+	const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
-		const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
+	const auto interpolated = CartesianFrame< TypeParam >::cosineInterpolation(frameA, frameB, static_cast< TypeParam >(0.5));
 
-		const auto interpolated = CartesianFrame< TypeParam >::cosineInterpolation(frameA, frameB, static_cast< TypeParam >(0.5));
-
-		// At t=0.5, should be near midpoint with cosine interpolation
-		ASSERT_NEAR(interpolated.position()[X], static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.1));
-		ASSERT_NEAR(interpolated.position()[Y], static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.1));
-		ASSERT_NEAR(interpolated.position()[Z], static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.1));
-	}
+	// At t=0.5, should be near midpoint with cosine interpolation
+	ASSERT_NEAR(interpolated.position()[X], static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.1));
+	ASSERT_NEAR(interpolated.position()[Y], static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.1));
+	ASSERT_NEAR(interpolated.position()[Z], static_cast< TypeParam >(5.0), static_cast< TypeParam >(0.1));
 }
 
 TYPED_TEST(MathCartesianFrame, CosineInterpolationEndpoints)
 {
-	if constexpr ( std::is_integral_v< TypeParam > )
-	{
-		std::cout << "No useful test for integral version !"
-					 "\n";
+	const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
+	const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		const auto frameA = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{0.0, 0.0, 0.0}};
-		const auto frameB = CartesianFrame< TypeParam >{Vector< 3, TypeParam >{10.0, 10.0, 10.0}};
+	// At t=0, should equal frameA
+	const auto interpolatedA = CartesianFrame< TypeParam >::cosineInterpolation(frameA, frameB, static_cast< TypeParam >(0.0));
+	ASSERT_NEAR(interpolatedA.position()[X], frameA.position()[X], static_cast< TypeParam >(1e-5));
 
-		// At t=0, should equal frameA
-		const auto interpolatedA = CartesianFrame< TypeParam >::cosineInterpolation(frameA, frameB, static_cast< TypeParam >(0.0));
-		ASSERT_NEAR(interpolatedA.position()[X], frameA.position()[X], static_cast< TypeParam >(1e-5));
-
-		// At t=1, should equal frameB
-		const auto interpolatedB = CartesianFrame< TypeParam >::cosineInterpolation(frameA, frameB, static_cast< TypeParam >(1.0));
-		ASSERT_NEAR(interpolatedB.position()[X], frameB.position()[X], static_cast< TypeParam >(1e-5));
-	}
+	// At t=1, should equal frameB
+	const auto interpolatedB = CartesianFrame< TypeParam >::cosineInterpolation(frameA, frameB, static_cast< TypeParam >(1.0));
+	ASSERT_NEAR(interpolatedB.position()[X], frameB.position()[X], static_cast< TypeParam >(1e-5));
 }
 
 TYPED_TEST(MathCartesianFrame, GetUprightSpriteModelMatrix)
 {
-	/* The camera position is a float vector: only the float frame can take it. */
-	if constexpr ( !std::is_same_v< TypeParam, float > )
-	{
-		std::cout << "Upright billboards are float-only !" "\n";
+	/* 2026-10-19: the camera position is a Vector< 3, precision_t > (it was a float vector, so only the float frame
+	 * compiled it): both precisions run. */
+	const auto value = [] (double number) {
+		return static_cast< TypeParam >(number);
+	};
+	const auto tolerance = value(1e-5);
 
-		ASSERT_EQ(true, true);
-	}
-	else
-	{
-		auto frame = CartesianFrame< float >{};
-		frame.setPosition(1.0F, 0.0F, 2.0F);
+	auto frame = CartesianFrame< TypeParam >{};
+	frame.setPosition(value(1.0), value(0.0), value(2.0));
 
-		/* The camera 3 m east, 4 m south and 10 m ABOVE: the billboard turns toward it in the horizontal
-		 * plane only (backward = (0.6, 0, 0.8)), its up axis stays the world's +Y. */
-		const auto modelMatrix = frame.getUprightSpriteModelMatrix({4.0F, 10.0F, 6.0F});
+	/* The camera 3 m east, 4 m south and 10 m ABOVE: the billboard turns toward it in the horizontal
+	 * plane only (backward = (0.6, 0, 0.8)), its up axis stays the world's +Y. */
+	const auto modelMatrix = frame.getUprightSpriteModelMatrix(Vector< 3, TypeParam >{value(4.0), value(10.0), value(6.0)});
 
-		/* Right = up × backward = (0.8, 0, -0.6). */
-		ASSERT_NEAR(modelMatrix[M4x4Col0Row0], 0.8F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col0Row1], 0.0F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col0Row2], -0.6F, 1e-5F);
-		/* Up = +Y, whatever the camera height. */
-		ASSERT_NEAR(modelMatrix[M4x4Col1Row0], 0.0F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col1Row1], 1.0F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col1Row2], 0.0F, 1e-5F);
-		/* Backward, horizontal. */
-		ASSERT_NEAR(modelMatrix[M4x4Col2Row0], 0.6F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col2Row1], 0.0F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col2Row2], 0.8F, 1e-5F);
-		/* Position. */
-		ASSERT_NEAR(modelMatrix[M4x4Col3Row0], 1.0F, 1e-5F);
-		ASSERT_NEAR(modelMatrix[M4x4Col3Row2], 2.0F, 1e-5F);
+	/* Right = up × backward = (0.8, 0, -0.6). */
+	ASSERT_NEAR(modelMatrix[M4x4Col0Row0], value(0.8), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col0Row1], value(0.0), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col0Row2], value(-0.6), tolerance);
+	/* Up = +Y, whatever the camera height. */
+	ASSERT_NEAR(modelMatrix[M4x4Col1Row0], value(0.0), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col1Row1], value(1.0), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col1Row2], value(0.0), tolerance);
+	/* Backward, horizontal. */
+	ASSERT_NEAR(modelMatrix[M4x4Col2Row0], value(0.6), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col2Row1], value(0.0), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col2Row2], value(0.8), tolerance);
+	/* Position. */
+	ASSERT_NEAR(modelMatrix[M4x4Col3Row0], value(1.0), tolerance);
+	ASSERT_NEAR(modelMatrix[M4x4Col3Row2], value(2.0), tolerance);
 
-		/* The camera straight above: no horizontal offset, the billboard faces +Z. */
-		const auto aboveMatrix = frame.getUprightSpriteModelMatrix({1.0F, 10.0F, 2.0F});
+	/* The camera straight above: no horizontal offset, the billboard faces +Z. */
+	const auto aboveMatrix = frame.getUprightSpriteModelMatrix(Vector< 3, TypeParam >{value(1.0), value(10.0), value(2.0)});
 
-		ASSERT_NEAR(aboveMatrix[M4x4Col1Row1], 1.0F, 1e-5F);
-		ASSERT_NEAR(aboveMatrix[M4x4Col2Row2], 1.0F, 1e-5F);
-	}
+	ASSERT_NEAR(aboveMatrix[M4x4Col1Row1], value(1.0), tolerance);
+	ASSERT_NEAR(aboveMatrix[M4x4Col2Row2], value(1.0), tolerance);
 }

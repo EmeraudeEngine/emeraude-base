@@ -548,9 +548,9 @@ namespace EmEn::Base::VertexFactory
 
 			struct md2_frame_t
 			{
-				md2_vec3_t scale;
-				md2_vec3_t translate;
-				std::array< char, 16 > name;
+				md2_vec3_t scale{};
+				md2_vec3_t translate{};
+				std::array< char, 16 > name{};
 				std::vector< md2_vertex_t > verts;
 			};
 
@@ -965,9 +965,9 @@ namespace EmEn::Base::VertexFactory
 			struct md5_joint_t
 			{
 				std::string name;
-				int parent;
-				std::array< float, 3 > pos;
-				std::array< float, 4 > orient; // Quaternion (x, y, z, w)
+				int parent{0};
+				std::array< float, 3 > pos{};
+				std::array< float, 4 > orient{}; // Quaternion (x, y, z, w)
 			};
 
 			struct md5_weight_t

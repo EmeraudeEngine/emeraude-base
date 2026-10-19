@@ -1589,7 +1589,9 @@ namespace EmEn::Base::PixelFactory
 						return true;
 
 					case MirrorMode::Y :
-						return Processor::mirrorY(source, destination, pool);
+						Processor::mirrorY(source, destination, pool);
+
+						return true;
 
 					case MirrorMode::Both :
 						return Processor::mirrorBoth(source, destination);
@@ -3099,11 +3101,9 @@ namespace EmEn::Base::PixelFactory
 			 * @param source A reference to the input pixmap.
 			 * @param output A reference to the output pixmap.
 			 * @param pool An optional thread pool to spread the rows across. Default nullptr (serial).
-			 * @return bool
 			 */
-			[[nodiscard]]
 			static
-			bool
+			void
 			mirrorY (const Pixmap< pixel_data_t, dimension_t > & source, Pixmap< pixel_data_t, dimension_t > & output, ThreadPool * pool = nullptr) noexcept
 			{
 				const auto rowCount = source.height();
@@ -3139,8 +3139,6 @@ namespace EmEn::Base::PixelFactory
 						processRow(row);
 					}
 				}
-
-				return true;
 			}
 
 			/**

@@ -27,9 +27,9 @@
 #include "SHA1.hpp"
 
 /* STL inclusions. */
+#include <bit>
 #include <cstring>
 
-#define SHA1_ROTL(x, n) (((x) << (n)) | ((x) >> ((sizeof(x) << 3) - (n))))
 #define SHA1_UNPACK32(x, str)				 \
 {											 \
 	*((str) + 3) = static_cast< uint8_t >((x)	  );	   \
@@ -63,7 +63,7 @@ namespace EmEn::Base::Hash
 
 			for ( size_t j = 16; j < w.size(); j++ )
 			{
-				w[j] = SHA1_ROTL(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
+				w[j] = std::rotl(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
 			}
 
 			auto a = m_h[0];
@@ -72,7 +72,9 @@ namespace EmEn::Base::Hash
 			auto d = m_h[3];
 			auto e = m_h[4];
 
-			for ( size_t j = 0; j < w.size(); j++ )
+			size_t j = 0;
+
+			for ( const auto word : w )
 			{
 				uint32_t f = 0;
 				uint32_t k = 0;
@@ -98,13 +100,15 @@ namespace EmEn::Base::Hash
 					k = 0xCA62C1D6;
 				}
 
-				const auto temp = SHA1_ROTL(a, 5) + f + e + k + w[j];
+				const auto temp = std::rotl(a, 5) + f + e + k + word;
 
 				e = d;
 				d = c;
-				c = SHA1_ROTL(b, 30);
+				c = std::rotl(b, 30);
 				b = a;
 				a = temp;
+
+				++j;
 			}
 
 			m_h[0] += a;

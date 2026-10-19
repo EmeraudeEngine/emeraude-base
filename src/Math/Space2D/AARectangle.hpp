@@ -209,6 +209,7 @@ namespace EmEn::Base::Math::Space2D
 				const auto rectangleWidth = this->width();
 				const auto rectangleHeight = this->height();
 
+				/* cppcheck-suppress unsignedLessThanZero ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 				if ( rectangleWidth <= 0 || rectangleHeight <= 0 )
 				{
 					return false;
@@ -381,6 +382,7 @@ namespace EmEn::Base::Math::Space2D
 			{
 				auto newWidth = this->width() + value;
 
+				/* cppcheck-suppress unsignedLessThanZero ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 				if ( newWidth < 0 )
 				{
 					newWidth = 0;
@@ -399,6 +401,7 @@ namespace EmEn::Base::Math::Space2D
 			{
 				auto newHeight = this->height() + value;
 
+				/* cppcheck-suppress unsignedLessThanZero ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 				if ( newHeight < 0 )
 				{
 					newHeight = 0;
@@ -950,8 +953,10 @@ namespace EmEn::Base::Math::Space2D
 			{
 				return
 					this->left() >= width ||
+					/* cppcheck-suppress unsignedLessThanZero ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 					this->right() <= 0 ||
 					this->top() >= height ||
+					/* cppcheck-suppress unsignedLessThanZero ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 					this->bottom() <= 0;
 			}
 
@@ -997,6 +1002,7 @@ namespace EmEn::Base::Math::Space2D
 			bool
 			isInside (precision_t width, precision_t height) const noexcept
 			{
+				/* cppcheck-suppress unsignedPositive ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 				return this->left() >= 0 && this->right() <= width && this->top() >= 0 && this->bottom() <= height;
 			}
 
@@ -1022,6 +1028,7 @@ namespace EmEn::Base::Math::Space2D
 			bool
 			isIntersect (precision_t width, precision_t height) const noexcept
 			{
+				/* cppcheck-suppress unsignedLessThanZero ; generic code: precision_t is signed for the float and int32 rectangles, unsigned for the pixel ones. */
 				return !(this->left() >= width  || this->right() <= 0 || this->top() >= height || this->bottom() <= 0);
 			}
 

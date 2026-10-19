@@ -142,12 +142,14 @@ TEST(BaseThread, moveOnlyCallablesAndMovesTransferTheThread)
 
 	Thread second{std::move(first)};
 
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(first.joinable());
 	EXPECT_TRUE(second.joinable());
 
 	Thread third;
 	third = std::move(second);
 
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(second.joinable());
 	EXPECT_TRUE(third.joinable());
 
@@ -188,6 +190,7 @@ TEST(BaseThread, aStopWakesAConditionVariableWaitWithoutANotify)
 	std::atomic_bool wokenByTheStop{false};
 	Thread thread;
 
+	/* cppcheck-suppress localMutex ; the wait only needs a lock to hold: nothing else shares it, the stop alone ends the wait. */
 	ASSERT_TRUE(thread.start([&waiting, &wokenByTheStop] (const std::stop_token & token) {
 		std::mutex mutex;
 		std::condition_variable_any condition;
@@ -269,6 +272,7 @@ TEST(BaseThread, aMoveAssignmentOverARunningThreadStopsAndJoinsIt)
 	/* The first body was stopped and joined by the assignment; the second one runs on, now owned by `first`. */
 	EXPECT_TRUE(firstReturned.load());
 	EXPECT_FALSE(secondReturned.load());
+	/* cppcheck-suppress accessMoved ; the test asserts the moved-from state, part of the documented contract. */
 	EXPECT_FALSE(second.joinable());
 	EXPECT_FALSE(second.stopToken().stop_possible());
 	ASSERT_TRUE(first.joinable());

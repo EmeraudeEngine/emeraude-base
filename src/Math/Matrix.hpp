@@ -1882,7 +1882,7 @@ namespace EmEn::Base::Math
 
 				const auto sine = std::sin(radian);
 				const auto cosine = std::cos(radian);
-				const auto arcCosine = static_cast< precision_t >(1.0) - cosine;
+				const auto arcCosine = static_cast< precision_t >(1) - cosine;
 
 				if constexpr ( dim_t == 3 )
 				{
@@ -2178,7 +2178,7 @@ namespace EmEn::Base::Math
 			static
 			Matrix
 			perspectiveProjection (precision_t fov, precision_t aspectRatio, precision_t zNear = 0, precision_t zFar = 1) noexcept
-				requires (dim_t == 4)
+				requires (dim_t == 4 && std::is_floating_point_v< precision_t >)
 			{
 				if ( zNear < 0 )
 				{
@@ -2190,6 +2190,7 @@ namespace EmEn::Base::Math
 					zFar = 1;
 				}
 
+				/* cppcheck-suppress knownArgument ; cppcheck ignores the requires clause: it evaluates this member for integral matrices it cannot be instantiated with. */
 				const auto a = fastCotan(fov * static_cast< precision_t >(0.5));
 
 				Matrix matrix;
