@@ -123,11 +123,17 @@ cppcheck --project=<build>/compile_commands.json --file-filter='*/emeraude-base/
 macro, and a configuration that reaches an `#error` (`emeraude_platform.hpp`: "Unsupported architecture / compiler")
 is dropped SILENTLY — no finding, no message, exit 0. Run `--check-config` on one TU first: it must print no
 `#error`. The defines per OS: Linux `-D__x86_64__ -D__linux__ -D__GNUC__=14` (`--library=posix --platform=unix64`);
-macOS arm64 `-D__aarch64__ -D__arm64__ -D__APPLE__ -D__clang__` (`--platform=unix64`); Windows `-D_M_AMD64
+macOS arm64 `-D__aarch64__ -D__arm64__ -D__APPLE__ -D__clang__ -D__attribute__(x)=` (`--platform=unix64`; ⚠️ without
+the last one, `EMEN_API` / `EMEN_CAPABILITY` expand to `__attribute__((…))` between `class` and its name and cppcheck
+abandons every such class body: 400 artefacts on the engine, 2026-10-19, macOS peer — 3 information lines with it); Windows `-D_M_AMD64
 -D_MSC_VER=1944` (`--library=windows --platform=win64`, which defines `_WIN32` / `_WIN64`). The gate counts the error,
 warning, style, performance and portability lines; an `information: Unmatched suppression` is not a finding (an
 inline suppression for an instantiation or a configuration another OS or a library-only run does not reach).
 First runs: macOS 0, Windows 0 (library TUs; three unmatched-suppression notes).
+
+⚠️ With `--project`, cppcheck 2.22 does NOT search the compile database's `-isystem` directories (nor a `-I` given on
+its own command line): those headers are "not found" — harmless while nothing of them reaches an `#if`, a skipped TU
+when it does (projet-alpha's CEF: its ledger § cppcheck rewrites that one `-isystem` to `-I` in a copy of the database).
 
 A touched TU alone: add `--file-filter='*<file name>'` once per file. ⚠️ cppcheck does not honour a `requires` clause:
 it evaluates a constrained member for every instantiation of its class (e.g. `rotateTowards()` for an `int` vector).
