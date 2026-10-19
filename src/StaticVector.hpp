@@ -39,8 +39,10 @@
 #include <initializer_list>
 #include <iostream>
 #include <iterator>
-#include <stdexcept>
+#include <memory>
+#include <stdexcept> // IWYU pragma: keep (std::length_error, under __cpp_exceptions: a consumer built WITH exceptions)
 #include <type_traits>
+#include <utility>
 
 #if IS_WINDOWS
 #undef min
@@ -780,7 +782,7 @@ namespace EmEn::Base
 					for ( size_type index = commonSize; index < m_size; ++index )
 					{
 						new (other.data() + index) data_t(std::move((*this)[index]));
-						(*this)[index].~data_t();
+						std::destroy_at(std::addressof((*this)[index]));
 					}
 				}
 				else if ( other.m_size > m_size )
@@ -788,7 +790,7 @@ namespace EmEn::Base
 					for ( size_type index = commonSize; index < other.m_size; ++index )
 					{
 						new (this->data() + index) data_t(std::move(other[index]));
-						other[index].~data_t();
+						std::destroy_at(std::addressof(other[index]));
 					}
 				}
 

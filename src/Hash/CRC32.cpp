@@ -36,16 +36,20 @@ namespace EmEn::Base::Hash
 
 			std::array< uint32_t, 256 > table{};
 
-			for ( uint32_t i = 0; i < 256; ++i )
+			/* NOTE: A range-for over the table itself: no index to bound (MSVC /analyze C28020 could not tie the literal 256 to
+			 * the array, clang-tidy wants no variable subscript). */
+			uint32_t entryIndex = 0;
+
+			for ( auto & entry : table )
 			{
-				uint32_t crc = i;
+				uint32_t crc = entryIndex++;
 
 				for ( uint32_t j = 0; j < 8; ++j )
 				{
 					crc = ((crc & 1U) != 0U) ? ((crc >> 1) ^ Polynomial) : (crc >> 1);
 				}
 
-				table[i] = crc;
+				entry = crc;
 			}
 
 			return table;

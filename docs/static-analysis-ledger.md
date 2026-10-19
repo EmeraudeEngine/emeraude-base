@@ -229,6 +229,11 @@ checked on the three OS before it is kept.
 `Network/asio_throw_exception.hpp` defines asio's `throw_exception()` under `-fno-exceptions`; the engine's first IWYU
 lot removed it from two files and the link failed (2026-10-19).
 
+⚠️ **A `#if defined(__cpp_exceptions)` branch is a platform branch for IWYU**: the cascade builds without exceptions,
+so IWYU never sees the `throw std::length_error` of `StaticVector.hpp` and proposed removing `<stdexcept>` — a break for a
+consumer built WITH exceptions (2026-10-19). Kept with `// IWYU pragma: keep (<reason>)`; `tools/gate/gate.py` lists such
+files as having a platform branch.
+
 ⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
 for `BaseUtility.hpp`): the fix is the template's own header including what it uses.
 
@@ -263,3 +268,25 @@ history says nothing); the reasons below are INFERRED, not ruled by the owner ye
 `readability-trailing-comma`, `portability-avoid-pragma-once` (the cascade's written style),
 `readability-suspicious-call-argument` (names compared, not defects), `clang-diagnostic-unreachable-code` (presumably
 the `if constexpr` platform branches).
+
+## MSVC /analyze (owner decision 2026-10-19, Ave Robustus II P-W (6))
+
+The Windows peer ran MSVC 19.44's `/analyze` with Microsoft's `NativeRecommendedRules` rule set over the cascade's own
+sources (emeraude-base `src/`, the engine `src/` with every `*.windows.cpp`, projet-alpha `src/`), in a separate build
+tree: `CMAKE_CXX_FLAGS` gets `/analyze /analyze:external- /analyze:WX- /analyze:ruleset NativeRecommendedRules.ruleset`
+(CMake already passes the SYSTEM includes as `/external:I`, so `/analyze:external-` skips the third-party headers;
+`/analyze:WX-` keeps the C6xxx warnings non-fatal under `/WX`). About 11 minutes; the normal build is untouched. The rule
+set has no Core Guidelines check (C26xxx): clang-tidy gates those.
+
+**First run (2026-10-19)**: 13 unique findings — emeraude-base 11, the engine 2, projet-alpha 0. Fixed:
+- engine `Graphics/MDI/BatchBuilder.cpp` C6011: `dispatch()` dereferenced the batch's geometry on the strength of a
+  check made by `buildBatches()` only — a batch without geometry takes the individual path now, which checks it;
+- engine `Scenes/AbstractEntity.debug.cpp` C6387: an out-of-range `VisualDebugType` (an enum cast from an integer)
+  left `label` null — refused with the mesh;
+- base `StaticVector.hpp` C6031 ×2 (`swap()`): the moved-from element destroyed through `operator[]` — through `data()`,
+  as the file's other destructions;
+- base `Hash/CRC32.cpp` C28020: the table loop bounded by `table.size()` instead of the literal 256.
+Kept ON PURPOSE: C6262 ×5 (a frame above 16 KiB: `LZMA::Compressor::compress()`, `Decompressor::decompress()`,
+`HTTPSClient::performHop()`, `Font`'s glyph-array emplace, `Synthesizer::generateSinTable()`) — the smallest thread
+stack of the cascade is macOS's 512 KiB for a secondary thread, the frames stay well under it; C6993 ×3 (`Shape.hpp`,
+"OpenMP constructs ignored": informational).
