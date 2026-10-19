@@ -412,6 +412,8 @@ namespace EmEn::Base::PixelFactory
 
 	/* Explicit instantiation — the ONLY place FreeType symbols enter the binary. Fonts are 8-bit
 	 * greyscale glyph maps; TextProcessor only ever takes a Font by reference, so no other precision
-	 * reaches this method. A missing instantiation fails at LINK time, named by the linker. */
-	template bool Font< uint8_t >::readTrueTypeFile (const std::filesystem::path &, uint32_t, bool);
+	 * reaches this method. A missing instantiation fails at LINK time, named by the linker. The WHOLE class is
+	 * instantiated (Font.hpp declares it extern): every member compiles here, as base test_TemplateInstantiation.cpp
+	 * does for the header-only templates. */
+	template class Font< uint8_t >;
 }

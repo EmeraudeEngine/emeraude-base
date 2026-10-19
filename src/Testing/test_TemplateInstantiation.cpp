@@ -33,6 +33,9 @@
  *      not excluded by its own 'requires' clause.
  * A new header goes in the list, a new class template gets its instantiation (with each supported argument). A member
  * valid only for some arguments takes a 'requires' clause, never a removal from this list.
+ * ⚠️ A specialization a .cpp instantiates (FileFormatJpeg / PNG / TIFF / WebP< uint8_t, uint32_t >, Font< uint8_t >:
+ * their header declares it 'extern template') is NOT repeated here — an explicit instantiation definition may appear
+ * once in a program (GCC and clang accepted the duplicate silently, MSVC refused it: C4661). That .cpp is its guard.
  * See docs/subsystems/source-tree/02-base-specific-rules.md. */
 
 /* Local inclusions: every header of the library. */
@@ -390,12 +393,7 @@ template class EmEn::Base::PixelFactory::Color<>;
 template class EmEn::Base::PixelFactory::Color< double >;
 template class EmEn::Base::PixelFactory::FileFormatHDR<>;
 template class EmEn::Base::PixelFactory::FileFormatInterface<>;
-template class EmEn::Base::PixelFactory::FileFormatJpeg<>;
-template class EmEn::Base::PixelFactory::FileFormatPNG<>;
-template class EmEn::Base::PixelFactory::FileFormatTIFF<>;
 template class EmEn::Base::PixelFactory::FileFormatTarga<>;
-template class EmEn::Base::PixelFactory::FileFormatWebP<>;
-template class EmEn::Base::PixelFactory::Font<>;
 template class EmEn::Base::PixelFactory::Gradient<>;
 template class EmEn::Base::PixelFactory::Margin<>;
 template class EmEn::Base::PixelFactory::Pixmap<>;

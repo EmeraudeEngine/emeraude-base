@@ -621,4 +621,8 @@ namespace EmEn::Base::PixelFactory
 
 			std::map< uint32_t, ASCIIGlyphArray< precision_t > > m_fonts;
 	};
+
+	/* NOTE: readTrueTypeFile() is defined in Font.cpp (FreeType stays out of the header), which instantiates the whole
+	 * specialization: every member of Font< uint8_t > is compiled there, every other translation unit uses it. */
+	extern template class Font< uint8_t >;
 }

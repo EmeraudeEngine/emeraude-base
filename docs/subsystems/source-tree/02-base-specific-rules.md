@@ -178,6 +178,11 @@ cascade uses (`template class X< ... >;` compiles every member). Rules:
   takes a `requires` clause — never a removal from the list;
 - a template whose specialization lives in a `.cpp` (`FileFormatSNDFile< int16_t >`) is instantiated with another
   argument, the generic path.
+- a specialization a `.cpp` already instantiates (`FileFormatJpeg / PNG / TIFF / WebP< uint8_t, uint32_t >`,
+  `Font< uint8_t >`: their libraries stay out of the headers) is declared `extern template` in its header and NOT
+  repeated in the guard — an explicit instantiation definition may appear once in a program. GCC and clang accepted
+  the duplicate silently; MSVC refused it (C4661, 2026-10-19). That `.cpp` instantiates the WHOLE class, so it is the
+  guard of those members.
 
 ### Integrated External Dependencies
 - **libsndfile**: Audio format loading via `sf_open_virtual` (WaveFactory)

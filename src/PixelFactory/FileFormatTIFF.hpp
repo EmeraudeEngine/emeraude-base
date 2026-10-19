@@ -87,4 +87,9 @@ namespace EmEn::Base::PixelFactory
 			[[nodiscard]]
 			bool writeStream (IO::ByteStream & stream, const Pixmap< pixel_data_t, dimension_t > & pixmap, const WriteOptions & options = {}) const noexcept override;
 	};
+
+	/* NOTE: The members are defined in FileFormatTIFF.cpp (the libtiff code stays out of the header), which instantiates
+	 * this specialization: every other translation unit uses that one (an explicit instantiation definition may appear
+	 * once in a program — base test_TemplateInstantiation.cpp does not repeat it). */
+	extern template class FileFormatTIFF< uint8_t, uint32_t >;
 }
