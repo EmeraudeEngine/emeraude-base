@@ -34,9 +34,18 @@
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
-#include "IO/ByteStream.hpp"
 #include "Pixmap.hpp"
-#include "Types.hpp"
+
+/* Forward declarations. */
+namespace EmEn::Base::IO
+{
+	class ByteStream;
+}
+
+namespace EmEn::Base::PixelFactory
+{
+	struct WriteOptions;
+}
 
 namespace EmEn::Base::PixelFactory
 {

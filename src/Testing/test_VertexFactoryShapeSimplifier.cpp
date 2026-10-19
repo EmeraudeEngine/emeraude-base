@@ -30,17 +30,31 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstdint>
-#include <iostream>
-#include <stop_token>
-#include <thread>
-#include <vector>
 #include <cmath>
+#include <compare>
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <iostream>
+#include <optional>
+#include <stop_token>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 /* Local inclusions. */
+#include "Math/Space3D/AACuboid.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "VertexFactory/CapUVMapping.hpp"
+#include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
 #include "VertexFactory/ShapeDecimator.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "VertexFactory/ShapeSimplifier.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::VertexFactory;

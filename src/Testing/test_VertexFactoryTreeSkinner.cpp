@@ -29,17 +29,29 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <numbers>
+#include <string>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
+#include "Math/Space3D/AACuboid.hpp"
 #include "Math/Vector.hpp"
+#include "VertexFactory/Shape.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
-#include "VertexFactory/TreeColonizationGrower.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
 #include "VertexFactory/TreeGenerator.hpp"
+#include "VertexFactory/TreeMesh.hpp"
+#include "VertexFactory/TreeParameters.hpp"
 #include "VertexFactory/TreeParametricGrower.hpp"
+#include "VertexFactory/TreeSegment.hpp"
+#include "VertexFactory/TreeSkeleton.hpp"
 #include "VertexFactory/TreeSkinner.hpp"
+#include "VertexFactory/TreeSkinningOptions.hpp"
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::VertexFactory;

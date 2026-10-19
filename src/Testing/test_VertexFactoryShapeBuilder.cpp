@@ -29,8 +29,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
@@ -39,8 +41,13 @@
 #include "VertexFactory/Shape.hpp"
 #include "VertexFactory/ShapeAssembler.hpp"
 #include "VertexFactory/ShapeBuilder.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
+#include "VertexFactory/ShapeEdge.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "VertexFactory/ShapeProcessor.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
+#include "VertexFactory/Types.hpp"
 
 using namespace EmEn::Base::VertexFactory;
 

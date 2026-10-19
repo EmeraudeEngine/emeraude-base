@@ -27,11 +27,14 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdint>
 #include <functional>
 #include <type_traits>
 
 /* Local inclusions. */
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 
 namespace EmEn::Base::Algorithms
 {

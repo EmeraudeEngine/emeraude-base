@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -36,9 +37,11 @@
 /* Local inclusions for usages. */
 #include "Math/Base.hpp"
 #include "Math/CartesianFrame.hpp"
+#include "Math/Vector.hpp"
 #include "Randomizer.hpp"
 #include "TreeParameters.hpp"
 #include "TreeSkeleton.hpp"
+#include "VertexFactory/TreeSegment.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

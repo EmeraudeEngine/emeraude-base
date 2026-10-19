@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <map>
+#include <type_traits>
 
 /* Local inclusions. */
 #include "Color.hpp"

@@ -38,11 +38,12 @@
 #include <vector>
 
 /* Third-party inclusions. */
-#include "ft2build.h"
-#include FT_FREETYPE_H
+#include "ft2build.h" // IWYU pragma: keep
+#include FT_FREETYPE_H // IWYU pragma: keep
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "PixelFactory/Pixmap.hpp"
 
 namespace EmEn::Base::PixelFactory
 {

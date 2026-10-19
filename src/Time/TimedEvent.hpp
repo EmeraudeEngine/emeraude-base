@@ -27,16 +27,19 @@
 #pragma once
 
 /* STL inclusions. */
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <ratio>
 #include <type_traits>
+#include <utility>
 
 /* Local inclusions for usages. */
 #include "Mutex.hpp"
 #include "Thread.hpp"
+#include "ThreadSafety.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::Time

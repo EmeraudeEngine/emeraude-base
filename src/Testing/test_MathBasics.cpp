@@ -32,6 +32,12 @@
 #include "Math/DeterminantAverage.hpp"
 #include "Math/Vector.hpp"
 
+/* STL inclusions. */
+#include <cmath>
+#include <numbers>
+#include <string>
+#include <vector>
+
 using namespace EmEn::Base::Math;
 
 /* 2026-09-26: 19 requires-clauses of the cascade were COMMA expressions (`requires (A, B)`) that checked only B — a too

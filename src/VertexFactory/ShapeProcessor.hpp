@@ -31,8 +31,11 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <numbers>
 #include <numeric>
@@ -42,11 +45,14 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
-#include "Algorithms/DelaunayTriangulation.hpp"
+#include "Math/Vector.hpp"
 #include "Shape.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

@@ -28,9 +28,11 @@
 
 /* STL inclusions. */
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 namespace EmEn::Base::PixelFactory
 {

@@ -45,11 +45,23 @@
 #include "Math/Space2D/Intersections/SegmentRectangle.hpp"
 #include "Math/Space2D/Intersections/SegmentSegment.hpp"
 #include "Math/Space2D/Intersections/SegmentTriangle.hpp"
-#include "Math/Space2D/Triangle.hpp"
 #include "Math/Space2D/Line.hpp"
 #include "Math/Space2D/Point.hpp"
+#include "Math/Space2D/SAT.hpp"
 #include "Math/Space2D/Segment.hpp"
 #include "Math/Space2D/Triangle.hpp"
+#include "Math/Vector.hpp"
+#include "StaticVector.hpp"
+
+/* STL inclusions. */
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <initializer_list>
+#include <limits>
+#include <numbers>
+#include <string>
+#include <vector>
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::Math;
@@ -354,7 +366,6 @@ TYPED_TEST(MathSpace2D, TriangleIsValid)
 	const Triangle< TypeParam > invalidTriangle{{0, 0}, {0, 0}, {0, 1}};
 	ASSERT_FALSE(invalidTriangle.isValid());
 }
-
 
 TYPED_TEST(MathSpace2D, TriangleFlip)
 {
@@ -980,7 +991,6 @@ TYPED_TEST(MathSpace2D, AARectangleToString)
 	ASSERT_FALSE(text.empty());
 	ASSERT_NE(text.find("rectangle"), std::string::npos);
 }
-
 
 // ============================================================================
 // COLLISION TESTS - POINT COLLISIONS

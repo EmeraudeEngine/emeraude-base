@@ -30,13 +30,14 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <limits>
-#include <ostream>
 #include <sstream>
 #include <string>
 #include <type_traits>
 
 /* Local inclusions for usages. */
+#include "Math/Vector.hpp"
 #include "Point.hpp"
 
 namespace EmEn::Base::Math::Space2D

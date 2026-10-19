@@ -30,10 +30,12 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <numbers>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
@@ -41,9 +43,10 @@
 #include "Shape.hpp"
 #include "ShapeBuilder.hpp"
 #include "ShapeProcessor.hpp"
-#include "TreeMesh.hpp"
-#include "TreeSkinningOptions.hpp"
 #include "TreeSkeleton.hpp"
+#include "TreeSkinningOptions.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
+#include "VertexFactory/TreeLeafAttachment.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

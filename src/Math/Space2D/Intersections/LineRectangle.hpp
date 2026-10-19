@@ -29,9 +29,16 @@
 /* Local inclusions for usages. */
 #include "Math/Space2D/AARectangle.hpp"
 #include "Math/Space2D/Line.hpp"
+#include "Math/Space2D/Point.hpp"
 #include "Math/Space2D/Segment.hpp"
-#include "StaticVector.hpp"
+#include "Math/Vector.hpp"
 #include "SegmentSegment.hpp"
+#include "StaticVector.hpp"
+
+/* STL inclusions. */
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
 
 namespace EmEn::Base::Math::Space2D
 {

@@ -26,13 +26,19 @@
 
 /* STL inclusions. */
 #include <array>
+#include <cmath>
+#include <cstddef>
 #include <limits>
+#include <numbers>
+#include <string>
+#include <type_traits>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
 #include "Math/Matrix.hpp"
+#include "Math/Vector.hpp"
 
 using namespace EmEn::Base::Math;
 

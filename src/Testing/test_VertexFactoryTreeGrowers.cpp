@@ -26,17 +26,26 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
-#include <cmath>
-#include <cstdint>
 #include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
+#include "Math/CartesianFrame.hpp"
+#include "Math/Space3D/AACuboid.hpp"
 #include "Math/Vector.hpp"
 #include "VertexFactory/TreeColonizationGrower.hpp"
 #include "VertexFactory/TreeGenerator.hpp"
 #include "VertexFactory/TreeGrowthCurve.hpp"
+#include "VertexFactory/TreeLeafAttachment.hpp"
+#include "VertexFactory/TreeMesh.hpp"
+#include "VertexFactory/TreeParameters.hpp"
 #include "VertexFactory/TreeParametricGrower.hpp"
+#include "VertexFactory/TreeSegment.hpp"
 #include "VertexFactory/TreeSkeleton.hpp"
 
 using namespace EmEn::Base;

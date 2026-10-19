@@ -30,27 +30,31 @@
 /* STL inclusions. */
 #include <atomic>
 #include <chrono>
-#include <cstddef>
+#include <compare>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <functional>
 #include <memory>
 #include <ratio>
+#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
 #include "Thread.hpp"
-#include "Time/Time.hpp"
-#include "Time/EventTrait.hpp"
 #include "Time/Elapsed/CPUTime.hpp"
 #include "Time/Elapsed/RealTime.hpp"
 #include "Time/Elapsed/ScopeCPUTime.hpp"
 #include "Time/Elapsed/ScopeRealTime.hpp"
+#include "Time/EventTrait.hpp"
 #include "Time/Statistics/CPUTime.hpp"
 #include "Time/Statistics/RealTime.hpp"
+#include "Time/Time.hpp"
+#include "Time/TimedEvent.hpp"
+#include "Time/Types.hpp"
 
 namespace EmEn::Base::Time
 {

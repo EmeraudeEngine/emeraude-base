@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <limits>
@@ -43,9 +44,10 @@
 #include <vector>
 
 /* Local inclusions for usages. */
-#include "GridQuad.hpp"
 #include "Algorithms/DiamondSquare.hpp"
 #include "Algorithms/PerlinNoise.hpp"
+#include "GridQuad.hpp"
+#include "Math/Base.hpp"
 #include "Math/Space3D/AACuboid.hpp"
 #include "Math/Space3D/Sphere.hpp"
 #include "Math/Vector.hpp"

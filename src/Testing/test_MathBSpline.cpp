@@ -26,6 +26,8 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <initializer_list>
+#include <string>
 #include <vector>
 
 /* Third-party inclusions. */

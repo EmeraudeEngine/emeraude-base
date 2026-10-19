@@ -38,6 +38,8 @@
 #include <random>
 #include <string>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"

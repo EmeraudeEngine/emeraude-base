@@ -30,15 +30,23 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
-#include <cstdint>
+#include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <numeric>
 #include <type_traits>
 #include <vector>
 
 /* Local inclusions for usages. */
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
 #include "Shape.hpp"
 #include "ShapeBuilderOptions.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
+#include "VertexFactory/TextureCoordinates.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

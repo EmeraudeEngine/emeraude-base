@@ -41,10 +41,14 @@
 #include <vector>
 
 /* Third-party inclusions. */
+#include <jmorecfg.h>
 #include <jpeglib.h>
 
 /* Local inclusions. */
+#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 
 /* MSVC raises C4611 ("interaction between '_setjmp' and C++ object destruction is non-portable") for
  * any setjmp() in C++ code — even with no destructible object in scope — and /WX turns it into an

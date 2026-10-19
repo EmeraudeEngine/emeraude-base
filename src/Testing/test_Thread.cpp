@@ -24,18 +24,20 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
-
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
 #include <atomic>
 #include <chrono>
+#include <compare>
 #include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <stop_token>
+#include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 
 /* Local inclusions. */

@@ -26,12 +26,15 @@
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
+#include <tsf.h>
 
 /* STL inclusions. */
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <initializer_list>
 #include <memory>
 #include <string>
 #include <string_view>

@@ -29,15 +29,21 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <compare>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <mutex>
 #include <numeric>
 #include <random>
 #include <stop_token>
+#include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -46,8 +52,11 @@
 
 /* Local inclusions. */
 #include "Math/Space2D/AARectangle.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Processor.hpp"
+#include "Thread.hpp"
 #include "ThreadPool.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 

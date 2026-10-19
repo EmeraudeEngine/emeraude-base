@@ -38,8 +38,10 @@
 #include <type_traits>
 
 /* Local inclusions. */
+#include "BaseUtility.hpp"
 #include "Math/Base.hpp"
 #include "Math/Vector.hpp"
+#include "Randomizer.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::PixelFactory

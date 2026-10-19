@@ -30,7 +30,16 @@
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "Math/Base.hpp"
 #include "Math/CartesianFrame.hpp"
+#include "Math/Matrix.hpp"
+#include "Math/Vector.hpp"
+
+/* STL inclusions. */
+#include <cmath>
+#include <cstddef>
+#include <string>
+#include <type_traits>
 
 using namespace EmEn::Base::Math;
 
@@ -695,7 +704,6 @@ TYPED_TEST(MathCartesianFrame, EulerAnglesOfAComposedRotationFollowTheZYXOrder)
 		ASSERT_NEAR(frame.getRollAngle(), rollAngle, Tolerance);
 	}
 }
-
 
 // ============================================================================
 // MATRIX GETTERS

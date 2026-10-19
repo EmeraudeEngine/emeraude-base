@@ -27,12 +27,19 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <span>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
+#include "Math/Space3D/AACuboid.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 #include "VertexFactory/Grid.hpp"
+#include "VertexFactory/GridQuad.hpp"
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::VertexFactory;

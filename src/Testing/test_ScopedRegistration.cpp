@@ -28,6 +28,8 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <functional>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>

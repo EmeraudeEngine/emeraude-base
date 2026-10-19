@@ -28,11 +28,15 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <limits>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 /* Local inclusions for usages. */
+#include "Math/Vector.hpp"
 #include "Point.hpp"
 
 namespace EmEn::Base::Math::Space2D

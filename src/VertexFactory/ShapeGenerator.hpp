@@ -30,12 +30,27 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <limits>
+#include <numbers>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 /* Local inclusions for usages. */
+#include "BaseUtility.hpp"
 #include "CapUVMapping.hpp"
+#include "Math/Base.hpp"
+#include "Math/Matrix.hpp"
+#include "Math/Space3D/AACuboid.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
 #include "ShapeAssembler.hpp"
 #include "ShapeBuilder.hpp"
+#include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
 
 namespace EmEn::Base::VertexFactory::ShapeGenerator
 {

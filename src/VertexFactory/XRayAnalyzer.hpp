@@ -29,17 +29,26 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
 #include <vector>
 
 /* Local inclusions for usages. */
+#include "Math/Base.hpp"
 #include "Math/CartesianFrame.hpp"
-#include "Math/Space3D/AACuboid.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/Pixmap.hpp"
-#include "ThreadPool.hpp"
+#include "PixelFactory/Types.hpp"
 #include "Shape.hpp"
+
+/* Forward declarations. */
+namespace EmEn::Base
+{
+	class ThreadPool;
+}
 
 namespace EmEn::Base::VertexFactory
 {

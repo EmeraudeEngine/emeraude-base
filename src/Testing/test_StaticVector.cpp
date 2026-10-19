@@ -26,6 +26,12 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <compare>
+#include <cstddef>
+#include <iterator>
+#include <string>
+#include <utility>
+#include <vector>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>

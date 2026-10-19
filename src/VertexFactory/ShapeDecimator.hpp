@@ -29,25 +29,32 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
-#include <stop_token>
 #include <cmath>
 #include <cstdint>
-#include <memory>
 #include <cstring>
 #include <functional>
+#include <iostream>
 #include <limits>
+#include <memory>
 #include <memory_resource>
 #include <queue>
+#include <ranges>
+#include <stop_token>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
 #include "FlatHashMap.hpp"
+#include "Math/Base.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/Pixmap.hpp"
-#include "ThreadPool.hpp"
+#include "PixelFactory/Types.hpp"
 #include "Shape.hpp"
 #include "ShapeProcessor.hpp"
+#include "ThreadPool.hpp" // IWYU pragma: keep (a template body calls it: a forward declaration is not enough)
+#include "VertexFactory/ShapeTriangle.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

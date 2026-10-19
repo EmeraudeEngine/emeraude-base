@@ -27,14 +27,18 @@
 #pragma once
 
 /* STL inclusions. */
-#include <cstdint>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 /* Local inclusions for usages. */
 #include "CartesianFrame.hpp"
+#include "Math/Vector.hpp"
 #include "Range.hpp"
 #include "Space3D/AACuboid.hpp"
 
@@ -103,7 +107,6 @@ namespace EmEn::Base::Math
 				m_normals[NegativeY] = Vector< 3, data_t >::normal(m_vertices[PositiveXNegativeYPositiveZ], m_vertices[NegativeXNegativeYPositiveZ], m_vertices[NegativeXNegativeYNegativeZ]);
 				m_normals[PositiveZ] = Vector< 3, data_t >::normal(m_vertices[PositiveXPositiveYPositiveZ], m_vertices[NegativeXPositiveYPositiveZ], m_vertices[NegativeXNegativeYPositiveZ]);
 				m_normals[NegativeZ] = Vector< 3, data_t >::normal(m_vertices[NegativeXPositiveYNegativeZ], m_vertices[PositiveXPositiveYNegativeZ], m_vertices[PositiveXNegativeYNegativeZ]);
-
 
 				return true;
 			}

@@ -27,17 +27,24 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
+#include <iterator>
 #include <map>
 #include <sstream>
 #include <string>
+#include <type_traits>
 
 /* Local inclusions. */
 #include "FileIO.hpp"
 #include "IO/IO.hpp"
+#include "Math/Space2D/AARectangle.hpp"
+#include "PixelFactory/Types.hpp"
 #include "Pixmap.hpp"
 #include "Processor.hpp"
 

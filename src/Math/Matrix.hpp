@@ -31,16 +31,19 @@
 #include <array>
 #include <cassert>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <iomanip>
 #include <limits>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <type_traits>
 
 /* Local inclusions for usages. */
 #include "Base.hpp"
+#include "BaseUtility.hpp"
 #include "Vector.hpp"
 
 namespace EmEn::Base::Math
@@ -2372,7 +2375,6 @@ namespace EmEn::Base::Math
 			inverseFromDeterminant (precision_t D) const noexcept
 			{
 				const auto invD = static_cast< precision_t >(1) / D;
-
 
 				Matrix inverse;
 

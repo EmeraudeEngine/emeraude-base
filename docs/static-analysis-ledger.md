@@ -1,4 +1,4 @@
-# Static-analysis ledger — emeraude-base (clang-tidy, cppcheck)
+# Static-analysis ledger — emeraude-base (clang-tidy, cppcheck, include-what-you-use)
 
 > Owner decision 2026-09-30, plan Ave Robustus § 3 (projet-alpha `docs/plans/ave-robustus.md`). The configuration is
 > this repository's `.clang-tidy`. Gate on every change: ZERO NEW finding on the touched translation units; a finding
@@ -119,6 +119,16 @@ cppcheck --project=<build>/compile_commands.json --file-filter='*/emeraude-base/
 	--template='{file}:{line}:{column}: {severity}: {message} [{id}]' > cppcheck.out 2> cppcheck.txt
 ```
 
+⚠️ **A zero from a dropped configuration is not a zero** (Windows peer, 2026-10-19): cppcheck predefines no compiler
+macro, and a configuration that reaches an `#error` (`emeraude_platform.hpp`: "Unsupported architecture / compiler")
+is dropped SILENTLY — no finding, no message, exit 0. Run `--check-config` on one TU first: it must print no
+`#error`. The defines per OS: Linux `-D__x86_64__ -D__linux__ -D__GNUC__=14` (`--library=posix --platform=unix64`);
+macOS arm64 `-D__aarch64__ -D__arm64__ -D__APPLE__ -D__clang__` (`--platform=unix64`); Windows `-D_M_AMD64
+-D_MSC_VER=1944` (`--library=windows --platform=win64`, which defines `_WIN32` / `_WIN64`). The gate counts the error,
+warning, style, performance and portability lines; an `information: Unmatched suppression` is not a finding (an
+inline suppression for an instantiation or a configuration another OS or a library-only run does not reach).
+First runs: macOS 0, Windows 0 (library TUs; three unmatched-suppression notes).
+
 A touched TU alone: add `--file-filter='*<file name>'` once per file. ⚠️ cppcheck does not honour a `requires` clause:
 it evaluates a constrained member for every instantiation of its class (e.g. `rotateTowards()` for an `int` vector).
 
@@ -151,4 +161,41 @@ tests; `rotateTowards()` and `perspectiveProjection()` (requires clauses cppchec
 (`ShapeGenerator`, `ShapeProcessor`); a reference member of an aggregate (`TreeParametricGrower`); four test patterns
 (a Pixmap copying its span, a registration the move assignment must undo, a copy's independence, a lock only the
 waiting thread holds).
+
+## include-what-you-use
+
+**Version: include-what-you-use 0.23** (Debian, clang 19). Owner decisions 2026-10-19: every file a lot touches comes
+out IWYU-clean (no mass pass over the untouched ones); forward declarations are allowed (IWYU's default), each one
+verified by compiling — a type used inside a template body needs its complete definition, so IWYU's forward
+declaration is refused there and the include kept with `// IWYU pragma: keep (<reason>)` (`ThreadPool.hpp` in
+`PixelFactory/Processor.hpp` and `VertexFactory/ShapeDecimator.hpp`).
+
+**Configuration**: `iwyu-mapping.imp` at the repository root — `std::abs` / `size_t` homes, FreeType through
+`ft2build.h` (its macro includes are `// IWYU pragma: keep`), asio through `asio.hpp` / `asio/ssl.hpp`, `std::vector`
+(IWYU 0.23 attributes it to `<format>` with libstdc++ 14). IWYU still names a C header (`<stddef.h>`, `<stdint.h>`):
+the cascade writes the C++ one (`<cstddef>`, `<cstdint>`). The guard TU's include list is `// IWYU pragma:
+begin_keep` / `end_keep` (it includes every header on purpose).
+
+**The command** (Linux; the touched `.cpp` files as TUs, the touched headers checked through the guard TU, which
+includes all of them):
+
+```bash
+iwyu_tool -p <build> <touched .cpp files> -- -Wno-unknown-warning-option \
+	-Xiwyu --mapping_file=iwyu-mapping.imp -Xiwyu --cxx17ns
+iwyu_tool -p <build> src/Testing/test_TemplateInstantiation.cpp -- -Wno-unknown-warning-option \
+	-Xiwyu --mapping_file=iwyu-mapping.imp -Xiwyu --cxx17ns -Xiwyu --check_also=<each touched header>
+```
+
+Apply a suggestion with projet-alpha `tools/iwyu-apply.py`, inside the cascade's include sections (STL, third-party, local; the forward declarations in a
+`/* Forward declarations. */` block), never with IWYU's `fix_includes.py`, which ignores them. A quoted header that
+is not in the tree (`"asio.hpp"`, `"ft2build.h"`) is third-party. Run it twice: an include added to a header removes
+the template-instantiation blame IWYU put on its tests (the second pass removes what the first added to them).
+
+⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
+for `BaseUtility.hpp`): the fix is the template's own header including what it uses.
+
+**First lot (2026-10-19)**: the 73 files the three base lots of that day touched (44 headers, 29 `.cpp`): 386
+includes added and 167 removed in 65 files at the first pass, then converged. Known IWYU false suggestion, kept: a
+namespace-scope forward declaration of `ShapeDecimator::ArenaList` (a nested class template is declared inside its
+class only; every use follows its definition).
 

@@ -28,8 +28,10 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 #include <span>
+#include <string>
 #include <type_traits>
 
 /* Third-party inclusions. */

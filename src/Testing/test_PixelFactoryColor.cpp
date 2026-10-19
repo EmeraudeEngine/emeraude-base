@@ -26,6 +26,10 @@
 
 /* STL inclusions. */
 #include <array>
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <type_traits>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
@@ -34,6 +38,7 @@
 #include "Math/Vector.hpp"
 #include "PixelFactory/Color.hpp"
 #include "PixelFactory/Gradient.hpp"
+#include "PixelFactory/Types.hpp"
 
 using namespace EmEn::Base;
 using namespace EmEn::Base::PixelFactory;

@@ -33,14 +33,15 @@
 #include <cctype>
 #include <charconv>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <type_traits>
 #include <vector>
 
 /* Local inclusions for inheritances. */
@@ -48,7 +49,9 @@
 
 /* Local inclusions for usages. */
 #include "emeraude_platform.hpp"
+#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
+#include "VertexFactory/ShapeLoadResult.hpp"
 
 /* Local inclusions for usages. */
 #include "Math/Vector.hpp"

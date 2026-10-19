@@ -29,10 +29,12 @@
 
 /* STL inclusions. */
 #include <cstdint>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
 #include "Algorithms/Mandelbrot.hpp"
+#include "PixelFactory/Pixmap.hpp"
 
 using namespace EmEn::Base;
 

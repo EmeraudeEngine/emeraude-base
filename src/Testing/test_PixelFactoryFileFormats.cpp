@@ -33,20 +33,21 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
-#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <iostream>
 #include <iterator>
 #include <span>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
-#include "IO/IO.hpp"
-#include "TemporaryPath.hpp"
 #include "Constants.hpp"
+#include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
 #include "PixelFactory/FileFormatHDR.hpp"
 #include "PixelFactory/FileFormatJpeg.hpp"
@@ -54,8 +55,11 @@
 #include "PixelFactory/FileFormatTarga.hpp"
 #include "PixelFactory/FileFormatTIFF.hpp"
 #include "PixelFactory/FileFormatWebP.hpp"
+#include "PixelFactory/FileIO.hpp"
 #include "PixelFactory/Font.hpp"
 #include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
+#include "TemporaryPath.hpp"
 
 using namespace EmEn::Base;
 

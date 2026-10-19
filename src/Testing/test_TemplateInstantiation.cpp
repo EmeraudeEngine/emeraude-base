@@ -38,7 +38,13 @@
  * once in a program (GCC and clang accepted the duplicate silently, MSVC refused it: C4661). That .cpp is its guard.
  * See docs/subsystems/source-tree/02-base-specific-rules.md. */
 
+/* STL inclusions. */
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+
 /* Local inclusions: every header of the library. */
+// IWYU pragma: begin_keep
 #include "Algorithms/DelaunayTriangulation.hpp"
 #include "Algorithms/DiamondSquare.hpp"
 #include "Algorithms/Mandelbrot.hpp"
@@ -289,6 +295,8 @@
 #include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
 #include "emeraude_platform.hpp"
+
+// IWYU pragma: end_keep
 
 /* Every class template, with the arguments the cascade uses. */
 template class EmEn::Base::Algorithms::DelaunayTriangulation<>;

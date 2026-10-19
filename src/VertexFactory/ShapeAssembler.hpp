@@ -29,10 +29,14 @@
 /* STL inclusions. */
 #include <cstdint>
 #include <type_traits>
+#include <vector>
 
 /* Local inclusions for usages. */
 #include "Math/CartesianFrame.hpp"
+#include "Math/Matrix.hpp"
+#include "Math/Vector.hpp"
 #include "ShapeBuilder.hpp"
+#include "VertexFactory/Shape.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

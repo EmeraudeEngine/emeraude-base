@@ -31,25 +31,32 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <initializer_list>
 #include <limits>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
 #include "IO/MemoryStream.hpp"
-#include "VertexFactory/FileIO.hpp"
+#include "Math/Vector.hpp"
+#include "VertexFactory/FileFormatInterface.hpp"
 #include "VertexFactory/FileFormatMDx.hpp"
 #include "VertexFactory/FileFormatNative.hpp"
 #include "VertexFactory/FileFormatOBJ.hpp"
 #include "VertexFactory/FileFormatSTL.hpp"
+#include "VertexFactory/FileIO.hpp"
+#include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "VertexFactory/ShapeLoadResult.hpp"
-#include "VertexFactory/StreamIO.hpp"
 #include "VertexFactory/ShapeTriangle.hpp"
 #include "VertexFactory/ShapeVertex.hpp"
+#include "VertexFactory/StreamIO.hpp"
 
 namespace EmEn::Base::VertexFactory
 {

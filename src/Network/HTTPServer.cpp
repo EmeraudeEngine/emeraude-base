@@ -31,9 +31,10 @@
 #include <chrono>
 #include <cstdlib>
 #include <memory>
+#include <new>
 #include <sstream>
+#include <system_error>
 #include <utility>
-#include <vector>
 
 /* Local inclusions. */
 #include "ConditionVariable.hpp"
@@ -41,6 +42,7 @@
 #include "Logging/Logging.hpp"
 #include "Mutex.hpp"
 #include "String.hpp"
+#include "ThreadSafety.hpp"
 
 namespace EmEn::Base::Network
 {

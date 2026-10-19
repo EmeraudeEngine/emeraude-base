@@ -35,9 +35,12 @@
 #include <limits>
 #include <span>
 #include <sstream>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 /* Local inclusions for usages. */
+#include "BaseUtility.hpp"
 #include "Randomizer.hpp"
 #include "String.hpp"
 

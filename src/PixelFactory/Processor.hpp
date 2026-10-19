@@ -31,20 +31,27 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 #include <limits>
 #include <optional>
 #include <type_traits>
 #include <vector>
 
 /* Local inclusions. */
+#include "Math/Base.hpp"
+#include "Math/Space2D/AARectangle.hpp"
 #include "Math/Space2D/Circle.hpp"
 #include "Math/Space2D/Intersections/LineLine.hpp"
 #include "Math/Space2D/Segment.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
+#include "PixelFactory/Types.hpp"
+#include "ThreadPool.hpp" // IWYU pragma: keep (a template body calls it: a forward declaration is not enough)
 #include "Pixmap.hpp"
-#include "ThreadPool.hpp"
 
 namespace EmEn::Base::PixelFactory
 {

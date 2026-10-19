@@ -27,22 +27,32 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
-#include <istream>
 #include <numbers>
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
+#include "Math/Matrix.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
+#include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
+#include "VertexFactory/ShapeLoadResult.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
 
 /* Local inclusions for usages. */
 #include "Animation/Joint.hpp"
@@ -514,7 +524,6 @@ namespace EmEn::Base::VertexFactory
 
 				return true;
 			}
-
 
 			// =========================================================================================================
 			// MD2 Section

@@ -1,0 +1,17 @@
+# include-what-you-use mapping of emeraude-base (owner decision 2026-10-19, plan Ave Robustus II P-W (2)): the files a
+# lot touches come out IWYU-clean. The command lives in docs/static-analysis-ledger.md § include-what-you-use.
+[
+	# std::abs and std::size_t have several homes: the cascade's choice.
+	{ "symbol": ["std::abs", "private", "<cmath>", "public"] },
+	{ "symbol": ["abs", "private", "<cmath>", "public"] },
+	{ "symbol": ["size_t", "private", "<cstddef>", "public"] },
+	{ "symbol": ["std::size_t", "private", "<cstddef>", "public"] },
+	{ "symbol": ["ptrdiff_t", "private", "<cstddef>", "public"] },
+	# FreeType is included through its macros (FT_FREETYPE_H after ft2build.h).
+	{ "include": ["@<freetype/.*>", "private", "\"ft2build.h\"", "public"] },
+	# asio is included through its umbrella headers, after the no-exceptions hook (Network/asio_throw_exception.hpp).
+	{ "include": ["@<asio/ssl/.*>", "private", "\"asio/ssl.hpp\"", "public"] },
+	{ "include": ["@<asio/.*>", "private", "\"asio.hpp\"", "public"] },
+	# IWYU 0.23 with libstdc++ 14 attributes std::vector to <format>.
+	{ "symbol": ["std::vector", "private", "<vector>", "public"] }
+]

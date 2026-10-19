@@ -30,16 +30,29 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
-#include <vector>
-#include <span>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <initializer_list>
 #include <limits>
+#include <span>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 /* Local inclusions. */
 #include "Constants.hpp"
-#include "TemporaryPath.hpp"
+#include "Math/Space2D/AARectangle.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/FileIO.hpp"
+#include "PixelFactory/IOCommon.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Processor.hpp"
+#include "PixelFactory/Types.hpp"
+#include "TemporaryPath.hpp"
 #include "ThreadPool.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 
@@ -1362,7 +1375,6 @@ TEST(PixelFactoryProcessor, shiftTextAreaWholeHeightOrMore)
 		EXPECT_EQ(pixmap.height(), 3U);
 	}
 }
-
 
 namespace
 {

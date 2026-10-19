@@ -25,14 +25,19 @@
  */
 
 /* STL inclusions. */
+#include <array>
 #include <cmath>
 #include <limits>
+#include <numbers>
+#include <string>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "Math/Matrix.hpp"
 #include "Math/Quaternion.hpp"
+#include "Math/Vector.hpp"
 
 using namespace EmEn::Base::Math;
 

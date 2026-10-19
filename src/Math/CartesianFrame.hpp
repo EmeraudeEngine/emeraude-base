@@ -27,14 +27,19 @@
 #pragma once
 
 /* STL inclusions. */
+#include <array>
+#include <cassert>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <type_traits>
 
 /* Local inclusions for usages. */
+#include "Math/Base.hpp"
+#include "Math/Vector.hpp"
 #include "Matrix.hpp"
 #include "Quaternion.hpp"
 

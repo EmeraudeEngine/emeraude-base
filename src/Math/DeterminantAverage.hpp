@@ -28,6 +28,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <cstddef>
 #include <type_traits>
 #include <vector>
 
