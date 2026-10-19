@@ -125,8 +125,12 @@ is dropped SILENTLY — no finding, no message, exit 0. Run `--check-config` on 
 `#error`. The defines per OS: Linux `-D__x86_64__ -D__linux__ -D__GNUC__=14` (`--library=posix --platform=unix64`);
 macOS arm64 `-D__aarch64__ -D__arm64__ -D__APPLE__ -D__clang__ -D__attribute__(x)=` (`--platform=unix64`; ⚠️ without
 the last one, `EMEN_API` / `EMEN_CAPABILITY` expand to `__attribute__((…))` between `class` and its name and cppcheck
-abandons every such class body: 400 artefacts on the engine, 2026-10-19, macOS peer — 3 information lines with it); Windows `-D_M_AMD64
--D_MSC_VER=1944` (`--library=windows --platform=win64`, which defines `_WIN32` / `_WIN64`). The gate counts the error,
+abandons every such class body: 400 artefacts on the engine, 2026-10-19, macOS peer — 3 information lines with it); Windows `-D_WIN32 -D_WIN64 -D_M_AMD64
+-D_MSC_VER=1944 -UEMERAUDE_USE_FULL_EXPORTS -UEMERAUDE_USE_LEAN_EXPORTS` (`--library=windows --platform=win64`; Windows
+peer, 2026-10-19: ⚠️ `--platform=win64` does NOT define `_WIN32` — the `*.windows.cpp` that include
+`COM.windows.hpp` reached its `#error` and were dropped, 25 files checked of 30; and the MSVC database defines
+`EMERAUDE_USE_FULL_EXPORTS`, so `EMEN_API` is `__declspec(dllexport)` between `class` and its name: 338 class bodies
+abandoned and 59 false findings — `-D__declspec(x)=` does not help, undefining the export switches does). The gate counts the error,
 warning, style, performance and portability lines; an `information: Unmatched suppression` is not a finding (an
 inline suppression for an instantiation or a configuration another OS or a library-only run does not reach).
 First runs: macOS 0, Windows 0 (library TUs; three unmatched-suppression notes).
@@ -220,6 +224,10 @@ the template-instantiation blame IWYU put on its tests (the second pass removes 
 `INT32` and guards `jmorecfg.h` against redefining them) — MSVC C2371. The mapping sends `jmorecfg.h` / `jconfig.h`,
 `pngconf.h` / `pnglibconf.h`, `tiffconf.h` / `tiff.h` to their public header. A third-party include IWYU adds is
 checked on the three OS before it is kept.
+
+⚠️ **A header that is included for its definitions, not its names, carries `// IWYU pragma: always_keep`**:
+`Network/asio_throw_exception.hpp` defines asio's `throw_exception()` under `-fno-exceptions`; the engine's first IWYU
+lot removed it from two files and the link failed (2026-10-19).
 
 ⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
 for `BaseUtility.hpp`): the fix is the template's own header including what it uses.

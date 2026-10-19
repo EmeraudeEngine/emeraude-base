@@ -26,6 +26,10 @@
 
 #pragma once
 
+/* NOTE: Nothing names this header's symbols: asio calls the throw_exception() it defines under -fno-exceptions, and an
+ * include include-what-you-use removed is a LINK error (engine, 2026-10-19). */
+// IWYU pragma: always_keep
+
 /* STL inclusions. */
 #include <cstdlib>
 #include <iostream>
