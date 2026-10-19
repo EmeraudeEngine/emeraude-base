@@ -162,6 +162,24 @@ tests; `rotateTowards()` and `perspectiveProjection()` (requires clauses cppchec
 (a Pixmap copying its span, a registration the move assignment must undo, a copy's independence, a lock only the
 waiting thread holds).
 
+**Seen from the engine's sweep (2026-10-19)**: the engine analyses this library's headers through its own
+instantiations, and found three traps and four sites here:
+- ⚠️ **`*/dependencies/*` suppresses EVERYTHING from a consumer.** The engine reaches this repository through its own
+  `dependencies/` directory (`…/emeraude-engine/dependencies/emeraude-base/src/…`): the former third-party pattern hid
+  every finding of the engine, a false zero. The third-party patterns name each directory (`*/dependencies/asio/*`, the
+  ext-deps archive `*/dependencies/*-Release*/*`…), never the parent.
+- ⚠️ **A constrained alias template abandons the TU**: `template< typename T > requires (…) using X = …;` is a
+  `syntaxError` for cppcheck 2.22 (and 2.23-dev) — every TU including `Math/Space2D/Point.hpp` was skipped, silently but
+  for one line. The constraint is a type-constraint (`template< Arithmetic T > using …`, the `Math::Arithmetic` concept of
+  `Math/Base.hpp`); `test_TemplateInstantiation.cpp` asserts it still refuses what the requires-clause refused.
+- A suppression inline in a header is judged by THIS repository's sweep: the engine instantiates other members and
+  arguments, so four of them are `information: Unmatched suppression` in the engine's sweep — not findings (the gate
+  counts error / warning / style / performance / portability). A file pattern on `unmatchedSuppression` does not
+  silence them (tried).
+- Fixed here: `SparseTriplet` (ShapeProcessor) members initialized; `FileFormatOBJ`'s vertex-key hash written as a loop
+  (same value — cppcheck misread the unrolled form as dead stores); `cosineInterpolation()` halves by a division by 2
+  (exact, no `double → float` cast of 0.5).
+
 ## include-what-you-use
 
 **Version: include-what-you-use 0.23** (Debian, clang 19). Owner decisions 2026-10-19: every file a lot touches comes

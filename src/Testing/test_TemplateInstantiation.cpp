@@ -40,6 +40,7 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 
@@ -469,3 +470,25 @@ template class EmEn::Base::WaveFactory::FileFormatSNDFile< float >;
 template class EmEn::Base::WaveFactory::SFXScript<>;
 template class EmEn::Base::WaveFactory::Synthesizer<>;
 template class EmEn::Base::WaveFactory::Wave<>;
+
+/* NOTE: The constrained alias templates carry a type-constraint, never a requires-clause: cppcheck 2.22 abandons the
+ * whole translation unit on 'template< ... > requires (...) using X = ...;' (2026-10-19). The constraint was MOVED, not
+ * removed — these assertions prove it still refuses what the former requires-clause refused. */
+namespace
+{
+	template< typename precision_t >
+	concept HasPoint2D = requires { typename EmEn::Base::Math::Space2D::Point< precision_t >; };
+
+	template< typename precision_t >
+	concept HasPoint3D = requires { typename EmEn::Base::Math::Space3D::Point< precision_t >; };
+
+	template< typename index_data_t >
+	concept HasOBJTriangle = requires { typename EmEn::Base::VertexFactory::OBJTriangle< index_data_t >; };
+}
+
+static_assert(HasPoint2D< float > && HasPoint2D< int32_t > && HasPoint2D< uint32_t >);
+static_assert(!HasPoint2D< const char * > && !HasPoint2D< std::array< float, 2 > >);
+static_assert(HasPoint3D< float > && HasPoint3D< double >);
+static_assert(!HasPoint3D< int32_t > && !HasPoint3D< uint32_t >);
+static_assert(HasOBJTriangle< uint16_t > && HasOBJTriangle< uint32_t >);
+static_assert(!HasOBJTriangle< int32_t > && !HasOBJTriangle< float >);

@@ -27,6 +27,12 @@ missingInclude
 missingIncludeSystem
 checkersReport
 
-# Third-party code (FetchContent, submodules).
+# Third-party code (FetchContent, submodules, the ext-deps archive). ⚠️ Never '*/dependencies/*': a consumer reaches this
+# repository through its own dependencies/ directory (projet-alpha/dependencies/emeraude-engine/dependencies/emeraude-base),
+# which then suppressed EVERY finding — an engine sweep reported a false zero (2026-10-19).
 *:*/_deps/*
-*:*/dependencies/*
+*:*/dependencies/asio/*
+*:*/dependencies/json/*
+*:*/dependencies/tinysoundfont/*
+*:*/dependencies/*-Release*/*
+*:*/dependencies/*-Debug*/*

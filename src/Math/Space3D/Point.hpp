@@ -27,7 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
-#include <type_traits>
+#include <concepts>
 
 /* Local inclusions for usages. */
 #include "Math/Vector.hpp"
@@ -37,7 +37,6 @@ namespace EmEn::Base::Math::Space3D
 	/**
 	 * @brief Vector specialization of a point in 3D space.
 	 */
-	template< typename precision_t >
-	requires (std::is_floating_point_v< precision_t >)
+	template< std::floating_point precision_t >
 	using Point = Vector< 3, precision_t >;
 }

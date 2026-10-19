@@ -360,6 +360,17 @@ namespace EmEn::Base::Math
 	}
 
 	/**
+	 * @brief An integral or floating point type (std::is_arithmetic_v), as a concept: a type-constraint
+	 * (`template< Arithmetic T >`) where a requires-clause would also do.
+	 * @note ⚠️ An alias template is constrained by a type-constraint, never by a requires-clause: cppcheck 2.22 (and
+	 * its development version, 2026-10-19) cannot parse `template< typename T > requires (...) using X = ...;` and
+	 * abandons every translation unit that includes one.
+	 * @note Parameter of the concept: `value_t` is the tested type (clang's -Wdocumentation refuses a tparam command on a concept).
+	 */
+	template< typename value_t >
+	concept Arithmetic = std::is_arithmetic_v< value_t >;
+
+	/**
 	 * @brief A type linearInterpolation() and cosineInterpolation() accept: `a + (b - a) * t` is defined and gives the
 	 * type back — scalars, and the vectors and matrices of this library. The cubic, Catmull-Rom and Hermite
 	 * interpolations stay scalar-only.
@@ -410,7 +421,7 @@ namespace EmEn::Base::Math
 		requires (LinearlyInterpolable< number_t, scale_number_t > && std::is_floating_point_v< scale_number_t >)
 	{
 		/* Cosine version only modifies 'factor' before performing a simple linear interpolation. */
-		factor = (static_cast< scale_number_t >(1) - std::cos(factor * std::numbers::pi_v< scale_number_t >)) * static_cast< scale_number_t >(0.5);
+		factor = (static_cast< scale_number_t >(1) - std::cos(factor * std::numbers::pi_v< scale_number_t >)) / static_cast< scale_number_t >(2);
 
 		return linearInterpolation(operandA, operandB, factor);
 	}

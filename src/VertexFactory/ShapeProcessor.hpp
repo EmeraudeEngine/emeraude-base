@@ -1339,9 +1339,9 @@ namespace EmEn::Base::VertexFactory
 
 			struct SparseTriplet
 			{
-				size_t row;
-				size_t col;
-				vertex_data_t value;
+				size_t row{0};
+				size_t col{0};
+				vertex_data_t value{0};
 			};
 
 			struct ChartData

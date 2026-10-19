@@ -26,10 +26,8 @@
 
 #pragma once
 
-/* STL inclusions. */
-#include <type_traits>
-
 /* Local inclusions for usages. */
+#include "Math/Base.hpp"
 #include "Math/Vector.hpp"
 
 namespace EmEn::Base::Math::Space2D
@@ -37,7 +35,6 @@ namespace EmEn::Base::Math::Space2D
 	/**
 	 * @brief Vector specialization of a point in 2D space.
 	 */
-	template< typename precision_t >
-	requires (std::is_arithmetic_v< precision_t >)
+	template< Arithmetic precision_t >
 	using Point = Vector< 2, precision_t >;
 }

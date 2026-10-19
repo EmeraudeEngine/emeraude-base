@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -127,8 +128,7 @@ namespace EmEn::Base::VertexFactory
 	 * @brief An OBJ triangle structure.
 	 * @tparam index_data_t The precision type of index data.
 	 */
-	template< typename index_data_t >
-	requires (std::is_unsigned_v< index_data_t > )
+	template< std::unsigned_integral index_data_t >
 	using OBJTriangle = std::array< OBJVertex< index_data_t >, 3 >;
 
 	/**
@@ -489,12 +489,16 @@ namespace EmEn::Base::VertexFactory
 				{
 					constexpr std::uint64_t Multiplier{0x9E3779B97F4A7C15ULL};
 
-					auto hash = static_cast< std::uint64_t >(key[0]);
-					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[1]);
-					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[2]);
-					hash = (hash * Multiplier) ^ static_cast< std::uint64_t >(key[3]);
+					/* NOTE: The first round is (0 · Multiplier) ^ key[0] = key[0]. Not named 'hash': cppcheck 2.22
+					 * confuses it with std::hash in an instantiating TU and reports its stores unread. */
+					std::uint64_t seed{0};
 
-					return static_cast< size_t >(hash ^ (hash >> 32U));
+					for ( const auto index : key )
+					{
+						seed = (seed * Multiplier) ^ static_cast< std::uint64_t >(index);
+					}
+
+					return static_cast< size_t >(seed ^ (seed >> 32U));
 				}
 			};
 
