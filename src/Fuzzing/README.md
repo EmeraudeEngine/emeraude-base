@@ -20,6 +20,12 @@ the same `-fno-exceptions` policy the library uses, so a hidden `throw` (e.g. js
   ```
 - A configured/built emeraude-base build dir for the generated config header and the static
   library — defaults to `.claude-build-debug` (override with `BASE_BUILD_DIR`).
+- **macOS** (validated 2026-10-19, M6): AppleClang ships no libFuzzer runtime — the script defaults to Homebrew's LLVM
+  (`brew install llvm`; `$(brew --prefix llvm)/bin/clang++`, clang 23.1.3 tested), `CXX` overrides it. The
+  AppleClang-built `libEmeraudeBase.a` links with it: the targets use the SYSTEM libc++ (`/usr/lib/libc++.1.dylib`,
+  `otool -L`), the same one AppleClang links, plus Homebrew's ASan runtime. The script runs under macOS's
+  `/bin/bash` 3.2: no associative array, no empty-array expansion under `set -u` (keep it that way). The 14 targets
+  build; `fuzz_ini` 60 s from an empty corpus: 1.12 M runs, 0 crash.
 
 ## Design
 
