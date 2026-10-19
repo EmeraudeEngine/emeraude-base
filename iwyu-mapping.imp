@@ -9,6 +9,14 @@
 	{ "symbol": ["ptrdiff_t", "private", "<cstddef>", "public"] },
 	# FreeType is included through its macros (FT_FREETYPE_H after ft2build.h).
 	{ "include": ["@<freetype/.*>", "private", "\"ft2build.h\"", "public"] },
+	# libjpeg, libpng, libtiff: their configuration headers come through the public one, in the order it sets (on Windows,
+	# jconfig.h must precede jmorecfg.h: a direct <jmorecfg.h> redefined boolean / INT32, MSVC C2371).
+	{ "include": ["<jmorecfg.h>", "private", "<jpeglib.h>", "public"] },
+	{ "include": ["<jconfig.h>", "private", "<jpeglib.h>", "public"] },
+	{ "include": ["<pngconf.h>", "private", "<png.h>", "public"] },
+	{ "include": ["<pnglibconf.h>", "private", "<png.h>", "public"] },
+	{ "include": ["<tiffconf.h>", "private", "<tiffio.h>", "public"] },
+	{ "include": ["<tiff.h>", "private", "<tiffio.h>", "public"] },
 	# asio is included through its umbrella headers, after the no-exceptions hook (Network/asio_throw_exception.hpp).
 	{ "include": ["@<asio/ssl/.*>", "private", "\"asio/ssl.hpp\"", "public"] },
 	{ "include": ["@<asio/.*>", "private", "\"asio.hpp\"", "public"] },

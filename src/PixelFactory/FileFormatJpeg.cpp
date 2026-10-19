@@ -41,7 +41,6 @@
 #include <vector>
 
 /* Third-party inclusions. */
-#include <jmorecfg.h>
 #include <jpeglib.h>
 
 /* Local inclusions. */

@@ -191,6 +191,12 @@ Apply a suggestion with projet-alpha `tools/iwyu-apply.py`, inside the cascade's
 is not in the tree (`"asio.hpp"`, `"ft2build.h"`) is third-party. Run it twice: an include added to a header removes
 the template-instantiation blame IWYU put on its tests (the second pass removes what the first added to them).
 
+⚠️ **A library's private configuration header is never included directly** (Windows peer, fd37902): IWYU proposed
+`<jmorecfg.h>` before `<jpeglib.h>`; on Windows libjpeg-turbo's `jconfig.h` must come first (it typedefs `boolean` and
+`INT32` and guards `jmorecfg.h` against redefining them) — MSVC C2371. The mapping sends `jmorecfg.h` / `jconfig.h`,
+`pngconf.h` / `pnglibconf.h`, `tiffconf.h` / `tiff.h` to their public header. A third-party include IWYU adds is
+checked on the three OS before it is kept.
+
 ⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
 for `BaseUtility.hpp`): the fix is the template's own header including what it uses.
 
