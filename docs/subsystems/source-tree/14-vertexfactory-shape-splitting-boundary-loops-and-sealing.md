@@ -86,6 +86,11 @@ Two UV generation modes on `ShapeProcessor`:
 - Least Squares Conformal Maps parameterization per chart (CGLS sparse solver)
 - Shelf packing into [0,1]² UV space
 - Tangent space recomputation after UV assignment
+- ⚠️ It had NEVER compiled until 2026-10-19 (two `const` maps written to, from the engine's clang-tidy const-correctness
+  mass fix e96495d6f, invisible because no code called it). Proven since by
+  `VertexFactoryShapeProcessor.uvUnwrapMapsPlanarChartsConformallyInsideTheUnitSquare` (a cuboid's faces keep their
+  angles in UV, inside [0,1]²) and `uvUnwrapOfAClosedSmoothSurfaceStaysFinite`; the duplicated seam vertices no longer
+  add a stray vertex colour, and `updateProperties()` runs at the end as for the lightmap UVs.
 
 **`deduplicateVertices(keepNormals, keepTextureCoordinates)`**:
 - Boolean flags control which attributes are compared (default both true)

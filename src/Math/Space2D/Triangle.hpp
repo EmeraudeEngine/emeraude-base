@@ -148,7 +148,7 @@ namespace EmEn::Base::Math::Space2D
 			 * @param point A reference to a point.
 			 */
 			void
-			setPointC (const Point< precision_t > & point) const noexcept
+			setPointC (const Point< precision_t > & point) noexcept
 			{
 				m_points[2] = point;
 			}

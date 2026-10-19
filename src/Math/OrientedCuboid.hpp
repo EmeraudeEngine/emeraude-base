@@ -87,14 +87,14 @@ namespace EmEn::Base::Math
 				const auto & min = cuboid.minimum();
 
 				/* Transform the new position for vertices. */
-				m_vertices[PositiveXPositiveYPositiveZ] = (matrix * Vector< 4, data_t >(max[X], max[Y], max[Z], 1.0F)).toVector3();
-				m_vertices[PositiveXPositiveYNegativeZ] = (matrix * Vector< 4, data_t >(max[X], max[Y], min[Z], 1.0F)).toVector3();
-				m_vertices[PositiveXNegativeYPositiveZ] = (matrix * Vector< 4, data_t >(max[X], min[Y], max[Z], 1.0F)).toVector3();
-				m_vertices[PositiveXNegativeYNegativeZ] = (matrix * Vector< 4, data_t >(max[X], min[Y], min[Z], 1.0F)).toVector3();
-				m_vertices[NegativeXPositiveYPositiveZ] = (matrix * Vector< 4, data_t >(min[X], max[Y], max[Z], 1.0F)).toVector3();
-				m_vertices[NegativeXPositiveYNegativeZ] = (matrix * Vector< 4, data_t >(min[X], max[Y], min[Z], 1.0F)).toVector3();
-				m_vertices[NegativeXNegativeYPositiveZ] = (matrix * Vector< 4, data_t >(min[X], min[Y], max[Z], 1.0F)).toVector3();
-				m_vertices[NegativeXNegativeYNegativeZ] = (matrix * Vector< 4, data_t >(min[X], min[Y], min[Z], 1.0F)).toVector3();
+				m_vertices[PositiveXPositiveYPositiveZ] = (matrix * Vector< 4, data_t >(max[X], max[Y], max[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[PositiveXPositiveYNegativeZ] = (matrix * Vector< 4, data_t >(max[X], max[Y], min[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[PositiveXNegativeYPositiveZ] = (matrix * Vector< 4, data_t >(max[X], min[Y], max[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[PositiveXNegativeYNegativeZ] = (matrix * Vector< 4, data_t >(max[X], min[Y], min[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[NegativeXPositiveYPositiveZ] = (matrix * Vector< 4, data_t >(min[X], max[Y], max[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[NegativeXPositiveYNegativeZ] = (matrix * Vector< 4, data_t >(min[X], max[Y], min[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[NegativeXNegativeYPositiveZ] = (matrix * Vector< 4, data_t >(min[X], min[Y], max[Z], static_cast< data_t >(1))).toVector3();
+				m_vertices[NegativeXNegativeYNegativeZ] = (matrix * Vector< 4, data_t >(min[X], min[Y], min[Z], static_cast< data_t >(1))).toVector3();
 
 				/* Rebuild the normals from the new vertices position. */
 				m_normals[PositiveX] = Vector< 3, data_t >::normal(m_vertices[PositiveXPositiveYPositiveZ], m_vertices[PositiveXNegativeYPositiveZ], m_vertices[PositiveXNegativeYNegativeZ]);

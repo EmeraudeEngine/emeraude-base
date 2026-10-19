@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdint>
 #include <ctime>
 #include <iostream>
 #include <string>
@@ -91,25 +92,11 @@ namespace EmEn::Base::Time::Elapsed
 			 */
 			~PrintScopeCPUTime ()
 			{
-				auto nanoseconds = 0UL;
+				/* NOTE: CLOCKS_PER_SEC is 1000 (Windows) or 1000000 (POSIX); a clock that went back (or failed, -1) counts zero. */
+				static_assert(1000000000 % CLOCKS_PER_SEC == 0, "CLOCKS_PER_SEC must divide one second in nanoseconds.");
 
-				if constexpr ( CLOCKS_PER_SEC == 1000 )
-				{
-					/* Duration is expressed in milliseconds. */
-					nanoseconds = (std::clock() - m_start) * 1000000;
-				}
-
-				if constexpr ( CLOCKS_PER_SEC == 1000000 )
-				{
-					/* Duration is expressed in microseconds. */
-					nanoseconds = (std::clock() - m_start) * 1000;
-				}
-
-				if constexpr ( CLOCKS_PER_SEC == 1000000000 )
-				{
-					/* Duration is expressed in nanoseconds. */
-					nanoseconds = std::clock() - m_start;
-				}
+				const auto ticks = std::clock() - m_start;
+				const auto nanoseconds = ticks > 0 ? static_cast< uint64_t >(ticks) * static_cast< uint64_t >(1000000000 / CLOCKS_PER_SEC) : uint64_t{0};
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Seconds) )
 				{
@@ -201,25 +188,11 @@ namespace EmEn::Base::Time::Elapsed
 			 */
 			~PrintScopeCPUTimeThreshold ()
 			{
-				auto nanoseconds = 0UL;
+				/* NOTE: CLOCKS_PER_SEC is 1000 (Windows) or 1000000 (POSIX); a clock that went back (or failed, -1) counts zero. */
+				static_assert(1000000000 % CLOCKS_PER_SEC == 0, "CLOCKS_PER_SEC must divide one second in nanoseconds.");
 
-				if constexpr ( CLOCKS_PER_SEC == 1000 )
-				{
-					/* Duration is expressed in milliseconds. */
-					nanoseconds = (std::clock() - m_start) * 1000000;
-				}
-
-				if constexpr ( CLOCKS_PER_SEC == 1000000 )
-				{
-					/* Duration is expressed in microseconds. */
-					nanoseconds = (std::clock() - m_start) * 1000;
-				}
-
-				if constexpr ( CLOCKS_PER_SEC == 1000000000 )
-				{
-					/* Duration is expressed in nanoseconds. */
-					nanoseconds = std::clock() - m_start;
-				}
+				const auto ticks = std::clock() - m_start;
+				const auto nanoseconds = ticks > 0 ? static_cast< uint64_t >(ticks) * static_cast< uint64_t >(1000000000 / CLOCKS_PER_SEC) : uint64_t{0};
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Seconds) )
 				{

@@ -197,7 +197,7 @@ namespace EmEn::Base::VertexFactory
 			bool
 			merge (const Shape< vertex_data_t, index_data_t > & sourceShape, const Math::CartesianFrame< vertex_data_t > & atLocation, bool useNewGroup = false) noexcept
 			{
-				return this->merge(sourceShape, atLocation.modelMatrix(), useNewGroup);
+				return this->merge(sourceShape, atLocation.getModelMatrix(), useNewGroup);
 			}
 
 			/**
@@ -219,7 +219,7 @@ namespace EmEn::Base::VertexFactory
 			 * @param shapeA A reference to a shape.
 			 * @param shapeB A reference to a shape.
 			 * @param useGroup Define the shapes as group. Default false.
-			 * @return Shape< vertex_data_t, index_data_t >
+			 * @return Shape< vertex_data_t, index_data_t > An empty shape when a merge fails.
 			 */
 			static
 			Shape< vertex_data_t, index_data_t >
@@ -228,8 +228,11 @@ namespace EmEn::Base::VertexFactory
 				Shape< vertex_data_t, index_data_t > output;
 
 				ShapeAssembler< vertex_data_t, index_data_t > assembler{output};
-				assembler.merge(shapeA, useGroup);
-				assembler.merge(shapeB, useGroup);
+
+				if ( !assembler.merge(shapeA, useGroup) || !assembler.merge(shapeB, useGroup) )
+				{
+					return {};
+				}
 
 				return output;
 			}
@@ -238,7 +241,7 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Merges a list of shapes and returns a new one.
 			 * @param shapes A reference to vector of shapes.
 			 * @param useGroup Define every shape as a group. Default false.
-			 * @return Shape< vertex_data_t, index_data_t >
+			 * @return Shape< vertex_data_t, index_data_t > An empty shape when a merge fails.
 			 */
 			static
 			Shape< vertex_data_t, index_data_t >
@@ -250,7 +253,10 @@ namespace EmEn::Base::VertexFactory
 
 				for ( const auto & shape : shapes )
 				{
-					assembler.merge(shapes, useGroup);
+					if ( !assembler.merge(shape, useGroup) )
+					{
+						return {};
+					}
 				}
 
 				return output;

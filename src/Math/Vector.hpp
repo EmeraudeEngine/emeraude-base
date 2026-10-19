@@ -220,7 +220,7 @@ namespace EmEn::Base::Math
 			explicit
 			Vector (std::span< const precision_t, dim_t > data) noexcept
 			{
-				std::copy(data.cbegin(), data.cend(), m_data.begin());
+				std::copy(data.begin(), data.end(), m_data.begin());
 			}
 
 			/**
@@ -774,6 +774,7 @@ namespace EmEn::Base::Math
 			[[nodiscard]]
 			bool
 			equal (const Vector & operand, precision_t epsilon = std::numeric_limits< precision_t >::epsilon()) const noexcept
+				requires (std::is_floating_point_v< precision_t >)
 			{
 				for ( size_t index = 0; index < dim_t ; index++ )
 				{
@@ -795,6 +796,7 @@ namespace EmEn::Base::Math
 			[[nodiscard]]
 			bool
 			different (const Vector & operand, precision_t epsilon = std::numeric_limits< precision_t >::epsilon()) const noexcept
+				requires (std::is_floating_point_v< precision_t >)
 			{
 				return !this->equal(operand, epsilon);
 			}
@@ -1350,6 +1352,7 @@ namespace EmEn::Base::Math
 			[[nodiscard]]
 			precision_t
 			distanceToPlane (const Vector & pointA, const Vector & pointB, const Vector & pointC) const noexcept
+				requires (dim_t == 3 || dim_t == 4)
 			{
 				return Vector::dotProduct(*this - pointA, this->normal(pointB - pointA, pointC - pointA));
 			}
@@ -1403,8 +1406,7 @@ namespace EmEn::Base::Math
 			reflect (const Vector & incident, const Vector & normal) noexcept
 			{
 				/* I' = I - 2 * dot(N, I) * N; */
-				//return incident - 2.0F * Vector3::dot(normal, incident) * normal;
-				return incident - (normal * (Vector::dotProduct(normal, incident) * 2.0F));
+				return incident - (normal * (Vector::dotProduct(normal, incident) * static_cast< precision_t >(2)));
 			}
 
 			/**
@@ -1412,23 +1414,24 @@ namespace EmEn::Base::Math
 			 * @param incident The Vector to refract.
 			 * @param normal A reference to a Vector representing the surface normal where the refraction occurs.
 			 * @param eta Specifies the indices of refraction ratio.
-			 * @return Vector
+			 * @return Vector The refracted direction (GLSL refract()), or the ZERO vector on a total internal reflection.
 			 */
 			[[nodiscard]]
 			static
 			Vector
-			refract (const Vector & incident, const Vector & normal, float eta) noexcept
+			refract (const Vector & incident, const Vector & normal, precision_t eta) noexcept
+				requires (std::is_floating_point_v< precision_t >)
 			{
+				/* R = eta * I - (eta * dot(N, I) + sqrt(k)) * N, with k = 1 - eta² * (1 - dot(N, I)²). */
 				const auto d = Vector::dotProduct(normal, incident);
+				const auto k = static_cast< precision_t >(1) - (eta * eta * (static_cast< precision_t >(1) - (d * d)));
 
-				const auto k = 1.0 - (eta * eta * (1.0 - (d * d)));
-
-				if ( k < 0.0 )
+				if ( k < static_cast< precision_t >(0) )
 				{
 					return {};
 				}
 
-				return (eta * incident) - (((eta * d) + std::sqrt(k)) * normal);
+				return (incident * eta) - (normal * ((eta * d) + std::sqrt(k)));
 			}
 
 			/**
@@ -1441,6 +1444,7 @@ namespace EmEn::Base::Math
 			static
 			Vector
 			normal (const Vector & lhs, const Vector & rhs) noexcept
+				requires (dim_t == 3 || dim_t == 4)
 			{
 				return Vector::crossProduct(lhs, rhs).normalize();
 			}
@@ -1457,6 +1461,7 @@ namespace EmEn::Base::Math
 			static
 			Vector
 			normal (const Vector & pointA, const Vector & pointB, const Vector & pointC) noexcept
+				requires (dim_t == 3)
 			{
 				const auto edgeAB = pointA - pointB;
 				const auto edgeBC = pointB - pointC;

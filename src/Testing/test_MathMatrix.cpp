@@ -1614,3 +1614,12 @@ TYPED_TEST(MathMatrix, MatrixVectorZero4)
 	ASSERT_EQ(result[2], TypeParam{0});
 	ASSERT_EQ(result[3], TypeParam{0});
 }
+
+/* 2026-10-19: trace() summed into an 'auto value = 0', an int: a float diagonal was truncated. It had never been
+ * instantiated for a floating point type (base test_TemplateInstantiation.cpp compiles every member now). */
+TEST(MathMatrixTrace, TheTraceKeepsTheFractions)
+{
+	EXPECT_FLOAT_EQ((Matrix< 4, float >::identity() * 0.5F).trace(), 2.0F);
+	EXPECT_DOUBLE_EQ((Matrix< 3, double >::identity() * 0.25).trace(), 0.75);
+	EXPECT_EQ((Matrix< 2, int >::identity() * 3).trace(), 6);
+}

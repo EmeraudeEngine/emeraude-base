@@ -25,6 +25,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <span>
@@ -490,4 +491,58 @@ TEST(VertexFactoryGrid, MemoryOccupiedCountsTheHeights)
 	grid.clear();
 
 	EXPECT_EQ(grid.memoryOccupied(), before);
+}
+
+/* 2026-10-19: updateBoundingBox() (private then) merged a brace list two overloads accept — it had never compiled — and
+ * kept no X/Z extent. Public now: the height modifiers keep the box conservative, this makes it tight again.
+ * buildPositionVector() left out the world offset that position() applies. */
+TEST(VertexFactoryGrid, updateBoundingBoxMakesTheBoxTight)
+{
+	Grid< float > grid;
+
+	ASSERT_TRUE(grid.initializeByCellSize(4U, 1.0F));
+
+	grid.applyPerlinNoise(1.0F, 10.0F);
+	grid.applyPerlinNoise(1.0F, 0.1F);
+
+	const auto & heights = grid.heights();
+	const auto [lowest, highest] = std::ranges::minmax_element(heights);
+
+	grid.updateBoundingBox();
+
+	const auto & box = grid.boundingBox();
+
+	EXPECT_FLOAT_EQ(box.minimum()[Math::Y], *lowest);
+	EXPECT_FLOAT_EQ(box.maximum()[Math::Y], *highest);
+	EXPECT_FLOAT_EQ(box.minimum()[Math::X], -2.0F);
+	EXPECT_FLOAT_EQ(box.maximum()[Math::X], 2.0F);
+	EXPECT_FLOAT_EQ(box.minimum()[Math::Z], -2.0F);
+	EXPECT_FLOAT_EQ(box.maximum()[Math::Z], 2.0F);
+}
+
+TEST(VertexFactoryGrid, buildPositionVectorMatchesThePoints)
+{
+	Grid< float > grid;
+
+	ASSERT_TRUE(grid.initializeByCellSize(2U, 1.0F));
+
+	grid.applyPerlinNoise(1.0F, 1.0F);
+
+	const auto positions = grid.buildPositionVector();
+
+	ASSERT_EQ(positions.size(), static_cast< size_t >(grid.pointCount()) * 3);
+
+	size_t index = 0;
+
+	for ( uint32_t pointY = 0; pointY < 3; ++pointY )
+	{
+		for ( uint32_t pointX = 0; pointX < 3; ++pointX )
+		{
+			const auto point = grid.position(pointX, pointY);
+
+			EXPECT_FLOAT_EQ(positions[index++], point[Math::X]);
+			EXPECT_FLOAT_EQ(positions[index++], point[Math::Y]);
+			EXPECT_FLOAT_EQ(positions[index++], point[Math::Z]);
+		}
+	}
 }

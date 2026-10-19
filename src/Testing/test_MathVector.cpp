@@ -29,6 +29,7 @@
 #include <array>
 #include <cmath>
 #include <limits>
+#include <span>
 #include <type_traits>
 
 /* Third-party inclusions. */
@@ -994,4 +995,46 @@ TEST(MathVectorDegeneracy, normalOfSmallAndFlatTriangles)
 	EXPECT_TRUE(V2::areNearlyParallel(V2{1e-5F, 0.0F}, V2{3e-5F, 0.0F}));
 	EXPECT_FALSE(V2::areNearlyParallel(V2{1e-5F, 0.0F}, V2{0.0F, 1e-5F}));
 	EXPECT_TRUE(V2::areNearlyParallel(V2{0.0F, 0.0F}, V2{1.0F, 0.0F}));
+}
+
+/* 2026-10-19: members no code had instantiated, so they had never compiled (base test_TemplateInstantiation.cpp guards
+ * them now): the span constructor (std::span has no cbegin() in C++20), refract() (a scalar times a vector does not
+ * exist) and reflect() in double (a float literal). */
+TEST(MathVectorNeverInstantiated, spanConstructorReflectAndRefract)
+{
+	const std::array< double, 3 > values{1.0, 2.0, 3.0};
+	const Vector< 3, double > fromSpan{std::span< const double, 3 >{values}};
+
+	EXPECT_EQ(fromSpan, (Vector< 3, double >{1.0, 2.0, 3.0}));
+
+	const Vector< 3, double > normal{0.0, 1.0, 0.0};
+	const auto incident = Vector< 3, double >{1.0, -1.0, 0.0}.normalized();
+
+	const auto reflected = Vector< 3, double >::reflect(incident, normal);
+	const Vector< 3, double > mirrored{incident[X], -incident[Y], 0.0};
+
+	EXPECT_EQ(reflected, mirrored);
+
+	/* eta = 1: the ray goes straight through. */
+	const auto straight = Vector< 3, double >::refract(incident, normal, 1.0);
+
+	EXPECT_NEAR(straight[X], incident[X], 1.0e-12);
+	EXPECT_NEAR(straight[Y], incident[Y], 1.0e-12);
+
+	/* Snell: n1·sin(θ1) = n2·sin(θ2), eta = n1 / n2. */
+	const auto eta = 1.0 / 1.5;
+	const auto refracted = Vector< 3, double >::refract(incident, normal, eta);
+
+	EXPECT_NEAR(refracted.length(), 1.0, 1.0e-12);
+	EXPECT_NEAR(refracted[X], eta * incident[X], 1.0e-12);
+	EXPECT_LT(refracted[Y], 0.0);
+
+	/* From glass into air past the critical angle: total internal reflection, the zero vector. */
+	const auto grazing = Vector< 3, float >{1.0F, -0.2F, 0.0F}.normalized();
+
+	const Vector< 3, float > up{0.0F, 1.0F, 0.0F};
+
+	const auto total = Vector< 3, float >::refract(grazing, up, 1.5F);
+
+	EXPECT_TRUE(total.isZero());
 }

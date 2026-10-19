@@ -177,6 +177,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ScopedRegistration.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_StaticVector.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_String.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_TemplateInstantiation.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Thread.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ThreadPool.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Time.cpp
@@ -195,6 +196,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryTreeSkinner.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathOctahedralMapping.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsDiamondSquare.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsMandelbrot.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsPerlinNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsWorleyNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryGrid.cpp

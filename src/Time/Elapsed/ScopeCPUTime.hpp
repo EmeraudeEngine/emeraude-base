@@ -61,27 +61,19 @@ namespace EmEn::Base::Time::Elapsed
 			ScopeCPUTime & operator= (const ScopeCPUTime &) = delete;
 
 			/** @brief Deleted move assignment operator. */
-			ScopeCPUTime & operator= (const ScopeCPUTime &&) = delete;
+			ScopeCPUTime & operator= (ScopeCPUTime &&) = delete;
 
 			/** @brief Destructor. */
 			~ScopeCPUTime ()
 			{
-				if constexpr ( CLOCKS_PER_SEC == 1000 )
-				{
-					/* Duration is expressed in milliseconds. */
-					m_duration += (std::clock() - m_start) * 1000000;
-				}
+				/* NOTE: CLOCKS_PER_SEC is 1000 (Windows) or 1000000 (POSIX); a clock that went back (or failed, -1) counts zero. */
+				static_assert(1000000000 % CLOCKS_PER_SEC == 0, "CLOCKS_PER_SEC must divide one second in nanoseconds.");
 
-				if constexpr ( CLOCKS_PER_SEC == 1000000 )
-				{
-					/* Duration is expressed in microseconds. */
-					m_duration += (std::clock() - m_start) * 1000;
-				}
+				const auto ticks = std::clock() - m_start;
 
-				if constexpr ( CLOCKS_PER_SEC == 1000000000 )
+				if ( ticks > 0 )
 				{
-					/* Duration is expressed in nanoseconds. */
-					m_duration += std::clock() - m_start;
+					m_duration += static_cast< uint64_t >(ticks) * static_cast< uint64_t >(1000000000 / CLOCKS_PER_SEC);
 				}
 			}
 

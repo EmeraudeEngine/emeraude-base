@@ -1017,3 +1017,35 @@ TYPED_TEST(MathQuaternion, DoubleRotation180)
 	ASSERT_NEAR(result[Y], vec[Y], static_cast< TypeParam >(0.01));
 	ASSERT_NEAR(result[Z], vec[Z], static_cast< TypeParam >(0.01));
 }
+
+/* 2026-10-19: swingTwistDecomposition() had never compiled (a squaredLength() that does not exist, a scalar times a
+ * vector): no code instantiated it. q = swing · twist, the twist turns around the given axis only, and the swing takes
+ * the axis where q takes it. */
+TYPED_TEST(MathQuaternion, SwingTwistDecomposition)
+{
+	const auto axis = Vector< 3, TypeParam >{1, 2, 3}.normalized();
+	const Vector< 3, TypeParam > twistAxis{0, 1, 0};
+
+	Quaternion< TypeParam > rotation;
+	rotation.fromAngleAxis(static_cast< TypeParam >(0.7), axis);
+
+	const auto [swing, twist] = rotation.swingTwistDecomposition(twistAxis);
+	const auto recomposed = swing * twist;
+	const auto sign = Quaternion< TypeParam >::dotProduct(recomposed, rotation) < 0 ? static_cast< TypeParam >(-1) : static_cast< TypeParam >(1);
+	const auto tolerance = static_cast< TypeParam >(1.0e-5);
+
+	EXPECT_NEAR(recomposed.complex()[X] * sign, rotation.complex()[X], tolerance);
+	EXPECT_NEAR(recomposed.complex()[Y] * sign, rotation.complex()[Y], tolerance);
+	EXPECT_NEAR(recomposed.complex()[Z] * sign, rotation.complex()[Z], tolerance);
+	EXPECT_NEAR(recomposed.real() * sign, rotation.real(), tolerance);
+
+	EXPECT_NEAR(twist.complex()[X], 0, tolerance);
+	EXPECT_NEAR(twist.complex()[Z], 0, tolerance);
+
+	const auto byRotation = rotation.rotatedVector(twistAxis);
+	const auto bySwing = swing.rotatedVector(twistAxis);
+
+	EXPECT_NEAR(bySwing[X], byRotation[X], tolerance);
+	EXPECT_NEAR(bySwing[Y], byRotation[Y], tolerance);
+	EXPECT_NEAR(bySwing[Z], byRotation[Z], tolerance);
+}

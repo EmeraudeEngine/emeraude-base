@@ -29,6 +29,7 @@
 
 /* Local inclusions. */
 #include "Math/Base.hpp"
+#include "Math/DeterminantAverage.hpp"
 #include "Math/Vector.hpp"
 
 using namespace EmEn::Base::Math;
@@ -545,4 +546,17 @@ TEST(Math, averageNegativeValues)
 {
 	std::vector< int > values{-10, -5, 0, 5, 10};
 	EXPECT_EQ(average(values), 0);
+}
+
+/* 2026-10-19: setTolerance() called std::max(0, tolerance) — an int and a float, no such overload. No translation unit
+ * included the header: it had never compiled. A negative tolerance is clamped to zero. */
+TEST(MathDeterminantAverage, setToleranceClampsANegativeValue)
+{
+	EmEn::Base::Math::DeterminantAverage< float > average{{1.0F, 2.0F, 3.0F}, 0.5F};
+
+	average.setTolerance(-1.0F);
+	EXPECT_FLOAT_EQ(average.getTolerance(), 0.0F);
+
+	average.setTolerance(0.25F);
+	EXPECT_FLOAT_EQ(average.getTolerance(), 0.25F);
 }

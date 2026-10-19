@@ -26,12 +26,18 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 /* Local inclusions. */
+#include "Math/CartesianFrame.hpp"
 #include "Math/Vector.hpp"
 #include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeAssembler.hpp"
 #include "VertexFactory/ShapeBuilder.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "VertexFactory/ShapeProcessor.hpp"
@@ -456,4 +462,171 @@ TEST(VertexFactoryShapeBuilder, deduplicationNeverMergesVerticesOutsideTheGrid)
 
 	EXPECT_EQ(processor.deduplicateVertices(), 1U) << "only the real duplicate may go";
 	EXPECT_EQ(shape.vertices().size(), 5U);
+}
+
+namespace
+{
+	/**
+	 * @brief Returns the three corner angles of a triangle.
+	 * @param pointA The first corner.
+	 * @param pointB The second corner.
+	 * @param pointC The third corner.
+	 * @return std::array< float, 3 >
+	 */
+	std::array< float, 3 >
+	cornerAngles (const EmEn::Base::Math::Vector< 3, float > & pointA, const EmEn::Base::Math::Vector< 3, float > & pointB, const EmEn::Base::Math::Vector< 3, float > & pointC) noexcept
+	{
+		using Vec = EmEn::Base::Math::Vector< 3, float >;
+
+		const auto angle = [] (const Vec & corner, const Vec & first, const Vec & second) {
+			const auto toFirst = (first - corner).normalized();
+			const auto toSecond = (second - corner).normalized();
+
+			return std::acos(std::clamp(Vec::dotProduct(toFirst, toSecond), -1.0F, 1.0F));
+		};
+
+		return {angle(pointA, pointB, pointC), angle(pointB, pointC, pointA), angle(pointC, pointA, pointB)};
+	}
+}
+
+/* 2026-10-19: generateUVUnwrap() (LSCM) had NEVER compiled — two const maps written to, from a clang-tidy mass fix,
+ * invisible because no code instantiated it (base test_TemplateInstantiation.cpp guards that now). A cube's faces are
+ * planar charts (90° between them, above the 66° seam threshold): LSCM maps a planar chart conformally, so every UV
+ * triangle keeps the angles of its 3D triangle, inside [0, 1]². */
+TEST(VertexFactoryShapeProcessor, uvUnwrapMapsPlanarChartsConformallyInsideTheUnitSquare)
+{
+	auto shape = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 2.0F, 3.0F);
+
+	ASSERT_FALSE(shape.empty());
+
+	ShapeProcessor< float, uint32_t > processor{shape};
+
+	ASSERT_TRUE(processor.generateUVUnwrap());
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & uv = vertex.textureCoordinates();
+
+		ASSERT_TRUE(std::isfinite(uv[0]) && std::isfinite(uv[1]));
+		EXPECT_GE(uv[0], -1.0e-4F);
+		EXPECT_LE(uv[0], 1.0F + 1.0e-4F);
+		EXPECT_GE(uv[1], -1.0e-4F);
+		EXPECT_LE(uv[1], 1.0F + 1.0e-4F);
+	}
+
+	for ( const auto & triangle : shape.triangles() )
+	{
+		const auto & vertexA = shape.vertex(triangle.vertexIndex(0));
+		const auto & vertexB = shape.vertex(triangle.vertexIndex(1));
+		const auto & vertexC = shape.vertex(triangle.vertexIndex(2));
+
+		const auto flatten = [] (const auto & vertex) {
+			return EmEn::Base::Math::Vector< 3, float >{vertex.textureCoordinates()[0], vertex.textureCoordinates()[1], 0.0F};
+		};
+
+		const auto angles3D = cornerAngles(vertexA.position(), vertexB.position(), vertexC.position());
+		const auto anglesUV = cornerAngles(flatten(vertexA), flatten(vertexB), flatten(vertexC));
+
+		EXPECT_NEAR(anglesUV[0], angles3D[0], 1.0e-3F);
+		EXPECT_NEAR(anglesUV[1], angles3D[1], 1.0e-3F);
+		EXPECT_NEAR(anglesUV[2], angles3D[2], 1.0e-3F);
+	}
+}
+
+/* A smooth closed surface is one chart without a boundary (the pinned pair comes from all its vertices): the result
+ * is distorted, but finite and inside the unit square. */
+TEST(VertexFactoryShapeProcessor, uvUnwrapOfAClosedSmoothSurfaceStaysFinite)
+{
+	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 12U, 6U);
+
+	ShapeProcessor< float, uint32_t > processor{shape};
+
+	ASSERT_TRUE(processor.generateUVUnwrap());
+
+	for ( const auto & vertex : shape.vertices() )
+	{
+		const auto & uv = vertex.textureCoordinates();
+
+		ASSERT_TRUE(std::isfinite(uv[0]) && std::isfinite(uv[1]));
+		EXPECT_GE(uv[0], -1.0e-4F);
+		EXPECT_LE(uv[0], 1.0F + 1.0e-4F);
+		EXPECT_GE(uv[1], -1.0e-4F);
+		EXPECT_LE(uv[1], 1.0F + 1.0e-4F);
+	}
+
+	for ( const auto & triangle : shape.triangles() )
+	{
+		for ( uint32_t corner = 0; corner < 3; ++corner )
+		{
+			ASSERT_LT(triangle.vertexIndex(corner), shape.vertices().size());
+		}
+	}
+}
+
+/* 2026-10-19: getDistances() took a vector of vectors and read position() on it — it had never compiled — and
+ * getDistancesAggregate() dereferenced end() for fewer than two vertices. */
+TEST(VertexFactoryShapeBuilder, distancesBetweenEveryPairOfVertices)
+{
+	using Vertex = ShapeVertex< float >;
+
+	const std::vector< Vertex > vertices{
+		Vertex{{0.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}},
+		Vertex{{3.0F, 0.0F, 0.0F}, {0.0F, 1.0F, 0.0F}},
+		Vertex{{3.0F, 4.0F, 0.0F}, {0.0F, 1.0F, 0.0F}}
+	};
+
+	const auto distances = ShapeBuilder< float, uint32_t >::getDistances(vertices);
+
+	ASSERT_EQ(distances.size(), 3U);
+	EXPECT_FLOAT_EQ(distances[0], 3.0F);
+	EXPECT_FLOAT_EQ(distances[1], 5.0F);
+	EXPECT_FLOAT_EQ(distances[2], 4.0F);
+
+	const auto aggregate = ShapeBuilder< float, uint32_t >::getDistancesAggregate(vertices);
+
+	EXPECT_FLOAT_EQ(aggregate[0], 3.0F);
+	EXPECT_FLOAT_EQ(aggregate[1], 5.0F);
+	EXPECT_FLOAT_EQ(aggregate[2], 4.0F);
+
+	const std::vector< Vertex > single{vertices.front()};
+
+	EXPECT_TRUE((ShapeBuilder< float, uint32_t >::getDistances(single).empty()));
+	EXPECT_EQ((ShapeBuilder< float, uint32_t >::getDistancesAggregate(single)), (std::array< float, 3 >{0.0F, 0.0F, 0.0F}));
+	EXPECT_EQ((ShapeBuilder< float, uint32_t >::getDistancesAggregate({})), (std::array< float, 3 >{0.0F, 0.0F, 0.0F}));
+}
+
+/* 2026-10-19: merge(shape, frame) called a CartesianFrame::modelMatrix() that does not exist, and mergeList() merged
+ * the whole list into itself — neither had ever compiled. */
+TEST(VertexFactoryShapeAssembler, mergeAtAFrameAndMergeAList)
+{
+	const auto cube = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F);
+
+	ASSERT_FALSE(cube.empty());
+
+	Shape< float, uint32_t > placed;
+	ShapeAssembler< float, uint32_t > assembler{placed};
+
+	ASSERT_TRUE(assembler.merge(cube, EmEn::Base::Math::CartesianFrame< float >{10.0F, 0.0F, 0.0F}));
+	ASSERT_EQ(placed.vertices().size(), cube.vertices().size());
+
+	for ( size_t index = 0; index < cube.vertices().size(); ++index )
+	{
+		EXPECT_NEAR(placed.vertices()[index].position()[0], cube.vertices()[index].position()[0] + 10.0F, 1.0e-5F);
+		EXPECT_NEAR(placed.vertices()[index].position()[1], cube.vertices()[index].position()[1], 1.0e-5F);
+		EXPECT_NEAR(placed.vertices()[index].position()[2], cube.vertices()[index].position()[2], 1.0e-5F);
+	}
+
+	/* Three sizes: the builder merges identical vertices, three equal cubes would share theirs. */
+	const std::vector< Shape< float, uint32_t > > shapes{
+		cube,
+		ShapeGenerator::generateCuboid< float, uint32_t >(2.0F, 2.0F, 2.0F),
+		ShapeGenerator::generateCuboid< float, uint32_t >(3.0F, 3.0F, 3.0F)
+	};
+	const auto merged = ShapeAssembler< float, uint32_t >::mergeList(shapes);
+
+	EXPECT_EQ(merged.vertices().size(), cube.vertices().size() * 3);
+	EXPECT_EQ(merged.triangles().size(), cube.triangles().size() * 3);
+	const auto none = ShapeAssembler< float, uint32_t >::mergeList({});
+
+	EXPECT_TRUE(none.empty());
 }

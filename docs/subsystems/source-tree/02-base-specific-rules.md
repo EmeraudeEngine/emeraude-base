@@ -162,6 +162,23 @@
 - **INIParser**: INI-style file parsing (sections, key-values)
 - **SourceCodeParser**: Source code parsing with annotations and formatting
 
+### The compile-time guard: every header, every class template (owner decision, 2026-10-19)
+
+A member of a class template is compiled only when something calls it, and a header is compiled only when a translation
+unit includes it. On 2026-10-19 an explicit instantiation of the 142 class templates found **19 members that had never
+compiled** (the LSCM UV unwrap, Vector's span constructor, `Processor::blit(source)`, `ShapeAssembler::mergeList()`,
+Color's HSV setters...) and **11 headers no translation unit included** — none visible to the compiler, clang-tidy, the
+tests or a cppcheck run (`docs/caution-points.md` § Templates).
+
+`src/Testing/test_TemplateInstantiation.cpp` (part of `EmeraudeBaseUnitTests`, so of every build of the tests on the
+three OS) includes EVERY header of the library and explicitly instantiates every class template with each argument the
+cascade uses (`template class X< ... >;` compiles every member). Rules:
+- a new header goes in its include list; a new class template gets its instantiation(s), one per supported argument;
+- a member valid only for some arguments (`crossProduct()` in 3D, an epsilon comparison for a floating point type)
+  takes a `requires` clause — never a removal from the list;
+- a template whose specialization lives in a `.cpp` (`FileFormatSNDFile< int16_t >`) is instantiated with another
+  argument, the generic path.
+
 ### Integrated External Dependencies
 - **libsndfile**: Audio format loading via `sf_open_virtual` (WaveFactory)
 - **libsamplerate**: Audio resampling (WaveFactory/Processor)

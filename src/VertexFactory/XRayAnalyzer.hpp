@@ -158,7 +158,7 @@ namespace EmEn::Base::VertexFactory
 					{
 						TransformedTriangle tt;
 
-						for ( int i = 0; i < 3; ++i )
+						for ( index_data_t i = 0; i < 3; ++i )
 						{
 							tt.v[i] = transformPoint(verts[tris[t].vertexIndex(i)].position(), entry.frame);
 						}
@@ -551,7 +551,7 @@ namespace EmEn::Base::VertexFactory
 				/* Add small padding. */
 				const auto pad = static_cast< vertex_data_t >(0.01);
 
-				for ( int i = 0; i < 3; ++i )
+				for ( size_t i = 0; i < 3; ++i )
 				{
 					m_boundsMin[i] -= pad;
 					m_boundsMax[i] += pad;

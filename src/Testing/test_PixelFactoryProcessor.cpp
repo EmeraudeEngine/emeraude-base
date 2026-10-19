@@ -1622,3 +1622,104 @@ TEST(PixelFactoryProcessor, aGrayAlphaPNGReadAsRGBAKeepsItsAlpha)
 	std::filesystem::remove(path, errorCode);
 }
 
+namespace
+{
+	/**
+	 * @brief Returns whether a pixel holds a color, at 8-bit precision.
+	 * @param pixmap A reference to the pixmap.
+	 * @param coordX The X coordinate.
+	 * @param coordY The Y coordinate.
+	 * @param color The expected color.
+	 * @return bool
+	 */
+	bool
+	pixelIs (const Pixmap< uint8_t > & pixmap, uint32_t coordX, uint32_t coordY, const Color< float > & color) noexcept
+	{
+		const auto pixel = pixmap.pixel(coordX, coordY);
+
+		return std::abs(pixel.red() - color.red()) < 0.01F && std::abs(pixel.green() - color.green()) < 0.01F && std::abs(pixel.blue() - color.blue()) < 0.01F;
+	}
+}
+
+/* 2026-10-19: blit(source) and copy(source, clip) called a Pixmap::area() that does not exist, copy(source, position)
+ * an overload that does not exist, and extend() returned the pixmap as its bool: none had ever compiled (no code
+ * instantiated them). */
+TEST(PixelFactoryProcessor, blitAndCopyAWholePixmap)
+{
+	Pixmap< uint8_t > source{2, 2, ChannelMode::RGB};
+	source.fill(Red);
+
+	Pixmap< uint8_t > target{4, 4, ChannelMode::RGB};
+	target.fill(Black);
+
+	const Processor< uint8_t > processor{target};
+
+	ASSERT_TRUE(processor.blit(source));
+	EXPECT_TRUE(pixelIs(target, 0, 0, Red));
+	EXPECT_TRUE(pixelIs(target, 1, 1, Red));
+	EXPECT_TRUE(pixelIs(target, 2, 2, Black));
+
+	ASSERT_TRUE(processor.copy(source, Math::Space2D::AARectangle< uint32_t >{2, 2, 2, 2}));
+	EXPECT_TRUE(pixelIs(target, 3, 3, Red));
+	EXPECT_TRUE(pixelIs(target, 2, 1, Black));
+
+	target.fill(Black);
+
+	/* One column left of the target: only the source's second column lands, at x = 0. */
+	ASSERT_TRUE(processor.copy(source, Math::Vector< 2, int32_t >{-1, 2}));
+	EXPECT_TRUE(pixelIs(target, 0, 2, Red));
+	EXPECT_TRUE(pixelIs(target, 0, 3, Red));
+	EXPECT_TRUE(pixelIs(target, 1, 2, Black));
+
+	/* INT32_MIN: no std::abs() overflow, refused (the source is not in the target). */
+	EXPECT_FALSE(processor.copy(source, Math::Vector< 2, int32_t >{std::numeric_limits< int32_t >::min(), 0}));
+}
+
+/* The borders are [left, top, right, bottom], row 0 at the top. */
+TEST(PixelFactoryProcessor, extendPlacesTheBorders)
+{
+	Pixmap< uint8_t > source{2, 2, ChannelMode::RGB};
+	source.fill(Red);
+
+	const auto black = Processor< uint8_t >::extend(source, std::array< uint32_t, 4 >{1, 2, 3, 4});
+
+	ASSERT_EQ(black.width(), 6U);
+	ASSERT_EQ(black.height(), 8U);
+	EXPECT_TRUE(pixelIs(black, 1, 2, Red));
+	EXPECT_TRUE(pixelIs(black, 2, 3, Red));
+	EXPECT_TRUE(pixelIs(black, 0, 2, Black));
+	EXPECT_TRUE(pixelIs(black, 3, 2, Black));
+	EXPECT_TRUE(pixelIs(black, 1, 1, Black));
+	EXPECT_TRUE(pixelIs(black, 1, 4, Black));
+
+	const auto colored = Processor< uint8_t >::extend(source, std::array< uint32_t, 4 >{1, 2, 3, 4}, Green);
+
+	ASSERT_EQ(colored.width(), 6U);
+	ASSERT_EQ(colored.height(), 8U);
+	EXPECT_TRUE(pixelIs(colored, 1, 2, Red));
+	EXPECT_TRUE(pixelIs(colored, 0, 2, Green));
+	EXPECT_TRUE(pixelIs(colored, 5, 3, Green));
+	EXPECT_TRUE(pixelIs(colored, 1, 0, Green));
+	EXPECT_TRUE(pixelIs(colored, 1, 7, Green));
+}
+
+/* resize(ratio) truncated source.width() * ratio into a size_t with no check: a NaN, a negative or a huge ratio was
+ * undefined behaviour. */
+TEST(PixelFactoryProcessor, resizeByRatioRefusesAnUnusableRatio)
+{
+	Pixmap< uint8_t > source{4, 6, ChannelMode::RGB};
+	source.fill(Red);
+
+	const auto half = Processor< uint8_t >::resize(source, 0.5F);
+
+	EXPECT_EQ(half.width(), 2U);
+	EXPECT_EQ(half.height(), 3U);
+
+	for ( const auto ratio : {0.0F, -1.0F, 0.1F, std::numeric_limits< float >::quiet_NaN(), std::numeric_limits< float >::infinity(), 3.0e9F} )
+	{
+		Pixmap< uint8_t > output;
+
+		EXPECT_FALSE(Processor< uint8_t >::resize(source, ratio, output)) << "ratio " << ratio;
+		EXPECT_FALSE(Processor< uint8_t >::resize(source, ratio).isValid()) << "ratio " << ratio;
+	}
+}

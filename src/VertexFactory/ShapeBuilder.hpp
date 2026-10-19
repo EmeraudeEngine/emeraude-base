@@ -482,38 +482,29 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Returns a list of distances between vertices.
+			 * @brief Returns the distance between every pair of vertices: n·(n−1)/2 values, in the order (0,1), (0,2) …
+			 * (0,n−1), (1,2) …
 			 * @param vertices A list of vertex.
-			 * @return std::vector< vertex_data_t >
+			 * @return std::vector< vertex_data_t > Empty for fewer than two vertices.
 			 */
 			[[nodiscard]]
 			static
 			std::vector< vertex_data_t >
-			getDistances (const std::vector< std::vector< ShapeVertex< vertex_data_t > > > & vertices) noexcept
+			getDistances (const std::vector< ShapeVertex< vertex_data_t > > & vertices) noexcept
 			{
-				if ( vertices.empty() )
+				const auto verticesCount = vertices.size();
+
+				if ( verticesCount < 2 )
 				{
 					return {};
 				}
 
-				const auto verticesCount = vertices.size();
-
-				/* Compute vector space. */
-				index_data_t space = 0;
-				auto count = verticesCount - 1;
-
-				for ( index_data_t index = 0; index < verticesCount; ++index )
-				{
-					space += count--;
-				}
-
-				/* Find every distance between every vertex. */
 				std::vector< vertex_data_t > distances;
-				distances.reserve(space);
+				distances.reserve((verticesCount * (verticesCount - 1)) / 2);
 
-				for ( index_data_t index = 0; index < verticesCount - 1; ++index )
+				for ( size_t index = 0; index < verticesCount - 1; ++index )
 				{
-					for ( index_data_t subIndex = index + 1; subIndex < verticesCount; ++subIndex )
+					for ( size_t subIndex = index + 1; subIndex < verticesCount; ++subIndex )
 					{
 						distances.emplace_back(Math::Vector< 3, vertex_data_t >::distance(vertices[index].position(), vertices[subIndex].position()));
 					}
@@ -525,19 +516,26 @@ namespace EmEn::Base::VertexFactory
 			/**
 			 * @brief Returns minimum, maximum and the average distances between vertices.
 			 * @param vertices A list of vertex.
-			 * @return std::array< vertex_data_t, 3 >
+			 * @return std::array< vertex_data_t, 3 > {minimum, maximum, average}, all zero for fewer than two vertices.
 			 */
 			[[nodiscard]]
 			static
 			std::array< vertex_data_t, 3 >
-			getDistancesAggregate (const std::vector< std::vector< ShapeVertex< vertex_data_t > > > & vertices) noexcept
+			getDistancesAggregate (const std::vector< ShapeVertex< vertex_data_t > > & vertices) noexcept
 			{
 				const auto distances = ShapeBuilder::getDistances(vertices);
 
+				if ( distances.empty() )
+				{
+					return {0, 0, 0};
+				}
+
+				const auto [minimum, maximum] = std::minmax_element(distances.cbegin(), distances.cend());
+
 				return {
-					*std::min_element(distances.cbegin(), distances.cend()),
-					*std::max_element(distances.cbegin(), distances.cend()),
-					std::accumulate(distances.cbegin(), distances.cend(), 0.0F) / distances.size()
+					*minimum,
+					*maximum,
+					std::accumulate(distances.cbegin(), distances.cend(), static_cast< vertex_data_t >(0)) / static_cast< vertex_data_t >(distances.size())
 				};
 			}
 

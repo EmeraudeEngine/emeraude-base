@@ -65,7 +65,7 @@ namespace EmEn::Base::Math
 			void
 			setTolerance (data_t tolerance) noexcept
 			{
-				m_tolerance = std::max(0, tolerance);
+				m_tolerance = std::max(static_cast< data_t >(0), tolerance);
 			}
 
 			/**

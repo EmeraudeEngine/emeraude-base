@@ -820,6 +820,38 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief Recalculates the bounding box from current height data.
+			 *
+			 * Iterates through all height values to determine the minimum and maximum Y extents,
+			 * then updates the bounding box accordingly. This is used when heights are modified
+			 * in ways that don't automatically update the bounding box.
+			 *
+			 * @note The height modifiers keep the box CONSERVATIVE (it only grows when a height is replaced): this makes it
+			 * tight again.
+			 */
+			void
+			updateBoundingBox () noexcept
+			{
+				auto minimum = static_cast< vertex_data_t >(0);
+				auto maximum = static_cast< vertex_data_t >(0);
+
+				if ( !m_pointHeights.empty() )
+				{
+					const auto [lowest, highest] = std::minmax_element(m_pointHeights.cbegin(), m_pointHeights.cend());
+
+					minimum = *lowest;
+					maximum = *highest;
+				}
+
+				/* NOTE: The same extents as every height modifier: the grid square around its world offset. */
+				m_boundingBox.set(
+					{m_worldOffset[0] + m_halfSquaredSize, maximum, m_worldOffset[1] + m_halfSquaredSize},
+					{m_worldOffset[0] - m_halfSquaredSize, minimum, m_worldOffset[1] - m_halfSquaredSize}
+				);
+				m_boundingSphere.setRadius(m_boundingBox.highestLength() * static_cast< vertex_data_t >(0.5));
+			}
+
+			/**
 			 * @brief Returns the axis-aligned bounding box enclosing the entire grid geometry.
 			 *
 			 * The bounding box is automatically updated by displacement methods like applyPerlinNoise()
@@ -1332,11 +1364,12 @@ namespace EmEn::Base::VertexFactory
 
 				for ( index_data_t yIndex = 0; yIndex < m_squaredPointCount; ++yIndex )
 				{
-					const auto zCoord = (yIndex * m_quadSquaredSize) - m_halfSquaredSize;
+					/* NOTE: The world offset of a sub-grid, as position() (it was left out: a sub-grid's vector sat at the origin). */
+					const auto zCoord = (static_cast< vertex_data_t >(yIndex) * m_quadSquaredSize) - m_halfSquaredSize + m_worldOffset[1];
 
 					for ( index_data_t xIndex = 0; xIndex < m_squaredPointCount; ++xIndex )
 					{
-						vector[writeIndex++] = (xIndex * m_quadSquaredSize) - m_halfSquaredSize;
+						vector[writeIndex++] = (static_cast< vertex_data_t >(xIndex) * m_quadSquaredSize) - m_halfSquaredSize + m_worldOffset[0];
 						vector[writeIndex++] = m_pointHeights[this->index(xIndex, yIndex)];
 						vector[writeIndex++] = zCoord;
 					}
@@ -2555,26 +2588,6 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				samples = std::move(levels.front().value);
-			}
-
-			/**
-			 * @brief Recalculates the bounding box from current height data.
-			 *
-			 * Iterates through all height values to determine the minimum and maximum Y extents,
-			 * then updates the bounding box accordingly. This is used when heights are modified
-			 * in ways that don't automatically update the bounding box.
-			 *
-			 * @note Currently unused in the public API; height modification methods handle bounding box updates directly
-			 */
-			void
-			updateBoundingBox () noexcept
-			{
-				m_boundingBox.reset();
-
-				for ( auto height : m_pointHeights )
-				{
-					m_boundingBox.merge({0.0F, height, 0.0F});
-				}
 			}
 
 			index_data_t m_squaredQuadCount{0}; ///< Number of quad cells per dimension (N divisions).

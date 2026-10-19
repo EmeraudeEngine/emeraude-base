@@ -1812,3 +1812,40 @@ wrong reason. Found on 2026-10-17 in four tests: three new ones (TIFF garbage, W
 `targaUnsupportedPixelDepthRejected`, which had never reached the pixel-depth guard it is named after. Pass a read
 source as `std::as_const(bytes)` — and check in the test's log that the refusal comes from the guard it targets.
 
+## Templates — a member nothing instantiates is never compiled; the instantiation guard (2026-10-19)
+
+Found by the first cppcheck sweep (P-W (2), `knownEmptyContainer` on two `const std::unordered_map`s that were written
+to): `ShapeProcessor::generateUVUnwrap()` had NEVER compiled. The engine's clang-tidy mass fix e96495d6f
+("const-qualify local variables") made two locals `const` inside a class template member no code called: GCC and clang
+check a dependent expression only at instantiation, so the library, the tests and clang-tidy all stayed green. An
+explicit instantiation of the 142 class templates then found 19 such members and 11 headers no translation unit
+included. All fixed and tested; `src/Testing/test_TemplateInstantiation.cpp` keeps it from happening again
+(`docs/subsystems/source-tree/02-base-specific-rules.md` § The compile-time guard).
+
+⚠️ **A clang-tidy fix-it on a template body is unverified until something instantiates it.** After a mass fix, build
+the guard TU — it compiles every member.
+
+What changed in behaviour (no code in the cascade called any of these before):
+- **Color**: the HSV setters (`setHue()`, `setSaturation()`, `setValue()`) go through a correct HSV→RGB conversion
+  (A. R. Smith, SIGGRAPH 1978). The former one rounded the sector (its fractional part was always 0), mixed the 0-100 and
+  0-1 scales and swapped a channel in sector 5. `operator+=` / `-=` (a scalar) work. `computeLuminance(ShadesScale, 0)`
+  returns the average instead of a division by zero. `Color< double >` compiles (float literals typed `data_t`).
+- **PixelFactory::Processor**: `extend()`'s borders are **[left, top, right, bottom]** (row 0 at the top) — what the code
+  always did; the documentation said [right, top, left, bottom] and the comments swapped Left / Right. `resize(ratio)`
+  refuses a ratio that is not finite and positive, or a dimension under one pixel or past `dimension_t` (it truncated
+  `width * ratio` into a `size_t`: undefined behaviour for a NaN or a negative ratio). `copy(source, position)` no
+  longer overflows `std::abs(INT32_MIN)`.
+- **Grid**: `updateBoundingBox()` is public — the height modifiers keep the box conservative, this makes it tight again
+  (it lost the X/Z extents before). `buildPositionVector()` adds the world offset, as `position()` does.
+- **ShapeBuilder**: `getDistances()` / `getDistancesAggregate()` take a `std::vector< ShapeVertex >` (they took a vector
+  of vectors); the aggregate of fewer than two vertices is {0, 0, 0} instead of dereferencing `end()`.
+- **ShapeAssembler**: `merge(shape, frame)` uses `getModelMatrix()`; `mergeList()` / `merge(a, b)` return an empty shape
+  when a merge fails. ⚠️ The builder merges identical vertices: three equal shapes merged share their vertices.
+- **Vector**: `refract()` takes a `precision_t` eta (GLSL `refract()`, the zero vector on a total internal reflection);
+  `normal(a, b)`, `distanceToPlane()` take `requires (dim 3 or 4)`, `normal(a, b, c)` `requires (dim 3)`;
+  `equal()` / `different()` with an epsilon are floating point only (an integral vector uses `==`).
+- **CartesianFrame**: the sprite model matrices take a `Vector< 3, precision_t >` camera position (a float one did not
+  compile for `CartesianFrame< double >`). **Matrix::trace()** sums in `precision_t` (it truncated into an `int`).
+- **Time/Elapsed**: `ScopeCPUTime`, `PrintScopeCPUTime`, `ScopeRealTime`, `RealTime` count a clock that went back as zero
+  instead of wrapping a negative duration into a `uint64_t`; one formula for any `CLOCKS_PER_SEC` dividing 10⁹.
+

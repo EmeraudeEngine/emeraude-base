@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <optional>
 #include <type_traits>
 #include <vector>
 
@@ -667,7 +668,7 @@ namespace EmEn::Base::PixelFactory
 			bool
 			blit (const Pixmap< pixel_data_t, dimension_t > & source) const noexcept
 			{
-				const auto sourceArea = source.area();
+				const auto sourceArea = source.template rectangle< dimension_t >();
 
 				return this->blit(source, sourceArea, sourceArea);
 			}
@@ -830,7 +831,7 @@ namespace EmEn::Base::PixelFactory
 			bool
 			copy (const Pixmap< pixel_data_t, dimension_t > & source, const Math::Space2D::AARectangle< dimension_t > & destinationClip, DrawPixelMode mode = DrawPixelMode::Replace, float opacity = 1.0F) const noexcept
 			{
-				return this->copy(source, source.area(), destinationClip, mode, opacity);
+				return this->copy(source, source.template rectangle< dimension_t >(), destinationClip, mode, opacity);
 			}
 
 			/**
@@ -855,9 +856,10 @@ namespace EmEn::Base::PixelFactory
 
 				if ( xPosition < 0 )
 				{
-					const auto shiftSize = static_cast< dimension_t >(std::abs(xPosition));
+					/* NOTE: 64-bit negation: std::abs() of INT32_MIN overflows an int32_t. */
+					const auto shift = -static_cast< int64_t >(xPosition);
 
-					if ( shiftSize >= source.width() )
+					if ( shift >= static_cast< int64_t >(source.width()) )
 					{
 						if constexpr ( IsDebug )
 						{
@@ -867,6 +869,7 @@ namespace EmEn::Base::PixelFactory
 						return false;
 					}
 
+					const auto shiftSize = static_cast< dimension_t >(shift);
 					const auto newWidth = source.width() - shiftSize;
 
 					sourceClip.setLeft(shiftSize);
@@ -884,9 +887,10 @@ namespace EmEn::Base::PixelFactory
 
 				if ( yPosition < 0 )
 				{
-					const auto shiftSize = static_cast< dimension_t >(std::abs(yPosition));
+					/* NOTE: 64-bit negation: std::abs() of INT32_MIN overflows an int32_t. */
+					const auto shift = -static_cast< int64_t >(yPosition);
 
-					if ( shiftSize >= source.height() )
+					if ( shift >= static_cast< int64_t >(source.height()) )
 					{
 						if constexpr ( IsDebug )
 						{
@@ -896,6 +900,7 @@ namespace EmEn::Base::PixelFactory
 						return false;
 					}
 
+					const auto shiftSize = static_cast< dimension_t >(shift);
 					const auto newHeight = source.height() - shiftSize;
 
 					sourceClip.setTop(shiftSize);
@@ -927,7 +932,7 @@ namespace EmEn::Base::PixelFactory
 			bool
 			copy (const Pixmap< pixel_data_t, dimension_t > & source, const Math::Vector< 2, int32_t > & position, DrawPixelMode mode = DrawPixelMode::Replace, float opacity = 1.0F) const noexcept
 			{
-				return this->copy(source, source.area(), position.x(), position.y(), mode, opacity);
+				return this->copy(source, position.x(), position.y(), mode, opacity);
 			}
 
 			/**
@@ -1274,7 +1279,7 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Resizes a pixmap using a ratio.
 			 * @param source A reference to a pixmap.
-			 * @param ratio The scale ratio.
+			 * @param ratio The scale ratio, finite and positive (refused otherwise, or when a dimension falls under one pixel).
 			 * @param destination A reference to a writable pixmap.
 			 * @param filteringMode The filtering mode to apply during the resize. Default linear.
 			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
@@ -1285,14 +1290,15 @@ namespace EmEn::Base::PixelFactory
 			bool
 			resize (const Pixmap< pixel_data_t, dimension_t > & source, float ratio, Pixmap< pixel_data_t, dimension_t > & destination, FilteringMode filteringMode = FilteringMode::Linear, ThreadPool * pool = nullptr) noexcept
 			{
-				return Processor::resize(
-					source,
-					static_cast< size_t >(source.width() * ratio),
-					static_cast< size_t >(source.height() * ratio),
-					destination,
-					filteringMode,
-					pool
-				);
+				const auto width = Processor::scaledDimension(source.width(), ratio);
+				const auto height = Processor::scaledDimension(source.height(), ratio);
+
+				if ( !width.has_value() || !height.has_value() )
+				{
+					return false;
+				}
+
+				return Processor::resize(source, *width, *height, destination, filteringMode, pool);
 			}
 
 			/**
@@ -1327,7 +1333,7 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Returns a resized pixmap using a ratio.
 			 * @param source A reference to a pixmap.
-			 * @param ratio The scale ratio.
+			 * @param ratio The scale ratio, finite and positive (an empty pixmap otherwise, or when a dimension falls under one pixel).
 			 * @param filteringMode The filtering mode to apply during the resize. Default linear.
 			 * @param pool An optional thread pool to spread the work across. Default nullptr (serial).
 			 * @return Pixmap< pixel_data_t, dimension_t >
@@ -1337,13 +1343,14 @@ namespace EmEn::Base::PixelFactory
 			Pixmap< pixel_data_t, dimension_t >
 			resize (const Pixmap< pixel_data_t, dimension_t > & source, float ratio, FilteringMode filteringMode = FilteringMode::Linear, ThreadPool * pool = nullptr) noexcept
 			{
-				return Processor::resize(
-					source,
-					static_cast< size_t >(source.width() * ratio),
-					static_cast< size_t >(source.height() * ratio),
-					filteringMode,
-					pool
-				);
+				Pixmap< pixel_data_t, dimension_t > output;
+
+				if ( !Processor::resize(source, ratio, output, filteringMode, pool) )
+				{
+					return {};
+				}
+
+				return output;
 			}
 
 			/**
@@ -1411,7 +1418,7 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Extends a pixmap with black borders.
 			 * @param source A reference to a pixmap.
 			 * @param destination A writable reference to a pixmap.
-			 * @param borders A reference to an array of dimensions for borders [right, top, left, bottom].
+			 * @param borders A reference to an array of dimensions for borders [left, top, right, bottom] (row 0 is the top of the image).
 			 * @return bool
 			 */
 			[[nodiscard]]
@@ -1434,7 +1441,7 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				return destination;
+				return true;
 			}
 
 			/**
@@ -1442,7 +1449,7 @@ namespace EmEn::Base::PixelFactory
 			 * @tparam color_data_t The color data type. Default float.
 			 * @param source A reference to a pixmap.
 			 * @param destination A writable reference to a pixmap.
-			 * @param borders A reference to an array of dimensions for borders [right, top, left, bottom].
+			 * @param borders A reference to an array of dimensions for borders [left, top, right, bottom] (row 0 is the top of the image).
 			 * @param color A reference to a color.
 			 * @return bool
 			 */
@@ -1485,7 +1492,7 @@ namespace EmEn::Base::PixelFactory
 					}
 				}
 
-				/* Right */
+				/* Left */
 				if ( borders[0] > 0 )
 				{
 					if ( !processor.copy(color, {0, borders[1], borders[0], source.height()}) )
@@ -1494,7 +1501,7 @@ namespace EmEn::Base::PixelFactory
 					}
 				}
 
-				/* Left */
+				/* Right */
 				if ( borders[2] > 0 )
 				{
 					if ( !processor.copy(color, {destination.width() - borders[2], borders[1], borders[2], source.height()}) )
@@ -1509,7 +1516,7 @@ namespace EmEn::Base::PixelFactory
 			/**
 			 * @brief Returns an extended pixmap with black borders.
 			 * @param source A reference to a pixmap.
-			 * @param borders A reference to an array of dimensions for borders [right, top, left, bottom].
+			 * @param borders A reference to an array of dimensions for borders [left, top, right, bottom] (row 0 is the top of the image).
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
 			[[nodiscard]]
@@ -1531,7 +1538,7 @@ namespace EmEn::Base::PixelFactory
 			 * @brief Returns an extended pixmap with selectable color borders.
 			 * @tparam color_data_t The color data type. Default float.
 			 * @param source A reference to a pixmap.
-			 * @param borders A reference to an array of dimensions for borders [right, top, left, bottom].
+			 * @param borders A reference to an array of dimensions for borders [left, top, right, bottom] (row 0 is the top of the image).
 			 * @param color A reference to a color.
 			 * @return Pixmap< pixel_data_t, dimension_t >
 			 */
@@ -2435,6 +2442,33 @@ namespace EmEn::Base::PixelFactory
 			}
 
 		private:
+
+			/**
+			 * @brief Scales a pixmap dimension by a resize ratio (truncated, as a pixel count).
+			 * @param dimension The dimension to scale.
+			 * @param ratio The scale ratio.
+			 * @return std::optional< dimension_t > Nothing for a ratio that is not finite or not positive, or a result
+			 * under one pixel or past dimension_t.
+			 */
+			[[nodiscard]]
+			static
+			std::optional< dimension_t >
+			scaledDimension (dimension_t dimension, float ratio) noexcept
+			{
+				if ( !std::isfinite(ratio) || ratio <= 0.0F )
+				{
+					return std::nullopt;
+				}
+
+				const auto scaled = std::floor(static_cast< double >(dimension) * static_cast< double >(ratio));
+
+				if ( scaled < 1.0 || scaled > static_cast< double >(std::numeric_limits< dimension_t >::max()) )
+				{
+					return std::nullopt;
+				}
+
+				return static_cast< dimension_t >(scaled);
+			}
 
 			/**
 			 * @brief Checks the clipping area within a pixmap.

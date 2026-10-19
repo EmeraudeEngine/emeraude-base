@@ -162,3 +162,71 @@ TEST(PixelFactoryColor, UnitLuminanceChromaticity)
 	ASSERT_EQ(black[Math::Z], 0.0F);
 }
 
+/* 2026-10-19: operator+=/-= compared 'this' with the address of a scalar (they had never compiled) and the HSV setters
+ * went through a conversion that rounded the sector, so its fractional part was always 0, mixed the 0-100 and 0-1
+ * scales and swapped a channel in the last sector — no code had ever called them. */
+TEST(PixelFactoryColor, addAndSubtractAScalarInPlace)
+{
+	Color< float > color{0.25F, 0.5F, 0.75F, 0.5F};
+
+	color += 0.5F;
+
+	EXPECT_FLOAT_EQ(color.red(), 0.75F);
+	EXPECT_FLOAT_EQ(color.green(), 1.0F);
+	EXPECT_FLOAT_EQ(color.blue(), 1.0F);
+	EXPECT_FLOAT_EQ(color.alpha(), 0.5F);
+
+	color -= 0.75F;
+
+	EXPECT_FLOAT_EQ(color.red(), 0.0F);
+	EXPECT_FLOAT_EQ(color.green(), 0.25F);
+	EXPECT_FLOAT_EQ(color.blue(), 0.25F);
+	EXPECT_FLOAT_EQ(color.alpha(), 0.5F);
+}
+
+TEST(PixelFactoryColor, hsvSettersFollowTheHexcone)
+{
+	const auto expectRGB = [] (const Color< double > & color, double red, double green, double blue) {
+		EXPECT_NEAR(color.red(), red, 1.0e-12);
+		EXPECT_NEAR(color.green(), green, 1.0e-12);
+		EXPECT_NEAR(color.blue(), blue, 1.0e-12);
+	};
+
+	Color< double > color{1.0, 0.0, 0.0, 1.0};
+
+	color.setHue(120.0);
+	expectRGB(color, 0.0, 1.0, 0.0);
+
+	color.setHue(240U);
+	expectRGB(color, 0.0, 0.0, 1.0);
+
+	/* Sector 5, halfway: (v, p, q). */
+	color.setHue(330.0);
+	expectRGB(color, 1.0, 0.0, 0.5);
+
+	/* Any angle, taken modulo 360. */
+	color.setHue(-240.0);
+	expectRGB(color, 0.0, 1.0, 0.0);
+
+	color.setHue(0.0);
+	color.setSaturation(50.0);
+	expectRGB(color, 1.0, 0.5, 0.5);
+
+	color.setValue(50U);
+	expectRGB(color, 0.5, 0.25, 0.25);
+
+	EXPECT_NEAR(color.hue(), 0.0, 1.0e-9);
+	EXPECT_NEAR(color.saturation(), 50.0, 1.0e-9);
+	EXPECT_NEAR(color.value(), 50.0, 1.0e-9);
+
+	/* Clamped to 0-100. */
+	color.setSaturation(250.0);
+	expectRGB(color, 0.5, 0.0, 0.0);
+}
+
+/* ShadesScale divided by its option: 0 (the default) gave NaN. */
+TEST(PixelFactoryColor, shadesScaleWithoutAStepIsTheAverage)
+{
+	EXPECT_FLOAT_EQ(Color< float >::computeLuminance(0.3F, 0.6F, 0.9F, GrayscaleConversionMode::ShadesScale, 0), 0.6F);
+	EXPECT_FLOAT_EQ(Color< float >::computeLuminance(0.3F, 0.6F, 0.9F, GrayscaleConversionMode::ShadesScale, -2), 0.6F);
+}

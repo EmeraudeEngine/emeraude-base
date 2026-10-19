@@ -27,7 +27,9 @@
 #pragma once
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <iomanip>
 #include <limits>
@@ -300,9 +302,9 @@ namespace EmEn::Base::PixelFactory
 			operator/ (const Color & operand) const noexcept
 			{
 				return {
-					operand.m_components[R] <= 0.0F ? 0.0F : m_components[R] / operand.m_components[R],
-					operand.m_components[G] <= 0.0F ? 0.0F : m_components[G] / operand.m_components[G],
-					operand.m_components[B] <= 0.0F ? 0.0F : m_components[B] / operand.m_components[B],
+					operand.m_components[R] <= static_cast< data_t >(0) ? static_cast< data_t >(0) : m_components[R] / operand.m_components[R],
+					operand.m_components[G] <= static_cast< data_t >(0) ? static_cast< data_t >(0) : m_components[G] / operand.m_components[G],
+					operand.m_components[B] <= static_cast< data_t >(0) ? static_cast< data_t >(0) : m_components[B] / operand.m_components[B],
 					m_components[A]
 				};
 			}
@@ -318,9 +320,9 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( this != &operand )
 				{
-					m_components[R] = operand.m_components[R] <= 0.0F ? 0.0F : m_components[R] / operand.m_components[R];
-					m_components[G] = operand.m_components[G] <= 0.0F ? 0.0F : m_components[G] / operand.m_components[G];
-					m_components[B] = operand.m_components[B] <= 0.0F ? 0.0F : m_components[B] / operand.m_components[B];
+					m_components[R] = operand.m_components[R] <= static_cast< data_t >(0) ? static_cast< data_t >(0) : m_components[R] / operand.m_components[R];
+					m_components[G] = operand.m_components[G] <= static_cast< data_t >(0) ? static_cast< data_t >(0) : m_components[G] / operand.m_components[G];
+					m_components[B] = operand.m_components[B] <= static_cast< data_t >(0) ? static_cast< data_t >(0) : m_components[B] / operand.m_components[B];
 				}
 
 				return *this;
@@ -353,12 +355,9 @@ namespace EmEn::Base::PixelFactory
 			Color &
 			operator+= (data_t operand) noexcept
 			{
-				if ( this != &operand )
-				{
-					m_components[R] = Math::clampToUnit(m_components[R] + operand);
-					m_components[G] = Math::clampToUnit(m_components[G] + operand);
-					m_components[B] = Math::clampToUnit(m_components[B] + operand);
-				}
+				m_components[R] = Math::clampToUnit(m_components[R] + operand);
+				m_components[G] = Math::clampToUnit(m_components[G] + operand);
+				m_components[B] = Math::clampToUnit(m_components[B] + operand);
 
 				return *this;
 			}
@@ -390,12 +389,9 @@ namespace EmEn::Base::PixelFactory
 			Color &
 			operator-= (data_t operand) noexcept
 			{
-				if ( this != &operand )
-				{
-					m_components[R] = Math::clampToUnit(m_components[R] - operand);
-					m_components[G] = Math::clampToUnit(m_components[G] - operand);
-					m_components[B] = Math::clampToUnit(m_components[B] - operand);
-				}
+				m_components[R] = Math::clampToUnit(m_components[R] - operand);
+				m_components[G] = Math::clampToUnit(m_components[G] - operand);
+				m_components[B] = Math::clampToUnit(m_components[B] - operand);
 
 				return *this;
 			}
@@ -698,7 +694,7 @@ namespace EmEn::Base::PixelFactory
 			void
 			setHue (data_t degree) noexcept
 			{
-				this->updateFromHSV(std::fmod(degree, 360.0F), this->saturation(), this->value());
+				this->updateFromHSV(degree, this->saturation(), this->value());
 			}
 
 			/**
@@ -708,7 +704,7 @@ namespace EmEn::Base::PixelFactory
 			void
 			setHue (unsigned int degree) noexcept
 			{
-				this->updateFromHSV(degree % 360U, this->saturation(), this->value());
+				this->updateFromHSV(static_cast< data_t >(degree % 360U), this->saturation(), this->value());
 			}
 
 			/**
@@ -718,7 +714,7 @@ namespace EmEn::Base::PixelFactory
 			void
 			setSaturation (data_t saturation) noexcept
 			{
-				this->updateFromHSV(this->hue(), Math::clamp(saturation, 0.0F, 100.0F), this->value());
+				this->updateFromHSV(this->hue(), std::clamp(saturation, static_cast< data_t >(0), static_cast< data_t >(100)), this->value());
 			}
 
 			/**
@@ -730,7 +726,7 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( saturation > 100 )
 				{
-					this->updateFromHSV(this->hue(), 100.0F, this->value());
+					this->updateFromHSV(this->hue(), static_cast< data_t >(100), this->value());
 				}
 				else
 				{
@@ -745,7 +741,7 @@ namespace EmEn::Base::PixelFactory
 			void
 			setValue (data_t value) noexcept
 			{
-				this->updateFromHSV(this->hue(), this->saturation(), Math::clamp(value, 0.0F, 100.0F));
+				this->updateFromHSV(this->hue(), this->saturation(), std::clamp(value, static_cast< data_t >(0), static_cast< data_t >(100)));
 			}
 
 			/**
@@ -757,7 +753,7 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( value > 100 )
 				{
-					this->updateFromHSV(this->hue(), this->saturation(), 100.0F);
+					this->updateFromHSV(this->hue(), this->saturation(), static_cast< data_t >(100));
 				}
 				else
 				{
@@ -952,7 +948,7 @@ namespace EmEn::Base::PixelFactory
 			data_t
 			gray () const noexcept
 			{
-				return (m_components[R] + m_components[G] + m_components[B]) / 3.0F;
+				return (m_components[R] + m_components[G] + m_components[B]) / static_cast< data_t >(3);
 			}
 
 			/**
@@ -1036,13 +1032,13 @@ namespace EmEn::Base::PixelFactory
 				/* Compute the hue component */
 				if ( Utility::equal(max, min) )
 				{
-					return 240.0F;
+					return static_cast< data_t >(240);
 				}
 
 				/* Intensity difference. */
 				const auto delta = max - min;
 
-				auto hue = 0.0F;
+				auto hue = static_cast< data_t >(0);
 
 				/* Between yellow & magenta */
 				if ( Utility::equal(max, m_components[R]) )
@@ -1052,24 +1048,24 @@ namespace EmEn::Base::PixelFactory
 				/* Between cyan & yellow */
 				else if ( Utility::equal(max, m_components[G]) )
 				{
-					hue = 2.0F + (m_components[B] - m_components[R]) / delta;
+					hue = static_cast< data_t >(2) + ((m_components[B] - m_components[R]) / delta);
 				}
 				/* Between magenta & cyan */
 				else if ( Utility::equal(max, m_components[B]) )
 				{
-					hue = 4.0F + (m_components[R] - m_components[G]) / delta;
+					hue = static_cast< data_t >(4) + ((m_components[R] - m_components[G]) / delta);
 				}
 
-				hue *= 60.0F;
+				hue *= static_cast< data_t >(60);
 
 				/* Clamp to 0-360 */
-				if ( hue < 0.0F )
+				if ( hue < static_cast< data_t >(0) )
 				{
-					hue += 360.0F;
+					hue += static_cast< data_t >(360);
 				}
-				else if ( hue > 360.0F )
+				else if ( hue > static_cast< data_t >(360) )
 				{
-					hue -= 360.0F;
+					hue -= static_cast< data_t >(360);
 				}
 
 				return hue;
@@ -1093,7 +1089,7 @@ namespace EmEn::Base::PixelFactory
 				const auto delta = max - min;
 
 				/* Compute the saturation component. */
-				return Utility::isZero(max) ? 0.0F : (delta / max) * 100.0F;
+				return Utility::isZero(max) ? static_cast< data_t >(0) : (delta / max) * static_cast< data_t >(100);
 			}
 
 			/**
@@ -1105,7 +1101,7 @@ namespace EmEn::Base::PixelFactory
 			value () const noexcept
 			{
 				/* Compute the value component. */
-				return std::max(m_components[R], std::max(m_components[G], m_components[B])) * 100.0F;
+				return std::max(m_components[R], std::max(m_components[G], m_components[B])) * static_cast< data_t >(100);
 			}
 
 			/**
@@ -1125,19 +1121,19 @@ namespace EmEn::Base::PixelFactory
 				switch ( mode )
 				{
 					case GrayscaleConversionMode::Average :
-						return (red + blue + green) / 3.0F;
+						return (red + blue + green) / static_cast< data_t >(3);
 
 					case GrayscaleConversionMode::LumaRec601_1 :
-						return (red * LuminanceRec6011Red) + (green * LuminanceRec6011Green) + (blue * LuminanceRec6011Blue);
+						return (red * static_cast< data_t >(LuminanceRec6011Red)) + (green * static_cast< data_t >(LuminanceRec6011Green)) + (blue * static_cast< data_t >(LuminanceRec6011Blue));
 
 					case GrayscaleConversionMode::LumaRec709 :
-						return (red * LuminanceRec709Red) + (green * LuminanceRec709Green) + (blue * LuminanceRec709Blue);
+						return (red * static_cast< data_t >(LuminanceRec709Red)) + (green * static_cast< data_t >(LuminanceRec709Green)) + (blue * static_cast< data_t >(LuminanceRec709Blue));
 
 					case GrayscaleConversionMode::LumaITU :
-						return (red * LuminanceITURed) + (green * LuminanceITUGreen) + (blue * LuminanceITUBlue);
+						return (red * static_cast< data_t >(LuminanceITURed)) + (green * static_cast< data_t >(LuminanceITUGreen)) + (blue * static_cast< data_t >(LuminanceITUBlue));
 
 					case GrayscaleConversionMode::Desaturation :
-						return (std::max({red, green, blue}) + std::min({red, green, blue})) * 0.5F;
+						return (std::max({red, green, blue}) + std::min({red, green, blue})) * static_cast< data_t >(0.5);
 
 					case GrayscaleConversionMode::Decomposition :
 						if ( option > 0 )
@@ -1162,14 +1158,21 @@ namespace EmEn::Base::PixelFactory
 
 					case GrayscaleConversionMode::ShadesScale :
 					{
-						const auto average = (red + blue + green) / 3.0F;
+						const auto average = (red + blue + green) / static_cast< data_t >(3);
+
+						/* NOTE: No shade step (option 0 or less): the plain average, not a division by zero. */
+						if ( option <= 0 )
+						{
+							return average;
+						}
+
 						const auto range = static_cast< data_t >(option);
 
 						return std::round(average / range) * range;
 					}
 				}
 
-				return 0.0F;
+				return static_cast< data_t >(0);
 			}
 
 			/**
@@ -1583,67 +1586,71 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Updates RGB components from HSV components modifications.
-			 * @param hue The hue value from 0 to 360.
+			 * @brief Updates RGB components from HSV components modifications (A. R. Smith, "Color Gamut Transform
+			 * Pairs", SIGGRAPH 1978). The alpha channel is kept.
+			 * @note ⚠️ Before 2026-10-19 this conversion rounded the sector, so its fractional part was always 0, mixed
+			 * the 0-100 and 0-1 scales and swapped a channel in the last sector: no instance ever called it (base
+			 * test_TemplateInstantiation.cpp now compiles every member).
+			 * @param hue The hue value in degrees, any value (taken modulo 360).
 			 * @param saturation The saturation value from 0 to 100.
 			 * @param value The intensity value from 0 to 100.
 			 */
 			void
 			updateFromHSV (data_t hue, data_t saturation, data_t value) noexcept
 			{
-				constexpr auto Min = static_cast< data_t >(0.01);
-				constexpr auto Max = static_cast< data_t >(100);
+				constexpr auto Zero = static_cast< data_t >(0);
+				constexpr auto One = static_cast< data_t >(1);
+				constexpr auto Percent = static_cast< data_t >(100);
+				constexpr auto FullTurn = static_cast< data_t >(360);
+				constexpr auto SectorAngle = static_cast< data_t >(60);
 
-				/* If there is no saturation, so there is no color, and we only use value. */
-				if ( Utility::isZero(saturation) )
+				const auto s = std::clamp(saturation, Zero, Percent) / Percent;
+				const auto v = std::clamp(value, Zero, Percent) / Percent;
+
+				auto h = std::fmod(hue, FullTurn);
+
+				if ( h < Zero )
 				{
-					const auto luminance = value * Min;
-
-					m_components[R] = luminance;
-					m_components[G] = luminance;
-					m_components[B] = luminance;
+					h += FullTurn;
 				}
-				else
+
+				const auto scaled = h / SectorAngle;
+				const auto sectorStart = std::floor(scaled);
+				const auto fraction = scaled - sectorStart;
+
+				/* NOTE: h < 360, so the sector is 0 to 5; the modulo guards a rounding up to 360 exactly. */
+				const auto sector = static_cast< unsigned int >(sectorStart) % 6U;
+
+				const auto p = v * (One - s);
+				const auto q = v * (One - (s * fraction));
+				const auto t = v * (One - (s * (One - fraction)));
+
+				switch ( sector )
 				{
-					const auto tmp = std::round(hue / static_cast< data_t >(60));
+					case 0 :
+						this->setRGB(v, t, p);
+						break;
 
-					/* Sector 0 to 5 */
-					const auto sector = static_cast< unsigned int >(tmp) % 6;
+					case 1 :
+						this->setRGB(q, v, p);
+						break;
 
-					/* Factorial part of hue */
-					const auto factorial = tmp - sector;
+					case 2 :
+						this->setRGB(p, v, t);
+						break;
 
-					const auto magicA = value * (Max - saturation);
-					const auto magicB = value * (Max - factorial * saturation);
-					const auto magicC = value * (Max - (Max - factorial) * saturation);
+					case 3 :
+						this->setRGB(p, q, v);
+						break;
 
-					switch ( sector )
-					{
-						case 0 :
-							this->setRGB(value * Min, magicC * Min, magicA * Min);
-							break;
+					case 4 :
+						this->setRGB(t, p, v);
+						break;
 
-						case 1 :
-							this->setRGB(magicB * Min, value * Min, magicA * Min);
-							break;
-
-						case 2 :
-							this->setRGB(magicA * Min, value * Min, magicC * Min);
-							break;
-
-						case 3 :
-							this->setRGB(magicA * Min, magicB * Min, value * Min);
-							break;
-
-						case 4 :
-							this->setRGB(magicC * Min, magicA * Min, value * Min);
-							break;
-
-						case 5 :
-						default :
-							this->setRGB(value * Min, magicA * Min, magicC * Min);
-							break;
-					}
+					case 5 :
+					default :
+						this->setRGB(v, p, q);
+						break;
 				}
 			}
 

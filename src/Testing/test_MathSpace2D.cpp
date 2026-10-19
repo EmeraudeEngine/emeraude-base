@@ -45,6 +45,7 @@
 #include "Math/Space2D/Intersections/SegmentRectangle.hpp"
 #include "Math/Space2D/Intersections/SegmentSegment.hpp"
 #include "Math/Space2D/Intersections/SegmentTriangle.hpp"
+#include "Math/Space2D/Triangle.hpp"
 #include "Math/Space2D/Line.hpp"
 #include "Math/Space2D/Point.hpp"
 #include "Math/Space2D/Segment.hpp"
@@ -2396,4 +2397,14 @@ TEST(MathSpace2DIntersections, shortCrossingSegmentsIntersect)
 
 		EXPECT_FALSE(isIntersecting(first, parallel)) << "scale " << scale;
 	}
+}
+
+/* 2026-10-19: setPointC() was declared const and assigned a member: it had never compiled (no code instantiated it). */
+TEST(MathSpace2DTriangle, setPointC)
+{
+	Triangle< float > triangle{{0.0F, 0.0F}, {1.0F, 0.0F}, {0.0F, 1.0F}};
+
+	triangle.setPointC({2.0F, 3.0F});
+
+	EXPECT_EQ(triangle.pointC(), (Point< float >{2.0F, 3.0F}));
 }

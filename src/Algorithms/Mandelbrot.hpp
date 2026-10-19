@@ -38,6 +38,7 @@ namespace EmEn::Base::Algorithms
 	/**
 	 * @brief The Mandelbrot algorithm class.
 	 * @tparam number_t The type of number. Default float.
+	 * @tparam precision_t The pixel component type of the generated pixmap. Default uint8_t.
 	 */
 	template< typename number_t = float, typename precision_t = uint8_t >
 	requires (std::is_floating_point_v< number_t > && std::is_arithmetic_v< precision_t >)
@@ -51,9 +52,9 @@ namespace EmEn::Base::Algorithms
 			 * @brief Constructs the mandelbrot algorithm.
 			 * @param width The width of the pixmap.
 			 * @param height The height of the pixmap.
-			 * @param channels The number of color. Default RBG.
+			 * @param channels The channel mode. Default RGB.
 			 */
-			Mandelbrot (size_t width, size_t height, PixelFactory::ChannelMode channels = PixelFactory::ChannelMode::RGB) noexcept
+			Mandelbrot (uint32_t width, uint32_t height, PixelFactory::ChannelMode channels = PixelFactory::ChannelMode::RGB) noexcept
 				: m_pixmap(width, height, channels)
 			{
 
@@ -71,8 +72,8 @@ namespace EmEn::Base::Algorithms
 			}
 
 			/**
-			 * @brief
-			 * @param function
+			 * @brief Sets the function that colors a pixel from its escape iteration count.
+			 * @param function The function (pixmap, x, y, iterations, maximum iterations).
 			 */
 			void
 			setColorizationMethod (const colorize_fn & function)
@@ -82,20 +83,20 @@ namespace EmEn::Base::Algorithms
 
 			/**
 			 * @brief Executes the generation.
-			 * @param minReal
-			 * @param maxReal
-			 * @param minImaginary
-			 * @param maxImaginary
-			 * @param maxIterations
+			 * @param minReal The real part at the left edge. Default -1.5.
+			 * @param maxReal The real part at the right edge. Default 0.7.
+			 * @param minImaginary The imaginary part at the top edge. Default -1.0.
+			 * @param maxImaginary The imaginary part at the bottom edge. Default 1.0.
+			 * @param maxIterations The iteration count after which a point is considered inside the set. Default 1000.
 			 */
 			void
-			execute (number_t minReal = -1.5, number_t maxReal = 0.7, number_t minImaginary = -1.0, number_t maxImaginary = 1.0, uint32_t maxIterations = 1000)
+			execute (number_t minReal = -1.5, number_t maxReal = 0.7, number_t minImaginary = -1.0, number_t maxImaginary = 1.0, int32_t maxIterations = 1000)
 			{
-				for ( size_t y = 0; y < m_pixmap.height(); y++ )
+				for ( uint32_t y = 0; y < m_pixmap.height(); y++ )
 				{
 					const auto ci = Mandelbrot::map(y, m_pixmap.height(), minImaginary, maxImaginary);
 
-					for ( size_t x = 0; x < m_pixmap.width(); x++ )
+					for ( uint32_t x = 0; x < m_pixmap.width(); x++ )
 					{
 						const auto cr = Mandelbrot::map(x, m_pixmap.width(), minReal, maxReal);
 
@@ -107,11 +108,11 @@ namespace EmEn::Base::Algorithms
 		private:
 
 			/**
-			 * @brief
-			 * @param cr
-			 * @param ci
-			 * @param maxIterations
-			 * @return int32_t
+			 * @brief Iterates z = z² + c from zero until |z| > 2 or the iteration limit.
+			 * @param cr The real part of c.
+			 * @param ci The imaginary part of c.
+			 * @param maxIterations The iteration limit.
+			 * @return int32_t The iteration count (maxIterations for a point inside the set).
 			 */
 			static
 			int32_t
@@ -137,11 +138,11 @@ namespace EmEn::Base::Algorithms
 			}
 
 			/**
-			 * @brief
-			 * @param offset
-			 * @param dimension
-			 * @param min
-			 * @param max
+			 * @brief Maps a pixel coordinate onto the complex plane range.
+			 * @param offset The pixel coordinate.
+			 * @param dimension The pixmap dimension on that axis.
+			 * @param min The value at coordinate 0.
+			 * @param max The value at coordinate dimension.
 			 * @return number_t
 			 */
 			static

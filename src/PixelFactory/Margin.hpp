@@ -59,7 +59,7 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Constructs a margin.
-			 * @param margin
+			 * @param margin The margin on the four sides.
 			 */
 			explicit Margin (data_t margin) noexcept
 				: m_data{{margin, margin, margin, margin}}
@@ -69,8 +69,8 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Constructs a margin.
-			 * @param verticalMargin
-			 * @param horizontalMargin
+			 * @param verticalMargin The top and bottom margins.
+			 * @param horizontalMargin The right and left margins.
 			 */
 			Margin (data_t verticalMargin, data_t horizontalMargin) noexcept
 				: m_data{{verticalMargin, horizontalMargin, verticalMargin, horizontalMargin}}
@@ -80,10 +80,10 @@ namespace EmEn::Base::PixelFactory
 
 			/**
 			 * @brief Constructs a margin.
-			 * @param top
-			 * @param right
-			 * @param bottom
-			 * @param left
+			 * @param top The top margin.
+			 * @param right The right margin.
+			 * @param bottom The bottom margin.
+			 * @param left The left margin.
 			 */
 			Margin (data_t top, data_t right, data_t bottom, data_t left) noexcept
 				: m_data{{top, right, bottom, left}}

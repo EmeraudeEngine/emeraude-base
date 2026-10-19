@@ -82,7 +82,10 @@ namespace EmEn::Base::Time::Elapsed
 			 */
 			~ScopeRealTime ()
 			{
-				m_duration += std::chrono::duration_cast< std::chrono::nanoseconds >(clockType::now() - m_startTime).count();
+				/* NOTE: A clock that is not steady (system_clock) can go back: that duration counts zero. */
+				const auto elapsed = std::chrono::duration_cast< std::chrono::nanoseconds >(clockType::now() - m_startTime).count();
+
+				m_duration += elapsed > 0 ? static_cast< uint64_t >(elapsed) : uint64_t{0};
 			}
 
 		private:

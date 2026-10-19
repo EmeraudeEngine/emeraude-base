@@ -1063,7 +1063,7 @@ namespace EmEn::Base::Math
 			 */
 			[[nodiscard]]
 			Matrix< 4, precision_t >
-			getSpriteModelMatrix (const Vector< 3, float > & cameraPosition) const noexcept
+			getSpriteModelMatrix (const Vector< 3, precision_t > & cameraPosition) const noexcept
 			{
 				/* Prepare re-oriented vectors toward the camera. */
 				const auto backward = (cameraPosition - m_position).normalize();
@@ -1094,7 +1094,7 @@ namespace EmEn::Base::Math
 			 */
 			[[nodiscard]]
 			Matrix< 4, precision_t >
-			getUprightSpriteModelMatrix (const Vector< 3, float > & cameraPosition) const noexcept
+			getUprightSpriteModelMatrix (const Vector< 3, precision_t > & cameraPosition) const noexcept
 			{
 				auto backward = cameraPosition - m_position;
 				backward[Y] = 0;

@@ -1274,11 +1274,11 @@ namespace EmEn::Base::Math
 			std::pair< Quaternion, Quaternion >
 			swingTwistDecomposition (const Vector< 3, precision_t > & twistAxis) const
 			{
-				const auto sqLen = twistAxis.squaredLength();
+				const auto sqLen = twistAxis.lengthSquared();
 
 				if ( sqLen < std::numeric_limits< precision_t >::epsilon() * std::numeric_limits< precision_t >::epsilon() )
 				{
-					/* throw std::invalid_argument("twistAxis must be non-zero for swing-twist decomposition."); */
+					/* A zero axis has no twist: refused, two default quaternions. */
 					return {};
 				}
 
@@ -1290,7 +1290,7 @@ namespace EmEn::Base::Math
 				auto twist = swing.conjugated() * (*this);
 
 				const auto twistVectorPart = twist.complex();
-				const auto projectedTwistVector = Vector< 3, precision_t >::dotProduct(twistVectorPart, twistAxis) * twistAxis;
+				const auto projectedTwistVector = twistAxis * Vector< 3, precision_t >::dotProduct(twistVectorPart, twistAxis);
 
 				twist.set(projectedTwistVector, twist.real());
 				twist.normalize();

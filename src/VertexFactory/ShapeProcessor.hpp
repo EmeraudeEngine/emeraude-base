@@ -1321,6 +1321,7 @@ namespace EmEn::Base::VertexFactory
 				m_shape.computeVertexTangent();
 
 				m_shape.declareTextureCoordinatesAvailable();
+				m_shape.updateProperties();
 
 				return true;
 			}
@@ -1432,13 +1433,13 @@ namespace EmEn::Base::VertexFactory
 				const auto triCount = triangles.size();
 
 				/* Build edge → triangle adjacency. */
-				const std::unordered_map< uint64_t, std::vector< size_t > > edgeToTris;
+				std::unordered_map< uint64_t, std::vector< size_t > > edgeToTris;
 
 				for ( size_t t = 0; t < triCount; ++t )
 				{
 					const auto & tri = triangles[t];
 
-					for ( int i = 0; i < 3; ++i )
+					for ( index_data_t i = 0; i < 3; ++i )
 					{
 						const auto a = tri.vertexIndex(i);
 						const auto b = tri.vertexIndex((i + 1) % 3);
@@ -1517,7 +1518,7 @@ namespace EmEn::Base::VertexFactory
 
 					const auto & tri = triangles[t];
 
-					for ( int i = 0; i < 3; ++i )
+					for ( index_data_t i = 0; i < 3; ++i )
 					{
 						const auto vIdx = tri.vertexIndex(i);
 
@@ -1552,7 +1553,6 @@ namespace EmEn::Base::VertexFactory
 							const auto & srcVertex = m_shape.vertices()[vIdx];
 							const auto newIdx = m_shape.saveVertex(srcVertex.position(), srcVertex.normal(), srcVertex.textureCoordinates());
 							m_shape.vertices()[newIdx].setTangent(srcVertex.tangent());
-							m_shape.saveVertexColor({});
 
 							/* Update chart's mapping. */
 							const auto localIdx = charts[c].globalToLocal[vIdx];
@@ -1565,7 +1565,7 @@ namespace EmEn::Base::VertexFactory
 							{
 								auto & tri = m_shape.triangles()[triIdx];
 
-								for ( int i = 0; i < 3; ++i )
+								for ( index_data_t i = 0; i < 3; ++i )
 								{
 									if ( tri.vertexIndex(i) == vIdx )
 									{
@@ -1585,13 +1585,13 @@ namespace EmEn::Base::VertexFactory
 			selectPinnedVertices (const ChartData & chart) const noexcept
 			{
 				/* Find boundary vertices of this chart. */
-				const std::unordered_map< uint64_t, size_t > edgeCounts;
+				std::unordered_map< uint64_t, size_t > edgeCounts;
 
 				for ( const auto triIdx : chart.triangleIndices )
 				{
 					const auto & tri = m_shape.triangles()[triIdx];
 
-					for ( int i = 0; i < 3; ++i )
+					for ( index_data_t i = 0; i < 3; ++i )
 					{
 						const auto key = packEdgeKey(tri.vertexIndex(i), tri.vertexIndex((i + 1) % 3));
 

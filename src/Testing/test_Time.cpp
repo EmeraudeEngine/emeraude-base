@@ -34,6 +34,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <ctime>
 #include <memory>
 #include <ratio>
 #include <thread>
@@ -45,6 +46,9 @@
 #include "Time/Time.hpp"
 #include "Time/EventTrait.hpp"
 #include "Time/Elapsed/CPUTime.hpp"
+#include "Time/Elapsed/RealTime.hpp"
+#include "Time/Elapsed/ScopeCPUTime.hpp"
+#include "Time/Elapsed/ScopeRealTime.hpp"
 #include "Time/Statistics/CPUTime.hpp"
 #include "Time/Statistics/RealTime.hpp"
 
@@ -532,4 +536,41 @@ TEST(TimeStatisticsRealTime, aBackwardsSampleIsDroppedAndCounted)
 	EXPECT_EQ(statistics.droppedSampleCount(), 1U);
 	EXPECT_EQ(statistics.topCount(), 1U);
 	EXPECT_EQ(statistics.duration(), 50U);
+}
+
+/* 2026-10-19: ScopeCPUTime.hpp and ScopeRealTime.hpp were included by no translation unit, RealTime by none that
+ * instantiated it: their signed-to-unsigned durations had never compiled under the warnings. */
+TEST(TimeElapsed, scopeTimersAccumulate)
+{
+	uint64_t realDuration = 0;
+
+	{
+		const EmEn::Base::Time::Elapsed::ScopeRealTime<> timer{realDuration};
+
+		std::this_thread::sleep_for(std::chrono::milliseconds{2});
+	}
+
+	EXPECT_GE(realDuration, 2000000U);
+
+	uint64_t cpuDuration = 0;
+
+	{
+		const EmEn::Base::Time::Elapsed::ScopeCPUTime timer{cpuDuration};
+
+		/* Burn CPU until the clock ticks. */
+		const auto start = std::clock();
+
+		while ( std::clock() == start )
+		{
+		}
+	}
+
+	EXPECT_GT(cpuDuration, 0U);
+
+	EmEn::Base::Time::Elapsed::RealTime<> chronometer;
+	chronometer.start();
+	std::this_thread::sleep_for(std::chrono::milliseconds{2});
+	chronometer.stop();
+
+	EXPECT_GE(chronometer.duration(), 2000000U);
 }

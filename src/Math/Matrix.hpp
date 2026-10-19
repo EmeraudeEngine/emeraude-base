@@ -1323,7 +1323,8 @@ namespace EmEn::Base::Math
 			precision_t
 			trace () const noexcept
 			{
-				auto value = 0;
+				/* NOTE: precision_t: the former 'auto value = 0' summed into an int, truncating every float diagonal. */
+				auto value = static_cast< precision_t >(0);
 
 				for ( size_t index = 0; index < dim_t; index++ )
 				{
