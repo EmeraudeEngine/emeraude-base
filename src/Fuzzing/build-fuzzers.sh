@@ -13,12 +13,27 @@
 #
 # Usage:   src/Fuzzing/build-fuzzers.sh
 #          BASE_BUILD_DIR=.claude-build-release src/Fuzzing/build-fuzzers.sh
+#
+# Portable to macOS's bash 3.2 (no associative array, no empty-array expansion under 'set -u'). On macOS, AppleClang
+# ships no libFuzzer runtime: the default compiler is Homebrew's LLVM (brew install llvm); CXX overrides it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
-CXX="${CXX:-clang++}"
+if [ -z "${CXX:-}" ]; then
+	if [ "$(uname -s)" = "Darwin" ]; then
+		CXX="$(brew --prefix llvm 2>/dev/null)/bin/clang++"
+
+		if [ ! -x "${CXX}" ]; then
+			echo "error: AppleClang has no libFuzzer runtime; install Homebrew's LLVM (brew install llvm) or set CXX." >&2
+			exit 1
+		fi
+	else
+		CXX="clang++"
+	fi
+fi
+
 BASE_BUILD_DIR="${BASE_BUILD_DIR:-.claude-build-debug}"
 OUT_DIR="${OUT_DIR:-src/Fuzzing/build}"
 
@@ -61,23 +76,29 @@ TARGETS=(
 # A parser implemented in a .cpp sits in the g++-built static library, uninstrumented: libFuzzer gets no coverage of
 # it and ASan / UBSan see none of its accesses (fuzz_http_response ran 520 M blind executions at 59 edges, 2026-10-17).
 # Such a target compiles its parser's own sources, instrumented; the archive's copies are then never pulled in.
-declare -A EXTRA_SOURCES=(
-	[fuzz_compression]="src/Compression/LZMA.cpp src/Compression/LZMA/Decompressor.cpp src/Compression/ZLIB.cpp"
-	[fuzz_http_response]="src/Network/HTTPResponseParser.cpp src/Network/HTTPResponse.cpp src/Network/HTTPHeaders.cpp"
-	[fuzz_ini]="src/INIParser.cpp"
-	[fuzz_jpeg]="src/PixelFactory/FileFormatJpeg.cpp"
-	[fuzz_png]="src/PixelFactory/FileFormatPNG.cpp"
-	[fuzz_wav]="src/WaveFactory/FileFormatSNDFile.cpp"
-)
+# NOTE: A 'case', not an associative array: bash 3.2 (macOS) has none.
+extra_sources ()
+{
+	case "$1" in
+		fuzz_compression) echo "src/Compression/LZMA.cpp src/Compression/LZMA/Decompressor.cpp src/Compression/ZLIB.cpp" ;;
+		fuzz_http_response) echo "src/Network/HTTPResponseParser.cpp src/Network/HTTPResponse.cpp src/Network/HTTPHeaders.cpp" ;;
+		fuzz_ini) echo "src/INIParser.cpp" ;;
+		fuzz_jpeg) echo "src/PixelFactory/FileFormatJpeg.cpp" ;;
+		fuzz_png) echo "src/PixelFactory/FileFormatPNG.cpp" ;;
+		fuzz_wav) echo "src/WaveFactory/FileFormatSNDFile.cpp" ;;
+		*) echo "" ;;
+	esac
+}
 
 mkdir -p "${OUT_DIR}"
 
 for target in "${TARGETS[@]}"; do
 	echo "==> building ${target}"
-	read -r -a extraSources <<< "${EXTRA_SOURCES[${target}]:-}"
+	read -r -a extraSources <<< "$(extra_sources "${target}")"
+	# NOTE: ${array[@]+"${array[@]}"}: before bash 4.4, an empty array expanded under 'set -u' is an unbound variable.
 	"${CXX}" "${FLAGS[@]}" "${INCLUDES[@]}" \
 		"src/Fuzzing/${target}.cpp" \
-		"${extraSources[@]}" \
+		${extraSources[@]+"${extraSources[@]}"} \
 		"${STATIC_LIB}" \
 		"${EXT_LINK[@]}" \
 		-o "${OUT_DIR}/${target}"
