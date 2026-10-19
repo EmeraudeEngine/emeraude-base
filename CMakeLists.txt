@@ -22,7 +22,7 @@ endif ()
 # plus resolution of the ext-deps-generator output. Consumable whole (emeraude::base)
 # or per-module (emeraude::base::math, …) by tools that don't need the full engine.
 project(EmeraudeBase
-	VERSION 1.5.1
+	VERSION 1.5.2
 	DESCRIPTION "Foundation library for Emeraude-Engine."
 	HOMEPAGE_URL "https://github.com/EmeraudeEngine/emeraude-base"
 	LANGUAGES C CXX
