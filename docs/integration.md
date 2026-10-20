@@ -61,7 +61,11 @@ Before the stamp, an extraction from an older release was kept forever after a v
 v018 → v019 bump would have linked the engine against v018 and failed on the `rgbcx::` symbols v019 added. A local
 symlink to an ext-deps-generator output (`dependencies/<folder>` → `output/<folder>`) is never stamped nor fetched.
 Proven with `cmake -P` on a scratch tree: an unstamped folder → the v019 archive downloaded and extracted (stamp v019,
-16 `rgbcx::` symbols); a second run → no download; a stamp set to `v018` → the cached v019 zip re-extracted.
+16 `rgbcx::` symbols); a second run → no download; a stamp set to `v018` → the cached v019 zip re-extracted. The same
+three runs on Windows (CMake 4.4, `windows.x86_64-Release-MD`: the downloaded zip's sha256 equal to the published asset),
+and on macOS a real v018 extraction (`macos.x86_64-Release-sdk12.0`) fetched v019 by itself at configure time. The same
+three runs on Windows (CMake 4.4, `windows.x86_64-Release-MD`: the downloaded zip's sha256 equal to the published asset),
+and on macOS a real v018 extraction (`macos.x86_64-Release-sdk12.0`) fetched v019 by itself at configure time.
 
 ## 2. Add it to your build
 
