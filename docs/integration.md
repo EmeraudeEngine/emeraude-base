@@ -47,10 +47,21 @@ targeted directly. A missing GitHub asset (HTTP 404) is caught by validating the
 payload's ZIP magic, not merely the transport status — so a stale/absent exact-tag asset
 falls through to the floor instead of being extracted as garbage.
 
-⚠️ A release that lacks the floor archive breaks every host whose glibc is not exactly the published tag. **v018**
-(2026-10-10, hwloc 3.0 and LightUSD; `EXTERNAL_DEPENDENCIES_VERSION` since a21ae5a) shipped `glibc2.41` only. The two
-`glibc2.35` zips are owed by ext-deps-generator (its item `hwloc-3-rollout-and-release`), and nothing changes here once
-they are uploaded.
+⚠️ A release that lacks the floor archive breaks every host whose glibc is not exactly the published tag. **v019**
+(2026-10-20, bc7enc_rdo with rgbcx — BC4 / BC5) ships `glibc2.35` (the floor), `glibc2.41` and `glibc2.43`, Release and
+Debug, with macOS arm64 / x86_64 and Windows MD / MT.
+
+### The version stamp (2026-10-20)
+
+The extracted folder's name carries no release (`dependencies/linux.x86_64-Release-glibc2.41`), so after an extraction
+`InstallDependencies.cmake` writes `dependencies/<folder>.version` (the `EXTERNAL_DEPENDENCIES_VERSION` it came from).
+At configure time a folder whose stamp is missing or names another release is fetched again: the cached
+`<folder>.<version>.zip` when present, else a download; the old folder is removed and the archive re-extracted.
+Before the stamp, an extraction from an older release was kept forever after a version bump — a peer configuring the
+v018 → v019 bump would have linked the engine against v018 and failed on the `rgbcx::` symbols v019 added. A local
+symlink to an ext-deps-generator output (`dependencies/<folder>` → `output/<folder>`) is never stamped nor fetched.
+Proven with `cmake -P` on a scratch tree: an unstamped folder → the v019 archive downloaded and extracted (stamp v019,
+16 `rgbcx::` symbols); a second run → no download; a stamp set to `v018` → the cached v019 zip re-extracted.
 
 ## 2. Add it to your build
 

@@ -39,7 +39,7 @@ endif ()
 # from a previously-configured build dir (e.g. "v012") silently win over a bump.
 # The leading 'v' is part of the value: it is both the GitHub release tag and
 # the archive filename token (e.g. ...-glibc2.35.v013.zip).
-set(EXTERNAL_DEPENDENCIES_VERSION "v018")
+set(EXTERNAL_DEPENDENCIES_VERSION "v019")
 set(EXTERNAL_DEPENDENCIES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/dependencies")
 
 # Candidate dirnames, in priority order: the exact host tag first, then the
@@ -60,6 +60,10 @@ set(EXTERNAL_DEPENDENCIES_PATH "")
 set(EXTERNAL_DEPENDENCIES_FRESH_DOWNLOAD FALSE)
 set(_emeraude_ext_tried "")
 
+# The extracted folder carries no version in its name: a stamp beside it ('<dir>.version', written after each
+# extraction) says which release it holds. Without it, an extraction from an older release was kept forever after a
+# version bump (v018 -> v019, 2026-10-20: the engine then failed to link on the symbols the new release added).
+
 file(MAKE_DIRECTORY ${EXTERNAL_DEPENDENCIES_DIR})
 
 foreach ( _cand IN LISTS _emeraude_ext_candidates )
@@ -69,19 +73,35 @@ foreach ( _cand IN LISTS _emeraude_ext_candidates )
 	set(_cand_url "https://github.com/EmeraudeEngine/ext-deps-generator/releases/download/${EXTERNAL_DEPENDENCIES_VERSION}/${_cand_filename}")
 	string(APPEND _emeraude_ext_tried "  ${_cand_url}\n")
 
-	# Already extracted (real dir or local symlink): nothing to fetch.
-	if ( EXISTS ${_cand_extracted} )
-		message("External dependencies '${_cand}' already present — no download needed.")
-		set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "${_cand}")
-		set(EXTERNAL_DEPENDENCIES_PATH "${_cand_archive}")
-		break ()
+	# Already extracted from THIS release (its stamp says so): nothing to fetch. A local symlink was handled above.
+	set(_cand_stamp "")
+
+	if ( EXISTS ${_cand_extracted}.version )
+		file(STRINGS ${_cand_extracted}.version _cand_stamp LIMIT_COUNT 1)
 	endif ()
 
-	# Archive already cached from a previous run (kept only when it was a valid ZIP): reuse it.
+	if ( EXISTS ${_cand_extracted} )
+		if ( _cand_stamp STREQUAL EXTERNAL_DEPENDENCIES_VERSION )
+			message("External dependencies '${_cand}' (${EXTERNAL_DEPENDENCIES_VERSION}) already present — no download needed.")
+			set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "${_cand}")
+			set(EXTERNAL_DEPENDENCIES_PATH "${_cand_archive}")
+			break ()
+		endif ()
+
+		if ( _cand_stamp STREQUAL "" )
+			set(_cand_stamp "no version stamp")
+		endif ()
+
+		message("External dependencies '${_cand}' hold another release (${_cand_stamp}, expected ${EXTERNAL_DEPENDENCIES_VERSION}) — fetching it.")
+	endif ()
+
+	# Archive already cached from a previous run (kept only when it was a valid ZIP): reuse it — and extract it again,
+	# the folder (if any) being from another release.
 	if ( EXISTS ${_cand_archive} )
 		message("External dependencies archive '${_cand_filename}' is present !")
 		set(EXTERNAL_DEPENDENCIES_RESOLVED_DIRNAME "${_cand}")
 		set(EXTERNAL_DEPENDENCIES_PATH "${_cand_archive}")
+		set(EXTERNAL_DEPENDENCIES_FRESH_DOWNLOAD TRUE)
 		break ()
 	endif ()
 
@@ -175,6 +195,8 @@ if ( EXTERNAL_DEPENDENCIES_FRESH_DOWNLOAD OR NOT EXISTS ${EMERAUDE_EXT_LIBS_PATH
 			"The archive contents may not match the engine's directory convention."
 		)
 	endif ()
+
+	file(WRITE ${EMERAUDE_EXT_LIBS_PATH}.version "${EXTERNAL_DEPENDENCIES_VERSION}\n")
 else ()
 	message("External dependencies binaries present !")
 endif ()
