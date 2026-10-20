@@ -15,3 +15,23 @@ During window resize, Pixmap dimensions can change between frames. `TextProcesso
 - `PixelFactory/TextProcessor.hpp:blitCharacter()` - Uses `blendFreePixel()` for bounds-safety
 - `PixelFactory/Pixmap.hpp:blendPixel()` - Assert on coordinates (development)
 - `PixelFactory/Pixmap.hpp:blendFreePixel()` - Silently ignores out-of-bounds (production)
+
+### Resampling a TEXTURE is not resizing an image (2026-10-20)
+
+`Processor::resize()` (Nearest / Linear / Cubic) maps the CORNERS — destination x reads the source at
+`x · (w − 1) / W` — and reads Black past the border (`safePixel()`). That suits a display resize, not a texture:
+on a tiled texture it shifts the content by up to half a source texel and darkens every tile edge.
+
+`Processor::resampleTexture(source, width, height, destination, wrap, pool)` is the texture resample: texel centres
+aligned (`(x + 0.5) · w / W − 0.5`), the taps past an edge WRAPPING (repeat addressing, `wrap = true`) or clamped,
+separable Catmull-Rom. Found by the engine's texture packing (a 512² opacity mask upscaled to its 1024² albedo).
+Tests: `PixelFactoryProcessor.resampleTexture*` (a constant stays constant up to its edges, centres aligned, wrap
+vs clamp, refusals).
+
+### Channel packing: `Pixmap::copyChannel()` (2026-10-20)
+
+`copyChannel(channel, source, sourceChannel)` copies one channel of another pixmap of the SAME size into a channel of
+this one, values exact (no conversion); a grey-scale source has one channel, named red; another size or a channel
+either pixmap lacks is refused, nothing written. Not `fillChannel(channel, pattern, …)`: that one converts the
+pattern to a luminance, and its `SingleChannel` mode cannot read the alpha. Tests:
+`PixelFactoryPixmap.copyChannel*`.

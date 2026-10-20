@@ -60,6 +60,82 @@ using namespace EmEn::Base;
 using namespace EmEn::Base::PixelFactory;
 using namespace EmEn::Base::Time::Elapsed;
 
+namespace
+{
+	/**
+	 * @brief Resamples a texture filled with 200 to 16 x 16 and answers whether every value stayed 200.
+	 * @param source The 200-filled source.
+	 * @param wrap The addressing.
+	 * @return bool
+	 */
+	[[nodiscard]]
+	bool
+	resamplesToTheSameConstant (const Pixmap< uint8_t > & source, bool wrap) noexcept
+	{
+		Pixmap< uint8_t > upscaled;
+
+		return Processor< uint8_t >::resampleTexture(source, 16, 16, upscaled, wrap) && upscaled.width() == 16 && upscaled.height() == 16 &&
+			std::ranges::all_of(upscaled.data(), [] (uint8_t value) { return value == 200; });
+	}
+}
+
+TEST(PixelFactoryProcessor, resampleTextureKeepsAConstantTextureConstantUpToItsEdges)
+{
+	const Pixmap< uint8_t > source{8, 8, ChannelMode::RGBA, std::span< const uint8_t >{std::vector< uint8_t >(size_t{8} * 8 * 4, 200)}};
+
+	/* resize() reads Black past the border: its edges darken. A texture resample wraps (or clamps): none does. */
+	EXPECT_TRUE(resamplesToTheSameConstant(source, true));
+	EXPECT_TRUE(resamplesToTheSameConstant(source, false));
+}
+
+TEST(PixelFactoryProcessor, resampleTextureAlignsTexelCentres)
+{
+	/* A 2-texel ramp, clamped, doubled: centre alignment reads the source at -0.25, 0.25, 0.75, 1.25 — a result
+	 * symmetric around the middle (each pair sums to 255). resize() maps the corners and loses that symmetry. */
+	Pixmap< uint8_t > source{2, 1, ChannelMode::Grayscale};
+	source.setPixelElement(0, 0, Channel::Red, 0);
+	source.setPixelElement(1, 0, Channel::Red, 255);
+
+	Pixmap< uint8_t > upscaled;
+	ASSERT_TRUE(Processor< uint8_t >::resampleTexture(source, 4, 1, upscaled, false));
+
+	const auto & data = upscaled.data();
+	ASSERT_EQ(data.size(), 4U);
+	EXPECT_EQ(data[0], 0);
+	EXPECT_EQ(data[3], 255);
+	EXPECT_NEAR(static_cast< int >(data[1]) + static_cast< int >(data[2]), 255, 1);
+	EXPECT_LT(data[1], data[2]);
+}
+
+TEST(PixelFactoryProcessor, resampleTextureWrapsARepeatingTexture)
+{
+	/* Only the first texel is lit. Doubled, the last destination texel reads the source at 3.25, between the last
+	 * texel and, wrapped around, the first one: Catmull-Rom gives ~58 with repeat addressing, 0 with clamping. */
+	Pixmap< uint8_t > source{4, 1, ChannelMode::Grayscale};
+	ASSERT_TRUE(source.fill(static_cast< uint8_t >(0)));
+	source.setPixelElement(0, 0, Channel::Red, 255);
+
+	Pixmap< uint8_t > wrapped;
+	ASSERT_TRUE(Processor< uint8_t >::resampleTexture(source, 8, 1, wrapped, true));
+
+	Pixmap< uint8_t > clamped;
+	ASSERT_TRUE(Processor< uint8_t >::resampleTexture(source, 8, 1, clamped, false));
+
+	EXPECT_GT(wrapped.data()[7], 32);
+	EXPECT_LT(clamped.data()[7], 16);
+}
+
+TEST(PixelFactoryProcessor, resampleTextureRefusesAnInvalidRequest)
+{
+	const Pixmap< uint8_t > invalid;
+	const Pixmap< uint8_t > source{4, 4, ChannelMode::RGB};
+	Pixmap< uint8_t > destination;
+
+	EXPECT_FALSE(Processor< uint8_t >::resampleTexture(invalid, 8, 8, destination));
+	EXPECT_FALSE(Processor< uint8_t >::resampleTexture(source, 0, 8, destination));
+	EXPECT_FALSE(Processor< uint8_t >::resampleTexture(source, 8, 0, destination));
+}
+
 TEST(PixelFactoryProcessor, scale)
 {
 	PrintScopeRealTime globalStat{"Processor::scale(2.0F) [OVERALL]"};

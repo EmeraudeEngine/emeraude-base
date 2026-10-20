@@ -2462,6 +2462,49 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Copies one channel of another pixmap of the SAME size into a channel of this one (channel packing:
+			 * a grey-scale map into the G of a packed texture, a mask into an albedo's A).
+			 * @note Exact: the values are copied, never converted (fillChannel() with a pattern converts to a luminance).
+			 * A grey-scale source has one channel, named red. The other channels of this pixmap keep their values.
+			 * @param channel The channel of this pixmap to write.
+			 * @param source A reference to the source pixmap, the same width and height. It may be this pixmap.
+			 * @param sourceChannel The channel of the source to read.
+			 * @return bool False, and nothing written, on an invalid pixmap, another size or a channel either pixmap
+			 * does not have.
+			 */
+			[[nodiscard]]
+			bool
+			copyChannel (Channel channel, const Pixmap & source, Channel sourceChannel) noexcept
+			{
+				if ( !this->isValid() || !source.isValid() || source.width() != m_width || source.height() != m_height )
+				{
+					return false;
+				}
+
+				const auto channelIndex = static_cast< size_t >(channel);
+				const auto sourceChannelIndex = static_cast< size_t >(sourceChannel);
+				const auto stride = this->colorCount();
+				const auto sourceStride = source.colorCount();
+
+				if ( channelIndex >= stride || sourceChannelIndex >= sourceStride )
+				{
+					return false;
+				}
+
+				const auto pixelCount = static_cast< size_t >(m_width) * static_cast< size_t >(m_height);
+				const auto & sourceData = source.data();
+
+				for ( size_t pixelIndex = 0; pixelIndex < pixelCount; ++pixelIndex )
+				{
+					m_data[(pixelIndex * stride) + channelIndex] = sourceData[(pixelIndex * sourceStride) + sourceChannelIndex];
+				}
+
+				this->markEverythingUpdated();
+
+				return true;
+			}
+
+			/**
 			 * @brief Fills the pixmap channel with a pattern.
 			 * @note The pattern pixmap will be used as grayscale.
 			 * @param channel The targeted channel of the pixmap.

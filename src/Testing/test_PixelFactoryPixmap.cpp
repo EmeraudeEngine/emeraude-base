@@ -29,13 +29,21 @@
 
 /* STL inclusions. */
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <span>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/FileIO.hpp"
 #include "PixelFactory/Gradient.hpp"
 #include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
+#include "Randomizer.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 
 using namespace EmEn::Base;
@@ -291,6 +299,69 @@ TEST(PixelFactoryPixmap, fillChannelValue)
 
 		ASSERT_TRUE(image.fillChannel(Channel::Blue, 0));
 	}
+}
+
+TEST(PixelFactoryPixmap, copyChannelPacksOneChannelOfAnotherPixmap)
+{
+	constexpr uint32_t Width{4};
+	constexpr uint32_t Height{3};
+	constexpr size_t PixelCount{static_cast< size_t >(Width) * Height};
+
+	/* Every channel of the source is distinct per pixel: R = i, G = i + 50, B = i + 100, A = i + 150. The packed
+	 * pixmap starts at 7 everywhere and expects the source ALPHA in its GREEN, nothing else changed. */
+	std::vector< uint8_t > sourceData(PixelCount * 4);
+	std::vector< uint8_t > expected(PixelCount * 4, 7);
+
+	for ( size_t pixel = 0; pixel < PixelCount; ++pixel )
+	{
+		const auto value = static_cast< uint8_t >(pixel);
+
+		sourceData[(pixel * 4) + 0] = value;
+		sourceData[(pixel * 4) + 1] = static_cast< uint8_t >(value + 50);
+		sourceData[(pixel * 4) + 2] = static_cast< uint8_t >(value + 100);
+		sourceData[(pixel * 4) + 3] = static_cast< uint8_t >(value + 150);
+		expected[(pixel * 4) + 1] = static_cast< uint8_t >(value + 150);
+	}
+
+	const Pixmap< uint8_t > source{Width, Height, ChannelMode::RGBA, std::span< const uint8_t >{sourceData}};
+	Pixmap< uint8_t > packed{Width, Height, ChannelMode::RGBA, std::span< const uint8_t >{std::vector< uint8_t >(PixelCount * 4, 7)}};
+
+	ASSERT_TRUE(packed.copyChannel(Channel::Green, source, Channel::Alpha));
+	EXPECT_EQ(packed.data(), expected);
+
+	/* A grey-scale source has one channel, read as red. */
+	const Pixmap< uint8_t > grey{Width, Height, ChannelMode::Grayscale, std::span< const uint8_t >{std::vector< uint8_t >(PixelCount, 200)}};
+
+	ASSERT_TRUE(packed.copyChannel(Channel::Alpha, grey, Channel::Red));
+	EXPECT_EQ(packed.pixelElement(3, 2, Channel::Alpha), 200);
+	EXPECT_EQ(packed.pixelElement(3, 2, Channel::Green), static_cast< uint8_t >(11 + 150));
+}
+
+TEST(PixelFactoryPixmap, copyChannelRefusesWhatCannotBeCopied)
+{
+	Pixmap< uint8_t > packed{4, 3, ChannelMode::RGBA};
+	ASSERT_TRUE(packed.fill(static_cast< uint8_t >(7)));
+
+	Pixmap< uint8_t > otherSize{3, 4, ChannelMode::RGBA};
+	ASSERT_TRUE(otherSize.fill(static_cast< uint8_t >(9)));
+
+	Pixmap< uint8_t > grey{4, 3, ChannelMode::Grayscale};
+	ASSERT_TRUE(grey.fill(static_cast< uint8_t >(9)));
+
+	Pixmap< uint8_t > rgb{4, 3, ChannelMode::RGB};
+	ASSERT_TRUE(rgb.fill(static_cast< uint8_t >(9)));
+
+	const Pixmap< uint8_t > invalid;
+
+	/* Another size, a source channel the source does not have, a target channel this pixmap does not have, an
+	 * invalid source: refused, nothing written. */
+	EXPECT_FALSE(packed.copyChannel(Channel::Red, otherSize, Channel::Red));
+	EXPECT_FALSE(packed.copyChannel(Channel::Red, grey, Channel::Alpha));
+	EXPECT_FALSE(rgb.copyChannel(Channel::Alpha, packed, Channel::Red));
+	EXPECT_FALSE(packed.copyChannel(Channel::Red, invalid, Channel::Red));
+
+	EXPECT_EQ(packed.pixelElement(0, 0, Channel::Red), 7);
+	EXPECT_EQ(rgb.pixelElement(0, 0, Channel::Red), 9);
 }
 
 TEST(PixelFactoryPixmap, fillChannelSequence)

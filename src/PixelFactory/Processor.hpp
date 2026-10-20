@@ -1151,6 +1151,114 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Resamples a TEXTURE to another size, texel centres aligned — destination texel x reads the source at
+			 * (x + 0.5) · w / W − 0.5 — the taps past an edge wrapping around (a repeating texture has no border) or
+			 * clamped, through a separable Catmull-Rom.
+			 * @note ⚠️ Not resize(): that one maps the CORNERS (x · (w − 1) / W) and reads Black past the border, a display
+			 * resize. Used on a tiled texture it shifts the content by up to half a source texel and darkens every tile
+			 * edge (measured on a packed 512² mask upscaled to 1024², 2026-10-20).
+			 * @param source A reference to the source pixmap.
+			 * @param width The destination width, 1 or more.
+			 * @param height The destination height, 1 or more.
+			 * @param destination A writable reference to the destination pixmap (same channel mode as the source).
+			 * @param wrap True: the taps past an edge wrap around (repeat addressing); false: they clamp to the edge.
+			 * @param pool An optional thread pool to spread the rows across. Default nullptr (serial).
+			 * @return bool False on an invalid source or an empty size.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			resampleTexture (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & destination, bool wrap = true, ThreadPool * pool = nullptr) noexcept
+			{
+				if ( !source.isValid() || width == 0 || height == 0 || !destination.initialize(width, height, source.channelMode()) )
+				{
+					return false;
+				}
+
+				const auto numChannels = static_cast< size_t >(source.colorCount());
+				const auto sourceWidth = static_cast< int64_t >(source.width());
+				const auto sourceHeight = static_cast< int64_t >(source.height());
+				const auto xScale = static_cast< double >(sourceWidth) / static_cast< double >(width);
+				const auto yScale = static_cast< double >(sourceHeight) / static_cast< double >(height);
+				const auto & sourceData = source.data();
+				auto & targetData = destination.data();
+
+				const auto address = [wrap] (int64_t coordinate, int64_t size) noexcept -> size_t {
+					if ( wrap )
+					{
+						return static_cast< size_t >(((coordinate % size) + size) % size);
+					}
+
+					return static_cast< size_t >(std::clamp< int64_t >(coordinate, 0, size - 1));
+				};
+
+				const auto unit = [] (pixel_data_t value) noexcept -> float {
+					if constexpr ( std::is_floating_point_v< pixel_data_t > )
+					{
+						return static_cast< float >(value);
+					}
+					else
+					{
+						return static_cast< float >(value) / static_cast< float >(std::numeric_limits< pixel_data_t >::max());
+					}
+				};
+
+				const auto processRow = [&] (size_t y) noexcept {
+					const double realY = ((static_cast< double >(y) + 0.5) * yScale) - 0.5;
+					const auto yFloor = static_cast< int64_t >(std::floor(realY));
+					const auto tY = static_cast< float >(realY - static_cast< double >(yFloor));
+					const auto row0 = address(yFloor - 1, sourceHeight) * static_cast< size_t >(sourceWidth);
+					const auto row1 = address(yFloor, sourceHeight) * static_cast< size_t >(sourceWidth);
+					const auto row2 = address(yFloor + 1, sourceHeight) * static_cast< size_t >(sourceWidth);
+					const auto row3 = address(yFloor + 2, sourceHeight) * static_cast< size_t >(sourceWidth);
+
+					for ( size_t x = 0; x < width; ++x )
+					{
+						const double realX = ((static_cast< double >(x) + 0.5) * xScale) - 0.5;
+						const auto xFloor = static_cast< int64_t >(std::floor(realX));
+						const auto tX = static_cast< float >(realX - static_cast< double >(xFloor));
+						const auto column0 = address(xFloor - 1, sourceWidth);
+						const auto column1 = address(xFloor, sourceWidth);
+						const auto column2 = address(xFloor + 1, sourceWidth);
+						const auto column3 = address(xFloor + 2, sourceWidth);
+						const size_t targetIndex = ((y * static_cast< size_t >(width)) + x) * numChannels;
+
+						for ( size_t channel = 0; channel < numChannels; ++channel )
+						{
+							/* NOTE: One source row (its base texel index), interpolated across the four columns. */
+							const auto rowValue = [&] (size_t rowBase) noexcept {
+								return Math::cubicInterpolationCatmullRom(
+									unit(sourceData[((rowBase + column0) * numChannels) + channel]),
+									unit(sourceData[((rowBase + column1) * numChannels) + channel]),
+									unit(sourceData[((rowBase + column2) * numChannels) + channel]),
+									unit(sourceData[((rowBase + column3) * numChannels) + channel]),
+									tX
+								);
+							};
+
+							targetData[targetIndex + channel] = Processor::clampValue(Math::cubicInterpolationCatmullRom(rowValue(row0), rowValue(row1), rowValue(row2), rowValue(row3), tY));
+						}
+					}
+				};
+
+				if ( pool != nullptr )
+				{
+					pool->parallelFor(static_cast< size_t >(0), static_cast< size_t >(height), processRow);
+				}
+				else
+				{
+					for ( size_t y = 0; y < height; ++y )
+					{
+						processRow(y);
+					}
+				}
+
+				destination.markEverythingUpdated();
+
+				return true;
+			}
+
+			/**
 			 * @brief Reduces a pixmap with an exact AREA-WEIGHTED box filter: every destination pixel is the mean of the
 			 * source footprint it covers, fractional pixels weighted by the fraction covered. The mip filter.
 			 * @note ⚠️ Not resize(): its Linear mode is a BILINEAR RESAMPLE for display — it reads the two source pixels
