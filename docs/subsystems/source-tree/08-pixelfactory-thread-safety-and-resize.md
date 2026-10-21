@@ -28,6 +28,18 @@ separable Catmull-Rom. Found by the engine's texture packing (a 512² opacity ma
 Tests: `PixelFactoryProcessor.resampleTexture*` (a constant stays constant up to its edges, centres aligned, wrap
 vs clamp, refusals).
 
+### Colour under transparent pixels: `Processor::fillTransparentColour()` (2026-10-21)
+
+`fillTransparentColour(pixmap, alphaThreshold)` dilates the colour of an RGBA pixmap under its holes (alpha below the
+threshold): pull-push hole filling (Gortler, Grzeszczuk, Szeliski, Cohen, *The Lumigraph*, SIGGRAPH 1996) — the visible
+colours averaged down a pyramid, pushed back into the holes. The alpha and the visible pixels are never touched; a
+pixmap with nothing to fill or nothing to fill it with is left as it was; a zero threshold or a non-RGBA pixmap is
+refused. Why: a texture keeps black under its transparent pixels and every filter (a box-filtered mip, a bilinear tap)
+mixed it into the visible edge — the engine's BC7 chain dilates first (its graphics § 39 § Baked assets: Sponza's cypress
+leaves kept 56 % of their green at mip 8). Tests: `PixelFactoryProcessor.fillTransparentColour*` (8: holes take the visible
+colour, a 1 × 1 box level keeps it where the raw one halves it, visible pixels kept, nearest side wins, the threshold
+both ways on an odd size, full / empty masks, refusals).
+
 ### Channel packing: `Pixmap::copyChannel()` (2026-10-20)
 
 `copyChannel(channel, source, sourceChannel)` copies one channel of another pixmap of the SAME size into a channel of

@@ -1392,6 +1392,95 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Dilates the colour of a cut-out under its transparent pixels (edge padding): every pixel whose alpha is
+			 * below the threshold takes the colour of the nearby visible ones — pull-push hole filling (S. J. Gortler,
+			 * R. Grzeszczuk, R. Szeliski, M. F. Cohen, "The Lumigraph", SIGGRAPH 1996, § 3.4.1): the visible colours are
+			 * averaged down a pyramid, then pushed back up into the holes, the coarse level filling the fine one.
+			 * @note Why: an RGBA texture keeps black (or anything) under its transparent pixels, and every filter mixes it
+			 * into the visible edge — a box-filtered mip level pulls the colour toward black (Sponza's cypress leaves kept
+			 * 56 % of their green at mip 8, 2026-10-21), a bilinear tap at mip 0 darkens the silhouette. Filling the holes
+			 * with the neighbouring colour makes both filters average colours of the same surface.
+			 * @note The alpha is never changed, nor the colour of a pixel at or above the threshold. Nothing to fill (every
+			 * pixel visible) or nothing to fill it with (every pixel a hole) leaves the pixmap as it was.
+			 * @note O(pixels), one extra pyramid of the pixmap's size (4/3 of it).
+			 * @param pixmap A writable reference to an RGBA pixmap.
+			 * @param alphaThreshold A pixel is visible when its alpha is at least this, a hole otherwise. Not zero.
+			 * @return bool False on an invalid or non-RGBA pixmap, or a zero threshold.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			fillTransparentColour (Pixmap< pixel_data_t, dimension_t > & pixmap, pixel_data_t alphaThreshold) noexcept
+			{
+				if ( !pixmap.isValid() || pixmap.channelMode() != ChannelMode::RGBA || alphaThreshold == pixel_data_t{0} )
+				{
+					return false;
+				}
+
+				auto & data = pixmap.data();
+				const auto width = static_cast< size_t >(pixmap.width());
+				const auto height = static_cast< size_t >(pixmap.height());
+				const auto pixelCount = width * height;
+
+				/* The size halves (rounded up) down to 1 x 1: at most 64 levels for a size_t dimension. */
+				std::vector< FillLevel > levels;
+				levels.reserve(64);
+				levels.push_back(FillLevel{width, height, std::vector< pixel_data_t >(pixelCount * 3), std::vector< uint8_t >(pixelCount, 0)});
+
+				size_t visible = 0;
+
+				for ( size_t index = 0; index < pixelCount; ++index )
+				{
+					for ( size_t channel = 0; channel < 3; ++channel )
+					{
+						levels.front().colour[(index * 3) + channel] = data[(index * 4) + channel];
+					}
+
+					if ( data[(index * 4) + 3] >= alphaThreshold )
+					{
+						levels.front().filled[index] = 1;
+						++visible;
+					}
+				}
+
+				if ( visible == 0 || visible == pixelCount )
+				{
+					return true;
+				}
+
+				/* Pull: each coarser level averages the visible children of its pixels. */
+				while ( levels.back().width > 1 || levels.back().height > 1 )
+				{
+					levels.push_back(pullLevel(levels.back()));
+				}
+
+				/* Push: from the second-coarsest level down, a hole takes its parent's colour (filled by then: the 1 x 1
+				 * top holds the mean of every visible pixel). */
+				for ( auto levelIndex = levels.size() - 1; levelIndex-- > 0; )
+				{
+					pushLevel(levels[levelIndex], levels[levelIndex + 1]);
+				}
+
+				/* The holes of the pixmap take the level-0 colour; the alpha and the visible pixels stay as they were. */
+				for ( size_t index = 0; index < pixelCount; ++index )
+				{
+					if ( data[(index * 4) + 3] >= alphaThreshold )
+					{
+						continue;
+					}
+
+					for ( size_t channel = 0; channel < 3; ++channel )
+					{
+						data[(index * 4) + channel] = levels.front().colour[(index * 3) + channel];
+					}
+				}
+
+				pixmap.markEverythingUpdated();
+
+				return true;
+			}
+
+			/**
 			 * @brief Resizes a pixmap using a ratio.
 			 * @param source A reference to a pixmap.
 			 * @param ratio The scale ratio, finite and positive (refused otherwise, or when a dimension falls under one pixel).
@@ -2559,6 +2648,142 @@ namespace EmEn::Base::PixelFactory
 			}
 
 		private:
+
+			/** @brief One level of the pull-push pyramid of fillTransparentColour(): RGB and a filled flag per pixel. */
+			struct FillLevel final
+			{
+				size_t width{0};
+				size_t height{0};
+				std::vector< pixel_data_t > colour; /* RGB, interleaved. */
+				std::vector< uint8_t > filled; /* 1: a visible (or already filled) pixel. */
+			};
+
+			/**
+			 * @brief Returns a channel mean in the pixel type (rounded to nearest for an integral one).
+			 * @param sum The sum of the values.
+			 * @param count The number of values. Not zero.
+			 * @return pixel_data_t
+			 */
+			[[nodiscard]]
+			static
+			pixel_data_t
+			fillMean (double sum, size_t count) noexcept
+			{
+				const auto mean = sum / static_cast< double >(count);
+
+				if constexpr ( std::is_integral_v< pixel_data_t > )
+				{
+					return static_cast< pixel_data_t >(std::lround(mean));
+				}
+				else
+				{
+					return static_cast< pixel_data_t >(mean);
+				}
+			}
+
+			/**
+			 * @brief Averages the filled children (2 x 2, fewer at an odd edge) of one pixel of the coarser level.
+			 * @param fine The finer level.
+			 * @param x The column in the coarser level.
+			 * @param y The row in the coarser level.
+			 * @param coarse The coarser level, its pixel written when one child at least is filled.
+			 */
+			static
+			void
+			pullPixel (const FillLevel & fine, size_t x, size_t y, FillLevel & coarse) noexcept
+			{
+				double sumRed = 0.0;
+				double sumGreen = 0.0;
+				double sumBlue = 0.0;
+				size_t count = 0;
+
+				for ( size_t fy = y * 2; fy < std::min((y * 2) + 2, fine.height); ++fy )
+				{
+					for ( size_t fx = x * 2; fx < std::min((x * 2) + 2, fine.width); ++fx )
+					{
+						const auto child = (fy * fine.width) + fx;
+
+						if ( fine.filled[child] == 0 )
+						{
+							continue;
+						}
+
+						sumRed += static_cast< double >(fine.colour[child * 3]);
+						sumGreen += static_cast< double >(fine.colour[(child * 3) + 1]);
+						sumBlue += static_cast< double >(fine.colour[(child * 3) + 2]);
+						++count;
+					}
+				}
+
+				if ( count == 0 )
+				{
+					return;
+				}
+
+				const auto index = (y * coarse.width) + x;
+
+				coarse.colour[index * 3] = fillMean(sumRed, count);
+				coarse.colour[(index * 3) + 1] = fillMean(sumGreen, count);
+				coarse.colour[(index * 3) + 2] = fillMean(sumBlue, count);
+				coarse.filled[index] = 1;
+			}
+
+			/**
+			 * @brief Builds the next, coarser level of the pull-push pyramid (half the size, rounded up).
+			 * @param fine The finer level.
+			 * @return FillLevel
+			 */
+			[[nodiscard]]
+			static
+			FillLevel
+			pullLevel (const FillLevel & fine) noexcept
+			{
+				FillLevel coarse{(fine.width + 1) / 2, (fine.height + 1) / 2, {}, {}};
+				coarse.colour.assign(coarse.width * coarse.height * 3, pixel_data_t{0});
+				coarse.filled.assign(coarse.width * coarse.height, 0);
+
+				for ( size_t y = 0; y < coarse.height; ++y )
+				{
+					for ( size_t x = 0; x < coarse.width; ++x )
+					{
+						pullPixel(fine, x, y, coarse);
+					}
+				}
+
+				return coarse;
+			}
+
+			/**
+			 * @brief Fills the holes of a level with the colour of their parent in the coarser level (filled already).
+			 * @param fine The level to fill.
+			 * @param coarse The coarser level.
+			 */
+			static
+			void
+			pushLevel (FillLevel & fine, const FillLevel & coarse) noexcept
+			{
+				for ( size_t y = 0; y < fine.height; ++y )
+				{
+					for ( size_t x = 0; x < fine.width; ++x )
+					{
+						const auto index = (y * fine.width) + x;
+
+						if ( fine.filled[index] != 0 )
+						{
+							continue;
+						}
+
+						const auto parent = ((y / 2) * coarse.width) + (x / 2);
+
+						for ( size_t channel = 0; channel < 3; ++channel )
+						{
+							fine.colour[(index * 3) + channel] = coarse.colour[(parent * 3) + channel];
+						}
+
+						fine.filled[index] = 1;
+					}
+				}
+			}
 
 			/**
 			 * @brief Scales a pixmap dimension by a resize ratio (truncated, as a pixel count).

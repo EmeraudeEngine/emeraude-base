@@ -34,6 +34,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <initializer_list>
 #include <limits>
 #include <span>
@@ -1811,4 +1812,198 @@ TEST(PixelFactoryProcessor, resizeByRatioRefusesAnUnusableRatio)
 		EXPECT_FALSE(Processor< uint8_t >::resize(source, ratio, output)) << "ratio " << ratio;
 		EXPECT_FALSE(Processor< uint8_t >::resize(source, ratio).isValid()) << "ratio " << ratio;
 	}
+}
+
+namespace
+{
+	using RGBA = std::array< uint8_t, 4 >;
+
+	/** @brief An RGBA pixmap whose pixels are given by a function of their position. */
+	[[nodiscard]]
+	Pixmap< uint8_t >
+	makeRGBA (uint32_t width, uint32_t height, const std::function< RGBA (size_t x, size_t y) > & pixelOf)
+	{
+		std::vector< uint8_t > bytes;
+		bytes.reserve(size_t{width} * height * 4);
+
+		for ( size_t y = 0; y < height; ++y )
+		{
+			for ( size_t x = 0; x < width; ++x )
+			{
+				const auto pixel = pixelOf(x, y);
+				bytes.insert(bytes.end(), pixel.begin(), pixel.end());
+			}
+		}
+
+		return Pixmap< uint8_t >{width, height, ChannelMode::RGBA, std::span< const uint8_t >{bytes}};
+	}
+
+	[[nodiscard]]
+	RGBA
+	pixelAt (const Pixmap< uint8_t > & pixmap, size_t x, size_t y)
+	{
+		const auto offset = ((y * pixmap.width()) + x) * 4;
+		const auto & data = pixmap.data();
+
+		return {data[offset], data[offset + 1], data[offset + 2], data[offset + 3]};
+	}
+
+	/** @brief Returns whether every pixel matches what the function expects at its position. */
+	[[nodiscard]]
+	bool
+	everyPixelIs (const Pixmap< uint8_t > & pixmap, const std::function< RGBA (size_t x, size_t y) > & expected)
+	{
+		for ( size_t y = 0; y < pixmap.height(); ++y )
+		{
+			for ( size_t x = 0; x < pixmap.width(); ++x )
+			{
+				if ( pixelAt(pixmap, x, y) != expected(x, y) )
+				{
+					return false;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	/** @brief A cut-out leaf: the left half visible green, the right half transparent BLACK. */
+	[[nodiscard]]
+	RGBA
+	halfLeaf (size_t x, size_t /*y*/)
+	{
+		return x < 4 ? RGBA{30, 200, 40, 255} : RGBA{0, 0, 0, 0};
+	}
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourGivesTheHolesTheVisibleColour)
+{
+	/* What Sponza's cypress stores: once filled, every RGB is the green and the alpha is untouched. */
+	auto pixmap = makeRGBA(8, 8, halfLeaf);
+
+	ASSERT_TRUE(Processor< uint8_t >::fillTransparentColour(pixmap, 128));
+	EXPECT_TRUE(everyPixelIs(pixmap, [] (size_t x, size_t /*y*/) { return x < 4 ? RGBA{30, 200, 40, 255} : RGBA{30, 200, 40, 0}; }));
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourKeepsTheColourOfABoxFilteredLevel)
+{
+	/* The defect it removes: the box-filtered 1 x 1 level of the raw leaf halves its green, the filled one keeps it. */
+	const auto raw = makeRGBA(8, 8, halfLeaf);
+	auto filled = makeRGBA(8, 8, halfLeaf);
+	ASSERT_TRUE(Processor< uint8_t >::fillTransparentColour(filled, 128));
+
+	Pixmap< uint8_t > rawMip;
+	Pixmap< uint8_t > filledMip;
+	ASSERT_TRUE(Processor< uint8_t >::downsample(raw, 1, 1, rawMip));
+	ASSERT_TRUE(Processor< uint8_t >::downsample(filled, 1, 1, filledMip));
+
+	EXPECT_EQ(pixelAt(rawMip, 0, 0)[1], 100);
+	EXPECT_EQ(pixelAt(filledMip, 0, 0)[1], 200);
+}
+
+namespace
+{
+	/** @brief Red on the left columns, blue on the right ones, a transparent gap between. */
+	[[nodiscard]]
+	RGBA
+	redGapBlue (size_t x, size_t /*y*/)
+	{
+		if ( x < 2 )
+		{
+			return RGBA{250, 10, 10, 255};
+		}
+
+		return x >= 6 ? RGBA{10, 10, 250, 255} : RGBA{0, 0, 0, 0};
+	}
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourLeavesTheVisiblePixels)
+{
+	auto pixmap = makeRGBA(8, 4, redGapBlue);
+
+	ASSERT_TRUE(Processor< uint8_t >::fillTransparentColour(pixmap, 128));
+	EXPECT_TRUE(everyPixelIs(pixmap, [&pixmap] (size_t x, size_t y) {
+		/* The visible pixels as they were; a hole keeps its alpha 0 (its colour is checked below). */
+		return x < 2 || x >= 6 ? redGapBlue(x, y) : RGBA{pixelAt(pixmap, x, y)[0], pixelAt(pixmap, x, y)[1], pixelAt(pixmap, x, y)[2], 0};
+	}));
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourTakesTheNearestColour)
+{
+	auto pixmap = makeRGBA(8, 4, redGapBlue);
+
+	ASSERT_TRUE(Processor< uint8_t >::fillTransparentColour(pixmap, 128));
+
+	/* Each hole leans to its own side, on every row. */
+	bool leansToItsSide = true;
+
+	for ( size_t y = 0; y < 4; ++y )
+	{
+		const auto nearRed = pixelAt(pixmap, 2, y);
+		const auto nearBlue = pixelAt(pixmap, 5, y);
+
+		leansToItsSide = leansToItsSide && nearRed[0] > nearRed[2] && nearBlue[2] > nearBlue[0];
+	}
+
+	EXPECT_TRUE(leansToItsSide);
+}
+
+namespace
+{
+	/** @brief 5 x 3: one visible pixel (alpha 200) at the origin, one at alpha 100 in the far corner, holes elsewhere. */
+	[[nodiscard]]
+	RGBA
+	twoPixels (size_t x, size_t y)
+	{
+		if ( x == 0 && y == 0 )
+		{
+			return RGBA{100, 150, 200, 200};
+		}
+
+		return x == 4 && y == 2 ? RGBA{7, 7, 7, 100} : RGBA{0, 0, 0, 0};
+	}
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourTreatsAPixelBelowTheThresholdAsAHole)
+{
+	/* A cut-out threshold (128): the alpha-100 pixel is a hole and takes the visible colour; odd sizes work. */
+	auto pixmap = makeRGBA(5, 3, twoPixels);
+
+	ASSERT_TRUE(Processor< uint8_t >::fillTransparentColour(pixmap, 128));
+	EXPECT_EQ(pixelAt(pixmap, 4, 2), (RGBA{100, 150, 200, 100}));
+	EXPECT_EQ(pixelAt(pixmap, 2, 1), (RGBA{100, 150, 200, 0}));
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourKeepsASemiTransparentPixelAboveTheThreshold)
+{
+	/* A graded-alpha threshold (1: only the fully transparent pixels are holes): the alpha-100 pixel keeps its colour. */
+	auto pixmap = makeRGBA(5, 3, twoPixels);
+
+	ASSERT_TRUE(Processor< uint8_t >::fillTransparentColour(pixmap, 1));
+	EXPECT_EQ(pixelAt(pixmap, 4, 2), (RGBA{7, 7, 7, 100}));
+	EXPECT_EQ(pixelAt(pixmap, 0, 0), (RGBA{100, 150, 200, 200}));
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourLeavesAFullOrAnEmptyMask)
+{
+	/* Nothing to fill (every pixel visible) and nothing to fill it with (every pixel a hole): unchanged, true. */
+	const auto opaque = [] (size_t /*x*/, size_t /*y*/) { return RGBA{1, 2, 3, 255}; };
+	const auto holes = [] (size_t /*x*/, size_t /*y*/) { return RGBA{9, 8, 7, 0}; };
+	auto full = makeRGBA(4, 4, opaque);
+	auto empty = makeRGBA(4, 4, holes);
+
+	EXPECT_TRUE(Processor< uint8_t >::fillTransparentColour(full, 128) && everyPixelIs(full, opaque));
+	EXPECT_TRUE(Processor< uint8_t >::fillTransparentColour(empty, 128) && everyPixelIs(empty, holes));
+}
+
+TEST(PixelFactoryProcessor, fillTransparentColourRefusesBadInput)
+{
+	/* A zero threshold, a pixmap without alpha, an invalid pixmap: refused. */
+	auto rgba = makeRGBA(4, 4, halfLeaf);
+	Pixmap< uint8_t > rgb{4, 4, ChannelMode::RGB};
+	Pixmap< uint8_t > invalid;
+
+	EXPECT_FALSE(Processor< uint8_t >::fillTransparentColour(rgba, 0));
+	EXPECT_FALSE(Processor< uint8_t >::fillTransparentColour(rgb, 128));
+	EXPECT_FALSE(Processor< uint8_t >::fillTransparentColour(invalid, 128));
 }
