@@ -46,6 +46,15 @@ graphics § 39 § The mip filter). Measurements and traps: `docs/caution-points.
 `downsampleKaiser*` (a constant kept exactly through odd sizes and sRGB, the mean within a bound — exact in float —,
 sharper and less aliasing than the box on sinusoids, mirrored edges), `downsampleFiltersSRGBColourInLinearLight`.
 
+### Texture names: `TextureName` — `<TextureName>.<Purpose>` (2026-10-21)
+
+`TextureName::parse(resourceName, TextureStore)` reads the naming convention of the engine's `GPUTextures` store (its
+graphics § 40): the purpose after the last dot of the last path component, its tokens ambientCG's words (`Color`,
+`Opacity`, `NormalGL`, `NormalDX`, `Roughness`, `Metalness`, `AmbientOcclusion`, `Displacement`, `Emission`; exact
+case) joined by `-` in channel order — a colour three channels from R, a normal two and alone, the rest one, four at most;
+a colour file holds only the opacity in A; `NormalDX` is a source only (refused for `TextureStore::GPU`). A refusal is a
+`TextureNameError` (`to_cstring()` gives the log sentence) and keeps nothing. Tests: `PixelFactoryTextureName.*` (7).
+
 ### Colour under transparent pixels: `Processor::fillTransparentColour()` (2026-10-21)
 
 `fillTransparentColour(pixmap, alphaThreshold)` dilates the colour of an RGBA pixmap under its holes (alpha below the

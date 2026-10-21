@@ -99,6 +99,7 @@ set(EMERAUDE_BASE_PIXEL_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/FileFormatWebP.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/Font.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/Reduction.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/TextureName.cpp
 )
 
 # vertex module — VertexFactory (mostly header-only; one compiled generator).
@@ -174,6 +175,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmap.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryPixmapFormat.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryProcessor.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryTextureName.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_PixelFactoryTextPixmap.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ScopedRegistration.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_StaticVector.cpp

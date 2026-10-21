@@ -218,6 +218,7 @@
 #include "PixelFactory/Reduction.hpp"
 #include "PixelFactory/StreamIO.hpp"
 #include "PixelFactory/TextProcessor.hpp"
+#include "PixelFactory/TextureName.hpp"
 #include "PixelFactory/Types.hpp"
 #include "PortableRandom.hpp"
 #include "Randomizer.hpp"
