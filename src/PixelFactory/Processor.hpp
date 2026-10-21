@@ -38,6 +38,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <span>
 #include <type_traits>
 #include <vector>
 
@@ -49,6 +50,7 @@
 #include "Math/Space2D/Segment.hpp"
 #include "Math/Vector.hpp"
 #include "PixelFactory/Color.hpp"
+#include "PixelFactory/Reduction.hpp"
 #include "PixelFactory/Types.hpp"
 #include "ThreadPool.hpp" // IWYU pragma: keep (a template body calls it: a forward declaration is not enough)
 #include "Pixmap.hpp"
@@ -1259,27 +1261,44 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Reduces a pixmap with an exact AREA-WEIGHTED box filter: every destination pixel is the mean of the
-			 * source footprint it covers, fractional pixels weighted by the fraction covered. The mip filter.
+			 * @brief Reduces a pixmap — the mip filter. Every destination pixel is the weighted sum of the source pixels its
+			 * kernel covers (ReductionKernel), separable: each source row is filtered horizontally once, into a ring of as many
+			 * rows as one destination row reads, then the columns of that ring are summed.
+			 * @note Box: the exact area-weighted mean of the source footprint — the mean is kept at every size, odd and
+			 * non-power-of-two ones included (the footprint of an odd width is 2.x pixels, split across its neighbours by
+			 * coverage, never truncated).
+			 * @note Kaiser: the Kaiser-windowed sinc of NVIDIA Texture Tools (ReductionKernel), sharper; its negative lobes
+			 * ring slightly at a hard edge — an integral channel is clamped to its range, a floating-point one is left as
+			 * filtered.
+			 * @note sRGB: the colour channels (every channel but the alpha) are decoded to linear light, filtered, and encoded
+			 * back — an sRGB colour averaged in its encoded space darkens the contrasts. The alpha is always linear. Integral
+			 * pixels only: a floating-point pixmap is linear by convention.
 			 * @note ⚠️ Not resize(): its Linear mode is a BILINEAR RESAMPLE for display — it reads the two source pixels
 			 * around one point per destination pixel, at x·(w−1)/W from the top-left corner, so a 1 × 1 target is the
 			 * corner pixel alone. Used to build a mip chain, it lost the mean of every texture: measured on a 23 % leaf
 			 * mask (1022 × 2048), 0.35 at 3 × 8, then 0.001 at 1 × 4 — the needles vanished beyond ~300 m (Sept 2026).
-			 * This filter keeps the mean EXACTLY at every size, odd and non-power-of-two ones included (the footprint
-			 * of an odd width is 2.x pixels, split across its neighbours by coverage, never truncated).
-			 * @note Integral channels are rounded to nearest; the accumulation is in double.
+			 * @note Integral channels are rounded to nearest; the accumulation is in float. Memory: one decoded source row, a
+			 * ring of filtered rows (2 or 3 for the box, 13 for the Kaiser at 2:1) and one accumulated row — never a whole
+			 * intermediate image.
 			 * @param source A reference to the source pixmap.
 			 * @param width The destination width, in [1, source width].
 			 * @param height The destination height, in [1, source height].
 			 * @param destination A writable reference to the destination pixmap.
-			 * @return bool False on an invalid source or an enlarging size.
+			 * @param filter The filter. Default the box.
+			 * @param sRGB Whether the colour channels are sRGB-encoded, to filter them in linear light. Default false.
+			 * @return bool False on an invalid source, an enlarging size, or sRGB asked of a floating-point pixmap.
 			 */
 			[[nodiscard]]
 			static
 			bool
-			downsample (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & destination) noexcept
+			downsample (const Pixmap< pixel_data_t, dimension_t > & source, dimension_t width, dimension_t height, Pixmap< pixel_data_t, dimension_t > & destination, ReductionFilter filter = ReductionFilter::Box, bool sRGB = false) noexcept
 			{
 				if ( !source.isValid() || width == 0 || height == 0 || width > source.width() || height > source.height() )
+				{
+					return false;
+				}
+
+				if ( std::is_floating_point_v< pixel_data_t > && sRGB )
 				{
 					return false;
 				}
@@ -1291,101 +1310,58 @@ namespace EmEn::Base::PixelFactory
 					return true;
 				}
 
-				if ( !destination.initialize(width, height, source.channelMode()) )
+				const auto channels = static_cast< size_t >(source.colorCount());
+				const auto sourceWidth = static_cast< size_t >(source.width());
+				const auto targetWidth = static_cast< size_t >(width);
+
+				const ReductionKernel columns{sourceWidth, targetWidth, filter};
+				const ReductionKernel rows{static_cast< size_t >(source.height()), static_cast< size_t >(height), filter};
+
+				if ( !columns.isValid() || !rows.isValid() || !destination.initialize(width, height, source.channelMode()) )
 				{
 					return false;
 				}
 
-				struct Tap final
+				/* The channels decoded from sRGB: every one but the alpha. */
+				const auto alphaChannels = source.hasAlphaChannel() ? size_t{1} : size_t{0};
+				const ChannelLayout layout{channels, sRGB ? channels - alphaChannels : size_t{0}};
+				const auto rowStride = targetWidth * channels;
+				const auto ringSize = rows.maximumSpan();
+
+				std::vector< float > decodedRow(sourceWidth * channels, 0.0F);
+				std::vector< float > ring(ringSize * rowStride, 0.0F);
+				std::vector< size_t > ringRows(ringSize, std::numeric_limits< size_t >::max());
+				std::vector< float > accumulated(rowStride, 0.0F);
+
+				const std::span< const pixel_data_t > sourceData{source.data()};
+				const std::span< pixel_data_t > targetData{destination.data()};
+				const std::span< float > ringData{ring};
+				const std::span< const float, 256 > decodeTable{sRGBByteDecodeTable()};
+
+				for ( size_t targetRow = 0; targetRow < static_cast< size_t >(height); ++targetRow )
 				{
-					size_t index;
-					double weight;
-				};
+					std::ranges::fill(accumulated, 0.0F);
 
-				/* The taps of one destination column (or row): every source pixel its footprint overlaps, weighted by
-				 * the overlap, normalised by the footprint so the weights sum to 1. */
-				const auto buildTaps = [] (size_t sourceSize, size_t destinationSize) {
-					std::vector< std::vector< Tap > > taps(destinationSize);
-
-					const auto scale = static_cast< double >(sourceSize) / static_cast< double >(destinationSize);
-
-					for ( size_t target = 0; target < destinationSize; ++target )
+					for ( const auto & tap : rows.taps(targetRow) )
 					{
-						const auto start = static_cast< double >(target) * scale;
-						const auto end = static_cast< double >(target + 1) * scale;
+						/* The rows of one destination row lie within maximumSpan(): their slots are distinct. */
+						const auto slot = tap.index % ringSize;
+						const auto filtered = ringData.subspan(slot * rowStride, rowStride);
 
-						for ( auto index = static_cast< size_t >(std::floor(start)); index < std::min(static_cast< size_t >(std::ceil(end)), sourceSize); ++index )
+						if ( ringRows[slot] != tap.index )
 						{
-							const auto overlap = std::min(end, static_cast< double >(index + 1)) - std::max(start, static_cast< double >(index));
+							reduceRow(sourceData.subspan(tap.index * sourceWidth * channels, sourceWidth * channels), filtered, layout, columns, decodeTable, decodedRow);
 
-							if ( overlap > 0.0 )
-							{
-								taps[target].push_back({index, overlap / scale});
-							}
+							ringRows[slot] = tap.index;
+						}
+
+						for ( size_t index = 0; index < rowStride; ++index )
+						{
+							accumulated[index] += filtered[index] * tap.weight;
 						}
 					}
 
-					return taps;
-				};
-
-				const auto channels = static_cast< size_t >(source.colorCount());
-				const auto sourceWidth = static_cast< size_t >(source.width());
-				const auto sourceHeight = static_cast< size_t >(source.height());
-				const auto targetWidth = static_cast< size_t >(width);
-				const auto targetHeight = static_cast< size_t >(height);
-
-				const auto columnTaps = buildTaps(sourceWidth, targetWidth);
-				const auto rowTaps = buildTaps(sourceHeight, targetHeight);
-
-				const auto & sourceData = source.data();
-
-				/* Separable: the rows first, into a double buffer, then the columns of that buffer. */
-				std::vector< double > horizontal(sourceHeight * targetWidth * channels, 0.0);
-
-				for ( size_t y = 0; y < sourceHeight; ++y )
-				{
-					for ( size_t x = 0; x < targetWidth; ++x )
-					{
-						auto * output = &horizontal[(y * targetWidth + x) * channels];
-
-						for ( const auto & tap : columnTaps[x] )
-						{
-							const auto * input = &sourceData[(y * sourceWidth + tap.index) * channels];
-
-							for ( size_t channel = 0; channel < channels; ++channel )
-							{
-								output[channel] += static_cast< double >(input[channel]) * tap.weight;
-							}
-						}
-					}
-				}
-
-				auto & targetData = destination.data();
-
-				for ( size_t y = 0; y < targetHeight; ++y )
-				{
-					for ( size_t x = 0; x < targetWidth; ++x )
-					{
-						for ( size_t channel = 0; channel < channels; ++channel )
-						{
-							double value = 0.0;
-
-							for ( const auto & tap : rowTaps[y] )
-							{
-								value += horizontal[(tap.index * targetWidth + x) * channels + channel] * tap.weight;
-							}
-
-							if constexpr ( std::is_integral_v< pixel_data_t > )
-							{
-								constexpr auto Lowest = static_cast< double >(std::numeric_limits< pixel_data_t >::lowest());
-								constexpr auto Highest = static_cast< double >(std::numeric_limits< pixel_data_t >::max());
-
-								value = std::clamp(std::round(value), Lowest, Highest);
-							}
-
-							targetData[(y * targetWidth + x) * channels + channel] = static_cast< pixel_data_t >(value);
-						}
-					}
+					writeRow(accumulated, layout, targetData.subspan(targetRow * rowStride, rowStride));
 				}
 
 				return true;
@@ -2648,6 +2624,139 @@ namespace EmEn::Base::PixelFactory
 			}
 
 		private:
+
+			/** @brief The channels of a pixel for downsample(): their count, and the leading ones decoded from sRGB. */
+			struct ChannelLayout final
+			{
+				size_t count{0};
+				size_t linear{0};
+			};
+
+			/**
+			 * @brief Converts a stored value to downsample()'s working space: linear light in [0, 1] for an sRGB channel,
+			 * the value itself otherwise.
+			 * @param value The stored value.
+			 * @param linearize Whether the channel is sRGB-encoded (integral pixels only).
+			 * @param decodeTable The sRGB byte table (sRGBByteDecodeTable()), fetched once by the caller.
+			 * @return float
+			 */
+			[[nodiscard]]
+			static
+			float
+			toWorkingSpace (pixel_data_t value, bool linearize, std::span< const float, 256 > decodeTable) noexcept
+			{
+				if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+				{
+					if ( linearize )
+					{
+						return decodeTable[value];
+					}
+				}
+				else if constexpr ( std::is_integral_v< pixel_data_t > )
+				{
+					if ( linearize )
+					{
+						return sRGBToLinear(static_cast< float >(static_cast< double >(value) / static_cast< double >(std::numeric_limits< pixel_data_t >::max())));
+					}
+				}
+
+				return static_cast< float >(value);
+			}
+
+			/**
+			 * @brief Converts a filtered value back from downsample()'s working space: an sRGB channel encoded to the nearest
+			 * code, an integral one rounded and clamped to its range (the ringing of the Kaiser), a floating-point one as is.
+			 * @param value The filtered value.
+			 * @param linearized Whether the channel was decoded from sRGB.
+			 * @return pixel_data_t
+			 */
+			[[nodiscard]]
+			static
+			pixel_data_t
+			fromWorkingSpace (float value, bool linearized) noexcept
+			{
+				if constexpr ( std::is_integral_v< pixel_data_t > )
+				{
+					constexpr auto Lowest = static_cast< double >(std::numeric_limits< pixel_data_t >::lowest());
+					constexpr auto Highest = static_cast< double >(std::numeric_limits< pixel_data_t >::max());
+
+					if ( !linearized )
+					{
+						return static_cast< pixel_data_t >(std::clamp(std::round(static_cast< double >(value)), Lowest, Highest));
+					}
+
+					if constexpr ( std::is_same_v< pixel_data_t, uint8_t > )
+					{
+						return linearToSRGBByte(value);
+					}
+					else
+					{
+						return static_cast< pixel_data_t >(std::round(static_cast< double >(linearToSRGB(value)) * Highest));
+					}
+				}
+				else
+				{
+					return static_cast< pixel_data_t >(value);
+				}
+			}
+
+			/**
+			 * @brief Decodes one source row to the working space and filters it along the columns (downsample()).
+			 * @param input The source row, sourceWidth × channels values.
+			 * @param output The filtered row, destination width × channels floats.
+			 * @param layout The channels per pixel and the leading ones decoded from sRGB.
+			 * @param columns The column kernel.
+			 * @param decodeTable The sRGB byte table (sRGBByteDecodeTable()).
+			 * @param decoded A scratch row of sourceWidth × channels floats.
+			 */
+			static
+			void
+			reduceRow (std::span< const pixel_data_t > input, std::span< float > output, const ChannelLayout & layout, const ReductionKernel & columns, std::span< const float, 256 > decodeTable, std::span< float > decoded) noexcept
+			{
+				for ( size_t offset = 0; offset < input.size(); offset += layout.count )
+				{
+					for ( size_t channel = 0; channel < layout.count; ++channel )
+					{
+						decoded[offset + channel] = toWorkingSpace(input[offset + channel], channel < layout.linear, decodeTable);
+					}
+				}
+
+				std::ranges::fill(output, 0.0F);
+
+				for ( size_t target = 0; target < columns.destinationSize(); ++target )
+				{
+					const auto pixelOutput = output.subspan(target * layout.count, layout.count);
+
+					for ( const auto & tap : columns.taps(target) )
+					{
+						const auto pixelInput = decoded.subspan(tap.index * layout.count, layout.count);
+
+						for ( size_t channel = 0; channel < layout.count; ++channel )
+						{
+							pixelOutput[channel] += pixelInput[channel] * tap.weight;
+						}
+					}
+				}
+			}
+
+			/**
+			 * @brief Converts one accumulated destination row back to stored values (downsample()).
+			 * @param accumulated The filtered row, in the working space.
+			 * @param layout The channels per pixel and the leading ones decoded from sRGB.
+			 * @param output The destination row.
+			 */
+			static
+			void
+			writeRow (std::span< const float > accumulated, const ChannelLayout & layout, std::span< pixel_data_t > output) noexcept
+			{
+				for ( size_t offset = 0; offset < accumulated.size(); offset += layout.count )
+				{
+					for ( size_t channel = 0; channel < layout.count; ++channel )
+					{
+						output[offset + channel] = fromWorkingSpace(accumulated[offset + channel], channel < layout.linear);
+					}
+				}
+			}
 
 			/** @brief One level of the pull-push pyramid of fillTransparentColour(): RGB and a filled flag per pixel. */
 			struct FillLevel final

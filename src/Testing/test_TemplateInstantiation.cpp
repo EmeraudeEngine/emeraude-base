@@ -215,6 +215,7 @@
 #include "PixelFactory/Margin.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Processor.hpp"
+#include "PixelFactory/Reduction.hpp"
 #include "PixelFactory/StreamIO.hpp"
 #include "PixelFactory/TextProcessor.hpp"
 #include "PixelFactory/Types.hpp"

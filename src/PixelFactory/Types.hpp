@@ -65,6 +65,16 @@ namespace EmEn::Base::PixelFactory
 		Cubic
 	};
 
+	/** @brief Enumerate the filters of a reduction (Processor::downsample(), the mip filter). */
+	enum class ReductionFilter : uint8_t
+	{
+		/** @brief The exact area-weighted box: the mean of the source footprint, never past the image's edge. The softest. */
+		Box,
+		/** @brief The Kaiser-windowed sinc of NVIDIA Texture Tools (width 3 destination pixels, alpha 4, stretch 1),
+		 * the edges mirrored. Sharper, slight ringing (clamped on integral pixels). */
+		Kaiser
+	};
+
 	/** @brief List drawing mode when copying an image or a color onto another. */
 	enum class DrawPixelMode : uint8_t
 	{

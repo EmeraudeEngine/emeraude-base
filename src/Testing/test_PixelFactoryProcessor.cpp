@@ -36,7 +36,9 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
+#include <iterator>
 #include <limits>
+#include <numbers>
 #include <span>
 #include <string>
 #include <system_error>
@@ -52,6 +54,7 @@
 #include "PixelFactory/IOCommon.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Processor.hpp"
+#include "PixelFactory/Reduction.hpp"
 #include "PixelFactory/Types.hpp"
 #include "TemporaryPath.hpp"
 #include "ThreadPool.hpp"
@@ -1393,6 +1396,481 @@ TEST(PixelFactoryProcessor, downsampleFiltersEveryChannelAndRefusesToEnlarge)
 	EXPECT_EQ(target.data()[3], 255);
 
 	EXPECT_FALSE(Processor< uint8_t >::downsample(source, 4, 3, target));
+}
+
+namespace
+{
+	/**
+	 * @brief Answers whether every destination pixel of a kernel has weights summing to 1, taps inside the source, and a
+	 * span within maximumSpan().
+	 * @param sourceSize The source size.
+	 * @param destinationSize The destination size.
+	 * @param filter The filter.
+	 * @return bool
+	 */
+	bool
+	isNormalisedAndInside (size_t sourceSize, size_t destinationSize, ReductionFilter filter) noexcept
+	{
+		const ReductionKernel kernel{sourceSize, destinationSize, filter};
+
+		if ( !kernel.isValid() || kernel.destinationSize() != destinationSize )
+		{
+			return false;
+		}
+
+		for ( size_t target = 0; target < destinationSize; ++target )
+		{
+			const auto taps = kernel.taps(target);
+			double sum = 0.0;
+
+			for ( const auto & tap : taps )
+			{
+				sum += static_cast< double >(tap.weight);
+			}
+
+			const auto [lowest, highest] = std::ranges::minmax_element(taps, {}, &ReductionTap::index);
+
+			if ( std::abs(sum - 1.0) > 1.0e-5 || highest->index >= sourceSize || highest->index - lowest->index + 1 > kernel.maximumSpan() )
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+}
+
+/* Every kernel's weights sum to 1 for every destination pixel, the taps stay inside the source (the Kaiser mirrors
+ * them), and one destination pixel reads at most maximumSpan() consecutive rows. */
+TEST(PixelFactoryProcessor, reductionKernelIsNormalisedAndStaysInside)
+{
+	for ( const auto filter : {ReductionFilter::Box, ReductionFilter::Kaiser} )
+	{
+		for ( const auto & [sourceSize, destinationSize] : std::array< std::pair< size_t, size_t >, 7 >{{{1, 1}, {2, 1}, {3, 1}, {5, 2}, {1022, 511}, {511, 255}, {64, 32}}} )
+		{
+			EXPECT_TRUE(isNormalisedAndInside(sourceSize, destinationSize, filter)) << sourceSize << " -> " << destinationSize;
+		}
+	}
+}
+
+namespace
+{
+	/**
+	 * @brief Answers whether a kernel is the identity: one tap of weight 1 on its own pixel, for every pixel.
+	 * @param kernel The kernel.
+	 * @return bool
+	 */
+	bool
+	isIdentity (const ReductionKernel & kernel) noexcept
+	{
+		for ( size_t target = 0; target < kernel.destinationSize(); ++target )
+		{
+			const auto taps = kernel.taps(target);
+
+			if ( taps.size() != 1 || taps.front().index != target || taps.front().weight != 1.0F )
+			{
+				return false;
+			}
+		}
+
+		return kernel.isValid();
+	}
+}
+
+/* An unchanged size is the identity, for both filters; a null or enlarging size is refused. */
+TEST(PixelFactoryProcessor, reductionKernelIdentityAndRefusals)
+{
+	EXPECT_TRUE(isIdentity(ReductionKernel{7, 7, ReductionFilter::Box}));
+	EXPECT_TRUE(isIdentity(ReductionKernel{7, 7, ReductionFilter::Kaiser}));
+
+	EXPECT_FALSE((ReductionKernel{0, 0, ReductionFilter::Kaiser}).isValid());
+	EXPECT_FALSE((ReductionKernel{4, 5, ReductionFilter::Kaiser}).isValid());
+}
+
+/* NVTT's filter: 1 at the centre, 0 at and past its half-width of 3, a sinc's zero at every other integer. */
+TEST(PixelFactoryProcessor, kaiserFilterShape)
+{
+	EXPECT_DOUBLE_EQ(ReductionKernel::kaiser(0.0), 1.0);
+	EXPECT_NEAR(ReductionKernel::kaiser(1.0), 0.0, 1.0e-12);
+	EXPECT_NEAR(ReductionKernel::kaiser(2.0), 0.0, 1.0e-12);
+	EXPECT_NEAR(ReductionKernel::kaiser(3.0), 0.0, 1.0e-12);
+	EXPECT_EQ(ReductionKernel::kaiser(-4.5), 0.0);
+	EXPECT_LT(ReductionKernel::kaiser(1.5), 0.0);
+}
+
+/* The sRGB byte table round-trips through the encoder, and matches the transfer function. */
+TEST(PixelFactoryProcessor, sRGBByteTableRoundTrips)
+{
+	for ( int value = 0; value <= 255; ++value )
+	{
+		const auto byte = static_cast< uint8_t >(value);
+
+		EXPECT_EQ(linearToSRGBByte(sRGBByteToLinear(byte)), byte);
+		EXPECT_NEAR(sRGBByteToLinear(byte), sRGBToLinear(static_cast< float >(value) / 255.0F), 1.0e-7F);
+	}
+}
+
+/* The bucketed encoder is round(encode × 255) exactly, and refuses what is outside [0, 1]. */
+TEST(PixelFactoryProcessor, sRGBByteEncoderIsTheNearestCode)
+{
+	for ( int step = 0; step <= 4000; ++step )
+	{
+		const auto linear = static_cast< float >(step) / 4000.0F;
+
+		EXPECT_EQ(linearToSRGBByte(linear), static_cast< uint8_t >(std::lround(linearToSRGB(linear) * 255.0F))) << linear;
+	}
+
+	EXPECT_EQ(linearToSRGBByte(-1.0F), 0);
+	EXPECT_EQ(linearToSRGBByte(2.0F), 255);
+	EXPECT_EQ(linearToSRGBByte(std::numeric_limits< float >::quiet_NaN()), 0);
+	EXPECT_EQ(linearToSRGB(std::numeric_limits< float >::quiet_NaN()), 0.0F);
+}
+
+namespace
+{
+	/**
+	 * @brief Reduces a pixmap by halves down to 1 × 1 with the Kaiser and counts the pixels that are not the constant.
+	 * @param source The constant RGBA source.
+	 * @param constant The four values.
+	 * @param sRGB Whether the colour is filtered in linear light.
+	 * @return size_t The pixels that changed, every level together (SIZE_MAX on a refused reduction).
+	 */
+	size_t
+	changedPixelsDownTheChain (const Pixmap< uint8_t > & source, const std::array< uint8_t, 4 > & constant, bool sRGB) noexcept
+	{
+		size_t changed = 0;
+		auto level = source;
+
+		while ( level.width() > 1 || level.height() > 1 )
+		{
+			Pixmap< uint8_t > next;
+
+			if ( !Processor< uint8_t >::downsample(level, std::max(level.width() / 2, 1U), std::max(level.height() / 2, 1U), next, ReductionFilter::Kaiser, sRGB) )
+			{
+				return std::numeric_limits< size_t >::max();
+			}
+
+			for ( size_t index = 0; index < next.data().size(); index += 4 )
+			{
+				if ( !std::ranges::equal(std::span{next.data()}.subspan(index, 4), constant) )
+				{
+					++changed;
+				}
+			}
+
+			level = std::move(next);
+		}
+
+		return changed;
+	}
+}
+
+/* A constant image stays EXACTLY constant through the Kaiser, odd sizes and edges included, sRGB or not. */
+TEST(PixelFactoryProcessor, downsampleKaiserKeepsAConstant)
+{
+	constexpr std::array< uint8_t, 4 > Constant{17, 128, 250, 99};
+
+	Pixmap< uint8_t > source;
+	ASSERT_TRUE(source.initialize(37, 23, ChannelMode::RGBA));
+
+	for ( size_t index = 0; index < source.data().size(); index += 4 )
+	{
+		std::ranges::copy(Constant, std::span{source.data()}.subspan(index, 4).begin());
+	}
+
+	EXPECT_EQ(changedPixelsDownTheChain(source, Constant, false), 0U);
+	EXPECT_EQ(changedPixelsDownTheChain(source, Constant, true), 0U);
+}
+
+namespace
+{
+	/**
+	 * @brief The 1022 × 2048 needle mask of the mip tests: thin diagonal needles, about a quarter covered.
+	 * @param on The value of a needle.
+	 * @return Pixmap< pixel_t >
+	 */
+	template< typename pixel_t >
+	Pixmap< pixel_t >
+	needleMask (pixel_t on) noexcept
+	{
+		Pixmap< pixel_t > mask;
+
+		if ( !mask.initialize(1022, 2048, ChannelMode::Grayscale) )
+		{
+			return mask;
+		}
+
+		for ( uint32_t y = 0; y < mask.height(); ++y )
+		{
+			for ( uint32_t x = 0; x < mask.width(); ++x )
+			{
+				const bool needle = x > 8 && y > 8 && ((x + y) % 8) < 2;
+
+				mask.data()[(static_cast< size_t >(y) * mask.width()) + x] = needle ? on : pixel_t{0};
+			}
+		}
+
+		return mask;
+	}
+
+	/**
+	 * @brief The worst distance between the mean of every level of a Kaiser chain and a reference mean.
+	 * @param mask The base level.
+	 * @param reference The reference mean, in [0, 1].
+	 * @param scale The value of 1 (255 for bytes, 1 for floats).
+	 * @return double (infinity on a refused reduction)
+	 */
+	template< typename pixel_t >
+	double
+	worstKaiserMeanDrift (const Pixmap< pixel_t > & mask, double reference, double scale) noexcept
+	{
+		double worst = 0.0;
+		auto level = mask;
+
+		while ( level.width() > 1 || level.height() > 1 )
+		{
+			Pixmap< pixel_t > next;
+
+			if ( !Processor< pixel_t >::downsample(level, std::max(level.width() / 2, 1U), std::max(level.height() / 2, 1U), next, ReductionFilter::Kaiser) )
+			{
+				return std::numeric_limits< double >::infinity();
+			}
+
+			double sum = 0.0;
+
+			for ( const auto value : next.data() )
+			{
+				sum += static_cast< double >(value);
+			}
+
+			worst = std::max(worst, std::abs((sum / (scale * static_cast< double >(next.data().size()))) - reference));
+			level = std::move(next);
+		}
+
+		return worst;
+	}
+}
+
+/* The Kaiser's weights spread every source pixel evenly (the mean is kept in floating point), but its ringing is
+ * CLAMPED on bytes: on the worst case — a binary needle mask, 0 / 255 at the Nyquist — the negative lobes clipped at 0
+ * raise the mean of the first level (0.247 → 0.273), then it holds down to 1 × 1. */
+TEST(PixelFactoryProcessor, downsampleKaiserKeepsTheMeanWithinABound)
+{
+	const auto mask = needleMask< uint8_t >(255);
+	const auto baseMean = channelMean(mask);
+
+	ASSERT_GT(baseMean, 0.2);
+
+	EXPECT_LT(worstKaiserMeanDrift(needleMask< float >(1.0F), baseMean, 1.0), 0.0005);
+	EXPECT_LT(worstKaiserMeanDrift(mask, baseMean, 255.0), 8.0 / 255.0);
+}
+
+namespace
+{
+	/**
+	 * @brief The amplitude of one frequency in a row of a grey-scale pixmap: the projection on its sine and cosine over
+	 * whole periods.
+	 * @param pixmap The one-row pixmap.
+	 * @param period The period, in pixels.
+	 * @param first The first pixel of the window.
+	 * @param count The window's length, a whole number of periods.
+	 * @return double
+	 */
+	double
+	amplitude (const Pixmap< uint8_t > & pixmap, double period, size_t first, size_t count) noexcept
+	{
+		const auto window = std::span{pixmap.data()}.subspan(first, count);
+		double mean = 0.0;
+
+		for ( const auto value : window )
+		{
+			mean += value;
+		}
+
+		mean /= static_cast< double >(count);
+
+		double sine = 0.0;
+		double cosine = 0.0;
+
+		for ( size_t index = 0; index < count; ++index )
+		{
+			const auto phase = 2.0 * std::numbers::pi * static_cast< double >(first + index) / period;
+			const auto value = static_cast< double >(window[index]) - mean;
+
+			sine += value * std::sin(phase);
+			cosine += value * std::cos(phase);
+		}
+
+		return 2.0 * std::hypot(sine, cosine) / static_cast< double >(count);
+	}
+
+	/**
+	 * @brief A 256 × 1 grey-scale sinusoid of amplitude 100 around 127.5.
+	 * @param period The period, in pixels.
+	 * @return Pixmap< uint8_t >
+	 */
+	Pixmap< uint8_t >
+	sinusoid (double period) noexcept
+	{
+		Pixmap< uint8_t > pixmap;
+
+		if ( !pixmap.initialize(256, 1, ChannelMode::Grayscale) )
+		{
+			return pixmap;
+		}
+
+		for ( size_t index = 0; index < 256; ++index )
+		{
+			const auto value = 127.5 + (100.0 * std::sin(2.0 * std::numbers::pi * static_cast< double >(index) / period));
+
+			pixmap.data()[index] = static_cast< uint8_t >(std::lround(value));
+		}
+
+		return pixmap;
+	}
+
+	/**
+	 * @brief Halves a 256 × 1 pixmap and measures one frequency of the result.
+	 * @param source The source.
+	 * @param filter The filter.
+	 * @param period The period to measure, in destination pixels.
+	 * @param count The window's length (from pixel 8), a whole number of periods.
+	 * @return double
+	 */
+	double
+	halvedAmplitude (const Pixmap< uint8_t > & source, ReductionFilter filter, double period, size_t count) noexcept
+	{
+		Pixmap< uint8_t > target;
+
+		if ( !Processor< uint8_t >::downsample(source, 128, 1, target, filter) )
+		{
+			return -1.0;
+		}
+
+		return amplitude(target, period, 8, count);
+	}
+}
+
+/* THE reason for the Kaiser: sharper AND less aliasing than the box. A detail below the new Nyquist keeps more of its
+ * contrast; a detail above it (which the reduced image cannot hold) folds back as a weaker false pattern. */
+TEST(PixelFactoryProcessor, downsampleKaiserIsSharperAndAliasesLessThanTheBox)
+{
+	/* Period 8 source pixels → 4 destination pixels (half the new Nyquist): 28 whole periods away from the edges. */
+	const auto passband = sinusoid(8.0);
+	const auto passBox = halvedAmplitude(passband, ReductionFilter::Box, 4.0, 112);
+	const auto passKaiser = halvedAmplitude(passband, ReductionFilter::Kaiser, 4.0, 112);
+
+	/* Period 2.5 source pixels (1.6 × the new Nyquist) folds to period 5 destination pixels: 22 whole periods. */
+	const auto stopband = sinusoid(2.5);
+	const auto aliasBox = halvedAmplitude(stopband, ReductionFilter::Box, 5.0, 110);
+	const auto aliasKaiser = halvedAmplitude(stopband, ReductionFilter::Kaiser, 5.0, 110);
+
+	/* The box: cos(π/8) = 0.924 of the contrast kept, |cos(0.4 π)| = 0.309 folded back. */
+	EXPECT_NEAR(passBox, 92.4, 1.5);
+	EXPECT_NEAR(aliasBox, 30.9, 1.5);
+
+	EXPECT_GT(passKaiser, passBox + 3.0) << "Kaiser " << passKaiser << " vs box " << passBox;
+	EXPECT_LT(aliasKaiser, aliasBox * 0.25) << "Kaiser " << aliasKaiser << " vs box " << aliasBox;
+}
+
+namespace
+{
+	/**
+	 * @brief A 2 × 2 RGBA checkerboard of 0 and 254 on every channel, alpha included.
+	 * @return Pixmap< uint8_t >
+	 */
+	Pixmap< uint8_t >
+	checkerboard () noexcept
+	{
+		Pixmap< uint8_t > pixmap;
+
+		if ( !pixmap.initialize(2, 2, ChannelMode::RGBA) )
+		{
+			return pixmap;
+		}
+
+		for ( size_t pixel = 0; pixel < 4; ++pixel )
+		{
+			const uint8_t value = ((pixel + (pixel / 2)) % 2) == 0 ? 0 : 254;
+
+			std::ranges::fill(std::span{pixmap.data()}.subspan(pixel * 4, 4), value);
+		}
+
+		return pixmap;
+	}
+
+	/**
+	 * @brief Reduces a pixmap to 1 × 1 and returns its pixel.
+	 * @param source The source.
+	 * @param filter The filter.
+	 * @param sRGB Whether the colour is filtered in linear light.
+	 * @return std::array< uint8_t, 4 > (the unused channels 0)
+	 */
+	std::array< uint8_t, 4 >
+	reducedToOnePixel (const Pixmap< uint8_t > & source, ReductionFilter filter, bool sRGB) noexcept
+	{
+		std::array< uint8_t, 4 > pixel{};
+		Pixmap< uint8_t > target;
+
+		if ( Processor< uint8_t >::downsample(source, 1, 1, target, filter, sRGB) )
+		{
+			std::ranges::copy(target.data(), pixel.begin());
+		}
+
+		return pixel;
+	}
+}
+
+/* sRGB: the colour channels are averaged in LINEAR light — black and 254 average to 187 (linear 0.4956), not to 127
+ * — and the alpha stays linear. Without the flag, everything is averaged as stored. (254, not 255: the stored mean of
+ * 0 and 255 is a 127.5 tie, which a Kaiser weight one ulp off 0.5 rounds either way.) */
+TEST(PixelFactoryProcessor, downsampleFiltersSRGBColourInLinearLight)
+{
+	const auto source = checkerboard();
+
+	for ( const auto filter : {ReductionFilter::Box, ReductionFilter::Kaiser} )
+	{
+		EXPECT_EQ(reducedToOnePixel(source, filter, false), (std::array< uint8_t, 4 >{127, 127, 127, 127}));
+		EXPECT_EQ(reducedToOnePixel(source, filter, true), (std::array< uint8_t, 4 >{187, 187, 187, 127}));
+	}
+}
+
+/* A grey-scale image without alpha: its only channel is colour. A floating-point pixmap is linear by convention: sRGB is
+ * refused. */
+TEST(PixelFactoryProcessor, downsampleSRGBGreyScaleAndFloatRefusal)
+{
+	Pixmap< uint8_t > grey;
+	ASSERT_TRUE(grey.initialize(2, 1, ChannelMode::Grayscale));
+	grey.data()[0] = 0;
+	grey.data()[1] = 254;
+
+	EXPECT_EQ(reducedToOnePixel(grey, ReductionFilter::Box, true).front(), 187);
+
+	Pixmap< float > hdr;
+	ASSERT_TRUE(hdr.initialize(2, 2, ChannelMode::RGBA));
+
+	Pixmap< float > hdrMip;
+	EXPECT_FALSE(Processor< float >::downsample(hdr, 1, 1, hdrMip, ReductionFilter::Kaiser, true));
+	EXPECT_TRUE(Processor< float >::downsample(hdr, 1, 1, hdrMip, ReductionFilter::Kaiser, false));
+}
+
+/* The Kaiser's edges are MIRRORED: a white left column never reaches the right edge (a wrapping kernel would bleed it
+ * there), and the ringing next to the hard edge is clamped to the byte range. */
+TEST(PixelFactoryProcessor, downsampleKaiserMirrorsItsEdges)
+{
+	Pixmap< uint8_t > source;
+	ASSERT_TRUE(source.initialize(32, 1, ChannelMode::Grayscale));
+
+	std::ranges::fill(source.data(), static_cast< uint8_t >(0));
+	source.data()[0] = 255;
+	source.data()[1] = 255;
+
+	Pixmap< uint8_t > target;
+	ASSERT_TRUE(Processor< uint8_t >::downsample(source, 16, 1, target, ReductionFilter::Kaiser));
+
+	EXPECT_GT(target.data()[0], 200);
+	EXPECT_EQ(target.data()[15], 0);
+	EXPECT_EQ(target.data()[14], 0);
 }
 
 namespace

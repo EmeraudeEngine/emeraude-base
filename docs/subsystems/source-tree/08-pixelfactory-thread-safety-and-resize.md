@@ -28,6 +28,24 @@ separable Catmull-Rom. Found by the engine's texture packing (a 512² opacity ma
 Tests: `PixelFactoryProcessor.resampleTexture*` (a constant stays constant up to its edges, centres aligned, wrap
 vs clamp, refusals).
 
+### The mip filter: `Processor::downsample()` — box or Kaiser, sRGB in linear light (2026-10-21)
+
+`downsample(source, width, height, destination, filter = ReductionFilter::Box, sRGB = false)` reduces a pixmap (any
+size in [1, source]) through a separable one-axis kernel per direction, `ReductionKernel` (`PixelFactory/Reduction.hpp`):
+- `ReductionFilter::Box` — the exact area-weighted footprint: the mean kept at every size, odd ones included.
+- `ReductionFilter::Kaiser` — NVIDIA Texture Tools' Kaiser-windowed sinc (I. Castaño, `src/nvimage/Filter.cpp`, public
+  domain): half-width 3 destination pixels, alpha 4, stretch 1, every tap the filter averaged over its source pixel
+  (32 sub-samples), the taps past an edge mirrored (the edge pixel repeated), merged when they land on one pixel.
+  Sharper than the box and far less aliasing; it rings slightly at a hard edge, clamped on integral pixels.
+- `sRGB` — every channel but the alpha decoded to linear light (`sRGBByteDecodeTable()`), filtered, encoded back to the
+  nearest byte (`linearToSRGBByte()`). Refused on a floating-point pixmap.
+
+The engine builds every texture's mip chain with the Kaiser of the previous level, an sRGB colour in linear light (its
+graphics § 39 § The mip filter). Measurements and traps: `docs/caution-points.md` § PixelFactory. Tests:
+`PixelFactoryProcessor.reductionKernelIsNormalisedAndStaysInside`, `sRGBByteTransferRoundTrips`,
+`downsampleKaiser*` (a constant kept exactly through odd sizes and sRGB, the mean within a bound — exact in float —,
+sharper and less aliasing than the box on sinusoids, mirrored edges), `downsampleFiltersSRGBColourInLinearLight`.
+
 ### Colour under transparent pixels: `Processor::fillTransparentColour()` (2026-10-21)
 
 `fillTransparentColour(pixmap, alphaThreshold)` dilates the colour of an RGBA pixmap under its holes (alpha below the

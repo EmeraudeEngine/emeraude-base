@@ -98,6 +98,7 @@ set(EMERAUDE_BASE_PIXEL_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/FileFormatTIFF.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/FileFormatWebP.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/Font.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/Reduction.cpp
 )
 
 # vertex module — VertexFactory (mostly header-only; one compiled generator).

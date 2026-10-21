@@ -1382,6 +1382,28 @@ chains with it: a 23 % leaf mask (1022 × 2048) read 0.001 at 1 × 4, a 35 % one
 foliage vanished. `Processor::downsample(source, width, height, destination)` is an exact area-weighted box filter:
 the mean holds at every size, odd and non-power-of-two widths included (tests `PixelFactoryProcessor.downsample*`).
 
+### `Processor::downsample()` filters: the box keeps the mean exactly, the Kaiser keeps it only in floating point (2026-10-21)
+
+`downsample(source, width, height, destination, filter = ReductionFilter::Box, sRGB = false)`. `ReductionFilter::Kaiser`
+is NVIDIA Texture Tools' Kaiser-windowed sinc (`ReductionKernel`, `PixelFactory/Reduction.hpp`: width 3 destination
+pixels, alpha 4, stretch 1, each tap averaged over its source pixel, the edges MIRRORED with the edge pixel repeated as
+`VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT` — NVTT skips it). Measured on a 256-pixel sinusoid halved: a detail at half
+the new Nyquist keeps 97.4 % of its contrast (box 92.0 %), a detail at 1.6 × the new Nyquist folds back at 0.25 (box
+31.0) — sharper AND less aliasing.
+- ⚠️ **Its negative lobes ring, and an integral pixel CLAMPS the ring**: on the worst case — a binary 0 / 255 needle
+  mask at the Nyquist — the clipped undershoot raises the first level's mean by 6.9 / 255 (0.247 → 0.273), then it
+  holds to 1 × 1. In `float` (no clamp) the mean holds within 0.0005. A test that needs the mean EXACT uses the box.
+- ⚠️ **A 0.5 tie rounds either way**: the stored mean of 0 and 255 is 127.5; a Kaiser weight one ulp off 0.5 gives
+  127, the box 128. Never write a test on a tie.
+- `sRGB = true` decodes every channel but the alpha to linear light (a 256-entry table), filters, and encodes back to
+  the nearest byte — `round(encode × 255)` exactly, through 255 linear thresholds indexed by the float's bits (32
+  buckets per octave, at most three comparisons): a binary search there cost 350 ms per 4096² RGBA chain. Integral
+  pixels only: a `float` pixmap is linear by convention, `sRGB` on it is refused.
+- Memory: one decoded source row, a ring of `ReductionKernel::maximumSpan()` filtered rows (2–3 for the box, 13 for the
+  Kaiser at 2:1) and one accumulated row. The former box kept a whole `double` intermediate image: 256 MiB for a 4096²
+  RGBA level. Full 4096² RGBA chain (GCC -O3, best of 5): former box 178 ms / 414 MB peak, box 149 ms, box sRGB 191 ms,
+  Kaiser 255 ms, Kaiser sRGB 325 ms.
+
 ### `Pixmap< pixel_data_t >` is **not** byte-typed — never `memset`/`memcpy` an element count
 
 `Pixmap` is `template< typename pixel_data_t = uint8_t, … > requires std::is_arithmetic_v< pixel_data_t >`.
