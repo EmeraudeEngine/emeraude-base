@@ -1399,6 +1399,10 @@ the new Nyquist keeps 97.4 % of its contrast (box 92.0 %), a detail at 1.6 × th
   the nearest byte — `round(encode × 255)` exactly, through 255 linear thresholds indexed by the float's bits (32
   buckets per octave, at most three comparisons): a binary search there cost 350 ms per 4096² RGBA chain. Integral
   pixels only: a `float` pixmap is linear by convention, `sRGB` on it is refused.
+- ⚠️ **MSVC C4127**: `if ( std::is_floating_point_v< pixel_data_t > && sRGB )` — a compile-time constant operand of a
+  runtime condition — is "conditional expression is constant", an ERROR under `/WX`; GCC and clang say nothing. It broke
+  the Windows build of f964a97 (found by the Windows peer). A type test in a template body is `if constexpr`, the runtime
+  test nested inside it.
 - Memory: one decoded source row, a ring of `ReductionKernel::maximumSpan()` filtered rows (2–3 for the box, 13 for the
   Kaiser at 2:1) and one accumulated row. The former box kept a whole `double` intermediate image: 256 MiB for a 4096²
   RGBA level. Full 4096² RGBA chain (GCC -O3, best of 5): former box 178 ms / 414 MB peak, box 149 ms, box sRGB 191 ms,

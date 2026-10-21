@@ -1298,9 +1298,13 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
-				if ( std::is_floating_point_v< pixel_data_t > && sRGB )
+				/* NOTE: if constexpr, not a constant operand of && (MSVC C4127 under /WX — GCC and clang are silent). */
+				if constexpr ( std::is_floating_point_v< pixel_data_t > )
 				{
-					return false;
+					if ( sRGB )
+					{
+						return false;
+					}
 				}
 
 				if ( width == source.width() && height == source.height() )
