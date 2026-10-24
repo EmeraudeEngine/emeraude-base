@@ -238,6 +238,16 @@ so IWYU never sees the `throw std::length_error` of `StaticVector.hpp` and propo
 consumer built WITH exceptions (2026-10-19). Kept with `// IWYU pragma: keep (<reason>)`; `tools/gate/gate.py` lists such
 files as having a platform branch.
 
+⚠️ **IWYU ran on NOTHING from 2026-10-21 (145fda6) to 2026-10-25** (macOS-PA, confirmed on Linux): the mapping entry
+`{ "include": ["<features.h>", "private", ...] }` contradicts IWYU's built-in glibc map (loaded on EVERY OS, it declares
+`<features.h>` public), and IWYU 0.23 / 0.27 then aborts every TU on an unconditional check ("Same file seen with two
+different visibilities: <features.h>", exit 250). The gate read the empty output as clean. Fixed with a SYMBOL mapping,
+`{ "symbol": ["__GLIBC__", "private", "<cstddef>", "public"] }`: IWYU runs, and `Resources/Manager.cpp` (the
+`__GLIBC__` guard) is not sent to `<features.h>`. The gate now reports a crash, a non-zero exit or a source without a
+verdict as `ENV`. The files touched in that window carry an IWYU debt: items `iwyu-debt-since-2026-10-21` (one per
+repository). Rule: **a mapping entry never re-declares the visibility of a header IWYU's built-in maps already know** —
+map the symbol instead.
+
 ⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
 for `BaseUtility.hpp`): the fix is the template's own header including what it uses.
 

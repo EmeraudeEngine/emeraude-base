@@ -23,6 +23,8 @@
 	# IWYU 0.23 with libstdc++ 14 attributes std::vector to <format>.
 	{ "symbol": ["std::vector", "private", "<vector>", "public"] },
 	# glibc's <features.h> defines __GLIBC__ (a `#if defined(__GLIBC__)` guard): any standard header brings it, and the
-	# header does not exist on macOS / Windows — never include it, point at a portable standard header instead.
-	{ "include": ["<features.h>", "private", "<cstddef>", "public"] }
+	# header does not exist on macOS / Windows — never include it, point at a portable standard header instead. A SYMBOL
+	# mapping: IWYU's built-in glibc map (loaded on every OS) declares <features.h> public, and an include entry that
+	# says private makes IWYU 0.23 / 0.27 assert on every TU ("Same file seen with two different visibilities").
+	{ "symbol": ["__GLIBC__", "private", "<cstddef>", "public"] }
 ]

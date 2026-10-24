@@ -29,7 +29,9 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <numbers>
+#include <string>
 
 /* Local inclusions. */
 #include "Math/Astronomy.hpp"
