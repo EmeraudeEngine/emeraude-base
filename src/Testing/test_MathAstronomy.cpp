@@ -95,7 +95,7 @@ TEST(MathAstronomy, SunriseDueEastAtTheEquinox)
 {
 	/* A planet whose star does not move against the stars keeps the equinox: the star rises due east, a quarter of a
 	 * day before noon, whatever the latitude. */
-	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = radians(23.0), .eccentricity = 0.0, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.0};
+	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = radians(23.0), .eccentricity = 0.0, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.0, .name = ""};
 
 	for ( const double latitude : {0.0, 45.0, -50.0} )
 	{
@@ -241,7 +241,7 @@ TEST(MathAstronomy, TheStarDistanceFollowsTheEllipse)
 
 TEST(MathAstronomy, AStillPlanetKeepsItsDistance)
 {
-	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.5, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.5};
+	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.5, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.5, .name = ""};
 
 	for ( const double time : {0.0, 1.0e3, 1.0e8} )
 	{
@@ -303,7 +303,7 @@ namespace
 	expectSimpleCourse (double noonElevation) noexcept
 	{
 		constexpr double Day{240.0};
-		const Planet planet{.siderealDay = Day, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.0, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.0};
+		const Planet planet{.siderealDay = Day, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.0, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.0, .name = ""};
 		const Observer observer{radians(90.0 - noonElevation)};
 
 		for ( int step = 0; step < 40; ++step )

@@ -30,6 +30,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <string>
 
 namespace EmEn::Base::Math::Astronomy
 {
@@ -104,6 +105,9 @@ namespace EmEn::Base::Math::Astronomy
 		/** @brief Semi-major axis of the orbit, the mean distance to the star, in astronomical units (Earth: 1.00000261 AU,
 		 * J2000). The star's illuminance at the planet goes as the inverse square of starDistance(). */
 		double semiMajorAxis{1.00000261};
+		/** @brief The planet's name, its identity for a consumer that pairs it with other data (a physical sky checks
+		 * that its atmosphere belongs to the same planet). Empty = unnamed: nothing is checked. Default "Earth". */
+		std::string name{"Earth"};
 	};
 
 	/**

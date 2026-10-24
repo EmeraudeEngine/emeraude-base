@@ -1,6 +1,6 @@
 ---
 id: iwyu-debt-since-2026-10-21
-title: IWYU debt — the 5 C++ files touched while include-what-you-use did not run (2026-10-21 to 2026-10-25)
+title: IWYU debt — the 4 C++ files touched while include-what-you-use did not run (2026-10-21 to 2026-10-25)
 status: open
 priority: high
 scope: emeraude-base src/
@@ -8,7 +8,7 @@ opened: 2026-10-25
 tags: [iwyu, static-analysis, gate, debt]
 ---
 
-# IWYU debt — the 5 C++ files touched while include-what-you-use did not run
+# IWYU debt — the 4 C++ files touched while include-what-you-use did not run
 
 ## Why
 
@@ -28,7 +28,6 @@ owner orders it.
 
 The files (as of 2026-10-25; the sky lots' files were brought clean that day):
 
-- `src/Math/Astronomy.hpp`
 - `src/PixelFactory/TextureName.cpp`
 - `src/PixelFactory/TextureName.hpp`
 - `src/Testing/test_PixelFactoryTextureName.cpp`
