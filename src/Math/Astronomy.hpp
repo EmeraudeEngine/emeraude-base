@@ -46,7 +46,8 @@ namespace EmEn::Base::Math::Astronomy
 	 * world axes (Y up); nothing here knows about the engine's frame.
 	 * @note References: J. Meeus, *Astronomical Algorithms*, 2nd ed., 1998 (ch. 13 the coordinate transformations, ch.
 	 * 30 Kepler's equation, ch. 48 the illuminated fraction); the orbital elements of Earth and the Moon from NASA's
-	 * planetary fact sheets. The orbits are the GENERIC two-body ones (owner decision 2026-10-24): no perturbation, the
+	 * planetary fact sheets; the semi-major axes from E. M. Standish, "Keplerian Elements for Approximate Positions of the
+	 * Major Planets", JPL (https://ssd.jpl.nasa.gov/planets/approx_pos.html, J2000). The orbits are the GENERIC two-body ones (owner decision 2026-10-24): no perturbation, the
 	 * Moon's nodes and perigee do not precess — the Sun stays within ~1° and the Moon within a few degrees of Meeus.
 	 */
 
@@ -100,6 +101,9 @@ namespace EmEn::Base::Math::Astronomy
 		 * in radians. Earth: 282.9373° (early January) — ⚠️ the tables give 102.9373°, the PLANET's longitude seen from
 		 * the star: the star seen from the planet stands opposite, 180° away. */
 		double longitudeOfPerihelion{radians(282.9373)};
+		/** @brief Semi-major axis of the orbit, the mean distance to the star, in astronomical units (Earth: 1.00000261 AU,
+		 * J2000). The star's illuminance at the planet goes as the inverse square of starDistance(). */
+		double semiMajorAxis{1.00000261};
 	};
 
 	/**
@@ -292,6 +296,25 @@ namespace EmEn::Base::Math::Astronomy
 	};
 
 	/**
+	 * @brief Returns the eccentric anomaly of the planet on its orbit at a time.
+	 * @note At the epoch λ = 0, i.e. the true anomaly is −ϖ: its mean anomaly is the origin of the mean motion.
+	 * @pre planet.orbitalPeriod > 0.
+	 * @param planet A reference to the planet.
+	 * @param time Seconds since the epoch.
+	 * @return double E, in radians.
+	 */
+	[[nodiscard]]
+	inline
+	double
+	orbitalEccentricAnomaly (const Planet & planet, double time) noexcept
+	{
+		const KeplerOrbit orbit{.eccentricity = planet.eccentricity};
+		const auto meanAnomalyAtEpoch = orbit.meanAnomaly(-planet.longitudeOfPerihelion);
+
+		return orbit.eccentricAnomaly(meanAnomalyAtEpoch + (TwoPi * time / planet.orbitalPeriod));
+	}
+
+	/**
 	 * @brief Returns the star's ecliptic longitude as seen from the planet at a time.
 	 * @note 0 at the epoch by definition (the vernal equinox); it advances non-uniformly on an eccentric orbit (Kepler).
 	 * A planet without orbital motion keeps it at 0.
@@ -310,11 +333,33 @@ namespace EmEn::Base::Math::Astronomy
 		}
 
 		const KeplerOrbit orbit{.eccentricity = planet.eccentricity};
-		/* At the epoch λ = 0, i.e. the true anomaly is −ϖ: its mean anomaly is the origin of the mean motion. */
-		const auto meanAnomalyAtEpoch = orbit.meanAnomaly(-planet.longitudeOfPerihelion);
-		const auto anomaly = orbit.trueAnomaly(orbit.eccentricAnomaly(meanAnomalyAtEpoch + (TwoPi * time / planet.orbitalPeriod)));
+		const auto anomaly = orbit.trueAnomaly(orbitalEccentricAnomaly(planet, time));
 
 		return wrapAngle(anomaly + planet.longitudeOfPerihelion);
+	}
+
+	/**
+	 * @brief Returns the planet's distance to its star at a time, in the unit of Planet::semiMajorAxis (AU).
+	 * @note r = a (1 − e cos E), E the eccentric anomaly of the mean motion starEclipticLongitude() follows. Earth:
+	 * 0.9833 AU at its perihelion (early January), 1.0167 AU at its aphelion. A planet without orbital motion stays at
+	 * its semi-major axis.
+	 * @param planet A reference to the planet.
+	 * @param time Seconds since the epoch.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	starDistance (const Planet & planet, double time) noexcept
+	{
+		if ( planet.orbitalPeriod <= 0.0 )
+		{
+			return planet.semiMajorAxis;
+		}
+
+		const auto eccentricity = std::clamp(planet.eccentricity, 0.0, 0.999999);
+
+		return planet.semiMajorAxis * (1.0 - (eccentricity * std::cos(orbitalEccentricAnomaly(planet, time))));
 	}
 
 	/**

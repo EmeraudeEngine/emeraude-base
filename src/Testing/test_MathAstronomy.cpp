@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -92,7 +93,7 @@ TEST(MathAstronomy, SunriseDueEastAtTheEquinox)
 {
 	/* A planet whose star does not move against the stars keeps the equinox: the star rises due east, a quarter of a
 	 * day before noon, whatever the latitude. */
-	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = radians(23.0), .eccentricity = 0.0, .longitudeOfPerihelion = 0.0};
+	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = radians(23.0), .eccentricity = 0.0, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.0};
 
 	for ( const double latitude : {0.0, 45.0, -50.0} )
 	{
@@ -203,6 +204,49 @@ TEST(MathAstronomy, AnEccentricOrbitIsNotUniform)
 	EXPECT_NEAR(june / SecondsPerDay, 92.8, 0.3);
 }
 
+TEST(MathAstronomy, TheStarDistanceFollowsTheEllipse)
+{
+	/* Earth stands at a (1 − e) at its perihelion, early January (~289 days after the March equinox), at a (1 + e) at
+	 * its aphelion, and at every instant on the conic r = a (1 − e²) / (1 + e cos ν) of the same true anomaly. */
+	const auto planet = earth();
+	const auto a = planet.semiMajorAxis;
+	const auto e = planet.eccentricity;
+	double nearest = 1.0e9;
+	double farthest = 0.0;
+	double perihelion = 0.0;
+
+	for ( int hour = 0; hour < 366 * 24; ++hour )
+	{
+		const auto time = static_cast< double >(hour) * 3600.0;
+		const auto distance = starDistance(planet, time);
+		const auto trueAnomaly = starEclipticLongitude(planet, time) - planet.longitudeOfPerihelion;
+
+		ASSERT_NEAR(distance, a * (1.0 - (e * e)) / (1.0 + (e * std::cos(trueAnomaly))), 1e-12) << "hour " << hour;
+
+		if ( distance < nearest )
+		{
+			nearest = distance;
+			perihelion = time;
+		}
+
+		farthest = std::max(farthest, distance);
+	}
+
+	EXPECT_NEAR(nearest, a * (1.0 - e), 1e-7);
+	EXPECT_NEAR(farthest, a * (1.0 + e), 1e-7);
+	EXPECT_NEAR(perihelion / SecondsPerDay, 289.0, 1.5);
+}
+
+TEST(MathAstronomy, AStillPlanetKeepsItsDistance)
+{
+	const Planet planet{.siderealDay = 1000.0, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.5, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.5};
+
+	for ( const double time : {0.0, 1.0e3, 1.0e8} )
+	{
+		EXPECT_EQ(starDistance(planet, time), 1.5);
+	}
+}
+
 TEST(MathAstronomy, MoonPhasesFollowTheSynodicMonth)
 {
 	const auto planet = earth();
@@ -257,7 +301,7 @@ namespace
 	expectSimpleCourse (double noonElevation) noexcept
 	{
 		constexpr double Day{240.0};
-		const Planet planet{.siderealDay = Day, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.0, .longitudeOfPerihelion = 0.0};
+		const Planet planet{.siderealDay = Day, .orbitalPeriod = 0.0, .axialTilt = 0.0, .eccentricity = 0.0, .longitudeOfPerihelion = 0.0, .semiMajorAxis = 1.0};
 		const Observer observer{radians(90.0 - noonElevation)};
 
 		for ( int step = 0; step < 40; ++step )
