@@ -246,7 +246,9 @@ different visibilities: <features.h>", exit 250). The gate read the empty output
 `__GLIBC__` guard) is not sent to `<features.h>`. The gate now reports a crash, a non-zero exit or a source without a
 verdict as `ENV`. The files touched in that window carry an IWYU debt: items `iwyu-debt-since-2026-10-21` (one per
 repository). Rule: **a mapping entry never re-declares the visibility of a header IWYU's built-in maps already know** —
-map the symbol instead.
+map the symbol instead. On macOS (macOS-PA, IWYU 0.23 on Homebrew LLVM 19): Apple's libc++ splits `<cmath>` and
+`<cstring>` into private headers (`<__math/*.h>`, `<_string.h>`) that IWYU 0.23's libc++ map does not know — two
+mapping lines send them to the public header (tested there: 0 residue on the six files that asked for them).
 
 ⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
 for `BaseUtility.hpp`): the fix is the template's own header including what it uses.

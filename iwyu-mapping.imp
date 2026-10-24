@@ -22,6 +22,10 @@
 	{ "include": ["@<asio/.*>", "private", "\"asio.hpp\"", "public"] },
 	# IWYU 0.23 with libstdc++ 14 attributes std::vector to <format>.
 	{ "symbol": ["std::vector", "private", "<vector>", "public"] },
+	# Apple's libc++ splits <cmath> and <cstring> into private headers IWYU 0.23's libc++ map does not know (macOS-PA,
+	# 2026-10-25): they point at the public header.
+	{ "include": ["@<__math/.*>", "private", "<cmath>", "public"] },
+	{ "include": ["<_string.h>", "private", "<cstring>", "public"] },
 	# glibc's <features.h> defines __GLIBC__ (a `#if defined(__GLIBC__)` guard): any standard header brings it, and the
 	# header does not exist on macOS / Windows — never include it, point at a portable standard header instead. A SYMBOL
 	# mapping: IWYU's built-in glibc map (loaded on every OS) declares <features.h> public, and an include entry that
