@@ -1341,6 +1341,24 @@ DOES blend back onto itself with weight 1 (`everyHemiCellBlendsBackOntoItself`).
 the camera frame a view is baked and read with (back = direction, up = +Y made orthogonal, −Z at the pole). The GLSL
 copy is the engine's `Saphir/ImposterGLSL.hpp`: change both at once.
 
+### `Math/Astronomy.hpp` — the perihelion is the STAR's longitude, and the time is a double (Oct 2026)
+
+A planet-generic sky (the engine's `Scenes::Component::CelestialClock`): a Keplerian two-body orbit, an axial tilt, a
+sidereal rotation and a latitude place the star and the moons in the observer's East-North-Up frame. Epoch: the
+vernal equinox at the observer's noon. Unit-tested in `test_MathAstronomy.cpp` (13 tests, among them the exact
+equivalence with the engine's former `SunCourse` great circle).
+
+- ⚠️⚠️ **`Planet::longitudeOfPerihelion` is the STAR's apparent longitude when the planet passes perihelion**, not the
+  tables' "longitude of perihelion" (the PLANET seen from the star): 180° apart. With the tables' 102.94° for Earth
+  the seasons came out reversed in length — the June → December half measured 181.75 days instead of 183.4, caught by
+  the test `AnEccentricOrbitIsNotUniform`. Earth's preset is 282.9373°.
+- ⚠️ **Time in DOUBLE seconds.** A date of a few years held in a float has ~8 s of resolution, 2 arc-minutes of sun
+  per step; the caller keeps a double and converts only the resulting directions.
+- **Generic orbits, no perturbation** (owner decision 2026-10-24): the Sun within ~1° and the Moon within a few
+  degrees of Meeus; the Moon's nodes and perigee do not precess, its parallax (~1°) is neglected.
+- `bugprone-easily-swappable-parameters` shaped the API: the latitude travels in an `Observer`, the eccentricity in a
+  `KeplerOrbit`, never as a bare `double` next to the time.
+
 ### A negative float converted straight to an unsigned integer is UNDEFINED — `PerlinNoise` did it for every coordinate below zero (Sept 2026, FIXED)
 
 `PerlinNoise::generate()` found its lattice cell with `static_cast< uint32_t >(std::floor(x))`: undefined
