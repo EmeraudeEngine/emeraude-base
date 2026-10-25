@@ -96,6 +96,7 @@
 #include "Locale.hpp"
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
+#include "Math/Astronomy.hpp"
 #include "Math/BSpline.hpp"
 #include "Math/Base.hpp"
 #include "Math/BezierCurve.hpp"

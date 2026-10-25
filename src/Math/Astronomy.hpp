@@ -535,4 +535,200 @@ namespace EmEn::Base::Math::Astronomy
 
 		return 1.0 / ((1.0 / orbit.period) - (1.0 / planet.orbitalPeriod));
 	}
+
+	/**
+	 * @brief Returns the pole of a moon's orbit for an observer at a time: the axis its face is oriented by.
+	 * @note A tidally locked moon keeps its spin axis close to its orbit's normal (the Moon's: within ~7°, Cassini's
+	 * laws); the orbit's nodes do not precess here (see the file's note). The moon lies in the plane this pole is the
+	 * normal of.
+	 * @param planet A reference to the planet.
+	 * @param orbit A reference to the moon's orbit.
+	 * @param observer A reference to the observer.
+	 * @param time Seconds since the epoch.
+	 * @return Horizontal
+	 */
+	[[nodiscard]]
+	inline
+	Horizontal
+	moonOrbitPole (const Planet & planet, const MoonOrbit & orbit, const Observer & observer, double time) noexcept
+	{
+		/* The orbit's normal in ecliptic coordinates: the ecliptic pole tilted by the inclination about the line of nodes,
+		 * (sin i sin Ω, −sin i cos Ω, cos i), i.e. the latitude 90° − i at the longitude Ω − 90°. */
+		const auto position = toEquatorial({.longitude = orbit.ascendingNode - (0.5 * std::numbers::pi), .latitude = (0.5 * std::numbers::pi) - orbit.inclination}, planet.axialTilt);
+
+		return toHorizontal(position, siderealAngle(planet, time), observer);
+	}
+
+	/* ---- The photometry of a moon's surface: the Hapke–Lommel-Seeliger reflectance of H. W. Jensen, F. Durand, J.
+	 * Dorsey, M. M. Stark, P. Shirley, S. Premože, "A Physically-Based Night Sky Model", SIGGRAPH 2001, § 4.2 (eq. 2 to
+	 * 4) and § 4.3 (eq. 1 and 5), after B. Hapke's lunar reflectance. A regolith reflects light back toward its source
+	 * (the opposition surge: a full moon is much brighter than two quarters) and shows no limb darkening when full. ---- */
+
+	/** @brief The lunar surface's density parameter g of the retrodirective function (Jensen et al. use 0.6; 0.4 for the
+	 * rays to 0.8 for the craters). */
+	constexpr double LunarSurfaceDensity{0.6};
+
+	/** @brief The lunar surface's forward-scattering amount t (Jensen et al.: 0.1, fitted to Rougier's measurements). */
+	constexpr double LunarForwardScattering{0.1};
+
+	/**
+	 * @brief The illuminance the full PLANET pours on its moon, relative to the star's: its geometric albedo × (its
+	 * radius / the moon's distance)². Earth's: 0.434 (NASA's planetary fact sheet, visual geometric albedo) × (6 371 km /
+	 * 384 400 km)² ≈ 1.19e-4 — the earthshine, ~16 lx under a 134 klx Sun (Jensen et al.'s eq. 1: 0.095 W/m², the same
+	 * order).
+	 */
+	constexpr double EarthshineRatio{0.434 * (6371.0 / 384400.0) * (6371.0 / 384400.0)};
+
+	/**
+	 * @brief Returns the retrodirective function B(φ, g) of the lunar reflectance (Jensen et al., eq. 3).
+	 * @note 2 at zero phase (the opposition surge), 1 from a right angle on.
+	 * @param phaseAngle The phase angle φ, the angle star–surface–observer, in radians.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	lunarRetrodirective (double phaseAngle) noexcept
+	{
+		const auto phase = std::abs(phaseAngle);
+
+		if ( phase >= 0.5 * std::numbers::pi )
+		{
+			return 1.0;
+		}
+
+		const auto tanPhase = std::tan(phase);
+
+		/* The limit at zero phase: tan φ / 2g × (1 − e^(−g / tan φ)) × (3 − e^(−g / tan φ)) → 0. */
+		if ( !(tanPhase > 1e-12) )
+		{
+			return 2.0;
+		}
+
+		const auto decay = std::exp(-LunarSurfaceDensity / tanPhase);
+
+		return 2.0 - ((tanPhase / (2.0 * LunarSurfaceDensity)) * (1.0 - decay) * (3.0 - decay));
+	}
+
+	/**
+	 * @brief Returns the scattering law S(φ) of the lunar surface's particles (Jensen et al., eq. 4).
+	 * @param phaseAngle The phase angle φ, in radians.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	lunarScattering (double phaseAngle) noexcept
+	{
+		const auto phase = std::min(std::abs(phaseAngle), std::numbers::pi);
+		const auto cosPhase = std::cos(phase);
+		const auto forward = 1.0 - (0.5 * cosPhase);
+
+		return ((std::sin(phase) + ((std::numbers::pi - phase) * cosPhase)) / std::numbers::pi) + (LunarForwardScattering * forward * forward);
+	}
+
+	/**
+	 * @brief Returns the Lommel-Seeliger kernel μ0 / (μ0 + μ): the only part of the lunar reflectance that changes over a
+	 * disc lit by a distant star and seen from a distant observer (lunarReflectance() multiplies it by factors of the
+	 * phase angle alone).
+	 * @note 1/2 at zero phase everywhere on the disc: no limb darkening when full. 0 where the element faces away from
+	 * the light or from the observer.
+	 * @param cosIncidence cos θi (μ0), between the surface normal and the light.
+	 * @param cosEmission cos θr (μ), between the surface normal and the observer.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	lommelSeeligerKernel (double cosIncidence, double cosEmission) noexcept
+	{
+		if ( !(cosIncidence > 0.0) || !(cosEmission > 0.0) )
+		{
+			return 0.0;
+		}
+
+		return cosIncidence / (cosIncidence + cosEmission);
+	}
+
+	/**
+	 * @brief Returns the lunar REFLECTANCE: the radiance a surface element sends toward the observer per unit albedo and
+	 * per unit illuminance normal to the light (Jensen et al., eq. 2: f = 2 / 3π × B × S / (1 + cos θr / cos θi)).
+	 * @note The radiance is `albedo × lunarReflectance() × E⊥`: the cos θi of the incidence is INSIDE it (the
+	 * Lommel-Seeliger kernel, lommelSeeligerKernel()), so a full moon is uniform from its centre to its limb. 0 where
+	 * the element faces away from the light or from the observer.
+	 * @param cosIncidence cos θi, between the surface normal and the light.
+	 * @param cosEmission cos θr, between the surface normal and the observer.
+	 * @param phaseAngle The phase angle φ, in radians.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	lunarReflectance (double cosIncidence, double cosEmission, double phaseAngle) noexcept
+	{
+		return (2.0 / (3.0 * std::numbers::pi)) * lunarRetrodirective(phaseAngle) * lunarScattering(phaseAngle) * lommelSeeligerKernel(cosIncidence, cosEmission);
+	}
+
+	/**
+	 * @brief Returns the Lommel-Seeliger phase law of a sphere: its disc-integrated brightness at a phase angle, relative
+	 * to full (Jensen et al., eq. 1 and 5: 1 − sin(φ/2) tan(φ/2) ln(cot(φ/4))).
+	 * @note The exact integral of μ0 / (μ0 + μ) over the visible disc, divided by its value at zero phase (π / 2). 1 at
+	 * zero phase, 0 at π.
+	 * @param phaseAngle The phase angle φ, in radians.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	lommelSeeligerPhaseLaw (double phaseAngle) noexcept
+	{
+		const auto phase = std::abs(phaseAngle);
+
+		if ( !(phase > 1e-9) )
+		{
+			return 1.0;
+		}
+
+		if ( phase >= std::numbers::pi - 1e-9 )
+		{
+			return 0.0;
+		}
+
+		const auto half = 0.5 * phase;
+
+		return std::clamp(1.0 - (std::sin(half) * std::tan(half) * std::log(1.0 / std::tan(0.25 * phase))), 0.0, 1.0);
+	}
+
+	/**
+	 * @brief Returns a moon's PHASE LAW: its disc-integrated brightness relative to full, from the lunar reflectance.
+	 * @note lunarReflectance() integrated over the visible disc: B(φ) and S(φ) do not depend on the surface element, so the
+	 * integral is [B(φ) S(φ) / B(0) S(0)] × lommelSeeligerPhaseLaw(φ) — exact, no quadrature. The quarter (φ = 90°)
+	 * gives 0.077; the measured Moon 0.083 (V −10.0 against −12.7 at full). A Lambert sphere gives 0.32: the
+	 * opposition surge is the difference.
+	 * @param phaseAngle The phase angle φ, in radians.
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	lunarPhaseLaw (double phaseAngle) noexcept
+	{
+		return (lunarRetrodirective(phaseAngle) * lunarScattering(phaseAngle) * lommelSeeligerPhaseLaw(phaseAngle)) / (lunarRetrodirective(0.0) * lunarScattering(0.0));
+	}
+
+	/**
+	 * @brief Returns a moon's phase angle from the elongation: φ = π − ψ, the star at infinity.
+	 * @param towardStar The direction toward the star (any frame, unit).
+	 * @param towardMoon The direction toward the moon (the same frame, unit).
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	phaseAngle (const Horizontal & towardStar, const Horizontal & towardMoon) noexcept
+	{
+		const auto cosElongation = std::clamp((towardStar.east * towardMoon.east) + (towardStar.north * towardMoon.north) + (towardStar.up * towardMoon.up), -1.0, 1.0);
+
+		return std::numbers::pi - std::acos(cosElongation);
+	}
 }

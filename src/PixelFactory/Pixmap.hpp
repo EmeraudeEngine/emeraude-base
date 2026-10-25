@@ -1773,9 +1773,12 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
-			 * @brief Returns the average color of the pixmap.
+			 * @brief Returns the average color of the pixmap: the mean of each channel's STORED values, normalized to
+			 * [0, 1] for integer data (an sRGB-encoded image averages its ENCODED values).
+			 * @note Accumulated in double: a 32-bit sum overflowed past 65 537 pixels of 16-bit data and ~16.8 M pixels
+			 * of 8-bit data, and an integer division truncated the result (2026-10-25).
 			 * @tparam color_data_t The color data type. Default float.
-			 * @return Color< color_data_t >
+			 * @return Color< color_data_t > Black for an invalid pixmap.
 			 */
 			template< typename color_data_t = float >
 			[[nodiscard]]
@@ -1787,7 +1790,10 @@ namespace EmEn::Base::PixelFactory
 					return {};
 				}
 
-				const auto limit = this->pixelCount();
+				/* Integer data is normalized by its type's maximum. */
+				constexpr double Scale = std::is_integral_v< pixel_data_t > ? 1.0 / static_cast< double >(std::numeric_limits< pixel_data_t >::max()) : 1.0;
+
+				const auto pixels = static_cast< double >(this->pixelCount());
 				const auto stride = this->colorCount();
 				const auto dataLimit = m_data.size();
 
@@ -1795,73 +1801,35 @@ namespace EmEn::Base::PixelFactory
 				{
 					case ChannelMode::Grayscale :
 					case ChannelMode::GrayscaleAlpha :
-						if constexpr ( std::is_floating_point_v< pixel_data_t > )
+					{
+						double sum = 0.0;
+
+						for ( size_t index = 0; index < dataLimit; index += stride )
 						{
-							pixel_data_t maxValue = 0;
-
-							for ( size_t index = 0; index < dataLimit; index += stride )
-							{
-								maxValue += m_data[index];
-							}
-
-							const auto value = static_cast< color_data_t >(maxValue / limit);
-
-							return {value, value, value};
+							sum += static_cast< double >(m_data[index]);
 						}
-						else
-						{
-							uint32_t maxValue = 0;
 
-							for ( size_t index = 0; index < dataLimit; index += stride )
-							{
-								maxValue += m_data[index];
-							}
+						const auto value = static_cast< color_data_t >(sum * Scale / pixels);
 
-							const auto value = static_cast< pixel_data_t >(std::floor(maxValue / limit));
-
-							return ColorFromInteger(value, value, value);
-						}
+						return {value, value, value};
+					}
 
 					case ChannelMode::RGB :
 					case ChannelMode::RGBA :
-						if constexpr ( std::is_floating_point_v< pixel_data_t > )
+					{
+						double red = 0.0;
+						double green = 0.0;
+						double blue = 0.0;
+
+						for ( size_t index = 0; index + 2 < dataLimit; index += stride )
 						{
-							pixel_data_t maxR = 0;
-							pixel_data_t maxG = 0;
-							pixel_data_t maxB = 0;
-
-							for ( size_t index = 0; index < dataLimit; index += stride )
-							{
-								maxR += m_data[index];
-								maxG += m_data[index+1];
-								maxB += m_data[index+2];
-							}
-
-							return {
-								static_cast< color_data_t >(maxR / limit),
-								static_cast< color_data_t >(maxG / limit),
-								static_cast< color_data_t >(maxB / limit)
-							};
+							red += static_cast< double >(m_data[index]);
+							green += static_cast< double >(m_data[index + 1]);
+							blue += static_cast< double >(m_data[index + 2]);
 						}
-						else
-						{
-							uint32_t maxR = 0;
-							uint32_t maxG = 0;
-							uint32_t maxB = 0;
 
-							for ( size_t index = 0; index < dataLimit; index += stride )
-							{
-								maxR += m_data[index];
-								maxG += m_data[index+1];
-								maxB += m_data[index+2];
-							}
-
-							return ColorFromInteger(
-								static_cast< pixel_data_t >(std::floor(maxR / limit)),
-								static_cast< pixel_data_t >(std::floor(maxG / limit)),
-								static_cast< pixel_data_t >(std::floor(maxB / limit))
-							);
-						}
+						return {static_cast< color_data_t >(red * Scale / pixels), static_cast< color_data_t >(green * Scale / pixels), static_cast< color_data_t >(blue * Scale / pixels)};
+					}
 				}
 
 				/* An out-of-range channel mode (cast from data) reaches no case above. */

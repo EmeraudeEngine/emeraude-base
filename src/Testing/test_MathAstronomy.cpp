@@ -30,8 +30,11 @@
 #include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <limits>
 #include <numbers>
+#include <optional>
 #include <string>
+#include <utility>
 
 /* Local inclusions. */
 #include "Math/Astronomy.hpp"
@@ -329,4 +332,238 @@ TEST(MathAstronomy, AStillPlanetReproducesTheSimpleSunCourse)
 	{
 		expectSimpleCourse(noonElevation);
 	}
+}
+
+namespace
+{
+	/**
+	 * @brief Integrates a function of (cos incidence, cos emission) over a sphere's visible disc, the star at a phase
+	 * angle: a midpoint grid over the projected disc (the projected area already carries the cos of the emission).
+	 */
+	template< typename function_t >
+	double
+	discIntegral (double phase, const function_t & function) noexcept
+	{
+		constexpr int Steps{400};
+
+		const double sinPhase = std::sin(phase);
+		const double cosPhase = std::cos(phase);
+		double sum = 0.0;
+
+		for ( int row = 0; row < Steps; ++row )
+		{
+			const double y = -1.0 + ((static_cast< double >(row) + 0.5) * 2.0 / Steps);
+
+			for ( int column = 0; column < Steps; ++column )
+			{
+				const double x = -1.0 + ((static_cast< double >(column) + 0.5) * 2.0 / Steps);
+				const double radial = (x * x) + (y * y);
+
+				if ( radial >= 1.0 )
+				{
+					continue;
+				}
+
+				/* The observer along +z, the star in the x-z plane at the phase angle. */
+				const double cosEmission = std::sqrt(1.0 - radial);
+				const double cosIncidence = (x * sinPhase) + (cosEmission * cosPhase);
+
+				sum += function(cosIncidence, cosEmission);
+			}
+		}
+
+		return sum * (2.0 / Steps) * (2.0 / Steps);
+	}
+
+	/**
+	 * @brief Returns the first whole degree in (first, last] where a function of an angle rises above its value one
+	 * degree before (beyond 1e-12), or nothing when it never rises.
+	 */
+	template< typename function_t >
+	std::optional< int >
+	firstRiseOverDegrees (const function_t & function, int first, int last) noexcept
+	{
+		double previous = function(radians(static_cast< double >(first)));
+
+		for ( int degree = first + 1; degree <= last; ++degree )
+		{
+			const auto value = function(radians(static_cast< double >(degree)));
+
+			if ( value > previous + 1e-12 )
+			{
+				return degree;
+			}
+
+			previous = value;
+		}
+
+		return std::nullopt;
+	}
+
+	/**
+	 * @brief Returns the largest gap between the lunar reflectance and its phase factors × the Lommel-Seeliger kernel,
+	 * over a few phases and geometries.
+	 */
+	double
+	kernelFactorizationError () noexcept
+	{
+		double deviation = 0.0;
+
+		for ( const auto phase : {0.0, 0.4, 1.2, 2.5} )
+		{
+			const auto factors = (2.0 / (3.0 * std::numbers::pi)) * lunarRetrodirective(phase) * lunarScattering(phase);
+
+			for ( const auto & [cosIncidence, cosEmission] : {std::pair{0.9, 0.4}, std::pair{0.2, 0.8}, std::pair{0.5, 0.5}} )
+			{
+				deviation = std::max(deviation, std::abs(lunarReflectance(cosIncidence, cosEmission, phase) - (factors * lommelSeeligerKernel(cosIncidence, cosEmission))));
+			}
+		}
+
+		return deviation;
+	}
+}
+
+TEST(MathAstronomy, TheLunarSurgeDoublesTheReflectanceAtOpposition)
+{
+	EXPECT_DOUBLE_EQ(lunarRetrodirective(0.0), 2.0);
+	EXPECT_DOUBLE_EQ(lunarRetrodirective(0.5 * std::numbers::pi), 1.0);
+	EXPECT_DOUBLE_EQ(lunarRetrodirective(std::numbers::pi), 1.0);
+
+	/* Continuous at both ends, and decreasing in between. */
+	EXPECT_NEAR(lunarRetrodirective(1e-6), 2.0, 1e-5);
+	EXPECT_NEAR(lunarRetrodirective((0.5 * std::numbers::pi) - 1e-6), 1.0, 1e-3);
+
+	const auto rise = firstRiseOverDegrees(lunarRetrodirective, 0, 90);
+
+	EXPECT_FALSE(rise.has_value()) << rise.value_or(0) << "°";
+
+	EXPECT_DOUBLE_EQ(lunarScattering(0.0), 1.0 + (LunarForwardScattering * 0.25));
+	EXPECT_NEAR(lunarScattering(std::numbers::pi), LunarForwardScattering * 2.25, 1e-12);
+}
+
+TEST(MathAstronomy, AFullMoonHasNoLimbDarkening)
+{
+	const auto centre = lunarReflectance(1.0, 1.0, 0.0);
+
+	EXPECT_NEAR(centre, (2.0 / (3.0 * std::numbers::pi)) * 2.0 * 1.025 * 0.5, 1e-12);
+
+	for ( const auto cosine : {0.9, 0.5, 0.1, 0.01} )
+	{
+		EXPECT_NEAR(lunarReflectance(cosine, cosine, 0.0), centre, 1e-12) << cosine;
+	}
+
+	/* Nothing past the terminator or past the limb. */
+	EXPECT_EQ(lunarReflectance(0.0, 0.5, 1.0), 0.0);
+	EXPECT_EQ(lunarReflectance(-0.3, 0.5, 1.0), 0.0);
+	EXPECT_EQ(lunarReflectance(0.5, 0.0, 1.0), 0.0);
+}
+
+TEST(MathAstronomy, TheLunarReflectanceIsTheKernelTimesThePhaseFactors)
+{
+	EXPECT_DOUBLE_EQ(lommelSeeligerKernel(0.7, 0.7), 0.5);
+	EXPECT_DOUBLE_EQ(lommelSeeligerKernel(0.3, 0.1), 0.75);
+	EXPECT_EQ(lommelSeeligerKernel(0.0, 0.5), 0.0);
+	EXPECT_EQ(lommelSeeligerKernel(-0.2, 0.5), 0.0);
+	EXPECT_EQ(lommelSeeligerKernel(0.5, -0.1), 0.0);
+	EXPECT_EQ(lommelSeeligerKernel(std::numeric_limits< double >::quiet_NaN(), 0.5), 0.0);
+
+	/* Over a disc the phase factors are uniform: a ratio of two disc integrals at one phase keeps the kernel alone. */
+	EXPECT_LT(kernelFactorizationError(), 1e-15);
+}
+
+TEST(MathAstronomy, TheLommelSeeligerPhaseLawIsTheDiscIntegral)
+{
+	const auto lommelSeeliger = [] (double cosIncidence, double cosEmission) {
+		return cosIncidence > 0.0 ? cosIncidence / (cosIncidence + cosEmission) : 0.0;
+	};
+	const auto full = discIntegral(0.0, lommelSeeliger);
+
+	/* The grid's own error on the disc's edge: ~1.5e-4 at 400 steps (the ratios below cancel most of it). */
+	EXPECT_NEAR(full, 0.5 * std::numbers::pi, 5e-4);
+	EXPECT_DOUBLE_EQ(lommelSeeligerPhaseLaw(0.0), 1.0);
+	EXPECT_DOUBLE_EQ(lommelSeeligerPhaseLaw(std::numbers::pi), 0.0);
+
+	for ( const auto degree : {15.0, 30.0, 60.0, 90.0, 120.0, 150.0, 170.0} )
+	{
+		const auto phase = radians(degree);
+
+		EXPECT_NEAR(lommelSeeligerPhaseLaw(phase), discIntegral(phase, lommelSeeliger) / full, 2e-4) << degree << "°";
+	}
+}
+
+TEST(MathAstronomy, TheLunarPhaseLawIsTheIntegralOfTheReflectance)
+{
+	const auto reflectance = [] (double phase) {
+		return [phase] (double cosIncidence, double cosEmission) {
+			return lunarReflectance(cosIncidence, cosEmission, phase);
+		};
+	};
+	const auto full = discIntegral(0.0, reflectance(0.0));
+	double error = 0.0;
+
+	for ( const auto degree : {0.0, 10.0, 45.0, 90.0, 135.0, 175.0} )
+	{
+		const auto phase = radians(degree);
+
+		error = std::max(error, std::abs(lunarPhaseLaw(phase) - (discIntegral(phase, reflectance(phase)) / full)));
+	}
+
+	EXPECT_LT(error, 2e-4);
+
+	/* The opposition surge: a quarter is under a tenth of the full Moon (measured: 0.083; a Lambert sphere: 0.32). */
+	EXPECT_NEAR(lunarPhaseLaw(0.5 * std::numbers::pi), 0.077, 0.002);
+	EXPECT_DOUBLE_EQ(lunarPhaseLaw(0.0), 1.0);
+	EXPECT_DOUBLE_EQ(lunarPhaseLaw(std::numbers::pi), 0.0);
+
+	const auto rise = firstRiseOverDegrees(lunarPhaseLaw, 0, 180);
+
+	EXPECT_FALSE(rise.has_value()) << rise.value_or(0) << "°";
+}
+
+TEST(MathAstronomy, AMoonLiesInThePlaneItsOrbitPoleIsNormalTo)
+{
+	const auto planet = earth();
+	const auto orbit = moon();
+	const Observer observer{radians(45.0)};
+
+	for ( const auto day : {0.0, 3.7, 11.2, 19.9, 27.0} )
+	{
+		const auto time = day * SecondsPerDay;
+		const auto pole = moonOrbitPole(planet, orbit, observer, time);
+		const auto toward = moonDirection(planet, orbit, observer, time);
+
+		EXPECT_NEAR((pole.east * pole.east) + (pole.north * pole.north) + (pole.up * pole.up), 1.0, 1e-12) << day;
+		EXPECT_NEAR((pole.east * toward.east) + (pole.north * toward.north) + (pole.up * toward.up), 0.0, 1e-9) << day;
+	}
+
+	/* An orbit in the ecliptic has the ecliptic's pole. */
+	auto flat = orbit;
+	flat.inclination = 0.0;
+
+	const auto pole = moonOrbitPole(planet, flat, observer, 0.0);
+	const auto eclipticPole = toHorizontal(toEquatorial({.longitude = 0.0, .latitude = 0.5 * std::numbers::pi}, planet.axialTilt), siderealAngle(planet, 0.0), observer);
+
+	EXPECT_NEAR(pole.east, eclipticPole.east, 1e-12);
+	EXPECT_NEAR(pole.north, eclipticPole.north, 1e-12);
+	EXPECT_NEAR(pole.up, eclipticPole.up, 1e-12);
+}
+
+TEST(MathAstronomy, ThePhaseAngleIsTheSupplementOfTheElongation)
+{
+	const auto planet = earth();
+	const auto orbit = moon();
+	const Observer observer{radians(45.0)};
+	const auto month = synodicPeriod(planet, orbit);
+
+	for ( const auto fractionOfMonth : {0.0, 0.1, 0.25, 0.4, 0.5, 0.75} )
+	{
+		const auto time = fractionOfMonth * month;
+		const auto star = starDirection(planet, observer, time);
+		const auto toward = moonDirection(planet, orbit, observer, time);
+
+		/* Meeus 48.1: k = (1 + cos φ) / 2. */
+		EXPECT_NEAR(illuminatedFraction(star, toward), 0.5 * (1.0 + std::cos(phaseAngle(star, toward))), 1e-12) << fractionOfMonth;
+	}
+
+	EXPECT_NEAR(phaseAngle(starDirection(planet, observer, 0.0), moonDirection(planet, orbit, observer, 0.0)), 0.0, 1e-6);
 }

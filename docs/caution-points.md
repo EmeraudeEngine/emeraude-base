@@ -1345,7 +1345,7 @@ copy is the engine's `Saphir/ImposterGLSL.hpp`: change both at once.
 
 A planet-generic sky (the engine's `Scenes::Component::CelestialClock`): a Keplerian two-body orbit, an axial tilt, a
 sidereal rotation and a latitude place the star and the moons in the observer's East-North-Up frame. Epoch: the
-vernal equinox at the observer's noon. Unit-tested in `test_MathAstronomy.cpp` (13 tests, among them the exact
+vernal equinox at the observer's noon. Unit-tested in `test_MathAstronomy.cpp` (22 tests, among them the exact
 equivalence with the engine's former `SunCourse` great circle).
 
 - ⚠️⚠️ **`Planet::longitudeOfPerihelion` is the STAR's apparent longitude when the planet passes perihelion**, not the
@@ -1358,6 +1358,25 @@ equivalence with the engine's former `SunCourse` great circle).
   degrees of Meeus; the Moon's nodes and perigee do not precess, its parallax (~1°) is neglected.
 - `bugprone-easily-swappable-parameters` shaped the API: the latitude travels in an `Observer`, the eccentricity in a
   `KeplerOrbit`, never as a bare `double` next to the time.
+- **The lunar photometry** (2026-10-25, the engine's moon discs and their light): Hapke's reflectance as H. W. Jensen
+  et al. give it (*A Physically-Based Night Sky Model*, SIGGRAPH 2001, eq. 2–5) — `lunarRetrodirective()` B(φ) (the
+  opposition surge, g = 0.6), `lunarScattering()` S(φ) (t = 0.1), `lommelSeeligerKernel()` μ0 / (μ0 + μ),
+  `lunarReflectance()` their product × 2 / 3π, `lommelSeeligerPhaseLaw()` the kernel's exact disc integral (eq. 5),
+  `lunarPhaseLaw()` = B S Φ_LS / B0 S0 (0.077 at quarter; the Moon measures 0.083), `phaseAngle()`, `moonOrbitPole()`
+  and `EarthshineRatio` (0.434 × (6 371 / 384 400)², NASA's visual geometric albedo). The phase factors are uniform over
+  a disc: a ratio of two disc integrals at one phase keeps the kernel alone (the engine's `MoonSurfacePhotometry`).
+  Proven by quadratures in `test_MathAstronomy.cpp` (the phase law IS the integral of the reflectance, to 2e-4). The
+  GLSL mirror is the engine's `AtmosphereGLSL::LunarReflectance`: change both at once.
+
+### `Pixmap::averageColor()` summed in 32 bits and truncated — a large or 16-bit image read garbage (Oct 2026, FIXED)
+
+The integer path summed each channel in a `uint32_t` and divided by an integer: a 16-bit image overflowed past 65 537
+pixels (512 × 512 white averaged 0.25), an 8-bit one past ~16.8 M pixels (an 8K equirectangular sky), and every result
+was truncated (half black, half white: 0.498 instead of 0.5). Found measuring the engine's moon map. Now accumulated in
+double and normalised by the type's maximum; the float path too (a float sum loses its low bits long before). Tests
+`PixelFactoryPixmap.averageColorOfALargeSixteenBitImage`, `averageColorOfAHugeEightBitImage`,
+`averageColorKeepsTheFraction` (failing before the fix). ⚠️ It averages the STORED values: an sRGB-encoded image gives
+the mean of its encoded values, not of its light — decode first when the light matters.
 
 ### A negative float converted straight to an unsigned integer is UNDEFINED — `PerlinNoise` did it for every coordinate below zero (Sept 2026, FIXED)
 

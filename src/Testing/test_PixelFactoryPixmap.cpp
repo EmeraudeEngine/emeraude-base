@@ -554,3 +554,48 @@ TEST(Pixmap, elementAndPixelCountsAreExact)
 	EXPECT_EQ(pixmap.pixelCount(), 16U);
 	EXPECT_EQ(pixmap.data().size(), 48U);
 }
+
+TEST(PixelFactoryPixmap, averageColorOfALargeSixteenBitImage)
+{
+	/* 512 × 512 × 65 535 overflows a 32-bit sum after 65 537 pixels: the average read garbage (2026-10-25). */
+	Pixmap< uint16_t > image{512, 512, ChannelMode::Grayscale};
+
+	ASSERT_TRUE(image.isValid());
+
+	image.fill(static_cast< uint16_t >(65535));
+
+	const auto average = image.averageColor();
+
+	EXPECT_NEAR(average.red(), 1.0F, 1e-6F);
+	EXPECT_NEAR(average.green(), 1.0F, 1e-6F);
+	EXPECT_NEAR(average.blue(), 1.0F, 1e-6F);
+}
+
+TEST(PixelFactoryPixmap, averageColorOfAHugeEightBitImage)
+{
+	/* 4 200 × 4 100 × 255 = 4.39e9, over a 32-bit sum (2026-10-25). */
+	Pixmap< uint8_t > image{4200, 4100, ChannelMode::RGB};
+
+	ASSERT_TRUE(image.isValid());
+
+	image.fill(static_cast< uint8_t >(255));
+
+	const auto average = image.averageColor();
+
+	EXPECT_NEAR(average.red(), 1.0F, 1e-6F);
+	EXPECT_NEAR(average.green(), 1.0F, 1e-6F);
+	EXPECT_NEAR(average.blue(), 1.0F, 1e-6F);
+}
+
+TEST(PixelFactoryPixmap, averageColorKeepsTheFraction)
+{
+	/* Half black, half 255: the mean is 127.5, not the floor 127. */
+	Pixmap< uint8_t > image{2, 1, ChannelMode::RGB};
+
+	ASSERT_TRUE(image.isValid());
+
+	image.fill(static_cast< uint8_t >(0));
+	image.setPixel(1, 0, White);
+
+	EXPECT_NEAR(image.averageColor().red(), 0.5F, 1e-6F);
+}
