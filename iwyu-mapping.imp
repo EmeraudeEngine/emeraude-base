@@ -26,6 +26,7 @@
 	# 2026-10-25): they point at the public header.
 	{ "include": ["@<__math/.*>", "private", "<cmath>", "public"] },
 	{ "include": ["<_string.h>", "private", "<cstring>", "public"] },
+	{ "include": ["@<__ostream/.*>", "private", "<ostream>", "public"] },
 	# glibc's <features.h> defines __GLIBC__ (a `#if defined(__GLIBC__)` guard): any standard header brings it, and the
 	# header does not exist on macOS / Windows — never include it, point at a portable standard header instead. A SYMBOL
 	# mapping: IWYU's built-in glibc map (loaded on every OS) declares <features.h> public, and an include entry that

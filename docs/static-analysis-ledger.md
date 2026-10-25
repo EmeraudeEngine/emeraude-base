@@ -248,7 +248,11 @@ verdict as `ENV`. The files touched in that window carry an IWYU debt: items `iw
 repository). Rule: **a mapping entry never re-declares the visibility of a header IWYU's built-in maps already know** —
 map the symbol instead. On macOS (macOS-PA, IWYU 0.23 on Homebrew LLVM 19): Apple's libc++ splits `<cmath>` and
 `<cstring>` into private headers (`<__math/*.h>`, `<_string.h>`) that IWYU 0.23's libc++ map does not know — two
-mapping lines send them to the public header (tested there: 0 residue on the six files that asked for them).
+mapping lines send them to the public header (tested there: 0 residue on the six files that asked for them); a third
+sends `<__ostream/*.h>` to `<ostream>`. ⚠️ On macOS, IWYU 0.23 aborts on a TU instantiating a vectorisable `std::find`
+(Apple libc++'s `ext_vector_type` splat, "TODO(csilvers): for objc and clang lang extensions"): the gate passes
+`-D__OPTIMIZE_SIZE__` to IWYU on Darwin, which selects libc++'s plain loop (`-Os` does not work: the database's `-O3`
+comes after the extra arguments).
 
 ⚠️ A template body's dependent call is blamed on the INSTANTIATING file (a test that instantiates `Vector` was asked
 for `BaseUtility.hpp`): the fix is the template's own header including what it uses.
