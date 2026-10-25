@@ -1368,6 +1368,30 @@ equivalence with the engine's former `SunCourse` great circle).
   Proven by quadratures in `test_MathAstronomy.cpp` (the phase law IS the integral of the reflectance, to 2e-4). The
   GLSL mirror is the engine's `AtmosphereGLSL::LunarReflectance`: change both at once.
 
+### `Math/SolarSystem.hpp` — our sky at a real instant: UT turns the Earth, TT moves the bodies (Oct 2026)
+
+The real-date ephemeris behind the engine's calendar clock (`CelestialClock::TimeModel::Calendar`, owner decisions
+2026-10-26): `julianDay()` / `calendarDate()` (Meeus ch. 7, Gregorian 1583–9999, refused outside),
+`julianDayFromUnixTime()`, `deltaT()` (Espenak & Meeus's polynomials), `greenwichMeanSiderealAngle()` (IAU 1982),
+`meanObliquity()` (IAU 1980), `precessionFromJ2000()` (IAU 1976 ζ z θ), the planets from Standish's JPL Table 1
+(1800–2050, `planet()`: light time iterated, the Earth = the barycentre minus its Moon offset), `sun()`, the Moon from
+Schlyter's mean orbit + 12 longitude, 5 latitude and 2 distance terms (`moon()`), and `topocentric()` (the parallax of a
+near body). Unit-tested in `test_MathSolarSystem.cpp` (13 tests) against Meeus's examples and three events.
+
+- ⚠️ **Two time scales**: the sidereal time takes the Julian day in UT, every position in TT = UT + ΔT (~69 s in 2026;
+  the 2005–2050 polynomial says 75 s: 3″ on the Moon). Mixing them moves the Moon by 35″.
+- ⚠️ **Frames**: the planets and the stars are J2000; `precessionFromJ2000()` brings them to the equator of date the
+  sidereal time turns (0.36° by 2026 — a sky without it is a third of a lunar diameter off). The Moon is computed of
+  date. Nutation (~17″) and aberration (~20″) are NOT applied: positions are geometric, mean of date.
+- ⚠️ **The parallax**: the Moon seen from the surface moves by its horizontal parallax (0.95°) × cos(elevation);
+  without `topocentric()` the 2017 total eclipse missed by 0.42°. Mars at its closest moves by 24″.
+- **Measured** (2026-10-26): precession vs Meeus 21.b 0.004″; Venus vs Meeus 33.a 8″ (no nutation nor aberration);
+  Mars 2003-08-27 at 0.37297 AU (0.37272: 0.07 %); the 2004 Venus transit 629″ from the Sun's centre (627″); the
+  2017 eclipse's Sun-Moon gap at greatest eclipse 46″. Against PyEphem (VSOP87/ELP) from Liège: the Sun 11–15″, a star
+  through the precessed frame 17–19″, **the Moon up to 3.5′ in longitude and 1.6′ in latitude** — Schlyter's
+  truncation, more than its announced 1–2′ (owner's choice 2026-10-26; a truncated ELP-2000/82 would bring ~10″).
+- `Body::EarthMoonBarycentre` is the Earth's orbit, not a target.
+
 ### `Pixmap::averageColor()` summed in 32 bits and truncated — a large or 16-bit image read garbage (Oct 2026, FIXED)
 
 The integer path summed each channel in a `uint32_t` and divided by an integer: a 16-bit image overflowed past 65 537

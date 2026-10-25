@@ -199,6 +199,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryTreeSkinner.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathOctahedralMapping.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathAstronomy.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_MathSolarSystem.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsDiamondSquare.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsMandelbrot.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsPerlinNoise.cpp

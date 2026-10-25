@@ -113,6 +113,7 @@
 #include "Math/Quaternion.hpp"
 #include "Math/Range.hpp"
 #include "Math/RigidBody.hpp"
+#include "Math/SolarSystem.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "Math/Space2D/Circle.hpp"
 #include "Math/Space2D/Collisions/CircleRectangle.hpp"
