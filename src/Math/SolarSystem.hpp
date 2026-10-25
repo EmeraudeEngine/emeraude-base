@@ -695,4 +695,144 @@ namespace EmEn::Base::Math::SolarSystem
 
 		return {.east = unit.x(), .north = unit.y(), .up = unit.z()};
 	}
+	/**
+	 * @brief What a planet looks like from afar: its size and its colour.
+	 */
+	struct PlanetAppearance
+	{
+		/** @brief Its equatorial radius, in km (IAU WGCCRE 2015). */
+		double radius{0.0};
+		/** @brief Its B−V colour index (Mallama & Hilton 2018; Pluto: Allen's). */
+		double colourIndex{0.0};
+	};
+
+	/** @brief The planets' appearance, in the order of Body (the barycentre's row is empty). */
+	constexpr std::array< PlanetAppearance, BodyCount > PlanetAppearances{{
+		{.radius = 2440.53, .colourIndex = 0.93},
+		{.radius = 6051.8, .colourIndex = 0.82},
+		{.radius = 0.0, .colourIndex = 0.0},
+		{.radius = 3396.19, .colourIndex = 1.36},
+		{.radius = 71492.0, .colourIndex = 0.83},
+		{.radius = 60268.0, .colourIndex = 1.04},
+		{.radius = 25559.0, .colourIndex = 0.56},
+		{.radius = 24764.0, .colourIndex = 0.41},
+		{.radius = 1188.3, .colourIndex = 0.80}
+	}};
+
+	/**
+	 * @brief Returns a planet's apparent angular diameter, in radians.
+	 * @param body The planet.
+	 * @param distanceAU Its distance, in AU, positive.
+	 * @return double 0 for the barycentre or a non-positive distance.
+	 */
+	[[nodiscard]]
+	inline
+	double
+	angularDiameter (Body body, double distanceAU) noexcept
+	{
+		/* Body has BodyCount enumerators: the index is in range. */
+		const auto radius = std::next(PlanetAppearances.cbegin(), static_cast< std::ptrdiff_t >(body))->radius;
+		const auto distance = distanceAU * KilometresPerAU;
+
+		if ( !(distance > radius) || radius <= 0.0 )
+		{
+			return 0.0;
+		}
+
+		return 2.0 * std::asin(radius / distance);
+	}
+
+	/**
+	 * @brief Returns the sine of Saturn's ring opening seen from the Earth, |sin B| (0 edge-on, ~0.45 wide open).
+	 * @param saturn A reference to Saturn's geocentric position (planet(Body::Saturn, ...)).
+	 * @param centuriesTT Julian centuries since J2000.0, TT (the pole is precessed like the position).
+	 * @return double
+	 */
+	[[nodiscard]]
+	inline
+	double
+	saturnRingOpening (const GeocentricPosition & saturn, double centuriesTT) noexcept
+	{
+		/* Saturn's north pole, J2000: right ascension 40.589°, declination 83.537° (IAU WGCCRE 2015). */
+		const auto ra = Astronomy::radians(40.589);
+		const auto dec = Astronomy::radians(83.537);
+		const auto pole = precessionFromJ2000(centuriesTT)(Vector< 3, double >{std::cos(dec) * std::cos(ra), std::cos(dec) * std::sin(ra), std::sin(dec)});
+
+		return std::min(std::abs(Vector< 3, double >::dotProduct(pole, saturn.direction)), 1.0);
+	}
+
+	/**
+	 * @brief Returns a planet's apparent visual magnitude (A. Mallama & J. L. Hilton, "Computing apparent planetary
+	 * magnitudes for The Astronomical Almanac", Astronomy and Computing 25, 2018): 5 log10(r Δ) + V(1, α).
+	 * @note Mars's rotational and orbital corrections, Uranus's sub-latitude term and Neptune's secular one are left out
+	 * (~0.1 mag). Pluto is not in the paper: V(1, 0) = −1.0, no phase term. Saturn is the globe AND the rings
+	 * (saturnRingOpening()).
+	 * @param body The planet.
+	 * @param position A reference to its geocentric position (planet()).
+	 * @param ringOpening |sin B| for Saturn (saturnRingOpening()), ignored otherwise.
+	 * @return double NaN for the barycentre.
+	 */
+	[[nodiscard]]
+	inline
+	double
+	apparentMagnitude (Body body, const GeocentricPosition & position, double ringOpening = 0.0) noexcept
+	{
+		const auto distances = 5.0 * std::log10(std::max(position.heliocentricDistance * position.distance, std::numeric_limits< double >::min()));
+		const auto a = Astronomy::degrees(position.phaseAngle);
+
+		switch ( body )
+		{
+			case Body::Mercury :
+				return distances - 0.613 + (6.3280e-02 * a) - (1.6336e-03 * a * a) + (3.3644e-05 * a * a * a) - (3.4265e-07 * a * a * a * a) + (1.6893e-09 * a * a * a * a * a) - (3.0334e-12 * a * a * a * a * a * a);
+
+			case Body::Venus :
+				if ( a <= 163.7 )
+				{
+					return distances - 4.384 - (1.044e-03 * a) + (3.687e-04 * a * a) - (2.814e-06 * a * a * a) + (8.938e-09 * a * a * a * a);
+				}
+
+				return distances + 236.05828 - (2.81914 * a) + (8.39034e-03 * a * a);
+
+			case Body::EarthMoonBarycentre :
+				return std::numeric_limits< double >::quiet_NaN();
+
+			case Body::Mars :
+				if ( a <= 50.0 )
+				{
+					return distances - 1.601 + (0.02267 * a) - (0.0001302 * a * a);
+				}
+
+				return distances - 0.367 - (0.02573 * a) + (0.0003445 * a * a);
+
+			case Body::Jupiter :
+			{
+				if ( a <= 12.0 )
+				{
+					return distances - 9.395 - (3.7e-04 * a) + (6.16e-04 * a * a);
+				}
+
+				const auto x = a / 180.0;
+
+				return distances - 9.428 - (2.5 * std::log10(std::max(1.0 - (1.507 * x) - (0.363 * x * x) - (0.062 * x * x * x) + (2.809 * x * x * x * x) - (1.876 * x * x * x * x * x), 1e-6)));
+			}
+
+			case Body::Saturn :
+			{
+				const auto sinB = std::clamp(ringOpening, 0.0, 1.0);
+
+				return distances - 8.914 - (1.825 * sinB) + (0.026 * a) - (0.378 * sinB * std::exp(-2.25 * a));
+			}
+
+			case Body::Uranus :
+				return distances - 7.110 + (6.587e-03 * a) + (1.045e-04 * a * a);
+
+			case Body::Neptune :
+				return distances - 7.00 + (a > 1.9 ? (7.944e-03 * a) + (9.617e-05 * a * a) : 0.0);
+
+			case Body::Pluto :
+				return distances - 1.0;
+		}
+
+		return std::numeric_limits< double >::quiet_NaN();
+	}
 }

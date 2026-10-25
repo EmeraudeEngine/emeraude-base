@@ -1391,6 +1391,11 @@ near body). Unit-tested in `test_MathSolarSystem.cpp` (13 tests) against Meeus's
   through the precessed frame 17–19″, **the Moon up to 3.5′ in longitude and 1.6′ in latitude** — Schlyter's
   truncation, more than its announced 1–2′ (owner's choice 2026-10-26; a truncated ELP-2000/82 would bring ~10″).
 - `Body::EarthMoonBarycentre` is the Earth's orbit, not a target.
+- **The planets' look** (2026-10-26): `PlanetAppearances` (radius, B−V), `angularDiameter()`, `saturnRingOpening()`
+  (|sin B| from the IAU pole) and `apparentMagnitude()` (Mallama & Hilton 2018; Mars's, Uranus's and Neptune's small
+  terms left out; Pluto V(1, 0) = −1.0). Tested: Mars 2003 −2.88 and 25.1″, Venus's 2020 greatest brilliancy −4.7,
+  Jupiter's 2022 opposition −2.94 and 49.9″, Saturn's rings 26° open in 2003 and edge-on in 2025. ⚠️ The Keplerian
+  elements leave Jupiter ~1.6′ and Saturn ~4.6′ off (PyEphem, 2026-10-27): their mutual perturbations.
 
 ### `Pixmap::averageColor()` summed in 32 bits and truncated — a large or 16-bit image read garbage (Oct 2026, FIXED)
 

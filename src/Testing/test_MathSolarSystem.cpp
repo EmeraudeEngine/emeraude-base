@@ -274,3 +274,41 @@ TEST(MathSolarSystem, DirectionsAreUnitVectors)
 	EXPECT_NEAR(moon(at).direction.length(), 1.0, 1e-12);
 	EXPECT_NEAR(sun(at).distance, 0.993, 0.01);
 }
+
+TEST(MathSolarSystem, PlanetMagnitudesFollowTheAlmanac)
+{
+	/* Mars at its 2003 opposition: V −2.88, 25.1″. */
+	const auto marsAt = terrestrialTime({.year = 2003, .month = 8, .day = 28, .hour = 18, .minute = 0, .second = 0.0});
+	const auto mars = planet(Body::Mars, marsAt);
+
+	EXPECT_NEAR(apparentMagnitude(Body::Mars, mars), -2.88, 0.15);
+	EXPECT_NEAR(Astronomy::degrees(angularDiameter(Body::Mars, mars.distance)) * 3600.0, 25.1, 0.3);
+
+	/* Venus at its greatest brilliancy, 2020 April 28: V −4.7. */
+	const auto venusAt = terrestrialTime({.year = 2020, .month = 4, .day = 28, .hour = 0, .minute = 0, .second = 0.0});
+
+	EXPECT_NEAR(apparentMagnitude(Body::Venus, planet(Body::Venus, venusAt)), -4.7, 0.15);
+
+	/* Jupiter at its 2022 September 26 opposition, the closest since 1963: V −2.94, 49.9″. */
+	const auto jupiterAt = terrestrialTime({.year = 2022, .month = 9, .day = 26, .hour = 20, .minute = 0, .second = 0.0});
+	const auto jupiter = planet(Body::Jupiter, jupiterAt);
+
+	EXPECT_NEAR(apparentMagnitude(Body::Jupiter, jupiter), -2.94, 0.15);
+	EXPECT_NEAR(Astronomy::degrees(angularDiameter(Body::Jupiter, jupiter.distance)) * 3600.0, 49.9, 0.4);
+}
+
+TEST(MathSolarSystem, SaturnsRingsBrightenIt)
+{
+	/* Wide open at the 2003 December 31 opposition (B ≈ −26°), edge-on at the 2025 September 21 one (B ≈ 0°). */
+	const auto openAt = terrestrialTime({.year = 2003, .month = 12, .day = 31, .hour = 12, .minute = 0, .second = 0.0});
+	const auto edgeAt = terrestrialTime({.year = 2025, .month = 9, .day = 21, .hour = 12, .minute = 0, .second = 0.0});
+	const auto open = planet(Body::Saturn, openAt);
+	const auto edge = planet(Body::Saturn, edgeAt);
+	const auto openSinB = saturnRingOpening(open, julianCenturies(openAt));
+	const auto edgeSinB = saturnRingOpening(edge, julianCenturies(edgeAt));
+
+	EXPECT_NEAR(Astronomy::degrees(std::asin(openSinB)), 26.0, 1.5);
+	EXPECT_LT(Astronomy::degrees(std::asin(edgeSinB)), 2.0);
+	EXPECT_LT(apparentMagnitude(Body::Saturn, open, openSinB), apparentMagnitude(Body::Saturn, edge, edgeSinB) - 0.8);
+	EXPECT_TRUE(std::isnan(apparentMagnitude(Body::EarthMoonBarycentre, open)));
+}
