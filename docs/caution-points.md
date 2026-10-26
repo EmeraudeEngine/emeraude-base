@@ -1396,6 +1396,12 @@ near body). Unit-tested in `test_MathSolarSystem.cpp` (13 tests) against Meeus's
   terms left out; Pluto V(1, 0) = −1.0). Tested: Mars 2003 −2.88 and 25.1″, Venus's 2020 greatest brilliancy −4.7,
   Jupiter's 2022 opposition −2.94 and 49.9″, Saturn's rings 26° open in 2003 and edge-on in 2025. ⚠️ The Keplerian
   elements leave Jupiter ~1.6′ and Saturn ~4.6′ off (PyEphem, 2026-10-27): their mutual perturbations.
+- **The planets' orientation** (`orientation()`, 2026-10-26): the IAU WGCCRE pole and prime meridian, J2000 vectors; an
+  EAST planetocentric longitude is atan2(n · (pole × meridian), n · meridian). Call it at the instant the light LEFT the
+  body (`GeocentricPosition::lightTime`). ⚠️ **Mars from the 2009 report** (α0 317.68143, δ0 52.88650, W 176.630 +
+  350.89198226 d): the 2015 values typed from memory put the pole 1.5° off — Horizons decided. Tested against JPL Horizons's
+  sub-Earth points (west longitudes, planetodetic latitudes → planetocentric): Mars 2026-10-27, 2003-08-28, 2020-10-13 and
+  Jupiter (System III) within 0.03° and 0.003°.
 
 ### `Pixmap::averageColor()` summed in 32 bits and truncated — a large or 16-bit image read garbage (Oct 2026, FIXED)
 

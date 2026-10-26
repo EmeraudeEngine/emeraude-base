@@ -312,3 +312,92 @@ TEST(MathSolarSystem, SaturnsRingsBrightenIt)
 	EXPECT_LT(apparentMagnitude(Body::Saturn, open, openSinB), apparentMagnitude(Body::Saturn, edge, edgeSinB) - 0.8);
 	EXPECT_TRUE(std::isnan(apparentMagnitude(Body::EarthMoonBarycentre, open)));
 }
+
+namespace
+{
+	/**
+	 * @brief The point of a planet under the Earth (its sub-observer point), planetocentric, in degrees.
+	 */
+	struct SubPoint
+	{
+		double westLongitude{0.0};
+		double latitude{0.0};
+	};
+
+	/**
+	 * @brief Returns a planet's sub-Earth point at an instant (Horizons's ObsSub-LON is a WEST longitude for Mars and
+	 * Jupiter).
+	 * @param body The planet.
+	 * @param date The instant, UT.
+	 * @return SubPoint
+	 */
+	SubPoint
+	subEarthPoint (Body body, const CalendarDate & date)
+	{
+		const auto at = terrestrialTime(date);
+		const auto seen = planet(body, at);
+		const auto frame = orientation(body, at - seen.lightTime);
+		const auto toDate = precessionFromJ2000(julianCenturies(at));
+		const auto pole = toDate(frame.pole);
+		const auto meridian = toDate(frame.primeMeridian);
+		const auto towardEarth = seen.direction * -1.0;
+		const auto east = Astronomy::degrees(std::atan2(Vector< 3, double >::dotProduct(towardEarth, Vector< 3, double >::crossProduct(pole, meridian)), Vector< 3, double >::dotProduct(towardEarth, meridian)));
+
+		return {.westLongitude = 360.0 - (east - (360.0 * std::floor(east / 360.0))), .latitude = Astronomy::degrees(std::asin(Vector< 3, double >::dotProduct(towardEarth, pole)))};
+	}
+
+	/**
+	 * @brief Returns the difference of two longitudes, in degrees, in [−180, 180).
+	 * @param lhs The first longitude.
+	 * @param rhs The second longitude.
+	 * @return double
+	 */
+	double
+	longitudeGap (double lhs, double rhs)
+	{
+		const auto gap = lhs - rhs + 180.0;
+
+		return gap - (360.0 * std::floor(gap / 360.0)) - 180.0;
+	}
+
+	/**
+	 * @brief Returns a planetodetic latitude as a planetocentric one.
+	 * @param latitude The planetodetic latitude, in degrees.
+	 * @param flattening The ellipsoid's flattening.
+	 * @return double
+	 */
+	double
+	planetocentric (double latitude, double flattening)
+	{
+		return Astronomy::degrees(std::atan((1.0 - flattening) * (1.0 - flattening) * std::tan(Astronomy::radians(latitude))));
+	}
+}
+
+TEST(MathSolarSystem, MarsFacesTheEarthLikeHorizons)
+{
+	/* JPL Horizons (IAU 2015 rotation), ObsSub-LON (west) and ObsSub-LAT (planetodetic, f = 0.005886). */
+	const auto october2026 = subEarthPoint(Body::Mars, {.year = 2026, .month = 10, .day = 27, .hour = 2, .minute = 0, .second = 0.0});
+
+	EXPECT_NEAR(longitudeGap(october2026.westLongitude, 174.566442), 0.0, 0.1);
+	EXPECT_NEAR(october2026.latitude, planetocentric(19.789486, 0.005886), 0.05);
+
+	const auto august2003 = subEarthPoint(Body::Mars, {.year = 2003, .month = 8, .day = 28, .hour = 0, .minute = 0, .second = 0.0});
+
+	EXPECT_NEAR(longitudeGap(august2003.westLongitude, 329.270132), 0.0, 0.1);
+	EXPECT_NEAR(august2003.latitude, planetocentric(-19.001511, 0.005886), 0.05);
+
+	const auto october2020 = subEarthPoint(Body::Mars, {.year = 2020, .month = 10, .day = 13, .hour = 23, .minute = 0, .second = 0.0});
+
+	EXPECT_NEAR(longitudeGap(october2020.westLongitude, 157.136196), 0.0, 0.1);
+	EXPECT_NEAR(october2020.latitude, planetocentric(-20.709220, 0.005886), 0.05);
+}
+
+TEST(MathSolarSystem, JupiterFacesTheEarthLikeHorizons)
+{
+	/* JPL Horizons, System III. */
+	const auto point = subEarthPoint(Body::Jupiter, {.year = 2026, .month = 10, .day = 27, .hour = 2, .minute = 0, .second = 0.0});
+
+	EXPECT_NEAR(longitudeGap(point.westLongitude, 20.485488), 0.0, 0.1);
+	EXPECT_NEAR(point.latitude, planetocentric(-0.134064, 0.06487), 0.05);
+}
+

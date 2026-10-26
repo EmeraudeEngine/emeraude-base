@@ -211,6 +211,8 @@ namespace EmEn::Base::Math::SolarSystem
 		double heliocentricDistance{0.0};
 		/** @brief The phase angle Sun-body-Earth, in radians (0 for the Sun). */
 		double phaseAngle{0.0};
+		/** @brief The light time from the body, in days (a planet; 0 otherwise): its look is the one it had then. */
+		double lightTime{0.0};
 	};
 
 	/**
@@ -634,7 +636,7 @@ namespace EmEn::Base::Math::SolarSystem
 		const auto cosine = ((heliocentricDistance * heliocentricDistance) + (distance * distance) - (sunDistance * sunDistance)) / std::max(2.0 * heliocentricDistance * distance, std::numeric_limits< double >::min());
 		const auto equatorial = precessionFromJ2000(julianCenturies(julianDayTT))(eclipticToEquatorial(geocentric, meanObliquity(0.0)));
 
-		return {.direction = equatorial.normalized(), .distance = distance, .heliocentricDistance = heliocentricDistance, .phaseAngle = std::acos(std::clamp(cosine, -1.0, 1.0))};
+		return {.direction = equatorial.normalized(), .distance = distance, .heliocentricDistance = heliocentricDistance, .phaseAngle = std::acos(std::clamp(cosine, -1.0, 1.0)), .lightTime = distance * LightDaysPerAU};
 	}
 
 	/**
@@ -834,5 +836,112 @@ namespace EmEn::Base::Math::SolarSystem
 		}
 
 		return std::numeric_limits< double >::quiet_NaN();
+	}
+
+	/**
+	 * @brief A body's orientation: its north pole and its prime meridian, unit vectors of the J2000 equator.
+	 */
+	struct BodyOrientation
+	{
+		/** @brief The north pole (the IAU's: the pole on the north side of the invariable plane). */
+		Vector< 3, double > pole{0.0, 0.0, 1.0};
+		/** @brief The direction from the centre toward longitude 0 on the equator. The direction toward east longitude
+		 * 90° is pole × primeMeridian: an EAST planetocentric longitude of a unit direction n from the centre is
+		 * atan2(n · (pole × primeMeridian), n · primeMeridian). */
+		Vector< 3, double > primeMeridian{1.0, 0.0, 0.0};
+	};
+
+	/**
+	 * @brief Returns a planet's orientation (the IAU WGCCRE recommended models: B. A. Archinal et al., "Report of the IAU
+	 * Working Group on Cartographic Coordinates and Rotational Elements: 2015", Celest. Mech. Dyn. Astr. 130:22, 2018 —
+	 * Mercury, Jupiter's System III, Saturn, Uranus, Neptune, Pluto; Mars from the 2009 report, Archinal et al., Celest.
+	 * Mech. Dyn. Astr. 109:101, 2011, the one that reproduces JPL Horizons: the periodic terms below 0.01° left out).
+	 * @note Checked against JPL Horizons's sub-Earth points (test MathSolarSystem.MarsFacesTheEarthLikeHorizons).
+	 * @note Pass the instant the light LEFT the body (julianDayTT − GeocentricPosition::lightTime): Mars turns 0.24° per
+	 * minute, Jupiter 0.6°.
+	 * @param body The planet (the barycentre answers the J2000 frame itself).
+	 * @param julianDayTT The Julian day, TT.
+	 * @return BodyOrientation J2000 equatorial vectors.
+	 */
+	[[nodiscard]]
+	inline
+	BodyOrientation
+	orientation (Body body, double julianDayTT) noexcept
+	{
+		const auto d = julianDayTT - JulianDayJ2000;
+		const auto T = d / DaysPerJulianCentury;
+		/* Right ascension and declination of the pole, prime meridian angle W, in degrees. */
+		double alpha = 0.0;
+		double delta = 90.0;
+		double W = 0.0;
+
+		switch ( body )
+		{
+			case Body::Mercury :
+				alpha = 281.0103 - (0.0328 * T);
+				delta = 61.4155 - (0.0049 * T);
+				W = 329.5988 + (6.1385108 * d);
+				break;
+
+			case Body::Venus :
+				alpha = 272.76;
+				delta = 67.16;
+				W = 160.20 - (1.4813688 * d);
+				break;
+
+			case Body::EarthMoonBarycentre :
+				return {};
+
+			case Body::Mars :
+				alpha = 317.68143 - (0.1061 * T);
+				delta = 52.88650 - (0.0609 * T);
+				W = 176.630 + (350.89198226 * d);
+				break;
+
+			case Body::Jupiter :
+				alpha = 268.056595 - (0.006499 * T);
+				delta = 64.495303 + (0.002413 * T);
+				W = 284.95 + (870.5360000 * d);
+				break;
+
+			case Body::Saturn :
+				alpha = 40.589 - (0.036 * T);
+				delta = 83.537 - (0.004 * T);
+				W = 38.90 + (810.7939024 * d);
+				break;
+
+			case Body::Uranus :
+				alpha = 257.311;
+				delta = -15.175;
+				W = 203.81 - (501.1600928 * d);
+				break;
+
+			case Body::Neptune :
+			{
+				const auto N = Astronomy::radians(357.85 + (52.316 * T));
+
+				alpha = 299.36 + (0.70 * std::sin(N));
+				delta = 43.46 - (0.51 * std::cos(N));
+				W = 249.978 + (541.1397757 * d) - (0.48 * std::sin(N));
+				break;
+			}
+
+			case Body::Pluto :
+				alpha = 132.993;
+				delta = -6.163;
+				W = 302.695 + (56.3625225 * d);
+				break;
+		}
+
+		const auto a = Astronomy::radians(alpha);
+		const auto dec = Astronomy::radians(delta);
+		/* W wraps first: 350.89° per day reaches 1e7 degrees, the fraction is what turns. */
+		const auto w = Astronomy::radians(W - (360.0 * std::floor(W / 360.0)));
+		const Vector< 3, double > pole{std::cos(dec) * std::cos(a), std::cos(dec) * std::sin(a), std::sin(dec)};
+		/* The ascending node of the body's equator on the J2000 equator, at right ascension α + 90°. */
+		const Vector< 3, double > node{-std::sin(a), std::cos(a), 0.0};
+		const auto east = Vector< 3, double >::crossProduct(pole, node);
+
+		return {.pole = pole, .primeMeridian = (node * std::cos(w)) + (east * std::sin(w))};
 	}
 }
