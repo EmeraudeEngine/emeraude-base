@@ -26,9 +26,11 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <span>
 #include <string>
 #include <vector>
@@ -552,4 +554,203 @@ TEST(VertexFactoryGrid, buildPositionVectorMatchesThePoints)
 			EXPECT_FLOAT_EQ(positions[index++], point[Math::Z]);
 		}
 	}
+}
+
+/* The fractal noise (FractalNoiseParams) and the edge falloff (EdgeFalloffParams): an archipelago that sinks into the
+ * sea before the map's border (2026-10-26). */
+
+namespace
+{
+	/* How many points of two grids of the same layout differ in height. */
+	size_t
+	differentHeights (const Grid< float > & first, const Grid< float > & second)
+	{
+		size_t count = 0;
+
+		for ( uint32_t index = 0; index < first.squaredPointCount() * first.squaredPointCount(); ++index )
+		{
+			count += first.position(index)[1] != second.position(index)[1] ? 1U : 0U;
+		}
+
+		return count;
+	}
+
+	/* How many points of a grid are not at a height. */
+	size_t
+	pointsNotAt (const Grid< float > & grid, float height)
+	{
+		size_t count = 0;
+
+		for ( uint32_t index = 0; index < grid.squaredPointCount() * grid.squaredPointCount(); ++index )
+		{
+			count += grid.position(index)[1] != height ? 1U : 0U;
+		}
+
+		return count;
+	}
+
+	/* How many points of the four borders are not at a height. */
+	size_t
+	borderPointsNotAt (const Grid< float > & grid, float height)
+	{
+		const auto last = grid.squaredQuadCount();
+		size_t count = 0;
+
+		for ( uint32_t i = 0; i <= last; ++i )
+		{
+			count += grid.position(i, 0U)[1] != height ? 1U : 0U;
+			count += grid.position(i, last)[1] != height ? 1U : 0U;
+			count += grid.position(0U, i)[1] != height ? 1U : 0U;
+			count += grid.position(last, i)[1] != height ? 1U : 0U;
+		}
+
+		return count;
+	}
+
+	/* How many steps RISE from the centre to the east border along the middle row. */
+	size_t
+	risesTowardTheBorder (const Grid< float > & grid)
+	{
+		const auto last = grid.squaredQuadCount();
+		size_t count = 0;
+
+		for ( uint32_t x = last / 2U; x < last; ++x )
+		{
+			count += grid.position(x + 1U, last / 2U)[1] > grid.position(x, last / 2U)[1] ? 1U : 0U;
+		}
+
+		return count;
+	}
+
+	/* The largest height gap between a coarse grid and a finer one at their shared points (`ratio` fine cells per coarse cell). */
+	float
+	largestGapAtSharedPoints (const Grid< float > & coarse, const Grid< float > & fine, uint32_t ratio)
+	{
+		float gap = 0.0F;
+
+		for ( uint32_t y = 0; y <= coarse.squaredQuadCount(); ++y )
+		{
+			for ( uint32_t x = 0; x <= coarse.squaredQuadCount(); ++x )
+			{
+				gap = std::max(gap, std::abs(coarse.position(x, y)[1] - fine.position(x * ratio, y * ratio)[1]));
+			}
+		}
+
+		return gap;
+	}
+
+	constexpr FractalNoiseParams< float > ValidFractalNoise{.wavelength = 200.0F, .factor = 40.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = 6, .seed = 7};
+}
+
+TEST(VertexFactoryGrid, AFractalNoiseIsReproducibleFromItsSeed)
+{
+	Grid< float > first;
+	ASSERT_TRUE(first.initializeByGridSize(512.0F, 128U));
+	ASSERT_TRUE(first.applyFractalNoise(ValidFractalNoise));
+
+	Grid< float > second;
+	ASSERT_TRUE(second.initializeByGridSize(512.0F, 128U));
+	ASSERT_TRUE(second.applyFractalNoise(ValidFractalNoise));
+
+	auto otherSeedParams = ValidFractalNoise;
+	otherSeedParams.seed = 8;
+
+	Grid< float > otherSeed;
+	ASSERT_TRUE(otherSeed.initializeByGridSize(512.0F, 128U));
+	ASSERT_TRUE(otherSeed.applyFractalNoise(otherSeedParams));
+
+	ASSERT_EQ(differentHeights(first, second), 0U);
+	/* Another seed is another relief. */
+	ASSERT_GT(differentHeights(first, otherSeed), first.squaredPointCount() * first.squaredPointCount() / 2);
+}
+
+TEST(VertexFactoryGrid, AFractalNoiseStaysInItsNormalisedRangeAndUsesIt)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(2048.0F, 256U));
+	ASSERT_TRUE(grid.applyFractalNoise({.wavelength = 300.0F, .factor = 50.0F, .offset = -10.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = 5, .seed = 3}));
+
+	/* Normalised by the octaves' total amplitude: within ±factor around the offset, and not flat. */
+	const auto & box = grid.boundingBox();
+
+	ASSERT_GE(box.minimum()[1], -60.0F);
+	ASSERT_LE(box.maximum()[1], 40.0F);
+	ASSERT_GT(box.maximum()[1] - box.minimum()[1], 30.0F);
+}
+
+TEST(VertexFactoryGrid, AFractalNoiseKeepsItsFeaturesInWorldUnits)
+{
+	/* The same world point gets the same height whatever the grid's division: the noise is sampled at the position. */
+	const FractalNoiseParams< float > params{.wavelength = 100.0F, .factor = 20.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = 4, .seed = 1};
+
+	Grid< float > coarse;
+	ASSERT_TRUE(coarse.initializeByGridSize(256.0F, 64U));
+	ASSERT_TRUE(coarse.applyFractalNoise(params));
+
+	Grid< float > fine;
+	ASSERT_TRUE(fine.initializeByGridSize(256.0F, 256U));
+	ASSERT_TRUE(fine.applyFractalNoise(params));
+
+	ASSERT_LT(largestGapAtSharedPoints(coarse, fine, 4U), 1.0e-4F);
+}
+
+TEST(VertexFactoryGrid, AnInvalidFractalNoiseIsRefusedAndLeavesTheHeights)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(64.0F, 16U));
+	grid.shiftHeight(3.0F);
+
+	const std::array< FractalNoiseParams< float >, 8 > invalid{
+		FractalNoiseParams< float >{.wavelength = 0.0F, .factor = 1.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = 6, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = 1.0F, .offset = 0.0F, .lacunarity = 1.0F, .gain = 0.5F, .octaves = 6, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = 1.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 1.0F, .octaves = 6, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = 1.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.0F, .octaves = 6, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = 1.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = 0, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = 1.0F, .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = MaxFractalOctaves + 1, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = std::numeric_limits< float >::quiet_NaN(), .offset = 0.0F, .lacunarity = 2.0F, .gain = 0.5F, .octaves = 6, .seed = 0},
+		FractalNoiseParams< float >{.wavelength = 1.0F, .factor = 1.0F, .offset = std::numeric_limits< float >::infinity(), .lacunarity = 2.0F, .gain = 0.5F, .octaves = 6, .seed = 0}
+	};
+
+	const auto refused = std::ranges::count_if(invalid, [&grid] (const auto & params) { return !grid.applyFractalNoise(params); });
+
+	ASSERT_EQ(refused, static_cast< std::ptrdiff_t >(invalid.size()));
+	ASSERT_EQ(pointsNotAt(grid, 3.0F), 0U);
+
+	Grid< float > empty;
+	ASSERT_FALSE(empty.applyFractalNoise(ValidFractalNoise));
+}
+
+TEST(VertexFactoryGrid, AnEdgeFalloffSinksTheWholeBorderAndKeepsTheCentre)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(1000.0F, 100U));
+	grid.shiftHeight(25.0F);
+	ASSERT_TRUE(grid.applyEdgeFalloff({.start = 0.4F, .edgeHeight = -30.0F}));
+
+	const auto last = grid.squaredQuadCount();
+
+	/* Every border point, corners included, is at the edge height exactly; the centre is untouched (square bump 0 <
+	 * start), and the height never rises toward the border. */
+	ASSERT_EQ(borderPointsNotAt(grid, -30.0F), 0U);
+	ASSERT_EQ(grid.position(last / 2U, last / 2U)[1], 25.0F);
+	ASSERT_EQ(risesTowardTheBorder(grid), 0U);
+
+	/* The bounding box follows. */
+	ASSERT_FLOAT_EQ(grid.boundingBox().minimum()[1], -30.0F);
+	ASSERT_FLOAT_EQ(grid.boundingBox().maximum()[1], 25.0F);
+}
+
+TEST(VertexFactoryGrid, AnInvalidEdgeFalloffIsRefusedAndLeavesTheHeights)
+{
+	Grid< float > grid;
+	ASSERT_TRUE(grid.initializeByGridSize(64.0F, 16U));
+	grid.shiftHeight(3.0F);
+
+	ASSERT_FALSE(grid.applyEdgeFalloff({.start = 1.0F, .edgeHeight = 0.0F}));
+	ASSERT_FALSE(grid.applyEdgeFalloff({.start = -0.1F, .edgeHeight = 0.0F}));
+	ASSERT_FALSE(grid.applyEdgeFalloff({.start = 0.5F, .edgeHeight = std::numeric_limits< float >::quiet_NaN()}));
+	ASSERT_EQ(pointsNotAt(grid, 3.0F), 0U);
+
+	Grid< float > empty;
+	ASSERT_FALSE(empty.applyEdgeFalloff({}));
 }

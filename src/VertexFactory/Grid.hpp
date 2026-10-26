@@ -87,6 +87,54 @@ namespace EmEn::Base::VertexFactory
 	};
 
 	/**
+	 * @brief Parameters of a fractal Brownian motion (fBm): several octaves of Perlin noise summed, each one `lacunarity`
+	 * times finer and `gain` times weaker than the previous (F. K. Musgrave, "Procedural Fractal Terrains", in D. S.
+	 * Ebert et al., "Texturing & Modeling: A Procedural Approach", 3rd ed., Morgan Kaufmann 2003, ch. 16).
+	 * @note Sampled in WORLD units (the grid's point positions), so a feature keeps its size whatever the grid's size
+	 * and division. The sum is normalised by the octaves' total amplitude to about [-1, 1], then × factor + offset.
+	 */
+	template< typename vertex_data_t = float >
+	requires (std::is_floating_point_v< vertex_data_t > )
+	struct FractalNoiseParams
+	{
+		/** @brief The first octave's wavelength, in world units: the size of the largest features. > 0. */
+		vertex_data_t wavelength{256};
+		/** @brief Multiplier of the normalised [-1, 1] sum: the relief spans about twice this value. */
+		vertex_data_t factor{1};
+		/** @brief Added after the factor: a negative offset sinks the relief, only the highest features emerge. */
+		vertex_data_t offset{0};
+		/** @brief The frequency ratio between two octaves. > 1. */
+		vertex_data_t lacunarity{2};
+		/** @brief The amplitude ratio between two octaves, in (0, 1). */
+		vertex_data_t gain{static_cast< vertex_data_t >(0.5)};
+		/** @brief How many octaves, 1 to MaxFractalOctaves. */
+		uint32_t octaves{6};
+		/** @brief The seed of the Perlin permutation: the same seed gives the same relief on every platform. */
+		uint32_t seed{0};
+	};
+
+	/** @brief The most octaves a FractalNoiseParams accepts (beyond 16 the finest octave is far below any grid cell). */
+	static constexpr uint32_t MaxFractalOctaves{16};
+
+	/**
+	 * @brief Parameters of an edge falloff: the heights blend toward `edgeHeight` near the grid's border, so a relief
+	 * never ends in a cliff on the map's edge — an island or an archipelago sinks into the sea before it.
+	 * @note The distance to the border is the "square bump" d = 1 − (1 − nx²)(1 − nz²), nx and nz the position in
+	 * [-1, 1] across the grid: 0 at the centre, 1 on the whole square border (a radial distance would leave the
+	 * corners up). The blend weight is smoothstep(start, 1, d) (A. Patel, "Making maps with noise functions", Red Blob
+	 * Games, 2015 — https://www.redblobgames.com/maps/terrain-from-noise/ § Islands).
+	 */
+	template< typename vertex_data_t = float >
+	requires (std::is_floating_point_v< vertex_data_t > )
+	struct EdgeFalloffParams
+	{
+		/** @brief The square-bump distance where the blend begins, in [0, 1): before it the heights are untouched. */
+		vertex_data_t start{static_cast< vertex_data_t >(0.5)};
+		/** @brief The height every border point reaches. */
+		vertex_data_t edgeHeight{0};
+	};
+
+	/**
 	 * @class Grid
 	 * @brief Template class for generating 2D grid geometry with height displacement.
 	 *
@@ -551,6 +599,111 @@ namespace EmEn::Base::VertexFactory
 					applyMode(m_pointHeights[idx], newValue, mode);
 					m_boundingBox.mergeY(m_pointHeights[idx]);
 				});
+			}
+
+			/**
+			 * @brief Applies a fractal Brownian motion of Perlin noise (FractalNoiseParams), sampled at each point's world
+			 * position.
+			 * @note Refuses (false, the heights untouched) a non-finite parameter, a wavelength ≤ 0, a lacunarity ≤ 1, a
+			 * gain outside (0, 1) or an octave count outside [1, MaxFractalOctaves], and an empty grid.
+			 * @note Each octave samples its own slice of the 3D noise (z = octave index + 0.5): the octaves are not
+			 * correlated, and the origin is not a zero of all of them at once (Perlin noise is 0 on its integer lattice).
+			 * @param params The noise parameters.
+			 * @param mode How the noise combines with the existing heights (default: Replace).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			applyFractalNoise (const FractalNoiseParams< vertex_data_t > & params, PointTransformationMode mode = PointTransformationMode::Replace) noexcept
+			{
+				constexpr auto One{static_cast< vertex_data_t >(1)};
+				constexpr auto Two{static_cast< vertex_data_t >(2)};
+				constexpr auto SliceOffset{static_cast< vertex_data_t >(0.5)};
+
+				const auto finite = std::isfinite(params.wavelength) && std::isfinite(params.factor) && std::isfinite(params.offset) && std::isfinite(params.lacunarity) && std::isfinite(params.gain);
+
+				if ( m_pointHeights.empty() || !finite || params.wavelength <= 0 || params.lacunarity <= One || params.gain <= 0 || params.gain >= One || params.octaves < 1 || params.octaves > MaxFractalOctaves )
+				{
+					return false;
+				}
+
+				/* The octaves' total amplitude: the normalisation to about [-1, 1]. */
+				vertex_data_t totalAmplitude = 0;
+				vertex_data_t octaveAmplitude = One;
+
+				for ( uint32_t octave = 0; octave < params.octaves; ++octave )
+				{
+					totalAmplitude += octaveAmplitude;
+					octaveAmplitude *= params.gain;
+				}
+
+				Algorithms::PerlinNoise< vertex_data_t > generator{params.seed};
+
+				this->applyTransformation([this, &params, &generator, totalAmplitude, mode] (index_data_t indexOnX, index_data_t indexOnY) {
+					const auto point = this->position(indexOnX, indexOnY);
+					auto frequency = One / params.wavelength;
+					auto amplitude = One;
+					vertex_data_t sum = 0;
+
+					for ( uint32_t octave = 0; octave < params.octaves; ++octave )
+					{
+						/* PerlinNoise::generate() answers in [0, 1]: centred on 0 here. */
+						const auto sample = (generator.generate(point[Math::X] * frequency, point[Math::Z] * frequency, static_cast< vertex_data_t >(octave) + SliceOffset) * Two) - One;
+
+						sum += sample * amplitude;
+						frequency *= params.lacunarity;
+						amplitude *= params.gain;
+					}
+
+					applyMode(m_pointHeights[this->index(indexOnX, indexOnY)], ((sum / totalAmplitude) * params.factor) + params.offset, mode);
+				});
+
+				this->updateBoundingBox();
+
+				return true;
+			}
+
+			/**
+			 * @brief Blends the heights toward EdgeFalloffParams::edgeHeight near the grid's border (the square bump, a
+			 * smoothstep from `start`): every border point ends exactly at edgeHeight, the centre is untouched.
+			 * @note Refuses (false, the heights untouched) a non-finite parameter, a start outside [0, 1) and an empty grid.
+			 * @param params The falloff parameters.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			applyEdgeFalloff (const EdgeFalloffParams< vertex_data_t > & params) noexcept
+			{
+				constexpr auto One{static_cast< vertex_data_t >(1)};
+
+				if ( m_pointHeights.empty() || m_squaredQuadCount == 0 || !std::isfinite(params.start) || !std::isfinite(params.edgeHeight) || params.start < 0 || params.start >= One )
+				{
+					return false;
+				}
+
+				const auto lastIndex = static_cast< vertex_data_t >(m_squaredQuadCount);
+
+				this->applyTransformation([this, &params, lastIndex] (index_data_t indexOnX, index_data_t indexOnY) {
+					constexpr auto Zero{static_cast< vertex_data_t >(0)};
+					constexpr auto Unit{static_cast< vertex_data_t >(1)};
+					constexpr auto Two{static_cast< vertex_data_t >(2)};
+					constexpr auto Three{static_cast< vertex_data_t >(3)};
+
+					/* The position across the grid in [-1, 1], from the indices: exactly ±1 on the border. */
+					const auto nx = ((static_cast< vertex_data_t >(indexOnX) / lastIndex) * Two) - Unit;
+					const auto nz = ((static_cast< vertex_data_t >(indexOnY) / lastIndex) * Two) - Unit;
+					const auto distance = Unit - ((Unit - (nx * nx)) * (Unit - (nz * nz)));
+					const auto t = std::clamp((distance - params.start) / (Unit - params.start), Zero, Unit);
+					const auto weight = t * t * (Three - (Two * t));
+					auto & height = m_pointHeights[this->index(indexOnX, indexOnY)];
+
+					/* The two-weight form: at weight 1 the border is edgeHeight EXACTLY. */
+					height = (height * (Unit - weight)) + (params.edgeHeight * weight);
+				});
+
+				this->updateBoundingBox();
+
+				return true;
 			}
 
 			/**
