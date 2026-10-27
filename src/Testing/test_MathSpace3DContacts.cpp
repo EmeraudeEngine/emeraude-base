@@ -30,9 +30,15 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <numbers>
+#include <ranges>
+#include <string>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
@@ -51,6 +57,7 @@
 #include "Math/Space3D/Sphere.hpp"
 #include "Math/Space3D/Triangle.hpp"
 #include "Math/Vector.hpp"
+#include "StaticVector.hpp"
 
 using namespace EmEn::Base::Math;
 using namespace EmEn::Base::Math::Space3D;
@@ -1428,4 +1435,44 @@ TEST(MathSpace3DContacts, randomBoxTrianglePairsSeparateAlongTheNormal)
 	}
 
 	EXPECT_GT(contacts, 300U);
+}
+
+/* The measurement the "fast AABB path" waited for (2026-10-27, source-tree doc 17): what the oriented box-box
+ * manifold costs on the pair an AABB path would serve (two unrotated boxes, a crate resting on the ground), next to a
+ * turned pair. Disabled: a measurement, run by hand in Release. */
+TEST(MathSpace3DContacts, DISABLED_BoxBoxManifoldCost)
+{
+	constexpr int Calls{1'000'000};
+	const auto crate = makeBox({0.3F, 0.49F, -0.2F}, {0.5F, 0.5F, 0.5F});
+	const auto floor = ground();
+	const auto turnedA = makeBox({0.1F, 0.2F, 0.3F}, {0.7F, 0.4F, 0.9F}, Vec3{1.0F, 2.0F, 3.0F}.normalized(), 0.7F);
+	const auto turnedB = makeBox({0.5F, 0.9F, -0.2F}, {0.6F, 0.5F, 0.4F}, Vec3{-2.0F, 1.0F, 0.5F}.normalized(), 1.3F);
+
+	const auto measure = [] (const OrientedBox< float > & boxA, const OrientedBox< float > & boxB) {
+		size_t points = 0;
+		const auto start = std::chrono::steady_clock::now();
+
+		for ( int call = 0; call < Calls; ++call )
+		{
+			ContactManifold< float > manifold;
+
+			if ( computeContactManifold(boxA, boxB, manifold) )
+			{
+				points += manifold.points().size();
+			}
+		}
+
+		const auto elapsed = std::chrono::duration_cast< std::chrono::nanoseconds >(std::chrono::steady_clock::now() - start).count();
+
+		return std::pair{static_cast< double >(elapsed) / Calls, points};
+	};
+
+	const auto [unrotated, unrotatedPoints] = measure(crate, floor);
+	const auto [turned, turnedPoints] = measure(turnedA, turnedB);
+
+	std::cout << "[cost] box-box manifold, unrotated pair: " << unrotated << " ns per call (" << unrotatedPoints / Calls << " points)\n";
+	std::cout << "[cost] box-box manifold, turned pair: " << turned << " ns per call (" << turnedPoints / Calls << " points)\n";
+
+	EXPECT_GT(unrotatedPoints, 0U);
+	EXPECT_GT(turnedPoints, 0U);
 }

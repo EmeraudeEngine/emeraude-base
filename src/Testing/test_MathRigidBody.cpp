@@ -28,9 +28,12 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
-#include <cmath>
 #include <limits>
 #include <numbers>
+#include <optional>
+#include <span>
+#include <string>
+#include <vector>
 
 /* Local inclusions. */
 #include "Math/Matrix.hpp"
@@ -221,4 +224,67 @@ TEST(MathRigidBody, aTinyRotationKeepsItsAngle)
 
 	EXPECT_NEAR(angle, 2.5F, 1.0e-5F);
 	EXPECT_NEAR(axis[Y], 1.0F, 1.0e-5F);
+}
+
+/* The compound body (2026-10-27, source-tree doc 19): the parts' tensors moved to the common centre of mass. */
+TEST(MathRigidBody, aBoxSplitInTwoHalvesIsTheWholeBox)
+{
+	/* A 2 x 1 x 1 box of 2 kg, and its two 1 x 1 x 1 halves of 1 kg centred at x = -0.5 and x = +0.5. */
+	const auto whole = RigidBody::solidBoxInertia(2.0F, Vec3{2.0F, 1.0F, 1.0F});
+	const auto half = RigidBody::solidBoxInertia(1.0F, Vec3{1.0F, 1.0F, 1.0F});
+
+	ASSERT_TRUE(whole.has_value());
+	ASSERT_TRUE(half.has_value());
+
+	const auto wholeTensor = whole.value_or(NoTensor);
+	const auto halfTensor = half.value_or(NoTensor);
+	const std::vector< RigidBody::CompoundPart< float > > parts{
+		{.mass = 1.0F, .centre = Vec3{-0.5F, 0.0F, 0.0F}, .inertia = halfTensor},
+		{.mass = 1.0F, .centre = Vec3{0.5F, 0.0F, 0.0F}, .inertia = halfTensor}
+	};
+	const auto compound = RigidBody::compoundInertia< float >(parts);
+
+	ASSERT_TRUE(compound.has_value());
+
+	const auto result = compound.value_or(RigidBody::CompoundInertia< float >{});
+
+	EXPECT_NEAR(result.mass, 2.0F, RigidBodyTolerance);
+	EXPECT_NEAR(result.centreOfMass[X], 0.0F, RigidBodyTolerance);
+	EXPECT_NEAR(result.centreOfMass[Y], 0.0F, RigidBodyTolerance);
+	EXPECT_NEAR(result.centreOfMass[Z], 0.0F, RigidBodyTolerance);
+	expectDiagonal(result.inertia, wholeTensor(0, 0), wholeTensor(1, 1), wholeTensor(2, 2));
+}
+
+TEST(MathRigidBody, aCompoundOfTwoPointMassesTurnsAboutItsCentre)
+{
+	/* 1 kg at x = 0 and 3 kg at x = 4: the centre at x = 3, I = 1 * 3^2 + 3 * 1^2 = 12 about Y and Z, 0 about X. */
+	const Matrix< 3, float > point{0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
+	const std::vector< RigidBody::CompoundPart< float > > parts{
+		{.mass = 1.0F, .centre = Vec3{0.0F, 0.0F, 0.0F}, .inertia = point},
+		{.mass = 3.0F, .centre = Vec3{4.0F, 0.0F, 0.0F}, .inertia = point}
+	};
+	const auto compound = RigidBody::compoundInertia< float >(parts);
+
+	ASSERT_TRUE(compound.has_value());
+
+	const auto result = compound.value_or(RigidBody::CompoundInertia< float >{});
+
+	EXPECT_NEAR(result.centreOfMass[X], 3.0F, RigidBodyTolerance);
+	expectDiagonal(result.inertia, 0.0F, 12.0F, 12.0F);
+}
+
+TEST(MathRigidBody, aCompoundRefusesWhatHasNoCentre)
+{
+	const Matrix< 3, float > point{0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
+
+	EXPECT_FALSE(RigidBody::compoundInertia< float >({}).has_value());
+
+	const std::vector< RigidBody::CompoundPart< float > > massless{{.mass = 0.0F, .centre = Vec3{}, .inertia = point}};
+	EXPECT_FALSE(RigidBody::compoundInertia< float >(massless).has_value());
+
+	const std::vector< RigidBody::CompoundPart< float > > negative{{.mass = -1.0F, .centre = Vec3{}, .inertia = point}};
+	EXPECT_FALSE(RigidBody::compoundInertia< float >(negative).has_value());
+
+	const std::vector< RigidBody::CompoundPart< float > > nonFinite{{.mass = 1.0F, .centre = Vec3{std::numeric_limits< float >::quiet_NaN(), 0.0F, 0.0F}, .inertia = point}};
+	EXPECT_FALSE(RigidBody::compoundInertia< float >(nonFinite).has_value());
 }

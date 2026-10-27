@@ -12,6 +12,7 @@ and the shape. The engine now derives it from the collision shape through these 
 | `solidCylinderInertia(mass, radius, height)` | along Y: m r²/2 about Y, m (3 r² + h²)/12 across |
 | `solidCapsuleInertia(mass, radius, cylinderHeight)` | along Y, the mass split by volume between the cylinder and the two caps (each cap's centre 3 r / 8 beyond the cylinder's end) |
 | `parallelAxis(inertia, mass, offset)` | I + m (\|d\|² E − d dᵀ) |
+| `compoundInertia(parts)` | a compound body (2026-10-27): the total mass, the centre of mass (the masses' weighted mean) and the tensor about it — every part's tensor moved there by `parallelAxis()` first; the parts' centres and tensors in the BODY frame (a part turned in the body brings R I Rᵀ). Refused (std::nullopt): no part, a negative or non-finite mass, a non-finite centre or tensor element, a total mass of 0 |
 | `skewSymmetric(v)` | [v]× (so that [v]× u = v × u) |
 | `integrateOrientation(q, worldω, dt)` | exp(ω dt) ∘ q, renormalised — the WORLD-space rotation |
 
@@ -33,6 +34,10 @@ a thin one = a rod m h²/12), refused inputs, the parallel-axis theorem (a point
 matrix vs the cross product, 10 000 world-axis steps keeping the axis and the angle, ω = 0 leaving the orientation,
 a 1e-5 rad rotation keeping its angle through `toAngleAxis()`.
 
-Left for when a consumer needs it (owner, 2026-10-07; item `physics-p1-leftovers`): the sum of several tensors for a
-compound body (each moved by `parallelAxis()` first — P3 derives an entity's tensor from its ONE collision shape and
-its total mass, engine `docs/subsystems/physics/16-rigid-body-rotation.md`), and a `Quaternion` from a `Matrix< 3 >`.
+Added 2026-10-27 (owner: implement the P1 leftovers, consumer or not): `compoundInertia()` (tests
+`aBoxSplitInTwoHalvesIsTheWholeBox` — two halves give exactly the whole box's tensor — `aCompoundOfTwoPointMassesTurnsAboutItsCentre`,
+`aCompoundRefusesWhatHasNoCentre`), and `Quaternion(const Matrix< 3 > &)` / `operator=(const Matrix< 3 > &)`: the 3 × 3
+rotation is the upper-left block of the 4 × 4 one `Quaternion(Matrix< 4 >)` reads, embedded and converted by that ONE
+path (tests `MathQuaternion.FromMatrix3`, `FromMatrix3IsFromMatrix4`: bit-identical on every branch of the conversion).
+The engine still derives an entity's tensor from its ONE collision shape (engine `docs/subsystems/physics/16-rigid-body-rotation.md`);
+a compound collision model is where `compoundInertia()` comes in.

@@ -814,6 +814,51 @@ TYPED_TEST(MathQuaternion, FromMatrix)
 	ASSERT_NEAR(quat[W], static_cast< TypeParam >(0.707), static_cast< TypeParam >(0.01));
 }
 
+/* A quaternion from a 3 x 3 rotation (2026-10-27, source-tree doc 19): the upper-left block of the 4 x 4 one
+ * Quaternion(Matrix< 4 >) reads, the same quaternion. */
+TYPED_TEST(MathQuaternion, FromMatrix3)
+{
+	const Matrix< 3, TypeParam > matrix{
+		0, -1, 0,
+		1, 0, 0,
+		0, 0, 1};
+
+	const Quaternion< TypeParam > quat{matrix};
+
+	ASSERT_NEAR(quat[X], TypeParam{0}, static_cast< TypeParam >(0.01));
+	ASSERT_NEAR(quat[Y], TypeParam{0}, static_cast< TypeParam >(0.01));
+	ASSERT_NEAR(quat[Z], static_cast< TypeParam >(0.707), static_cast< TypeParam >(0.01));
+	ASSERT_NEAR(quat[W], static_cast< TypeParam >(0.707), static_cast< TypeParam >(0.01));
+}
+
+TYPED_TEST(MathQuaternion, FromMatrix3IsFromMatrix4)
+{
+	/* Every branch of the conversion (the trace positive, then each diagonal element the largest). */
+	const std::array< Quaternion< TypeParam >, 4 > rotations{
+		Quaternion< TypeParam >{static_cast< TypeParam >(0.1), static_cast< TypeParam >(0.2), static_cast< TypeParam >(0.3), static_cast< TypeParam >(0.927362)},
+		Quaternion< TypeParam >{static_cast< TypeParam >(0.9), static_cast< TypeParam >(0.1), static_cast< TypeParam >(0.2), static_cast< TypeParam >(0.374166)},
+		Quaternion< TypeParam >{static_cast< TypeParam >(0.1), static_cast< TypeParam >(0.9), static_cast< TypeParam >(0.2), static_cast< TypeParam >(0.374166)},
+		Quaternion< TypeParam >{static_cast< TypeParam >(0.1), static_cast< TypeParam >(0.2), static_cast< TypeParam >(0.9), static_cast< TypeParam >(0.374166)}
+	};
+
+	for ( const auto & rotation : rotations )
+	{
+		const auto matrix4 = rotation.toRotationMatrix4();
+		const Matrix< 3, TypeParam > matrix3{
+			matrix4(0, 0), matrix4(0, 1), matrix4(0, 2),
+			matrix4(1, 0), matrix4(1, 1), matrix4(1, 2),
+			matrix4(2, 0), matrix4(2, 1), matrix4(2, 2)};
+
+		const Quaternion< TypeParam > from4{matrix4};
+		const Quaternion< TypeParam > from3{matrix3};
+
+		EXPECT_EQ(from3[X], from4[X]);
+		EXPECT_EQ(from3[Y], from4[Y]);
+		EXPECT_EQ(from3[Z], from4[Z]);
+		EXPECT_EQ(from3[W], from4[W]);
+	}
+}
+
 // ============================================================================
 // ACCESSORS AND SETTERS
 // ============================================================================

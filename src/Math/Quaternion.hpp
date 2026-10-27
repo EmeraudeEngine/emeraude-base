@@ -154,6 +154,36 @@ namespace EmEn::Base::Math
 			}
 
 			/**
+			 * @brief Constructs a quaternion from a 3 × 3 rotation matrix.
+			 * @note The 3 × 3 matrix is the upper-left block of the 4 × 4 one Quaternion(Matrix< 4 >) reads: the same
+			 * quaternion (2026-10-27, physics P1 leftovers).
+			 * @param matrix A reference to a rotation matrix.
+			 */
+			explicit
+			Quaternion (const Matrix< 3, precision_t > & matrix)
+			{
+				*this = matrix;
+			}
+
+			/**
+			 * @brief Copy assignment operator from a 3 × 3 rotation matrix.
+			 * @note Embedded in a 4 × 4 matrix (both column-major, no translation) and converted by the 4 × 4 path: ONE
+			 * implementation of the conversion.
+			 * @param matrix The copied matrix.
+			 * @return Quaternion &
+			 */
+			Quaternion &
+			operator= (const Matrix< 3, precision_t > & matrix)
+			{
+				return *this = Matrix< 4, precision_t >{std::array< precision_t, 16 >{
+					matrix[0], matrix[1], matrix[2], Zero,
+					matrix[3], matrix[4], matrix[5], Zero,
+					matrix[6], matrix[7], matrix[8], Zero,
+					Zero, Zero, Zero, One
+				}};
+			}
+
+			/**
 			 * @brief Copy assignment operator from matrix.
 			 * @param matrix The copied matrix.
 			 * @return Vector

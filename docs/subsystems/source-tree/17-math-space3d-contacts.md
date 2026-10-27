@@ -122,5 +122,8 @@ Release and ASan/UBSan green.
   `docs/subsystems/physics/05-…`). Never add a third convention. The overlap MTVs of `Collisions/` follow from it:
   `−normal × maximumDepth()` pushes A out of B (capsule ↔ triangle / AABB answer exactly that since 2026-10-07).
 - Correctness must not depend on bit-exact floats: the owner may enable `-ffast-math` one day.
-- Left for when a consumer needs it (owner, 2026-10-07): a fast AABB path with the same output, measured against the
-  unrotated `OrientedBox` (item `physics-p1-leftovers`).
+- No fast AABB path for two unrotated boxes (owner decision 2026-10-27, after the measure the item waited for): the
+  oriented box-box manifold costs **166 ns** on an unrotated crate resting on the ground (4 points) and 122 ns on a turned
+  pair (1 point) — Linux i9-14900K Release, median of 5 runs of 1 M calls, `MathSpace3DContacts.DISABLED_BoxBoxManifoldCost`;
+  ~0.17 ms per physics step for 1 000 box pairs. Not worth a second code path to keep identical; re-measure there if a
+  scene ever holds thousands of resting boxes.

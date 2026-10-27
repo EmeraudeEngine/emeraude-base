@@ -56,4 +56,4 @@ triangles are CONSERVATIVE (no contact sampled before the reported fraction) and
   usable normal, never a degenerate one; and no float division by a possibly-zero length.
 - `Space3D/Intersections/` `Line*` tests take an INFINITE line: they may answer a hit behind its origin, which is right
   for a line. A caller that means a RAY (forward only) uses `castRay` (owner, 2026-10-07).
-- Left for when a consumer needs it: casting a moving `OrientedBox` (item `physics-p1-leftovers`).
+- Casting a moving `OrientedBox`: `castBox()` above (it existed before the 2026-10-07 list that still asked for it).

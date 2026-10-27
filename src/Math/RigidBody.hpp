@@ -30,6 +30,7 @@
 #include <cmath>
 #include <numbers>
 #include <optional>
+#include <span>
 #include <type_traits>
 
 /* Local inclusions for usages. */
@@ -209,6 +210,84 @@ namespace EmEn::Base::Math::RigidBody
 		};
 
 		return inertia + (shift * mass);
+	}
+
+	/**
+	 * @brief One part of a compound body: its mass, its centre of mass and its inertia tensor about that centre, BOTH in
+	 * the body frame (a part turned in the body brings R I Rᵀ, not its local tensor).
+	 * @tparam precision_t The floating point type.
+	 */
+	template< typename precision_t = float >
+	struct CompoundPart final
+	{
+		precision_t mass{0};
+		Vector< 3, precision_t > centre;
+		Matrix< 3, precision_t > inertia{Detail::diagonal< precision_t >(0, 0, 0)};
+	};
+
+	/**
+	 * @brief The mass properties of a compound body: its total mass, its centre of mass in the body frame, and its inertia
+	 * tensor about that centre.
+	 * @tparam precision_t The floating point type.
+	 */
+	template< typename precision_t = float >
+	struct CompoundInertia final
+	{
+		precision_t mass{0};
+		Vector< 3, precision_t > centreOfMass;
+		Matrix< 3, precision_t > inertia{Detail::diagonal< precision_t >(0, 0, 0)};
+	};
+
+	/**
+	 * @brief The mass properties of a body made of several parts (2026-10-27, physics P1 leftovers): the masses summed, the
+	 * centre of mass their weighted mean, and every part's tensor moved to that centre by parallelAxis() before the sum.
+	 * @note A trust boundary (a scene or a file describes the parts): refused, never guessed.
+	 * @param parts The parts.
+	 * @return std::optional< CompoundInertia< precision_t > > Nothing for no part, a negative or non-finite mass, a
+	 * non-finite centre or tensor element, or a total mass of zero (a compound of massless parts has no centre).
+	 */
+	template< typename precision_t = float >
+	[[nodiscard]]
+	std::optional< CompoundInertia< precision_t > >
+	compoundInertia (std::span< const CompoundPart< precision_t > > parts) noexcept requires (std::is_floating_point_v< precision_t >)
+	{
+		precision_t total = 0;
+		Vector< 3, precision_t > weighted;
+
+		for ( const auto & part : parts )
+		{
+			if ( !Detail::nonNegative< precision_t >(part.mass) || !std::isfinite(part.centre[X]) || !std::isfinite(part.centre[Y]) || !std::isfinite(part.centre[Z]) )
+			{
+				return std::nullopt;
+			}
+
+			for ( size_t element = 0; element < 9; ++element )
+			{
+				if ( !std::isfinite(part.inertia[element]) )
+				{
+					return std::nullopt;
+				}
+			}
+
+			total += part.mass;
+			weighted += part.centre * part.mass;
+		}
+
+		if ( !(total > static_cast< precision_t >(0)) || !std::isfinite(total) )
+		{
+			return std::nullopt;
+		}
+
+		CompoundInertia< precision_t > result;
+		result.mass = total;
+		result.centreOfMass = weighted / total;
+
+		for ( const auto & part : parts )
+		{
+			result.inertia = result.inertia + parallelAxis(part.inertia, part.mass, part.centre - result.centreOfMass);
+		}
+
+		return result;
 	}
 
 	/**
