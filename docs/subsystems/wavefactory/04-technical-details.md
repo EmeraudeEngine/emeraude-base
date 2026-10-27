@@ -22,6 +22,33 @@ The `Synthesizer` class works exclusively with mono audio:
 4. Tracks are interleaved into final multi-channel output
 5. `finalInstructions` applied to mixed result
 
+### The DLS converter (`DLSSoundBank.hpp/.cpp`, 2026-10-27)
+
+`DLS::convertToSoundFont(span of the whole RIFF 'DLS ' chunk)` → `std::optional< std::vector< std::byte > >`, a
+SoundFont 2 file (RIFF 'sfbk': INFO `ifil` 2.1 / `isng` / `INAM`, `sdta` `smpl`, `pdta` with every terminal record).
+References: MMA "Downloadable Sounds Level 1" (1997) and "Level 2.2" (2006), Microsoft's `dls1.h` / `dls2.h`
+structures, E-mu / Creative "SoundFont 2.04 Technical Specification"; no third-party code.
+
+| DLS | SoundFont |
+|---|---|
+| `lins` / `ins ` / `insh` bank (CC 0, bits 8-14) and program; the drum flag (bit 31) | one preset (bank 128 for drums) → one instrument |
+| `rgn ` / `rgn2`: `rgnh` key range, velocity range (an empty / reversed one = 0-127: DLS 1 ignores it), key group | one zone: `keyRange`, `velRange`, `exclusiveClass` |
+| `wsmp` (the region's, else the wave's): unity note, fine tune, gain (65536 per cB, negative attenuates), first loop | ONE sample header per region (its own pitch and loop window on the shared wave data), `initialAttenuation`, `sampleModes` 1 |
+| `wlnk` table index → `ptbl` cue → the `wvpl` wave (offset from the pool data after 'wvpl') | `sampleID` |
+| `art1` / `art2` (instrument's, overridden per value by the region's), absolute connections only: EG1 delay / attack / hold / decay / release (timecents × 65536, the int32 minimum = 0 s), sustain (0.1 % × 65536 → cB below the peak), pan (0.1 %), gain | `delayVolEnv`, `attackVolEnv`, `holdVolEnv`, `decayVolEnv`, `releaseVolEnv` (clamped −12000 … 8000), `sustainVolEnv` (0 … 1440), `pan`, `initialAttenuation` |
+| PCM waves, 16-bit, or 8-bit (unsigned, re-centred), MONO | `smpl`, each wave once, followed by its 46 zero samples |
+
+Not mapped (the region still plays, with the SoundFont defaults there): the LFO, the pitch envelope (EG2), the filter,
+every modulated connection (a source or a control). Skipped: a region whose wave is missing, stereo or not PCM. Refused
+(std::nullopt + a warning): a malformed bank (every offset, size and count is checked before use — a chunk size past its
+parent's end, a cue past the pool), or one without a single playable region. Bounds: 4 096 instruments, 1 024 regions
+each, 65 536 waves, 65 535 sample headers (a SoundFont WORD), 4 096 connections per articulation chunk.
+Tests (`test_WaveFactoryDLS.cpp`, banks built byte by byte — no free reference bank exists): the converted bank loads and
+plays its wave at the unity note's pitch (441 Hz, 882 Hz an octave up); a drum instrument is bank 128; an EG1 attack
+of 1 s quietens the first 50 ms; malformed banks are refused (every size field set past the end, in turn: no read past
+the end, under ASan); an RMID plays its embedded bank FIRST (a silent bank gives silence even with a global SF2, a
+broken bank falls back to sound).
+
 ### FileFormatMIDI Details
 
 **Supported MIDI features:**

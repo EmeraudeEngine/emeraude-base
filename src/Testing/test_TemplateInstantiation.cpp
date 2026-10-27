@@ -288,6 +288,7 @@
 #include "VertexFactory/TreeSkinningOptions.hpp"
 #include "VertexFactory/Types.hpp"
 #include "VertexFactory/XRayAnalyzer.hpp"
+#include "WaveFactory/DLSSoundBank.hpp"
 #include "WaveFactory/FileFormatInterface.hpp"
 #include "WaveFactory/FileFormatJSON.hpp"
 #include "WaveFactory/FileFormatMIDI.hpp"

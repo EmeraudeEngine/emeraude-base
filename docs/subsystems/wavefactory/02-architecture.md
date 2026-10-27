@@ -96,8 +96,14 @@ All format handlers operate on `IO::ByteStream &` (polymorphic: file or memory).
 - **RMID unwrap**: detects the Microsoft RIFF/RMID/data 20-byte container that wraps a standard
   SMF (Tyrian and other mid-1990s game soundtracks). Header signature is `RIFF...RMID...data`;
   when matched, `istringstream::seekg(20)` skips to the inner SMF without reallocating the buffer.
-  Files without the prefix are parsed as-is. Optional embedded DLS sound bank is currently
-  ignored — rendering uses the application-level SF2 configured via `Core/Audio/MusicSoundfont`.
+  Files without the prefix are parsed as-is.
+- **RMID embedded DLS bank (2026-10-27, owner decision: a converter)**: when the RMID carries a nested RIFF 'DLS '
+  chunk, `DLS::convertToSoundFont()` (`DLSSoundBank.hpp/.cpp`) turns it into an in-memory SoundFont 2 that
+  `tsf_load_memory()` loads, owned for the call and PREFERRED over `ReadOptions::soundfont` (the application-level SF2 of
+  `Core/Audio/MusicSoundfont`). A malformed or unplayable bank is reported (a warning) and the file renders as before
+  (the global SF2, else the additive synthesizer). `m_soundfont` is reset to the options' at the end of the call: it
+  never outlives the bank. Every caller (the engine's `MusicResource` included) gets it with no change: the engine-side
+  per-resource override the former item planned is not needed. See `04-technical-details.md` § The DLS converter.
 - See: `FileFormatMIDI.hpp`
 
 **ReadOptions / WriteOptions** — Defined in `Types.hpp`

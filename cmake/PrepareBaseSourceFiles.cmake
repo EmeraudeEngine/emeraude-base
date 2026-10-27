@@ -110,6 +110,7 @@ set(EMERAUDE_BASE_VERTEX_SOURCES
 
 # wave module — sndfile, samplerate, TinySoundFont.
 set(EMERAUDE_BASE_WAVE_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/DLSSoundBank.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/FileFormatSNDFile.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/WaveFactory/Processor.cpp
 )
@@ -205,6 +206,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsPerlinNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsWorleyNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryGrid.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryDLS.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryProcessor.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactorySynthesizer.cpp

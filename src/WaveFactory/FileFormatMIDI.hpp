@@ -30,14 +30,18 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <random>
+#include <span>
 #include <sstream>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -46,6 +50,7 @@
 #include "tsf.h"
 
 /* Local inclusions for inheritances. */
+#include "DLSSoundBank.hpp"
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
@@ -161,15 +166,99 @@ namespace EmEn::Base::WaveFactory
 				 * allocating a substring copy of the (potentially large) buffer. */
 				std::istringstream input(buffer, std::ios::binary);
 
+				/* The RMID's own DLS bank, converted to a SoundFont, owned for this call (owner decision 2026-10-27). */
+				std::unique_ptr< tsf, decltype(&tsf_close) > embeddedBank{nullptr, &tsf_close};
+
 				if ( buffer.size() >= 20
 					&& buffer.compare(0, 4, "RIFF") == 0
 					&& buffer.compare(8, 4, "RMID") == 0
 					&& buffer.compare(12, 4, "data") == 0 )
 				{
 					input.seekg(20);
+
+					embeddedBank = loadEmbeddedBank(std::as_bytes(std::span{buffer}));
+
+					if ( embeddedBank != nullptr )
+					{
+						m_soundfont = embeddedBank.get();
+					}
 				}
 
-				return this->processIStream(input, wave);
+				const auto rendered = this->processIStream(input, wave);
+
+				/* The member never outlives the bank it pointed at. */
+				m_soundfont = options.soundfont;
+
+				return rendered;
+			}
+
+			/**
+			 * @brief Finds an RMID's embedded DLS bank (a RIFF 'DLS ' chunk among the RMID's chunks) and loads it as a
+			 * SoundFont (DLS::convertToSoundFont(), then tsf_load_memory()), preferred over the global SoundFont.
+			 * @note A malformed or unplayable bank is reported and the file renders with the global SoundFont (or the
+			 * additive synthesizer): the MIDI data itself is still good.
+			 * @param file The whole RMID file.
+			 * @return std::unique_ptr< tsf, decltype(&tsf_close) > The loaded bank, or nullptr when there is none or it
+			 * cannot be used.
+			 */
+			[[nodiscard]]
+			static
+			std::unique_ptr< tsf, decltype(&tsf_close) >
+			loadEmbeddedBank (std::span< const std::byte > file) noexcept
+			{
+				std::unique_ptr< tsf, decltype(&tsf_close) > bank{nullptr, &tsf_close};
+				size_t offset = 12;
+
+				/* The RMID's chunks: 'data' (the SMF), optional 'LIST' INFO, and the bank as a nested RIFF 'DLS '. */
+				while ( offset <= file.size() && file.size() - offset >= 12 )
+				{
+					uint32_t size = 0;
+
+					for ( size_t index = 0; index < 4; ++index )
+					{
+						size |= static_cast< uint32_t >(std::to_integer< uint8_t >(file[offset + 4 + index])) << (8U * index);
+					}
+
+					if ( size > file.size() - offset - 8 )
+					{
+						break;
+					}
+
+					const auto id = file.subspan(offset, 4);
+					const auto form = file.subspan(offset + 8, 4);
+					const auto isTag = [] (std::span< const std::byte > bytes, std::string_view tag) {
+						return std::ranges::equal(bytes, tag, [] (std::byte byte, char character) { return static_cast< char >(byte) == character; });
+					};
+
+					if ( isTag(id, "RIFF") && isTag(form, "DLS ") )
+					{
+						const auto soundFont = DLS::convertToSoundFont(file.subspan(offset, 8 + static_cast< size_t >(size)));
+
+						if ( !soundFont.has_value() || soundFont->size() > static_cast< size_t >(std::numeric_limits< int >::max()) )
+						{
+							Logging::warning("WaveFactory::FileFormatMIDI", "readStream(), the RMID's embedded DLS bank cannot be used: the global SoundFont plays it.");
+
+							return bank;
+						}
+
+						bank.reset(tsf_load_memory(soundFont->data(), static_cast< int >(soundFont->size())));
+
+						if ( bank == nullptr )
+						{
+							Logging::warning("WaveFactory::FileFormatMIDI", "readStream(), the SoundFont converted from the RMID's DLS bank does not load: the global SoundFont plays it.");
+						}
+						else
+						{
+							Logging::info("WaveFactory::FileFormatMIDI", "readStream(), the RMID plays with its embedded DLS bank.");
+						}
+
+						return bank;
+					}
+
+					offset += 8 + static_cast< size_t >(size) + (size & 1U);
+				}
+
+				return bank;
 			}
 
 			/** @copydoc EmEn::Base::WaveFactory::FileFormatInterface::writeStream() */
