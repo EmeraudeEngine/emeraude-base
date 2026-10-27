@@ -30,15 +30,18 @@
 
 /* STL inclusions. */
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <initializer_list>
+#include <iostream>
 #include <memory>
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -306,15 +309,70 @@ namespace EmEn::Base::WaveFactory
 
 		/* Decodes a MIDI file at 4 kHz (small buffers), with an optional SoundFont. */
 		bool
-		decodeMidi (const std::vector< std::byte > & file, Wave< int16_t > & wave, tsf * soundfont = nullptr) noexcept
+		decodeMidi (const std::vector< std::byte > & file, Wave< int16_t > & wave, tsf * soundfont = nullptr, const std::stop_token & stopToken = {}) noexcept
 		{
 			MemoryStream stream{file};
 			FileFormatMIDI< int16_t > format;
 			ReadOptions options{};
 			options.synthesisFrequency = Frequency::PCM4000Hz;
 			options.soundfont = soundfont;
+			options.stopToken = stopToken;
 
 			return format.readStream(stream, wave, options);
+		}
+
+		/* A note as the polyphony bound sees it. */
+		struct TestNote
+		{
+			uint32_t startTick{0};
+			uint32_t endTick{0};
+		};
+
+		/* The tick every staggered note is held to, and the length of a back-to-back note. */
+		constexpr uint32_t HeldUntilTick{10000};
+		constexpr uint32_t BackToBackLength{10};
+
+		/* `count` notes, one per tick, all held to HeldUntilTick. */
+		std::vector< TestNote >
+		staggeredHeldNotes (uint32_t count) noexcept
+		{
+			std::vector< TestNote > notes(count);
+
+			for ( uint32_t index = 0; index < count; ++index )
+			{
+				notes[index] = TestNote{.startTick = index, .endTick = HeldUntilTick};
+			}
+
+			return notes;
+		}
+
+		/* `count` notes of BackToBackLength ticks, each starting where the previous one ends. */
+		std::vector< TestNote >
+		backToBackNotes (uint32_t count) noexcept
+		{
+			std::vector< TestNote > notes(count);
+
+			for ( uint32_t index = 0; index < count; ++index )
+			{
+				notes[index] = TestNote{.startTick = index * BackToBackLength, .endTick = (index + 1) * BackToBackLength};
+			}
+
+			return notes;
+		}
+
+		/* The most notes sounding at once over [0, lastTick). */
+		template< typename note_t >
+		size_t
+		loudestPolyphony (const std::vector< note_t > & notes, uint32_t lastTick) noexcept
+		{
+			size_t loudest = 0;
+
+			for ( uint32_t tick = 0; tick < lastTick; ++tick )
+			{
+				loudest = std::max(loudest, static_cast< size_t >(std::ranges::count_if(notes, [tick] (const note_t & note) { return note.startTick <= tick && tick < note.endTick; })));
+			}
+
+			return loudest;
 		}
 
 		/* Whether any sample is not zero. */
@@ -413,6 +471,90 @@ namespace EmEn::Base::WaveFactory
 			ASSERT_TRUE(decodeMidi(file, wave, soundfont.get()));
 			EXPECT_EQ(wave.sampleCount(), ThirtyMinutes);
 		}
+	}
+
+	/* The rendering is stoppable and the additive renderer's polyphony bounded (owner decision 2026-10-27,
+	 * wavefactory doc 06): 256 voices, the oldest stolen, as TinySoundFont. */
+	TEST(WaveFactoryMIDI, aRequestedStopRefusesBothRenderers)
+	{
+		const auto file = makeMidi(0, 1, 480, heldNoteTrack(4800));
+		std::stop_source stop;
+
+		stop.request_stop();
+
+		Wave< int16_t > additive;
+
+		EXPECT_FALSE(decodeMidi(file, additive, nullptr, stop.get_token()));
+
+		const std::unique_ptr< tsf, decltype(&tsf_close) > soundfont{tsf_load_filename(TestSoundFont.string().c_str()), &tsf_close};
+		ASSERT_NE(soundfont, nullptr) << TestSoundFont;
+
+		Wave< int16_t > sampled;
+
+		EXPECT_FALSE(decodeMidi(file, sampled, soundfont.get(), stop.get_token()));
+	}
+
+	TEST(WaveFactoryMIDI, theAdditiveRendererStealsTheOldestVoiceBeyondItsPolyphony)
+	{
+		static_assert(FileFormatMIDI< int16_t >::MaxAdditiveVoices == 256);
+
+		/* 300 notes, one per tick, all held to tick 10 000: from the 257th on, each start steals the oldest voice. */
+		auto notes = staggeredHeldNotes(300);
+
+		EXPECT_EQ(FileFormatMIDI< int16_t >::stealOldestVoices(notes), 44U);
+		EXPECT_EQ(notes[0].endTick, 256U);
+		EXPECT_EQ(notes[43].endTick, 299U);
+		EXPECT_EQ(notes[44].endTick, 10000U);
+
+		/* Never more than 256 voices sound at once. */
+		EXPECT_EQ(loudestPolyphony(notes, 300), 256U);
+
+		/* Notes that do not overlap are never stolen. */
+		auto sequence = backToBackNotes(1000);
+
+		EXPECT_EQ(FileFormatMIDI< int16_t >::stealOldestVoices(sequence), 0U);
+	}
+
+	/* The measured stop latency of the additive renderer: four notes held 30 minutes at 48 kHz (~14 s of CPU unstopped), a
+	 * stop requested from another thread 100 ms in. Disabled: a measurement, run by hand. */
+	TEST(WaveFactoryMIDI, DISABLED_AdditiveRenderStopLatency)
+	{
+		std::string track;
+
+		for ( int note = 0; note < 4; ++note )
+		{
+			track += midiBytes({0x00, 0x90, 0x3C + note, 0x64});
+		}
+
+		track += midiDelta(0x0FFFFFFFU) + midiBytes({0x80, 0x3C, 0x00,  0x00, 0x80, 0x3D, 0x00,  0x00, 0x80, 0x3E, 0x00,  0x00, 0x80, 0x3F, 0x00,  0x00, 0xFF, 0x2F, 0x00});
+
+		const auto file = makeMidi(0, 1, 480, track);
+		std::stop_source stop;
+		std::chrono::steady_clock::time_point requestedAt;
+
+		std::jthread stopper{[&stop, &requestedAt] {
+			std::this_thread::sleep_for(std::chrono::milliseconds{100});
+			requestedAt = std::chrono::steady_clock::now();
+			static_cast< void >(stop.request_stop());
+		}};
+
+		MemoryStream stream{file};
+		FileFormatMIDI< int16_t > format;
+		ReadOptions options{};
+		options.stopToken = stop.get_token();
+		Wave< int16_t > wave;
+
+		const auto result = format.readStream(stream, wave, options);
+		const auto returnedAt = std::chrono::steady_clock::now();
+
+		stopper.join();
+
+		EXPECT_FALSE(result);
+
+		const auto latency = std::chrono::duration_cast< std::chrono::microseconds >(returnedAt - requestedAt).count();
+
+		std::cout << "[latency] additive MIDI render stop: " << latency << " us\n";
+		EXPECT_LT(latency, 50'000);
 	}
 
 	TEST(WaveFactoryMIDI, headerRefusals)

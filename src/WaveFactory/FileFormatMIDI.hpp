@@ -36,6 +36,7 @@
 #include <limits>
 #include <random>
 #include <sstream>
+#include <stop_token>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
@@ -50,6 +51,7 @@
 /* Local inclusions for usages. */
 #include "Logging/Logging.hpp"
 #include "Processor.hpp"
+#include "StaticVector.hpp"
 #include "Synthesizer.hpp"
 #include "Wave.hpp"
 
@@ -67,7 +69,55 @@ namespace EmEn::Base::WaveFactory
 	{
 		public:
 
+			/** @brief The additive renderer's polyphony (owner decision 2026-10-27, as TinySoundFont's
+			 * tsf_set_max_voices(256)): beyond it, a starting note steals the oldest sounding voice. */
+			static constexpr size_t MaxAdditiveVoices{256};
+
 			FileFormatMIDI () noexcept = default;
+
+			/**
+			 * @brief Bounds the polyphony of a note list to MaxAdditiveVoices: a note that starts while MaxAdditiveVoices
+			 * notes sound cuts the OLDEST of them (the earliest start) at its own start.
+			 * @note Why (2026-10-27): the additive renderer synthesizes every note sample by sample, so its cost is the sum
+			 * of the notes' durations — a 4 KB file of ~1 000 notes held 30 minutes cost ~50 minutes of CPU. A stolen
+			 * note keeps its envelope, computed over its shortened length (its release still fades). The cost is then
+			 * bounded by MaxAdditiveVoices × the rendered duration.
+			 * @pre The notes are sorted by start (a stable sort: equal starts keep their order, the same on every OS).
+			 * @tparam note_t A note with `startTick` and `endTick`.
+			 * @param notes The notes, sorted by start; a stolen note's endTick is lowered.
+			 * @return size_t The number of notes cut.
+			 */
+			template< typename note_t >
+			[[nodiscard]]
+			static
+			size_t
+			stealOldestVoices (std::vector< note_t > & notes) noexcept
+			{
+				/* The sounding notes, oldest first (the notes come in start order). */
+				StaticVector< size_t, MaxAdditiveVoices > sounding;
+				size_t stolen = 0;
+
+				for ( size_t index = 0; index < notes.size(); ++index )
+				{
+					const auto start = notes[index].startTick;
+
+					sounding.erase(std::remove_if(sounding.begin(), sounding.end(), [&notes, start] (size_t voice) {
+						return notes[voice].endTick <= start;
+					}), sounding.end());
+
+					if ( sounding.full() )
+					{
+						notes[sounding.front()].endTick = start;
+						sounding.erase(sounding.begin());
+
+						++stolen;
+					}
+
+					sounding.push_back(index);
+				}
+
+				return stolen;
+			}
 
 			/** @copydoc EmEn::Base::WaveFactory::FileFormatInterface::readStream() */
 			[[nodiscard]]
@@ -84,6 +134,7 @@ namespace EmEn::Base::WaveFactory
 				/* Store options for use by rendering methods. */
 				m_frequency = options.synthesisFrequency;
 				m_soundfont = options.soundfont;
+				m_stopToken = options.stopToken;
 
 				/* Read the entire stream into memory for std::istream-based parsing. */
 				const auto dataSize = stream.size();
@@ -1209,6 +1260,13 @@ namespace EmEn::Base::WaveFactory
 
 						while ( samplesToRender > 0 && currentSample < totalSamples )
 						{
+							if ( m_stopToken.stop_requested() )
+							{
+								Logging::info("WaveFactory::FileFormatMIDI", "renderWithSoundfont(), stopped.");
+
+								return false;
+							}
+
 							const uint32_t maxChunk = hasVibrato ? VibratoChunkSize : NormalChunkSize;
 							const uint32_t chunkSize = std::min(samplesToRender, maxChunk);
 							const uint32_t actualSamples = std::min(chunkSize, totalSamples - currentSample);
@@ -1329,6 +1387,13 @@ namespace EmEn::Base::WaveFactory
 							break;
 						}
 					}
+				}
+
+				if ( m_stopToken.stop_requested() )
+				{
+					Logging::info("WaveFactory::FileFormatMIDI", "renderWithSoundfont(), stopped.");
+
+					return false;
 				}
 
 				/* Render any remaining samples after all events. */
@@ -1557,9 +1622,15 @@ namespace EmEn::Base::WaveFactory
 				/* Sort notes by start time for portamento detection.
 				 * We need to track the previous note on each channel. */
 				std::vector< MIDINote > sortedNotes = notes;
-				std::sort(sortedNotes.begin(), sortedNotes.end(), [](const MIDINote & a, const MIDINote & b) {
+				std::stable_sort(sortedNotes.begin(), sortedNotes.end(), [](const MIDINote & a, const MIDINote & b) {
 					return a.startTick < b.startTick;
 				});
+
+				/* The polyphony bound (owner decision 2026-10-27): the cost is MaxAdditiveVoices × the duration at most. */
+				if ( const auto stolen = stealOldestVoices(sortedNotes); stolen > 0 )
+				{
+					Logging::info("WaveFactory::FileFormatMIDI", "renderToWave(), " + std::to_string(stolen) + " note(s) cut beyond the polyphony of " + std::to_string(MaxAdditiveVoices) + " voices.");
+				}
 
 				/* Track the last note frequency per channel for portamento. */
 				std::array< float, 16 > lastNoteFrequency{};
@@ -1570,6 +1641,13 @@ namespace EmEn::Base::WaveFactory
 				/* Render each note with pitch bend, modulation, expression, volume, and portamento. */
 				for ( const auto & note : sortedNotes )
 				{
+					if ( m_stopToken.stop_requested() )
+					{
+						Logging::info("WaveFactory::FileFormatMIDI", "renderToWave(), stopped.");
+
+						return false;
+					}
+
 					const uint32_t startSample = ticksToSamplesWithTempoMap(note.startTick, tempoEvents, header.division, sampleRate);
 					const uint32_t endSample = ticksToSamplesWithTempoMap(note.endTick, tempoEvents, header.division, sampleRate);
 
@@ -1653,9 +1731,16 @@ namespace EmEn::Base::WaveFactory
 					{
 						const uint32_t globalSample = startSample + localSample;
 
-						/* Update control values periodically (not every sample). */
+						/* Update control values periodically (not every sample); the stop is checked at the same pace. */
 						if ( localSample % ControlUpdateInterval == 0 )
 						{
+							if ( m_stopToken.stop_requested() )
+							{
+								Logging::info("WaveFactory::FileFormatMIDI", "renderToWave(), stopped.");
+
+								return false;
+							}
+
 							/* Calculate current tick (multiplication faster than division). */
 							const auto currentTick = saturatedUInt32(static_cast< double >(globalSample) * static_cast< double >(sampleToTickFactor));
 
@@ -1784,5 +1869,6 @@ namespace EmEn::Base::WaveFactory
 
 			Frequency m_frequency{Frequency::PCM48000Hz};
 			tsf * m_soundfont{nullptr};
+			std::stop_token m_stopToken;
 	};
 }

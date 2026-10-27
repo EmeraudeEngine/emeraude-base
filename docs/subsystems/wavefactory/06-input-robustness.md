@@ -18,8 +18,21 @@ in Release **and** under ASan/UBSan via `ctest`.
   48 kHz), and every floating-point tick / sample conversion goes through `saturatedUInt32()`. The header and the track
   chunk refuse a short read (`!stream.good()`), and the big-endian readers never read an indeterminate byte. Tests:
   `WaveFactoryMIDI.declaredDurationBeyondTheLimitIsTruncated` (both renderers) and the coverage tests beside it.
-  `fuzz_midi` (10 min, `float-cast-overflow` on): 0 crash / OOM / timeout. ⚠️ The CPU cost is NOT bounded yet (~3 s
-  per note held 30 minutes, no stop token): `docs/todo/midi-additive-render-cost.md`.
+  `fuzz_midi` (10 min, `float-cast-overflow` on): 0 crash / OOM / timeout.
+- **MIDI — the additive renderer's CPU cost: a polyphony bound and a stop (2026-10-27, owner decision)**: the additive
+  renderer synthesizes every note sample by sample, so its cost was the sum of the notes' durations (~3 s per note held
+  30 minutes on Linux Release at 48 kHz: 1 note 3.45 s, 4 notes 12.2 s, 16 notes 47.4 s; a 4 KB file of ~1 000 such notes
+  ~50 minutes of CPU; `fuzz_midi` reported 81-byte units at 8.4 s). Now: (1) `stealOldestVoices()` bounds the polyphony
+  to `MaxAdditiveVoices` (256, as TinySoundFont's `tsf_set_max_voices(256)`): a note starting while 256 sound cuts the
+  oldest at its own start; its envelope is recomputed over the shortened length, so its release still fades. The notes
+  are sorted STABLY by start (equal starts keep their file order on every standard library). The cost is then bounded by
+  256 × the rendered duration — 30 minutes at most, so ~13 minutes of CPU at worst on Linux: a cost a legitimate piece
+  never reaches, and which the stop now interrupts. (2) `ReadOptions::stopToken` reaches both renderers: the additive
+  one checks it per note and every 256 samples inside a note, the SoundFont one in its render-chunk loop (4 096 frames,
+  64 under vibrato) and before its tail; a stopped read returns false. Measured (Linux, four notes held 30 min, stop
+  100 ms in): 16-25 µs (`DISABLED_AdditiveRenderStopLatency`). Tests `WaveFactoryMIDI.aRequestedStopRefusesBothRenderers`,
+  `theAdditiveRendererStealsTheOldestVoiceBeyondItsPolyphony`. ⚠️ `fuzz_midi` needs `-timeout` above the worst legitimate
+  render under ASan, or every ceiling case is a timeout.
 - **MIDI — the additive renderer's resonant filter diverged (2026-10-17, found by the same tests under GCC UBSan with
   `float-cast-overflow`)**: Paul Kellett's filter (musicdsp.org Filters #29) defines its resonance q between 0 and 1;
   `Synthesizer::filterResonanceToFeedback()` mapped CC#71 up to 3.8 and the feedback used `(1 - f/2)` instead of the
