@@ -26,15 +26,25 @@
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
+#include <samplerate.h>
 
 /* STL inclusions. */
+#include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <initializer_list>
+#include <iostream>
 #include <numbers>
+#include <stop_token>
+#include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
 #include "WaveFactory/Processor.hpp"
+#include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
 
 /* The coverage pass (2026-10-17): every operation of the wave processor, the engine's mix-down / resample path
@@ -279,4 +289,79 @@ TEST(WaveFactoryProcessor, anEmptyProcessorRefusesEveryOperation)
 	EXPECT_FALSE(processor.swapChannels());
 	EXPECT_FALSE(processor.normalize());
 	EXPECT_FALSE(processor.convertBitDepth(16));
+}
+
+/* The resample is stoppable and streamed (docs/subsystems/wavefactory/07, 2026-10-27): the chunked libsamplerate
+ * conversion gives the samples src_simple() gave, and a stop requested before it leaves the wave as it was. */
+TEST(WaveFactoryProcessor, theStreamedResampleGivesTheOneShotSamples)
+{
+	const auto source = sine(440.0F, 2.0F, Frequency::PCM44100Hz, Channels::Stereo, 0.5F);
+	const auto ratio = 48000.0 / 44100.0;
+	const auto expectedFrames = static_cast< size_t >(std::ceil(static_cast< double >(source.sampleCount()) * ratio));
+	std::vector< float > expected(expectedFrames * 2U, 0.0F);
+
+	SRC_DATA data{};
+	data.data_in = source.data().data();
+	data.input_frames = static_cast< long >(source.sampleCount());
+	data.data_out = expected.data();
+	data.output_frames = static_cast< long >(expectedFrames);
+	data.src_ratio = ratio;
+
+	ASSERT_EQ(src_simple(&data, SRC_SINC_BEST_QUALITY, 2), 0);
+
+	expected.resize(static_cast< size_t >(data.output_frames_gen) * 2U);
+
+	Processor processor{source};
+
+	ASSERT_TRUE(processor.resample(Frequency::PCM48000Hz));
+	ASSERT_EQ(processor.wave().elementCount(), expected.size());
+
+	float largest = 0.0F;
+
+	for ( size_t index = 0; index < expected.size(); ++index )
+	{
+		largest = std::max(largest, std::abs(processor.wave().data()[index] - expected[index]));
+	}
+
+	EXPECT_EQ(largest, 0.0F);
+}
+
+TEST(WaveFactoryProcessor, aRequestedStopLeavesTheWaveUnresampled)
+{
+	Processor processor{sine(440.0F, 2.0F, Frequency::PCM44100Hz, Channels::Stereo, 0.5F)};
+	const auto before = processor.wave().sampleCount();
+	std::stop_source stop;
+
+	stop.request_stop();
+
+	EXPECT_FALSE(processor.resample(Frequency::PCM48000Hz, stop.get_token()));
+	EXPECT_EQ(processor.wave().frequency(), Frequency::PCM44100Hz);
+	EXPECT_EQ(processor.wave().sampleCount(), before);
+}
+
+/* The measured stop latency of a long resample (the 328 s track of the Windows peer's report, stereo, 44.1 -> 48 kHz):
+ * a stop requested from another thread 100 ms into the conversion. Disabled: a measurement, run by hand. */
+TEST(WaveFactoryProcessor, DISABLED_ResampleStopLatency)
+{
+	Processor processor{sine(440.0F, 328.0F, Frequency::PCM44100Hz, Channels::Stereo, 0.5F)};
+	std::stop_source stop;
+	std::chrono::steady_clock::time_point requestedAt;
+
+	std::jthread stopper{[&stop, &requestedAt] {
+		std::this_thread::sleep_for(std::chrono::milliseconds{100});
+		requestedAt = std::chrono::steady_clock::now();
+		static_cast< void >(stop.request_stop());
+	}};
+
+	const auto result = processor.resample(Frequency::PCM48000Hz, stop.get_token());
+	const auto returnedAt = std::chrono::steady_clock::now();
+
+	stopper.join();
+
+	EXPECT_FALSE(result);
+
+	const auto latency = std::chrono::duration_cast< std::chrono::microseconds >(returnedAt - requestedAt).count();
+
+	std::cout << "[latency] resample stop: " << latency << " us\n";
+	EXPECT_LT(latency, 50'000);
 }

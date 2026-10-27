@@ -30,16 +30,19 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <stop_token>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
-#include "Types.hpp"
 #include "Wave.hpp"
 
 namespace EmEn::Base::WaveFactory
 {
+	/* Forward declarations. */
+	enum class Frequency;
+
 	/**
 	 * @brief The Processor class. Used to perform transformations on existing waves.
 	 * @note The internal wave format uses floating point number (float) for precision during processing.
@@ -147,11 +150,15 @@ namespace EmEn::Base::WaveFactory
 			bool mixDown () noexcept;
 
 			/**
-			 * @brief Resamples a wave to a new frequency.
+			 * @brief Resamples a wave to a new frequency (libsamplerate, SRC_SINC_BEST_QUALITY), streamed in chunks.
+			 * @note The chunked conversion gives the samples a one-shot src_simple() gives (test
+			 * theStreamedResampleGivesTheOneShotSamples); the stop is checked between two chunks (Ave Robustus II,
+			 * 2026-10-27: a 328 s track resampled in one call held a shutdown for seconds).
 			 * @param frequency The new frequency of the wave.
+			 * @param stopToken Interrupts the conversion; a stopped call returns false and leaves the wave as it was.
 			 * @return bool
 			 */
-			bool resample (Frequency frequency) noexcept;
+			bool resample (Frequency frequency, const std::stop_token & stopToken = {}) noexcept;
 
 			/**
 			 * @brief Returns whether the processor has valid wave data.

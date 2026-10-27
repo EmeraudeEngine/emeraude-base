@@ -30,14 +30,23 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <optional>
+#include <span>
+#include <stop_token>
 #include <string>
 #include <vector>
 
 /* Third-party inclusions. */
 #include "sndfile.h"
+
+/* Local inclusions. */
+#include "IO/ByteStream.hpp"
+#include "WaveFactory/Types.hpp"
+#include "WaveFactory/Wave.hpp"
 
 namespace EmEn::Base::WaveFactory
 {
@@ -48,6 +57,9 @@ namespace EmEn::Base::WaveFactory
 	 */
 	namespace
 	{
+		/** @brief The frames decoded between two stop checks (~0.34 s of audio at 48 kHz, a few milliseconds of decode). */
+		constexpr sf_count_t DecodeBlockFrames{16384};
+
 		sf_count_t
 		streamGetFileLength (void * userData) noexcept
 		{
@@ -97,10 +109,67 @@ namespace EmEn::Base::WaveFactory
 
 			return static_cast< sf_count_t >(stream->tell());
 		}
+
+		/**
+		 * @brief Decodes up to `frames` frames as floats, BLOCK by block, the stop checked between two (Ave Robustus II,
+		 * 2026-10-27: a 328 s MP3 decoded in one sf_readf_float() call held a shutdown for seconds).
+		 * @param file The open libsndfile handle.
+		 * @param buffer The frames announced by the header (an estimate for VBR formats; a short block ends the stream) ×
+		 * `channelCount` floats.
+		 * @param channelCount The interleaved channel count (more than 0).
+		 * @param stopToken The stop.
+		 * @return std::optional< sf_count_t > The frames decoded, nothing when the stop was requested.
+		 */
+		[[nodiscard]]
+		std::optional< sf_count_t >
+		decodeFloatFrames (SNDFILE * file, std::span< float > buffer, size_t channelCount, const std::stop_token & stopToken) noexcept
+		{
+			const auto frames = static_cast< sf_count_t >(buffer.size() / channelCount);
+			sf_count_t decoded = 0;
+
+			while ( decoded < frames )
+			{
+				if ( stopToken.stop_requested() )
+				{
+					return std::nullopt;
+				}
+
+				const auto wanted = std::min< sf_count_t >(DecodeBlockFrames, frames - decoded);
+				const auto read = sf_readf_float(file, buffer.subspan(static_cast< size_t >(decoded) * channelCount).data(), wanted);
+
+				if ( read <= 0 )
+				{
+					break;
+				}
+
+				decoded += read;
+
+				if ( read < wanted )
+				{
+					break;
+				}
+			}
+
+			return decoded;
+		}
+
+		/**
+		 * @brief Converts decoded floats to 16-bit samples with a hard clip at ±1.0 (lossy codecs overshoot on transients).
+		 * @param source The decoded floats.
+		 * @param target The samples, at least as many as source.
+		 */
+		void
+		clipToInt16 (std::span< const float > source, std::span< int16_t > target) noexcept
+		{
+			for ( size_t index = 0; index < source.size(); ++index )
+			{
+				target[index] = static_cast< int16_t >(std::clamp(source[index], -1.0F, 1.0F) * 32767.0F);
+			}
+		}
 	}
 
 	bool
-	FileFormatSNDFile< int16_t >::readStream (IO::ByteStream & stream, Wave< int16_t > & wave, const ReadOptions & /*options*/) noexcept
+	FileFormatSNDFile< int16_t >::readStream (IO::ByteStream & stream, Wave< int16_t > & wave, const ReadOptions & options) noexcept
 	{
 		if ( !stream.isOpen() )
 		{
@@ -206,9 +275,15 @@ namespace EmEn::Base::WaveFactory
 
 				std::vector< float > floatBuffer(static_cast< size_t >(soundFileInfos.frames) * channelCount);
 
-				const auto actualRead = sf_readf_float(file, floatBuffer.data(), soundFileInfos.frames);
+				const auto decoded = decodeFloatFrames(file, floatBuffer, channelCount, options.stopToken);
 
-				if ( actualRead <= 0 )
+				if ( !decoded.has_value() )
+				{
+					Logging::info("WaveFactory::FileFormatSNDFile", "readStream(), the decode was stopped.");
+
+					isDataValid = false;
+				}
+				else if ( decoded.value() <= 0 )
 				{
 					Logging::error("WaveFactory::FileFormatSNDFile", std::string{"readStream(), libsndfile returned no frames: "} + sf_strerror(file));
 
@@ -216,6 +291,8 @@ namespace EmEn::Base::WaveFactory
 				}
 				else
 				{
+					const auto actualRead = decoded.value();
+
 					if ( actualRead < soundFileInfos.frames )
 					{
 						/* Trim the wave to the actual frame count (estimate was optimistic). */
@@ -223,24 +300,7 @@ namespace EmEn::Base::WaveFactory
 					}
 
 					/* Manual float→int16 conversion with hard clipping at ±1.0. */
-					const auto sampleCount = static_cast< size_t >(actualRead) * channelCount;
-					auto * out = wave.data().data();
-
-					for ( size_t i = 0; i < sampleCount; ++i )
-					{
-						float s = floatBuffer[i];
-
-						if ( s > 1.0F )
-						{
-							s = 1.0F;
-						}
-						else if ( s < -1.0F )
-						{
-							s = -1.0F;
-						}
-
-						out[i] = static_cast< int16_t >(s * 32767.0F);
-					}
+					clipToInt16(std::span< const float >{floatBuffer}.first(static_cast< size_t >(actualRead) * channelCount), wave.data());
 				}
 			}
 			else

@@ -892,7 +892,14 @@ stage-timed copy and a 250-900 ms sweep: worst **68.9 ms** against the 50 ms bou
 stopToken)` (new) allocates once, then value-initializes in chunks of 65 536 slots with a stop check between them and
 leaves the map unchanged when stopped; the four decimator tables (work mesh, penalties, collapse queue, output) take
 it. Output bit-identical (the 8 goldens before = after on Linux); Linux worst 16 → 9.2 ms (the start row), every
-later row 0.4-2 ms. Tests `FlatHashMap.anInterruptibleReserve*`.
+later row 0.4-2 ms. Tests `FlatHashMap.anInterruptibleReserve*`. **Windows proof** (the peer, i7-13850HX, MSVC 19.44,
+base `1da2837`, the stage-timed copy, a 250-900 ms sweep in 10 ms steps): worst **33.2 ms** unpinned, 40.3 ms on
+E-cores, 26.3 ms on P-cores, 0 row at 50 ms or more (68.9 ms before); the stop is now SEEN within 8.9 ms in the penalty
+stage (was ~48 ms) and 5.5 ms in the queue stage (was ~26 ms); the unit test 31.4 / 27.1 / 35.7 ms; goldens unchanged.
+⚠️ What is left is the MSVC release floor: on E-cores it reaches ~40 ms in the penalty stage, ~10 ms under the bound
+(one arena for the large tables, released once, would give the margin). And the START row is seen ~17 ms after the
+request on Windows (9.2 ms on Linux), before the first stage — most likely `decimate()`'s entry checks
+(`m_source.indicesInRange()` over 2.24 M triangles, no stop check); under the bound, not timed alone.
 **The release floor under MSVC (~20 ms).** Stopped during the collapses, the stop is SEEN within 0.01-2 ms; then the
 unwinding frees a few blocks of hundreds of MB: the collapse queue's vector 4.3-6.4 ms, triangles + vertices 6.3-9.4, the
 arena 5.4-11, the work mesh 0.8 ms (~1.5 ms in total on Linux). Pinned to E-cores ~30 ms, to P-cores ~20 ms. A full

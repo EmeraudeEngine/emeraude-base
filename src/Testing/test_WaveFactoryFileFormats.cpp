@@ -36,6 +36,7 @@
 #include <filesystem>
 #include <initializer_list>
 #include <memory>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -718,5 +719,83 @@ namespace EmEn::Base::WaveFactory
 		const std::vector< std::byte > jsonBad(8, std::byte{'{'});
 		Wave< int16_t > jsonDecoded;
 		EXPECT_FALSE(StreamIO::read(jsonBad, SoundFileFormat::JSON, jsonDecoded));
+	}
+
+	/* The decode is stoppable (Ave Robustus II, docs/subsystems/wavefactory/07, 2026-10-27): a file longer than one
+	 * decode block, read whole, then read with a stop already requested. */
+	namespace
+	{
+		std::vector< std::byte >
+		encodedRamp (size_t sampleCount)
+		{
+			Wave< int16_t > source;
+
+			if ( !source.initialize(sampleCount, Channels::Mono, Frequency::PCM8000Hz) )
+			{
+				return {};
+			}
+
+			for ( size_t i = 0; i < source.elementCount(); ++i )
+			{
+				source.data()[i] = static_cast< int16_t >((static_cast< int >(i % 2000) - 1000) * 30);
+			}
+
+			std::vector< std::byte > encoded;
+			MemoryStream out{encoded};
+			const FileFormatSNDFile< int16_t > format;
+			WriteOptions options;
+			options.format = AudioFormat::WAV;
+
+			if ( !format.writeStream(out, source, options) )
+			{
+				return {};
+			}
+
+			return encoded;
+		}
+	}
+
+	TEST(WaveFactorySNDFile, aDecodeLongerThanOneBlockKeepsEverySample)
+	{
+		constexpr size_t SampleCount{50'000};
+		const auto encoded = encodedRamp(SampleCount);
+
+		ASSERT_FALSE(encoded.empty());
+
+		MemoryStream in{encoded};
+		FileFormatSNDFile< int16_t > format;
+		Wave< int16_t > decoded;
+
+		ASSERT_TRUE(format.readStream(in, decoded, {}));
+		ASSERT_EQ(decoded.elementCount(), SampleCount);
+
+		size_t mismatches = 0;
+
+		for ( size_t i = 0; i < SampleCount; ++i )
+		{
+			const auto expected = (static_cast< int >(i % 2000) - 1000) * 30;
+
+			mismatches += std::abs(static_cast< int >(decoded.data()[i]) - expected) > 2 ? 1U : 0U;
+		}
+
+		EXPECT_EQ(mismatches, 0U);
+	}
+
+	TEST(WaveFactorySNDFile, aRequestedStopRefusesTheDecode)
+	{
+		const auto encoded = encodedRamp(50'000);
+
+		ASSERT_FALSE(encoded.empty());
+
+		std::stop_source stop;
+		stop.request_stop();
+
+		MemoryStream in{encoded};
+		FileFormatSNDFile< int16_t > format;
+		Wave< int16_t > decoded;
+		ReadOptions options;
+		options.stopToken = stop.get_token();
+
+		EXPECT_FALSE(format.readStream(in, decoded, options));
 	}
 }

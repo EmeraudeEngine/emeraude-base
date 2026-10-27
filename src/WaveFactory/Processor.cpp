@@ -32,7 +32,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <random>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -43,9 +45,16 @@
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
 #include "Types.hpp"
+#include "WaveFactory/Wave.hpp"
 
 namespace EmEn::Base::WaveFactory
 {
+	namespace
+	{
+		/** @brief The input frames handed to the resampler between two stop checks. */
+		constexpr size_t ResampleChunkFrames{16384};
+	}
+
 	bool
 	Processor::mixDown () noexcept
 	{
@@ -95,7 +104,7 @@ namespace EmEn::Base::WaveFactory
 	}
 
 	bool
-	Processor::resample (Frequency frequency) noexcept
+	Processor::resample (Frequency frequency, const std::stop_token & stopToken) noexcept
 	{
 		if ( !m_wave.isValid() )
 		{
@@ -111,36 +120,83 @@ namespace EmEn::Base::WaveFactory
 			return true;
 		}
 
+		const auto channels = static_cast< size_t >(m_wave.channels());
 		const auto ratio = static_cast< double >(frequency) / static_cast< double >(m_wave.frequency());
+		const auto inputFrames = m_wave.sampleCount();
+		const auto outputCapacity = static_cast< size_t >(std::ceil(static_cast< double >(inputFrames) * ratio));
 
-		/* Reserve a temporary buffer. */
-		const auto newSampleCount = static_cast< size_t >(std::ceil(static_cast< double >(m_wave.sampleCount()) * ratio));
+		std::vector< float > temporaryBuffer(outputCapacity * channels, 0.0F);
 
-		std::vector< float > temporaryBuffer(newSampleCount * static_cast< size_t >(m_wave.channels()), 0.0F);
+		/* The converter's state, released on every path. */
+		struct StateRelease
+		{
+			void
+			operator() (SRC_STATE * state) const noexcept
+			{
+				static_cast< void >(src_delete(state));
+			}
+		};
 
-		SRC_DATA data;
-		/* A pointer to the input data samples. */
-		data.data_in = m_wave.samplePointer(0);
-		/* The number of frames of data pointed to by data_in. */
-		data.input_frames = static_cast< long >(m_wave.sampleCount());
-		/* A pointer to the output data samples. */
-		data.data_out = temporaryBuffer.data();
-		/* Maximum number of frame pointers to "data_out". */
-		data.output_frames = static_cast< long >(newSampleCount);
-		/* Equal to output_sample_rate / input_sample_rate. */
-		data.src_ratio = ratio;
+		int error = 0;
+		const std::unique_ptr< SRC_STATE, StateRelease > state{src_new(SRC_SINC_BEST_QUALITY, static_cast< int >(channels), &error)};
 
-		const auto error = src_simple(&data, SRC_SINC_BEST_QUALITY, static_cast< int >(m_wave.channels()));
-
-		if ( error > 0 )
+		if ( state == nullptr )
 		{
 			Logging::error("WaveFactory::Processor", src_strerror(error));
 
 			return false;
 		}
 
+		const std::span< const float > input{m_wave.data()};
+		const std::span< float > output{temporaryBuffer};
+		size_t consumed = 0;
+		size_t produced = 0;
+
+		/* Fed in chunks; once the input is exhausted, end_of_input drains the filter's tail until it yields nothing. The
+		 * loop is bounded: every turn consumes input or produces output, and the output is bounded by its capacity. */
+		while ( true )
+		{
+			if ( stopToken.stop_requested() )
+			{
+				Logging::info("WaveFactory::Processor", "resample(), stopped.");
+
+				return false;
+			}
+
+			const auto chunk = std::min(ResampleChunkFrames, inputFrames - consumed);
+
+			SRC_DATA data{};
+			data.data_in = input.subspan(consumed * channels).data();
+			data.input_frames = static_cast< long >(chunk);
+			data.data_out = output.subspan(produced * channels).data();
+			data.output_frames = static_cast< long >(outputCapacity - produced);
+			data.src_ratio = ratio;
+			data.end_of_input = consumed + chunk >= inputFrames ? 1 : 0;
+
+			error = src_process(state.get(), &data);
+
+			if ( error != 0 )
+			{
+				Logging::error("WaveFactory::Processor", src_strerror(error));
+
+				return false;
+			}
+
+			consumed += static_cast< size_t >(data.input_frames_used);
+			produced += static_cast< size_t >(data.output_frames_gen);
+
+			/* Done once the tail is drained; and a turn that moves nothing (the output full: the same stop as the one-shot
+			 * src_simple() at a full output) ends the loop instead of spinning. */
+			const auto progressed = data.input_frames_used > 0 || data.output_frames_gen > 0;
+
+			if ( (data.end_of_input != 0 && data.output_frames_gen == 0) || produced >= outputCapacity || !progressed )
+			{
+				break;
+			}
+		}
+
 		/* Resize to actual generated frames (may differ slightly from estimate). */
-		temporaryBuffer.resize(static_cast< size_t >(data.output_frames_gen) * static_cast< size_t >(m_wave.channels()));
+		temporaryBuffer.resize(produced * channels);
 
 		/* Swap data. */
 		m_wave.m_data.swap(temporaryBuffer);

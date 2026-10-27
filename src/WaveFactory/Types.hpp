@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <cstdint>
 #include <iostream>
+#include <stop_token>
 
 /* Forward declarations. */
 
@@ -104,11 +105,14 @@ namespace EmEn::Base::WaveFactory
 	/**
 	 * @brief Options for reading/decoding audio data.
 	 * @note synthesisFrequency and soundfont are used by procedural format handlers (JSON, MIDI).
+	 * @note stopToken interrupts a long decode (Ave Robustus II): a handler checks it between two blocks and returns
+	 * false once a stop is requested. Default: never stopped.
 	 */
 	struct ReadOptions
 	{
 		Frequency synthesisFrequency{Frequency::PCM48000Hz};
 		tsf * soundfont{nullptr};
+		std::stop_token stopToken;
 	};
 
 	/**
