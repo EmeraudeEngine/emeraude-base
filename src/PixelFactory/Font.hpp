@@ -39,9 +39,11 @@
 #include <sstream>
 #include <string>
 #include <type_traits>
+#include <utility>
 
 /* Local inclusions. */
 #include "FileIO.hpp"
+#include "FlatHashMap.hpp"
 #include "IO/IO.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "PixelFactory/Types.hpp"
@@ -102,6 +104,7 @@ namespace EmEn::Base::PixelFactory
 				m_fixedWidth = fixedWidth;
 				m_letterSpacing = letterSpacing;
 				m_widestChar = 0;
+				m_kerning = KerningTable{};
 
 				for ( size_t index = 0; index < ASCIICount; index++ )
 				{
@@ -170,6 +173,46 @@ namespace EmEn::Base::PixelFactory
 				return m_letterSpacing;
 			}
 
+			/** @brief The pair adjustments: key (left << 8 | right), value in pixels (negative closes the pair up). */
+			using KerningTable = FlatHashMap< uint16_t, int16_t >;
+
+			/**
+			 * @brief Sets the pair adjustments of this size (a TrueType font's 'kern' pairs, Font::readTrueTypeFile()).
+			 * @note Replaced by the next writeGlyphData(), which clears them.
+			 * @param pairs The adjustments; only non-zero ones are worth storing.
+			 */
+			void
+			setKerning (KerningTable pairs) noexcept
+			{
+				m_kerning = std::move(pairs);
+			}
+
+			/**
+			 * @brief Returns the pen adjustment between two characters, in pixels (0 when the pair has none).
+			 * @param left The character before.
+			 * @param right The character after.
+			 * @return int32_t
+			 */
+			[[nodiscard]]
+			int32_t
+			kerning (uint8_t left, uint8_t right) const noexcept
+			{
+				const auto * adjustment = m_kerning.find(static_cast< uint16_t >((static_cast< uint16_t >(left) << 8U) | right));
+
+				return adjustment == nullptr ? 0 : static_cast< int32_t >(*adjustment);
+			}
+
+			/**
+			 * @brief Returns the number of kerned pairs.
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			size_t
+			kerningPairCount () const noexcept
+			{
+				return m_kerning.size();
+			}
+
 			/**
 			 * @brief Returns the height of characters.
 			 * @return uint32_t
@@ -216,6 +259,7 @@ namespace EmEn::Base::PixelFactory
 		private:
 
 			std::array< Pixmap< precision_t >, ASCIICount > m_glyphs;
+			KerningTable m_kerning;
 			uint32_t m_widestChar{0};
 			uint32_t m_letterSpacing{0};
 			uint32_t m_height{0};

@@ -1828,6 +1828,21 @@ Found by the coverage pass (`IOFileUtils.*`):
 - The tests failed on the former code (the FIFO ones by timing: a releaser opens the write end after 1 s, so a
   regression fails instead of hanging the suite — POSIX only, Windows has no FIFO in the file system).
 
+## PixelFactory — a TrueType font kerns its pairs (2026-10-27)
+
+`TextProcessor` moved the pen by each glyph's own width only: "AV", "To", "LT" kept the gap of their cells. Now
+`Font::readTrueTypeFile()` reads the pair adjustments with FreeType's `FT_Get_Kerning()` (`FT_KERNING_DEFAULT`, 26.6
+rounded to the nearest pixel, clamped to ±the cell bound) over the printable Latin-1 pairs and stores the non-zero ones
+in `ASCIIGlyphArray` (`KerningTable`, a `FlatHashMap` keyed `left << 8 | right`; `kerning(left, right)`,
+`kerningPairCount()`; cleared by every `writeGlyphData()`). `TextProcessor::kernedPen()` applies the pair between two
+characters of a ROW (none at a row start; never left of the row start) when it places a glyph, tests the overflow and
+measures a word for the wrap. A fixed-width font keeps its grid (no pairs read), a pixmap font has none. A negative
+pair makes the next cell overlap the previous one's right margin: harmless, `blitCharacter()` BLENDS by coverage (0
+leaves the pixel). The test font `Joystick.Bold.ttf` ('kern' table, 114 pairs; AV −407 / 2048 em). Tests
+`PixelFactoryFont.trueTypeFontReadsItsKerningPairs`, `PixelFactoryTextProcessor.aKernedPairMovesThePen` ("AV" = 'A' +
+'V' placed at width(A) + pair, pixel for pixel). ⚠️ `FT_Get_Kerning()` reads the legacy 'kern' table only: a font that
+kerns through OpenType GPOS alone gets no pair (that needs a shaper, HarfBuzz — not in the base).
+
 ## PixelFactory — a proportional pixmap font keeps each glyph's aspect; the text advances in pixels (2026-10-18)
 
 Found by the coverage pass (`PixelFactoryFont.*`, `PixelFactoryTextProcessor.*`), two defects that hid each other:

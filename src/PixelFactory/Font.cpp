@@ -385,9 +385,54 @@ namespace EmEn::Base::PixelFactory
 			cells[code] = std::move(cell);
 		}
 
+		/* The pair adjustments (2026-10-27): FreeType's FT_Get_Kerning() over the printable Latin-1 pairs, rounded to whole
+		 * pixels; a fixed-width font keeps its grid. ⚠️ FT_Get_Kerning() reads the legacy 'kern' table only: a font that
+		 * kerns through OpenType GPOS alone gets no pair here (that needs a shaper, HarfBuzz). Reference: FreeType,
+		 * "Glyph Conventions" § Kerning (https://freetype.org/freetype2/docs/glyphs/glyphs-4.html). */
+		static_assert(MaxTrueTypeFontSize * MaxTrueTypeCellWidthFactor <= static_cast< uint32_t >(std::numeric_limits< int16_t >::max()), "a clamped pair adjustment must fit the table's int16_t");
+
+		typename ASCIIGlyphArray< precision_t >::KerningTable kerning;
+
+		if ( !fixedWidth && FT_HAS_KERNING(face.get()) )
+		{
+			/* NOTE: A vector, as the cells above: the indices are checked by it on this cold path. */
+			std::vector< FT_UInt > glyphIndices(ASCIICount, 0U);
+
+			for ( size_t code = 0; code < ASCIICount; ++code )
+			{
+				glyphIndices[code] = isControlCode(code) ? 0U : FT_Get_Char_Index(face.get(), static_cast< FT_ULong >(code));
+			}
+
+			for ( size_t left = 0; left < ASCIICount; ++left )
+			{
+				for ( size_t right = 0; right < ASCIICount; ++right )
+				{
+					if ( glyphIndices[left] == 0 || glyphIndices[right] == 0 )
+					{
+						continue;
+					}
+
+					FT_Vector delta{};
+
+					if ( FT_Get_Kerning(face.get(), glyphIndices[left], glyphIndices[right], FT_KERNING_DEFAULT, &delta) != 0 )
+					{
+						continue;
+					}
+
+					/* 26.6 fixed point, rounded to the nearest pixel; bounded by the cell width (a hostile table). */
+					const auto pixels = std::clamp< int64_t >((static_cast< int64_t >(delta.x) + (delta.x < 0 ? -32 : 32)) / 64, -static_cast< int64_t >(maxCellWidth), static_cast< int64_t >(maxCellWidth));
+
+					if ( pixels != 0 )
+					{
+						static_cast< void >(kerning.tryEmplace(static_cast< uint16_t >((left << 8U) | right), static_cast< int16_t >(pixels)));
+					}
+				}
+			}
+		}
+
 		auto & glyphs = this->getGlyphArray(fontSize);
 
-		return glyphs.writeGlyphData([&cells, widestCell, fontSize, fixedWidth] (size_t index) {
+		const auto written = glyphs.writeGlyphData([&cells, widestCell, fontSize, fixedWidth] (size_t index) {
 			auto & cell = cells[index];
 
 			if ( !fixedWidth || cell.width() == widestCell )
@@ -409,6 +454,13 @@ namespace EmEn::Base::PixelFactory
 
 			return padded;
 		}, fixedWidth, 0U); // No letter spacing: each cell is as wide as its glyph's advance.
+
+		if ( written )
+		{
+			glyphs.setKerning(std::move(kerning));
+		}
+
+		return written;
 	}
 
 	/* Explicit instantiation — the ONLY place FreeType symbols enter the binary. Fonts are 8-bit

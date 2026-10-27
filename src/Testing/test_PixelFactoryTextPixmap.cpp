@@ -24,13 +24,26 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+/* STL inclusions. */
+#include <cstdint>
+#include <filesystem>
+#include <initializer_list>
+#include <string>
+#include <vector>
+
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "Math/Space2D/AARectangle.hpp"
+#include "PixelFactory/Color.hpp"
 #include "PixelFactory/FileIO.hpp"
+#include "PixelFactory/Font.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Processor.hpp"
 #include "PixelFactory/TextProcessor.hpp"
+#include "PixelFactory/Types.hpp"
 #include "Time/Elapsed/PrintScopeRealTime.hpp"
 
 using namespace EmEn::Base;
@@ -308,3 +321,57 @@ TEST(PixelFactoryTextProcessor, wordsWrapByTheirPixelWidth)
 	EXPECT_FALSE(hasInk(narrow, 64U, 127U, 0U));
 }
 
+/* The kerning (2026-10-27, caution-points § PixelFactory): a TrueType font's 'kern' pairs move the pen ("AV" closes up). */
+TEST(PixelFactoryFont, trueTypeFontReadsItsKerningPairs)
+{
+	Font< uint8_t > proportional;
+	ASSERT_TRUE(proportional.readFile(TrueTypeFont, 32U, false));
+
+	const auto * glyphs = proportional.glyphs(32U);
+	ASSERT_NE(glyphs, nullptr);
+
+	/* The test font's 'kern' table: AV -407 / 2048 em, nothing for HH. */
+	EXPECT_LT(glyphs->kerning(static_cast< uint8_t >('A'), static_cast< uint8_t >('V')), 0);
+	EXPECT_EQ(glyphs->kerning(static_cast< uint8_t >('H'), static_cast< uint8_t >('H')), 0);
+	EXPECT_GT(glyphs->kerningPairCount(), 0U);
+
+	/* A fixed-width font keeps its grid, and a pixmap font has no pair data. */
+	Font< uint8_t > fixed;
+	ASSERT_TRUE(fixed.readFile(TrueTypeFont, 32U, true));
+	ASSERT_NE(fixed.glyphs(32U), nullptr);
+	EXPECT_EQ(fixed.glyphs(32U)->kerningPairCount(), 0U);
+
+	const auto charsMap = loadCharsMap();
+	ASSERT_TRUE(charsMap.isValid());
+
+	Font< uint8_t > pixmapFont;
+	ASSERT_TRUE(pixmapFont.parsePixmap(charsMap, 32U, false));
+	ASSERT_NE(pixmapFont.glyphs(32U), nullptr);
+	EXPECT_EQ(pixmapFont.glyphs(32U)->kerningPairCount(), 0U);
+}
+
+TEST(PixelFactoryTextProcessor, aKernedPairMovesThePen)
+{
+	/* "AV" equals 'A' at the area's left plus 'V' one 'A' width and one (negative) pair adjustment further. */
+	Font< uint8_t > font;
+	ASSERT_TRUE(font.readFile(TrueTypeFont, 32U, false));
+
+	const auto * glyphs = font.glyphs(32U);
+	ASSERT_NE(glyphs, nullptr);
+
+	const auto widthA = static_cast< int32_t >(glyphs->glyph(static_cast< uint8_t >('A')).width());
+	const auto pair = glyphs->kerning(static_cast< uint8_t >('A'), static_cast< uint8_t >('V'));
+	ASSERT_LT(pair, 0);
+
+	const auto both = writeText(font, 32U, "AV", 0, 256);
+	auto expected = writeText(font, 32U, "A", 0, 256);
+	{
+		TextProcessor< uint8_t > processor{expected};
+		processor.setFont(font, 32U);
+		processor.setFontColor(White);
+		processor.setRectangle({widthA + pair, 0, 256 - (widthA + pair), 128});
+		ASSERT_TRUE(processor.write("V"));
+	}
+
+	EXPECT_TRUE(both.data() == expected.data());
+}

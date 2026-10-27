@@ -210,6 +210,8 @@ namespace EmEn::Base::PixelFactory
 				for ( dimension_t currentRow = 0; currentRow < m_textMetrics.maxRows; ++currentRow )
 				{
 					dimension_t penX = 0;
+					/* The character drawn before on this row, for the pair adjustment (none at the row start). */
+					char previous = '\0';
 
 					for ( ; currentChar < text.size(); ++currentChar )
 					{
@@ -243,16 +245,20 @@ namespace EmEn::Base::PixelFactory
 							}
 						}
 
+						/* NOTE: The pair adjustment with the character before (2026-10-27: "AV" closes up). */
+						const auto kernedX = this->kernedPen(penX, previous, ASCIICode);
+
 						/* NOTE: A character that overflows the row goes to the next one, unless it starts the row (wider
 						 * than the area: drawn clipped). */
-						if ( penX > 0 && penX + this->cellWidth(ASCIICode) > areaWidth )
+						if ( kernedX > 0 && kernedX + this->cellWidth(ASCIICode) > areaWidth )
 						{
 							break;
 						}
 
-						this->blitCharacter(ASCIICode, penX, currentRow);
+						this->blitCharacter(ASCIICode, kernedX, currentRow);
 
-						penX += this->advance(ASCIICode);
+						penX = kernedX + this->advance(ASCIICode);
+						previous = ASCIICode;
 					}
 
 					/* NOTE: No more text to print. */
@@ -300,6 +306,36 @@ namespace EmEn::Base::PixelFactory
 			}
 
 			/**
+			 * @brief Returns the pen position of a character drawn after another on the same row: moved by the font's
+			 * pair adjustment (kerning), never left of the row start. A fixed-width font keeps its grid.
+			 * @pre A font is selected.
+			 * @param penX The pen position after the previous character.
+			 * @param previous The previous character on the row ('\0' at the row start: no adjustment).
+			 * @param ASCIICode The character to draw.
+			 * @return dimension_t
+			 */
+			[[nodiscard]]
+			dimension_t
+			kernedPen (dimension_t penX, char previous, char ASCIICode) const noexcept
+			{
+				if ( previous == '\0' || m_selectedFont->isFixedWidth() )
+				{
+					return penX;
+				}
+
+				const auto adjustment = m_selectedFont->kerning(static_cast< uint8_t >(previous), static_cast< uint8_t >(ASCIICode));
+
+				if ( adjustment >= 0 )
+				{
+					return penX + static_cast< dimension_t >(adjustment);
+				}
+
+				const auto back = static_cast< dimension_t >(-adjustment);
+
+				return back >= penX ? 0 : penX - back;
+			}
+
+			/**
 			 * @brief Returns the width of the word starting at an offset, up to the next space, line feed or the end of
 			 * the text (the letter spacing after its last character excluded).
 			 * @pre A font is selected.
@@ -312,10 +348,12 @@ namespace EmEn::Base::PixelFactory
 			wordWidth (const std::string & text, size_t offset) const noexcept
 			{
 				dimension_t width = 0;
+				char previous = '\0';
 
 				for ( auto index = offset; index < text.size() && text[index] != ' ' && text[index] != '\n'; ++index )
 				{
-					width += this->advance(text[index]);
+					width = this->kernedPen(width, previous, text[index]) + this->advance(text[index]);
+					previous = text[index];
 				}
 
 				if ( width > 0 )
