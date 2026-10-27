@@ -291,21 +291,23 @@ namespace EmEn::Base::Math::SolarSystem
 			return std::nullopt;
 		}
 
+		/* Meeus's Z, A, B, C, D, E in lower case: the capitals are Math's component indices (Vector.hpp), which a local
+		 * would shadow — MSVC C4459 under /WX, silent on GCC and clang. */
 		const auto shifted = julianDay + 0.5;
-		const auto Z = std::floor(shifted);
-		const auto fraction = shifted - Z;
-		const auto alpha = std::floor((Z - 1867216.25) / 36524.25);
-		const auto A = Z + 1.0 + alpha - std::floor(alpha / 4.0);
-		const auto B = A + 1524.0;
-		const auto C = std::floor((B - 122.1) / 365.25);
-		const auto D = std::floor(365.25 * C);
-		const auto E = std::floor((B - D) / 30.6001);
-		const auto month = E < 14.0 ? E - 1.0 : E - 13.0;
+		const auto z = std::floor(shifted);
+		const auto fraction = shifted - z;
+		const auto alpha = std::floor((z - 1867216.25) / 36524.25);
+		const auto a = z + 1.0 + alpha - std::floor(alpha / 4.0);
+		const auto b = a + 1524.0;
+		const auto c = std::floor((b - 122.1) / 365.25);
+		const auto d = std::floor(365.25 * c);
+		const auto e = std::floor((b - d) / 30.6001);
+		const auto month = e < 14.0 ? e - 1.0 : e - 13.0;
 
 		CalendarDate date{
-			.year = static_cast< int >(month > 2.0 ? C - 4716.0 : C - 4715.0),
+			.year = static_cast< int >(month > 2.0 ? c - 4716.0 : c - 4715.0),
 			.month = static_cast< int >(month),
-			.day = static_cast< int >(B - D - std::floor(30.6001 * E)),
+			.day = static_cast< int >(b - d - std::floor(30.6001 * e)),
 			.hour = 0,
 			.minute = 0,
 			.second = 0.0
@@ -870,23 +872,23 @@ namespace EmEn::Base::Math::SolarSystem
 	{
 		const auto d = julianDayTT - JulianDayJ2000;
 		const auto T = d / DaysPerJulianCentury;
-		/* Right ascension and declination of the pole, prime meridian angle W, in degrees. */
+		/* Right ascension and declination of the pole, prime meridian angle (the IAU's W), in degrees. */
 		double alpha = 0.0;
 		double delta = 90.0;
-		double W = 0.0;
+		double meridian = 0.0;
 
 		switch ( body )
 		{
 			case Body::Mercury :
 				alpha = 281.0103 - (0.0328 * T);
 				delta = 61.4155 - (0.0049 * T);
-				W = 329.5988 + (6.1385108 * d);
+				meridian = 329.5988 + (6.1385108 * d);
 				break;
 
 			case Body::Venus :
 				alpha = 272.76;
 				delta = 67.16;
-				W = 160.20 - (1.4813688 * d);
+				meridian = 160.20 - (1.4813688 * d);
 				break;
 
 			case Body::EarthMoonBarycentre :
@@ -895,25 +897,25 @@ namespace EmEn::Base::Math::SolarSystem
 			case Body::Mars :
 				alpha = 317.68143 - (0.1061 * T);
 				delta = 52.88650 - (0.0609 * T);
-				W = 176.630 + (350.89198226 * d);
+				meridian = 176.630 + (350.89198226 * d);
 				break;
 
 			case Body::Jupiter :
 				alpha = 268.056595 - (0.006499 * T);
 				delta = 64.495303 + (0.002413 * T);
-				W = 284.95 + (870.5360000 * d);
+				meridian = 284.95 + (870.5360000 * d);
 				break;
 
 			case Body::Saturn :
 				alpha = 40.589 - (0.036 * T);
 				delta = 83.537 - (0.004 * T);
-				W = 38.90 + (810.7939024 * d);
+				meridian = 38.90 + (810.7939024 * d);
 				break;
 
 			case Body::Uranus :
 				alpha = 257.311;
 				delta = -15.175;
-				W = 203.81 - (501.1600928 * d);
+				meridian = 203.81 - (501.1600928 * d);
 				break;
 
 			case Body::Neptune :
@@ -922,21 +924,21 @@ namespace EmEn::Base::Math::SolarSystem
 
 				alpha = 299.36 + (0.70 * std::sin(N));
 				delta = 43.46 - (0.51 * std::cos(N));
-				W = 249.978 + (541.1397757 * d) - (0.48 * std::sin(N));
+				meridian = 249.978 + (541.1397757 * d) - (0.48 * std::sin(N));
 				break;
 			}
 
 			case Body::Pluto :
 				alpha = 132.993;
 				delta = -6.163;
-				W = 302.695 + (56.3625225 * d);
+				meridian = 302.695 + (56.3625225 * d);
 				break;
 		}
 
 		const auto a = Astronomy::radians(alpha);
 		const auto dec = Astronomy::radians(delta);
-		/* W wraps first: 350.89° per day reaches 1e7 degrees, the fraction is what turns. */
-		const auto w = Astronomy::radians(W - (360.0 * std::floor(W / 360.0)));
+		/* The meridian wraps first: 350.89° per day reaches 1e7 degrees, the fraction is what turns. */
+		const auto w = Astronomy::radians(meridian - (360.0 * std::floor(meridian / 360.0)));
 		const Vector< 3, double > pole{std::cos(dec) * std::cos(a), std::cos(dec) * std::sin(a), std::sin(dec)};
 		/* The ascending node of the body's equator on the J2000 equator, at right ascension α + 90°. */
 		const Vector< 3, double > node{-std::sin(a), std::cos(a), 0.0};

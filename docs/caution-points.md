@@ -224,6 +224,15 @@ names at namespace scope of the test file that instantiates it.
 headers now prefix every local constant per file (`CastContactTolerance`, `BoxBoxFaceBias`, …); measured: clang's
 `-Wshadow-all` does not catch it either for a template inside a nested namespace.
 
+⚠️ **A third form, 2026-10-27 — no template needed:** inside `namespace EmEn::Base::Math` (and every namespace nested in it),
+the component indices of `Vector.hpp` (`X Y Z W`, `U V`, `R G B A`) are namespace-scope constants, so ANY local named by one
+capital letter among them hides one. `Math/SolarSystem.hpp` (sky lot S3) did it twice — Meeus's `Z`, `A`, `B` in
+`calendarDate()`, the IAU's `W` in `orientation()` — and the whole engine stopped building on MSVC (every TU including the
+header), found by the Windows peer. Renamed `z a b c d e` and `meridian`. GCC and clang are silent: `-Wshadow` does not warn
+for a local over a namespace-scope name. **Before pushing** a header under `Math/`:
+`/usr/bin/grep -nE "(auto|double|float|int)[[:space:]]+(X|Y|Z|W|U|V|R|G|B|A)[[:space:]]*(=|\{|;)" src/Math/` must print only
+the declarations themselves (`Vector.hpp`, and `Quaternion.hpp`'s class constants).
+
 ### The paranoid MSVC set, compiled for the first time on Windows — what it found (Ave Robustus II, 2026-10-08)
 
 The MSVC block of the PARANOID option (`/W4 /permissive- /w14242 … /WX`, without the former `/wd4100 /wd4127 /wd4702
