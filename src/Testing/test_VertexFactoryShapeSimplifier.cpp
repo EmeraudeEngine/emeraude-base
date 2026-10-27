@@ -36,6 +36,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <stop_token>
 #include <string>
@@ -131,6 +132,99 @@ TEST(VertexFactoryShapeSimplifier, GroupsAreKeptOneByOne)
 	EXPECT_GT(simplified->groups()[0].second, 0U);
 	EXPECT_EQ(simplified->groups()[1].first, simplified->groups()[0].second);
 	EXPECT_EQ(simplified->groups()[0].second + simplified->groups()[1].second, simplified->triangles().size());
+}
+
+namespace
+{
+	/** @brief Which group's triangles, along which axis. */
+	struct GroupAxis
+	{
+		size_t group{0};
+		size_t axis{0};
+	};
+
+	/** @brief The extent of a group's triangles along an axis: {lowest, highest} coordinate. */
+	std::pair< float, float >
+	groupExtent (const Shape< float > & shape, GroupAxis query)
+	{
+		const auto [first, count] = shape.groups()[query.group];
+		float lowest = std::numeric_limits< float >::max();
+		float highest = std::numeric_limits< float >::lowest();
+
+		for ( size_t triangle = first; triangle < first + count; ++triangle )
+		{
+			for ( uint32_t corner = 0; corner < 3; ++corner )
+			{
+				const auto value = shape.vertices()[shape.triangles()[triangle].vertexIndex(corner)].position()[query.axis];
+
+				lowest = std::min(lowest, value);
+				highest = std::max(highest, value);
+			}
+		}
+
+		return {lowest, highest};
+	}
+
+	/** @brief The straight border between two groups: the axis across it, its coordinate, and whether group 0 lies below. */
+	struct GroupBorder
+	{
+		size_t axis{0};
+		float coordinate{0.0F};
+		bool firstBelow{true};
+	};
+
+	/** @brief Finds the border of a two-group shape whose groups do not overlap along X or Z. */
+	GroupBorder
+	findGroupBorder (const Shape< float > & shape)
+	{
+		const auto x0 = groupExtent(shape, {.group = 0, .axis = 0});
+		const auto x1 = groupExtent(shape, {.group = 1, .axis = 0});
+		const size_t axis = (x0.second <= x1.first || x1.second <= x0.first) ? 0U : 2U;
+		const auto extent0 = groupExtent(shape, {.group = 0, .axis = axis});
+		const auto extent1 = groupExtent(shape, {.group = 1, .axis = axis});
+		const auto firstBelow = extent0.first < extent1.first;
+
+		return {.axis = axis, .coordinate = firstBelow ? extent0.second : extent0.first, .firstBelow = firstBelow};
+	}
+
+	/** @brief How far the triangles of each group reach past the border (0 when both stay on their side). */
+	float
+	borderOverflow (const Shape< float > & shape, const GroupBorder & border)
+	{
+		const auto extent0 = groupExtent(shape, {.group = 0, .axis = border.axis});
+		const auto extent1 = groupExtent(shape, {.group = 1, .axis = border.axis});
+		const auto below = border.firstBelow ? extent0 : extent1;
+		const auto above = border.firstBelow ? extent1 : extent0;
+
+		return std::max(std::abs(below.second - border.coordinate), std::abs(above.first - border.coordinate));
+	}
+}
+
+TEST(VertexFactoryShapeDecimator, theBorderBetweenTwoGroupsStaysOnItsLine)
+{
+	/* A welded plane, continuous UVs, its first half group 0 and its second half group 1: the border between the two
+	 * materials is a straight line the decimation must keep (2026-10-27, owner decision: a penalty on the group border).
+	 * Without it, the border is an ordinary interior edge of a flat plane for the QEM: it drifted by 0.88 and 1.81 here. */
+	auto shape = ShapeGenerator::generatePlane< float, uint32_t >(10.0F, 10.0F, 32U, 32U);
+	const auto triangleCount = static_cast< uint32_t >(shape.triangles().size());
+	const auto half = triangleCount / 2;
+
+	shape.groups().clear();
+	shape.groups().emplace_back(0U, half);
+	shape.groups().emplace_back(half, triangleCount - half);
+
+	const auto border = findGroupBorder(shape);
+
+	ASSERT_EQ(borderOverflow(shape, border), 0.0F);
+
+	const ShapeDecimator< float, uint32_t > decimator{shape, 0.1F};
+	const auto decimated = decimator.decimate();
+
+	ASSERT_EQ(decimated.groups().size(), 2U);
+	ASSERT_LT(decimated.triangles().size(), shape.triangles().size() / 4);
+
+	/* Every triangle stays on its own side of the source border, which is still the border. */
+	EXPECT_LT(borderOverflow(decimated, border), 1e-4F);
 }
 
 TEST(VertexFactoryShapeSimplifier, EmptyGroupStaysEmpty)

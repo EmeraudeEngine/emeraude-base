@@ -882,6 +882,19 @@ item `vector-normalized-absolute-epsilon`).
 Linux, macOS and Windows (even triangle counts). Its adjacency lists are now insertion-ordered arrays; never iterate an
 unordered container where the order drives the result (`FlatHashMap` with `PortableHash` iterates the same everywhere).
 
+### The decimator anchors the BORDER between two groups (materials), like a UV seam (2026-10-27)
+
+A multi-material mesh keeps its groups through decimation (each work triangle carries its `groupIndex`, the output
+rebuilds the ranges), but the edge where two groups meet was not penalised: on a welded surface with continuous UVs it
+is an ordinary interior edge for the QEM, and the border between the materials drifted at the coarse levels — on a flat
+32 × 32 plane split in two groups, decimated to 10 %, by 0.88 and 1.81 units off its line. Owner decision: the seams'
+penalty, not a per-group decimation (which would leave every group with its own open border). In
+`applyBoundaryAndSeamPenalties()`, a vertex whose adjacent triangles carry more than one `groupIndex` gets the same
+weighted POINT quadric as a UV seam vertex (`m_boundaryPenaltyWeight`), one penalty when it is both; the decimation
+stays global, the mesh welded. Single-group shapes are untouched (the 8 goldens identical). Test
+`VertexFactoryShapeDecimator.theBorderBetweenTwoGroupsStaysOnItsLine`. ⚠️ `simplifyShape()` is meshoptimizer, not this
+decimator: a test of the QEM decimator must build a `ShapeDecimator`.
+
 ### ⚠️ The decimator's large tables initialize INTERRUPTIBLY; its output is NOT bit-identical across OS (2026-10-27)
 
 **The detection gap (FIXED 2026-10-27).** Each stage sized a `FlatHashMap` of millions of slots in its constructor

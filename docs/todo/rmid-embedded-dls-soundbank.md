@@ -27,6 +27,11 @@ and similar mid-1990s soundtracks render correctly with a general-purpose SF2.
 Moved here from projet-alpha on 2026-10-11, because the parsing belongs to this repository. The engine part (the
 per-resource override) follows once the base exposes the bank.
 
+## Owner decision (2026-10-27)
+
+**A DLS → SF2 converter**: the embedded DLS bank (RIFF DLS Level 1/2) is converted in memory into a SoundFont that
+TinySoundFont loads (`tsf_load_memory`), preferred over the global SF2 when present.
+
 ## What remains, if it ever matters
 
 - [ ] Base: parse the optional `DLS ` RIFF subchunk after the `data` chunk in `FileFormatMIDI`, with a unit test.

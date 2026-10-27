@@ -1273,7 +1273,10 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				/* Detect UV seam vertices and apply penalties. */
+				/* Detect the UV seam vertices and the GROUP BORDER vertices, and anchor them. A group border (two materials
+				 * meeting on a welded surface with continuous UVs) is otherwise an ordinary interior edge for the QEM: on a
+				 * flat region it drifted by whole cells (2026-10-27, owner decision: the seams' penalty; test
+				 * theBorderBetweenTwoGroupsStaysOnItsLine). */
 				const auto & srcVerts = m_source.vertices();
 
 				for ( size_t v = 0; v < vertices.size(); ++v )
@@ -1291,6 +1294,10 @@ namespace EmEn::Base::VertexFactory
 					Math::Vector< 3, vertex_data_t > firstTC;
 					bool isSeam = false;
 					bool hasFirst = false;
+					const auto firstGroup = triangles[vertices[v].adjacentTris[0]].groupIndex;
+					const auto isGroupBorder = std::ranges::any_of(vertices[v].adjacentTris, [&triangles, firstGroup] (auto triIdx) {
+						return triangles[triIdx].groupIndex != firstGroup;
+					});
 
 					for ( const auto triIdx : vertices[v].adjacentTris )
 					{
@@ -1322,9 +1329,9 @@ namespace EmEn::Base::VertexFactory
 						}
 					}
 
-					if ( isSeam )
+					if ( isSeam || isGroupBorder )
 					{
-						/* Anchor a UV seam vertex where it is: a weighted POINT quadric (the squared distance to it). It used
+						/* Anchor a UV seam (or group border) vertex where it is, ONE penalty when it is both: a weighted POINT quadric (the squared distance to it). It used
 						 * to be all ten coefficients set to the weight — not a valid quadric (not positive semi-definite): its
 						 * optimal position was arbitrary and could throw a seam vertex off the surface (2026-10-09: 0.053
 						 * from a unit sphere). */
