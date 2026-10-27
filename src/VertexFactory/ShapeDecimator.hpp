@@ -896,7 +896,15 @@ namespace EmEn::Base::VertexFactory
 					return quantized[first] == quantized[second];
 				};
 
-				FlatHashMap< index_data_t, index_data_t, decltype(hashVertex), decltype(samePosition) > firstAtPosition{srcVerts.size(), hashVertex, samePosition};
+				FlatHashMap< index_data_t, index_data_t, decltype(hashVertex), decltype(samePosition) > firstAtPosition{0, hashVertex, samePosition};
+
+				/* The large table is initialized in chunks with a stop check (FlatHashMap::reserve(count, stopToken), D7 under
+				 * MSVC: its one-go value-initialization held a stop for up to ~48 ms, 2026-10-27). */
+				if ( !firstAtPosition.reserve(srcVerts.size(), m_stopToken) )
+				{
+					return false;
+				}
+
 				std::vector< index_data_t > workIndexOf(srcVerts.size());
 
 				work.representatives.clear();
@@ -1153,7 +1161,15 @@ namespace EmEn::Base::VertexFactory
 					index_data_t b{0};
 				};
 
-				FlatHashMap< uint64_t, EdgeTally > edges{(triangles.size() * 3) / 2};
+				FlatHashMap< uint64_t, EdgeTally > edges;
+
+				/* The large table is initialized in chunks with a stop check (FlatHashMap::reserve(count, stopToken), D7 under
+				 * MSVC: its one-go value-initialization held a stop for up to ~48 ms, 2026-10-27). */
+				if ( !edges.reserve((triangles.size() * 3) / 2, m_stopToken) )
+				{
+					return false;
+				}
+
 
 				for ( const auto & tri : triangles )
 				{
@@ -1651,7 +1667,15 @@ namespace EmEn::Base::VertexFactory
 			buildCollapseQueue (const std::vector< VertexData > & vertices, const std::vector< TriangleData > & triangles, CollapseQueue & queue) const noexcept
 			{
 				/* NOTE: A flat table (D7); only membership is asked, the queue order does not depend on it. */
-				FlatHashMap< uint64_t, bool > processedEdges{(triangles.size() * 3) / 2};
+				FlatHashMap< uint64_t, bool > processedEdges;
+
+				/* The large table is initialized in chunks with a stop check (FlatHashMap::reserve(count, stopToken), D7 under
+				 * MSVC: its one-go value-initialization held a stop for up to ~48 ms, 2026-10-27). */
+				if ( !processedEdges.reserve((triangles.size() * 3) / 2, m_stopToken) )
+				{
+					return false;
+				}
+
 				size_t iteration = 0;
 
 				for ( size_t t = 0; t < triangles.size(); ++t )
@@ -1718,7 +1742,15 @@ namespace EmEn::Base::VertexFactory
 					}
 				};
 
-				FlatHashMap< OutputVertexKey, index_data_t, OutputVertexKeyHash > vertexMap{triangles.size()};
+				FlatHashMap< OutputVertexKey, index_data_t, OutputVertexKeyHash > vertexMap;
+
+				/* The large table is initialized in chunks with a stop check (FlatHashMap::reserve(count, stopToken), D7 under
+				 * MSVC: its one-go value-initialization held a stop for up to ~48 ms, 2026-10-27). */
+				if ( !vertexMap.reserve(triangles.size(), m_stopToken) )
+				{
+					return {};
+				}
+
 				/* Three per triangle: the output vertex of each corner. */
 				std::vector< index_data_t > outputCorners(triangles.size() * 3);
 				size_t iteration = 0;

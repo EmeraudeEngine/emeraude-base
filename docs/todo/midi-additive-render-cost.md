@@ -30,6 +30,11 @@ with a bounded latency in every stage).
 
 The SoundFont renderer is bounded by TinySoundFont's voice limit (256, `tsf_set_max_voices()`), not by this item.
 
+## Owner decision (2026-10-27)
+
+**A polyphony limit in the additive renderer (256 voices, the oldest voice stolen, as TinySoundFont) AND a
+`std::stop_token` through `ReadOptions`** (the same path as `wavefactory-decode-stop-token`). No voice-second budget.
+
 ## What remains — owner decision first
 
 Options (to present with trade-offs and a recommendation):

@@ -27,6 +27,8 @@
 /* STL inclusions. */
 #include <cstddef>
 #include <cstdint>
+#include <stop_token>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -222,4 +224,49 @@ TEST(FlatHashMap, customKeyAndClear)
 	EXPECT_TRUE(map.empty());
 	EXPECT_EQ(map.slotCount(), slots);
 	EXPECT_EQ(map.find(Point{.x = 0, .y = 0}), nullptr);
+}
+
+TEST(FlatHashMap, anInterruptibleReserveStoppedBeforeItStartsLeavesTheMapUnchanged)
+{
+	FlatHashMap< uint64_t, uint32_t > map{8};
+
+	static_cast< void >(map.tryEmplace(3, 30));
+
+	const auto slots = map.slotCount();
+	std::stop_source stop;
+
+	stop.request_stop();
+
+	EXPECT_FALSE(map.reserve(4'000'000, stop.get_token()));
+	EXPECT_EQ(map.slotCount(), slots);
+	EXPECT_EQ(map.size(), 1U);
+	ASSERT_NE(map.find(3), nullptr);
+	EXPECT_EQ(*map.find(3), 30U);
+}
+
+TEST(FlatHashMap, anInterruptibleReserveNotStoppedSizesLikeReserve)
+{
+	FlatHashMap< uint64_t, uint32_t > plain;
+	FlatHashMap< uint64_t, uint32_t > interruptible;
+
+	plain.reserve(1'000'000);
+
+	static_cast< void >(interruptible.tryEmplace(11, 1));
+	static_cast< void >(interruptible.tryEmplace(22, 2));
+
+	EXPECT_TRUE(interruptible.reserve(1'000'000, std::stop_token{}));
+	EXPECT_EQ(interruptible.slotCount(), plain.slotCount());
+	EXPECT_EQ(interruptible.size(), 2U);
+	ASSERT_NE(interruptible.find(11), nullptr);
+	EXPECT_EQ(*interruptible.find(11), 1U);
+	ASSERT_NE(interruptible.find(22), nullptr);
+	EXPECT_EQ(*interruptible.find(22), 2U);
+
+	/* Already large enough: nothing to do, whatever the token. */
+	std::stop_source stop;
+
+	stop.request_stop();
+
+	EXPECT_TRUE(interruptible.reserve(10, stop.get_token()));
+	EXPECT_EQ(interruptible.slotCount(), plain.slotCount());
 }

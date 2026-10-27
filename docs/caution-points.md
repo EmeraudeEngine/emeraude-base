@@ -466,7 +466,7 @@ task is never purged). A `wait()` WITHOUT a stop still waits for a queued task: 
 ⚠️ The measured stop latency of a 2.24 M-triangle decimation is 16 ms worst on Linux (2.5 ms on the M2): 1.52 s, then
 0.74 s before the D7 rewrite, where the rest was the DEALLOCATION of its node-based containers; 25 ms after D7 step 4
 (`9fb8f86`), then 16 ms once the per-vertex lists became trivially destructible (`fd9dc5c`) — the worst row is now the
-start (allocating the work mesh). Detail below in § VertexFactory and item `task-handle-and-stop-token`.
+start (allocating the work mesh). Detail below in § VertexFactory (the item `task-handle-and-stop-token` closed 2026-10-27).
 Proof: 8 `ThreadPoolTaskHandle.*` tests, 20 rounds under TSan with 0 report; Release and ASan/UBSan green.
 
 ### ⚠️⚠️ An object running SEVERAL tasks owns them through a `TaskGroup` (Ave Robustus II, 2026-10-15)
@@ -488,8 +488,7 @@ that started it. Contract:
 - the owner declares the group LAST (destroyed first). State: `Base::Mutex` + annotations (D12), notifications after
   the guard.
 Proof: 11 `ThreadPoolTaskGroup.*` tests (+ 2 death tests); the deadlock tests hung on the first contract,
-`AStopNeverWaitsForOtherOwnersQueuedWork` took 11.4 s without the purge; Release full suite 2529; ASan/UBSan and TSan in
-the item `task-handle-and-stop-token`; clang `-Wthread-safety` clean.
+`AStopNeverWaitsForOtherOwnersQueuedWork` took 11.4 s without the purge; Release full suite 2529; ASan/UBSan and TSan green (2026-10-15); clang `-Wthread-safety` clean.
 
 ### ⚠️⚠️ A self-join ABORTS, in every build — never destroy or stop an owner from its own thread (D2, 2026-10-08)
 
@@ -876,13 +875,36 @@ on Linux, 2.5 ms on the M2, since `fd9dc5c`** (2026-10-09; Windows to re-measure
 stages' node-based containers; 25 ms after D7 step 4 (`9fb8f86`: a lean work mesh, the adjacency in one arena, every
 hash table a `FlatHashMap`, a total collapse order); then the per-vertex lists became `ArenaList`s, trivially
 destructible, so a stop no longer pays a million destructors (~20 ms on Linux, ~65 ms on a Windows laptop before
-`fd9dc5c`). Same figures as § *A job that touches an object is `submit()`ted* above; item
-`task-handle-and-stop-token`. ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
+`fd9dc5c`). Same figures as § *A job that touches an object is `submit()`ted* above; § *The decimator's large tables initialize INTERRUPTIBLY* below. ⚠️ Its QEM costs were 0 on fine meshes (`Vector::normalized()` zeroes small normals:
 item `vector-normalized-absolute-epsilon`).
 ⚠️⚠️ **The decimation is the same on the three OS only since 2026-10-09 (D7 step 3):** it iterated per-vertex
 `std::unordered_set`s, whose order differs per standard library — the same mesh gave three different decimations on
 Linux, macOS and Windows (even triangle counts). Its adjacency lists are now insertion-ordered arrays; never iterate an
 unordered container where the order drives the result (`FlatHashMap` with `PortableHash` iterates the same everywhere).
+
+### ⚠️ The decimator's large tables initialize INTERRUPTIBLY; its output is NOT bit-identical across OS (2026-10-27)
+
+**The detection gap (FIXED 2026-10-27).** Each stage sized a `FlatHashMap` of millions of slots in its constructor
+(8.4 M slots, ~200 MB for the penalties' `EdgeTally` table, ~134 MB for the collapse queue's processed edges on the
+2.24 M-triangle sphere) and value-initialized it in one go, with no stop check: a stop landing there was seen only once
+the table was ready — ~48 ms after the penalty stage started under MSVC (Windows i7-13850HX, base `a673299`, a
+stage-timed copy and a 250-900 ms sweep: worst **68.9 ms** against the 50 ms bound of D7). `FlatHashMap::reserve(count,
+stopToken)` (new) allocates once, then value-initializes in chunks of 65 536 slots with a stop check between them and
+leaves the map unchanged when stopped; the four decimator tables (work mesh, penalties, collapse queue, output) take
+it. Output bit-identical (the 8 goldens before = after on Linux); Linux worst 16 → 9.2 ms (the start row), every
+later row 0.4-2 ms. Tests `FlatHashMap.anInterruptibleReserve*`.
+**The release floor under MSVC (~20 ms).** Stopped during the collapses, the stop is SEEN within 0.01-2 ms; then the
+unwinding frees a few blocks of hundreds of MB: the collapse queue's vector 4.3-6.4 ms, triangles + vertices 6.3-9.4, the
+arena 5.4-11, the work mesh 0.8 ms (~1.5 ms in total on Linux). Pinned to E-cores ~30 ms, to P-cores ~20 ms. A full
+uninterrupted decimation there: 10.3 s (work mesh 122 ms, init 175, corner UV 77, quadrics 83, penalties 408, queue
+767, collapses 7482, output 1181) — about 2.5 times Linux. ⚠️ Measuring only the unit test's fixed delays hides such a
+gap: time the stages or sweep the delays finely.
+**Cross-OS bit identity is NOT promised (owner decision 2026-10-27).** A decimation is deterministic on ONE OS (same
+input, same output, every run). Across OS the floating point differs: macOS arm64 contracts multiply-adds into FMA (with
+`-ffp-contract=off` its counts match Linux), and MSVC (`/fp:precise`, SSE2: no FMA) differs through its libm / its
+evaluation of the same expressions — on Windows 4 of the 8 goldens equal Linux's (sphere48, hollowedCube, capsule,
+cylinder), sphere300 has 11112 vertices against 11113, torus / geodesic / sphere48-normalmap the same counts with other
+hashes. No `-ffp-contract=off` cascade-wide. The ITERATION order is portable (below): only the arithmetic differs.
 
 ### ⚠️ No `.at()` in the base: an inconsistent shape is REFUSED, a construction invariant is `find()` + Debug `assert` (2026-10-08, FIXED)
 
@@ -1262,7 +1284,7 @@ purpose: `CartesianFrame::getUprightSpriteModelMatrix()` (a camera at the sprite
 fallback). Audit of the 243 call sites (2026-10-09): ~140 safe, ~75 already wrong and fixed by it (small-triangle
 normals), 8 that leaned on "short → zero" — guarded where a UNIT vector is projected (engine wheel `12374f4c`,
 projet-alpha Fox / Paladin `168dd9b1`), judged safe otherwise (a push field's centre, `lookAt` with target ≈
-position). The decimator's remaining QEM numerics: item `task-handle-and-stop-token`.
+position). The decimator's QEM numerics: § *The decimator's QEM numerics* (fixed 2026-10-09).
 Tests: `MathVector/*.NormalizeAnyScale`, `NormalizeRefusesZeroAndNonFinite`, `MathVectorDegeneracy.*`,
 `MathSpace2DIntersections.shortCrossingSegmentsIntersect`, `VertexFactoryShapeDecimator.aFineMeshIsDecimatedByItsQuadrics`;
 `gemCutsKeepTheirGeometry`'s princess sumAbsNormal +6 (6 corners had a ZERO normal).

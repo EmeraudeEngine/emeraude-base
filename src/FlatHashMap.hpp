@@ -33,6 +33,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <stop_token>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -150,6 +151,47 @@ namespace EmEn::Base
 				{
 					this->rehash(wanted);
 				}
+			}
+
+			/**
+			 * @brief Makes room for at least expectedCount entries like reserve(), but initializes the new table in chunks
+			 * of InitializationChunk slots and gives up between two chunks once a stop is requested.
+			 * @note Why (Ave Robustus II D7, 2026-10-27): a decimation stage sizes a table of millions of slots (8.4 M,
+			 * ~200 MB on a 2.24 M-triangle mesh); value-initializing it in one go held a stop for ~48 ms under MSVC — the
+			 * worst stop latency of the decimator (68.9 ms against the 50 ms bound). The allocation itself is one call; the
+			 * initialization is what takes the time.
+			 * @param expectedCount The number of entries.
+			 * @param stopToken The stop to watch between two chunks.
+			 * @return bool False when the stop was requested before the new table was ready: the map is unchanged. True
+			 * otherwise, including when no growth was needed.
+			 */
+			[[nodiscard]]
+			bool
+			reserve (size_t expectedCount, const std::stop_token & stopToken) noexcept
+			{
+				const auto wanted = FlatHashMap::capacityFor(expectedCount);
+
+				if ( wanted <= m_slots.size() )
+				{
+					return true;
+				}
+
+				std::vector< Slot > slots;
+				slots.reserve(wanted);
+
+				while ( slots.size() < wanted )
+				{
+					if ( stopToken.stop_requested() )
+					{
+						return false;
+					}
+
+					slots.resize(std::min(wanted, slots.size() + InitializationChunk));
+				}
+
+				this->adopt(std::move(slots));
+
+				return true;
 			}
 
 			/**
@@ -377,6 +419,10 @@ namespace EmEn::Base
 				return NotFound;
 			}
 
+			/** @brief The slots value-initialized between two stop checks by the interruptible reserve() (~1 ms of
+			 * initialization at the worst slot size measured). */
+			static constexpr size_t InitializationChunk{65536};
+
 			/** @brief One slot of the table. */
 			struct Slot final
 			{
@@ -418,10 +464,20 @@ namespace EmEn::Base
 			void
 			rehash (size_t slotCount) noexcept
 			{
-				std::vector< Slot > previous(slotCount);
+				this->adopt(std::vector< Slot >(slotCount));
+			}
+
+			/**
+			 * @brief Takes a table of empty slots (a power of two) and moves every entry into it.
+			 * @param slots The new table, every slot empty.
+			 */
+			void
+			adopt (std::vector< Slot > slots) noexcept
+			{
+				std::vector< Slot > previous{std::move(slots)};
 
 				previous.swap(m_slots);
-				m_mask = slotCount - 1;
+				m_mask = m_slots.size() - 1;
 
 				for ( auto & slot : previous )
 				{

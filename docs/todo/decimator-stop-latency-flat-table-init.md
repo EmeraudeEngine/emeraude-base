@@ -1,7 +1,7 @@
 ---
 id: decimator-stop-latency-flat-table-init
 title: The decimator's stop latency exceeds the 50 ms bound on Windows (68.9 ms): its large flat tables are built without a stop check
-status: open
+status: in-progress
 priority: high
 scope: src/VertexFactory/ShapeDecimator.hpp, src/FlatHashMap (construction)
 opened: 2026-10-15
@@ -36,23 +36,24 @@ Two causes, measured:
 Full uninterrupted decimation there: 10.3 s (work mesh 122 ms, init 175, corner UV 77, quadrics 83, penalties 408,
 queue 767, collapses 7482, output 1181) — about 2.5 times Linux.
 
+## Owner decision (2026-10-27)
+
+**An interruptible table initialization**: the large `FlatHashMap` tables are filled in chunks with a stop check
+between chunks (output bit-identical). The SwissTable layout and the smaller tables were not chosen.
+
 ## What remains
 
-- Close the detection gap (owner to choose, with the A/B of the plan): an interruptible table initialization (fill in
-  chunks with a stop check), or smaller / lazily-touched tables (sized to what the stage really inserts). A third form
-  of the second: a control-byte layout in the style of SwissTable / `absl::flat_hash_map`, where only a 1-byte-per-slot
-  metadata array is cleared (8.4 MB instead of 200 MB) — it bounds the gap only if that clear stays under the bound at
-  the worst mesh size (https://abseil.io/about/design/swisstables).
-- Then the release floor under MSVC if it still breaks the bound with the gap closed (e.g. one arena for the large
-  tables, released once).
-- Proof: the 250-900 ms sweep on Windows, worst < 50 ms on P- and E-cores; Linux and the M2 unchanged; the goldens
-  unchanged.
+DONE on Linux 2026-10-27 (`docs/caution-points.md` § *The decimator's large tables initialize INTERRUPTIBLY*): the
+chunked `FlatHashMap::reserve(count, stopToken)` in the four tables; goldens unchanged; Linux worst 9.2 ms.
+- The proof where the defect was: the Windows peer's 250-900 ms sweep (10 ms steps) with the stage-timed copy, worst
+  under 50 ms on P- and E-cores. If the release floor (~20 ms) still breaks the bound: one arena for the large tables,
+  released once. Then this file is deleted.
 
 ## ⚠️ Traps
 
 - The output must stay bit-identical on each OS (`DISABLED_PrintGoldenFingerprints`): the table initialization and the
   release do not change the decimation, so a golden that moves means the change went too far.
-- Cross-OS goldens (a separate fact, for the open `-ffp-contract` / libm decision in `task-handle-and-stop-token`): on
+- Cross-OS goldens (decided 2026-10-27: not promised, `docs/caution-points.md` § VertexFactory): on
   this Windows machine 4 / 8 goldens equal Linux's (sphere48, hollowedCube, capsule, cylinder); sphere300 has 11112 vs
   11113 vertices; torus, geodesic and sphere48-normalmap have the same counts but other hashes. MSVC with `/fp:precise`
   and no `/arch` (SSE2) emits NO FMA, so on Windows the difference is the libm or MSVC's evaluation of the same
@@ -61,7 +62,8 @@ queue 767, collapses 7482, output 1181) — about 2.5 times Linux.
 
 ## References
 
-- Base item `task-handle-and-stop-token` (the stop token in every stage, the earlier latency history).
+- Base `docs/caution-points.md` § VertexFactory (the stop token in every stage, the latency history; the former item
+  `task-handle-and-stop-token`).
 - Base `docs/caution-points.md` § VertexFactory (the release floor history); engine
   `docs/subsystems/graphics/20-15b-level-of-detail.md` (the LOD job's stop).
 - projet-alpha `docs/plans/ave-robustus-ii.md` § 5.2 (found on the way), § 7 D7.

@@ -30,12 +30,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-#include <functional>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string_view>
-#include <utility>
 
 namespace EmEn::Base::PixelFactory
 {

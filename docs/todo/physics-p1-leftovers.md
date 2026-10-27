@@ -1,7 +1,7 @@
 ---
 id: physics-p1-leftovers
 title: Physics P1 leftovers — wanted only when a consumer needs them
-status: parked
+status: open
 priority: unranked
 scope: emeraude-base Math (RigidBody, Space3D Contacts / Casts)
 opened: 2026-10-07
@@ -10,7 +10,11 @@ tags: [physics-overhaul, math]
 
 # Physics P1 leftovers — wanted only when a consumer needs them
 
-## Why parked
+## Owner decision (2026-10-27)
+
+**Implement it**, consumer or not (owner, closing every emeraude-base item).
+
+## Why it was parked
 
 Owner decision (2026-10-07): the P1 items `contact-manifold-generation`, `rigid-body-math-helpers` and
 `shape-casts-with-hit-normal` are closed — what they delivered is documented in `docs/subsystems/source-tree/17-…`,

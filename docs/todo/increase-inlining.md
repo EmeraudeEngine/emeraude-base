@@ -10,6 +10,10 @@ tags: [performance, cpp]
 
 # Increase inlining where it pays
 
+## Owner decision (2026-10-27)
+
+**Implement it**, consumer or not (owner, closing every emeraude-base item).
+
 ## What remains
 
 - [ ] Continue moving small, hot accessors into the headers, and **measure**. The project rule is

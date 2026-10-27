@@ -10,6 +10,10 @@ tags: [audio, midi, deferred]
 
 # RMID embedded DLS sound bank
 
+## Owner decision (2026-10-27)
+
+**Implement it**, consumer or not (owner, closing every emeraude-base item).
+
 ## Why
 
 An RMID container can carry an embedded DLS sound bank alongside the SMF data. The current unwrap
