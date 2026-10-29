@@ -326,4 +326,4 @@ set has no Core Guidelines check (C26xxx): clang-tidy gates those.
 Kept ON PURPOSE: C6262 ×5 (a frame above 16 KiB: `LZMA::Compressor::compress()`, `Decompressor::decompress()`,
 `HTTPSClient::performHop()`, `Font`'s glyph-array emplace, `Synthesizer::generateSinTable()`) — the smallest thread
 stack of the cascade is macOS's 512 KiB for a secondary thread, the frames stay well under it; C6993 ×3 (`Shape.hpp`,
-"OpenMP constructs ignored": informational).
+"OpenMP constructs ignored": informational; gone with OpenMP, 2026-10-29).

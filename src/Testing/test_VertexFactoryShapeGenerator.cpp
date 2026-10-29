@@ -28,17 +28,34 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <fstream>
+#include <initializer_list>
+#include <iterator>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <span>
+#include <sstream>
+#include <string>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
+#include "Math/Matrix.hpp"
+#include "Math/Space3D/AACuboid.hpp"
 #include "Math/Vector.hpp"
+#include "Thread.hpp"
+#include "VertexFactory/CapUVMapping.hpp"
 #include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeBuilder.hpp"
+#include "VertexFactory/ShapeBuilderOptions.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
+#include "VertexFactory/TextureCoordinates.hpp"
+#include "VertexFactory/Types.hpp"
 
 using namespace EmEn::Base::VertexFactory;
 
@@ -1708,4 +1725,108 @@ TEST(VertexFactoryShapeGenerator, computedTangentFrameOfTheReferenceQuad)
 TEST(VertexFactoryShapeGenerator, computedTangentFrameOfAMirroredUVIsland)
 {
 	expectFrame(buildQuad(true), -1.0F, -1.0F);
+}
+
+namespace
+{
+	/**
+	 * @brief Returns the process' thread count (Linux: /proc/self/status), nothing elsewhere.
+	 * @return std::optional< int >
+	 */
+	std::optional< int >
+	processThreadCount () noexcept
+	{
+#ifdef __linux__
+		std::ifstream status{"/proc/self/status"};
+		std::string line;
+
+		while ( std::getline(status, line) )
+		{
+			if ( line.starts_with("Threads:") )
+			{
+				std::istringstream value{line.substr(8)};
+				int count = 0;
+
+				if ( value >> count )
+				{
+					return count;
+				}
+			}
+		}
+#endif
+
+		return std::nullopt;
+	}
+
+	/**
+	 * @brief Expects a vertex's texture coordinates to be its cubic projection, scaled per axis.
+	 * @param vertex A reference to the vertex.
+	 * @param scales The scales (u, v, w).
+	 */
+	void
+	expectScaledCubicCoordinates (const ShapeVertex< float > & vertex, const EmEn::Base::Math::Vector< 3, float > & scales)
+	{
+		using EmEn::Base::Math::U;
+		using EmEn::Base::Math::V;
+		using EmEn::Base::Math::Z;
+
+		const auto expected = TextureCoordinates::generateCubicCoordinates(vertex.position(), vertex.normal());
+		const auto & actual = vertex.textureCoordinates();
+
+		EXPECT_FLOAT_EQ(actual[U], expected[U] * scales[U]);
+		EXPECT_FLOAT_EQ(actual[V], expected[V] * scales[V]);
+		/* The third texture coordinate ("w") is the vector's THIRD component: Math::Z, never Math::W (the fourth). */
+		EXPECT_FLOAT_EQ(actual[Z], expected[Z] * scales[Z]);
+	}
+}
+
+/* The per-triangle computations ran in OpenMP loops (2026-10-29): libgomp gave every CALLING thread its own team of one
+ * thread per core, kept alive for the process — ~960 idle threads in projet-alpha's city at side 128 (one team per
+ * loader-pool worker), owned by nobody, invisible to TSan. Owner decision: OpenMP removed from the base; a parallel
+ * variant, if one is ever proven useful, takes a valid Base::ThreadPool pointer. Run from a NEW thread: a team is per
+ * calling thread, so one created by an earlier test would hide it. */
+TEST(VertexFactoryShapeGenerator, shapeComputationsStartNoThread)
+{
+	if ( !processThreadCount().has_value() )
+	{
+		GTEST_SKIP() << "No thread count on this platform.";
+	}
+
+	std::optional< int > before;
+	std::optional< int > after;
+	bool computed = false;
+
+	{
+		EmEn::Base::Thread worker;
+
+		ASSERT_TRUE(worker.start([&before, &after, &computed] () {
+			/* Counted BEFORE the sphere: its generator runs these computations too. */
+			before = processThreadCount();
+
+			auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 64U, 32U);
+
+			computed = sphere.computeTriangleNormal() && sphere.generateTextureCoordinates() && sphere.computeTriangleTangent() &&
+				sphere.computeTriangleTangentFromEdge() && sphere.computeTriangleTBNSpace();
+			after = processThreadCount();
+		}));
+	}
+
+	EXPECT_TRUE(computed);
+	ASSERT_TRUE(before.has_value());
+	EXPECT_EQ(after, before);
+}
+
+/* The texture coordinates are a function of each vertex's own position and normal (cubic projection), the scales
+ * applied per axis: computed once per vertex, the same for a vertex however many triangles share it. */
+TEST(VertexFactoryShapeGenerator, generatedTextureCoordinatesAreTheVertexCubicProjection)
+{
+	auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 16U, 8U);
+
+	ASSERT_TRUE(sphere.generateTextureCoordinates(2.0F, 3.0F, 4.0F));
+	ASSERT_FALSE(sphere.vertices().empty());
+
+	for ( const auto & vertex : sphere.vertices() )
+	{
+		expectScaledCubicCoordinates(vertex, {2.0F, 3.0F, 4.0F});
+	}
 }

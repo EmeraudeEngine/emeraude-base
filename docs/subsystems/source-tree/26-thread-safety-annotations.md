@@ -84,8 +84,9 @@ handoff, a forgotten member). `EMERAUDE_ENABLE_TSAN` (default OFF, GCC / Clang /
 `EMERAUDE_ENABLE_ASAN`, `_LSAN` and `_MSAN`: the configure step refuses them together; UBSan may join) adds
 `-fsanitize=thread -fno-omit-frame-pointer -g -O1` to `EMERAUDE_COMPILE_OPTIONS` and `-fsanitize=thread` to the link,
 so it reaches the engine and the applications built on top; googletest is instrumented too. The five switches:
-base `README.md` § Options. Run it with `OMP_NUM_THREADS=1`: the system's libgomp is not instrumented and
-every VertexFactory OpenMP loop reads as a race otherwise (3374 false reports in one run). First full run, 2026-10-12:
+base `README.md` § Options. (Until 2026-10-29 it ran with `OMP_NUM_THREADS=1`: the system's libgomp is not
+instrumented and every VertexFactory OpenMP loop read as a race — 3374 false reports in one run; OpenMP left the base,
+`docs/caution-points.md` § No OpenMP.) First full run, 2026-10-12:
 2510 tests, 0 report, after it found the `TimedEvent` sleep (`docs/caution-points.md` § Time). Procedure: projet-alpha
 `docs/unit-testing.md` § "ThreadSanitizer".
 

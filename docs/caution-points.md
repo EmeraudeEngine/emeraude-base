@@ -506,13 +506,25 @@ caller's discipline, now documented as `@pre`: `~EventTrait` (projet-alpha's `Li
 Tests: `BaseThreadDeathTest.aThreadJoiningItselfAborts`, `ThreadPoolTaskHandleDeathTest.TaskWaitingForItsOwnHandleAborts`
 (death tests: the faulty statement runs in a child process).
 
-### ⚠️ TSan reports OpenMP regions as races — run a TSan test with `OMP_NUM_THREADS=1` (2026-10-08)
+### ⚠️ No OpenMP in the base — parallelism goes through a `Base::ThreadPool` the caller hands in (owner, 2026-10-29)
 
-libgomp is not built with TSan: its barriers are invisible, so the end of a `#pragma omp parallel for` looks
-unsynchronized. Measured on `VertexFactoryShapeDecimator.aRequestedStopTokenStopsTheDecimation` (its sphere goes through
-`Shape::computeTriangleTangent()`'s OpenMP loop): 7 "data race" reports between an OpenMP worker and the main thread's
-later stack frames — 0 with `OMP_NUM_THREADS=1`, same test, same binary. **Rule:** run TSan with `OMP_NUM_THREADS=1`
-(it then checks our own threads only); a race INSIDE an OpenMP region needs an Archer / TSan-aware OpenMP runtime.
+`Shape` ran five per-triangle computations in `#pragma omp parallel for` loops (Linux `-fopenmp`, Windows
+`/openmp:experimental`, never on macOS). Removed with `SetupOpenMP.cmake` and the `EMERAUDE_ENABLE_OPENMP` option:
+- **Threads owned by nobody**: libgomp gives every CALLING thread its own team of one thread per core and keeps it for
+  that thread's life — ~960 idle threads in a downstream city scene (one team per loader-pool worker), outside the
+  `Base::Thread` / jthread model, never stopped by their owner.
+- **A data race and an out-of-bounds write** in `generateTextureCoordinates()`: per TRIANGLE, so a shared vertex was
+  written by several threads at once; and `textureCoordinates[Math::W]` (index 3) on a 3-component vector — the third
+  texture coordinate is `Math::Z`. Tests `VertexFactoryShapeGenerator.shapeComputationsStartNoThread` (2 → 33 threads
+  before, from a fresh thread) and `generatedTextureCoordinatesAreTheVertexCubicProjection` (`_GLIBCXX_ASSERTIONS`
+  aborted on `std::array< float, 3 >::operator[]` before).
+- **Blind tools**: libgomp is not TSan-instrumented (its barriers read as races: 3374 false reports in one run, hence
+  the former `OMP_NUM_THREADS=1` rule — no longer needed).
+- **Never proven useful**: the per-vertex computations had already lost OpenMP (its fork/join cost above the work,
+  `docs/subsystems/source-tree/09-vertexfactory-shape-vertex-computation.md`).
+
+**Rule (owner):** a base algorithm is SERIAL; if parallelism is needed and proven useful (an A/B, Ave Performus), it
+takes a pointer to a valid `Base::ThreadPool` from its caller — never a hidden runtime that spawns its own threads.
 
 ## IO / std::filesystem (triad, 2026-09-30)
 

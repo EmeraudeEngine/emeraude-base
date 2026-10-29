@@ -769,26 +769,19 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				const auto trianglesCount = static_cast< int64_t >(m_triangles.size());
-				const auto & trianglesRef = m_triangles;
-				auto & verticesRef = m_vertices;
-
-				#pragma omp parallel for default(none) shared(uScale, vScale, wScale, trianglesCount, trianglesRef, verticesRef)
-				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
+				/* NOTE: Once per vertex, from its own position and normal. It used to run per TRIANGLE in an OpenMP loop: a
+				 * vertex shared by several triangles was written by several threads at once (a data race), and computed
+				 * as many times (OpenMP removed from the base, owner 2026-10-29). */
+				for ( auto & vertex : m_vertices )
 				{
-					const auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
+					auto textureCoordinates = TextureCoordinates::generateCubicCoordinates(vertex.position(), vertex.normal());
+					textureCoordinates[Math::U] *= uScale;
+					textureCoordinates[Math::V] *= vScale;
+					/* ⚠️ The third coordinate ("w") is the THIRD component: Math::Z. Math::W is the fourth — it wrote past
+					 * this 3-component vector (2026-10-29, _GLIBCXX_ASSERTIONS). */
+					textureCoordinates[Math::Z] *= wScale;
 
-					for ( index_data_t vertexIndex = 0; vertexIndex < 3; ++vertexIndex )
-					{
-						auto & currentVertex = verticesRef[triangle.vertexIndex(vertexIndex)];
-
-						auto textureCoordinates = TextureCoordinates::generateCubicCoordinates(currentVertex.position(), currentVertex.normal());
-						textureCoordinates[Math::U] *= uScale;
-						textureCoordinates[Math::V] *= vScale;
-						textureCoordinates[Math::W] *= wScale;
-
-						currentVertex.setTextureCoordinates(textureCoordinates);
-					}
+					vertex.setTextureCoordinates(textureCoordinates);
 				}
 
 				m_textureCoordinatesDeclared = true;
@@ -818,18 +811,11 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				const auto trianglesCount = static_cast< int64_t >(m_triangles.size());
-				auto & trianglesRef = m_triangles;
-				const auto & verticesRef = m_vertices;
-
-				#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef, invert)
-				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
+				for ( auto & triangle : m_triangles )
 				{
-					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
-
-					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
-					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
-					const auto & vertexC = verticesRef[triangle.vertexIndex(2)];
+					const auto & vertexA = m_vertices[triangle.vertexIndex(0)];
+					const auto & vertexB = m_vertices[triangle.vertexIndex(1)];
+					const auto & vertexC = m_vertices[triangle.vertexIndex(2)];
 
 					/* Compute the surface normal. */
 					const auto normal = Math::Vector< 3, vertex_data_t >::normal(
@@ -871,18 +857,11 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				const auto trianglesCount = static_cast< int64_t >(m_triangles.size());
-				auto & trianglesRef = m_triangles;
-				const auto & verticesRef = m_vertices;
-
-				#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef)
-				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
+				for ( auto & triangle : m_triangles )
 				{
-					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
-
-					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
-					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
-					const auto & vertexC = verticesRef[triangle.vertexIndex(2)];
+					const auto & vertexA = m_vertices[triangle.vertexIndex(0)];
+					const auto & vertexB = m_vertices[triangle.vertexIndex(1)];
+					const auto & vertexC = m_vertices[triangle.vertexIndex(2)];
 
 					/* Compute the surface tangent frame (the tangent and its handedness). */
 					const auto [tangent, handedness] = triangleTangentFrame(vertexA, vertexB, vertexC);
@@ -917,17 +896,10 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				const auto trianglesCount = static_cast< int64_t >(m_triangles.size());
-				auto & trianglesRef = m_triangles;
-				const auto & verticesRef = m_vertices;
-
-				#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef)
-				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
+				for ( auto & triangle : m_triangles )
 				{
-					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
-
-					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
-					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
+					const auto & vertexA = m_vertices[triangle.vertexIndex(0)];
+					const auto & vertexB = m_vertices[triangle.vertexIndex(1)];
 
 					const auto edge = vertexB.position() - vertexA.position();
 					const auto & normal = triangle.surfaceNormal();
@@ -987,17 +959,11 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				const auto trianglesCount = static_cast< int64_t >(m_triangles.size());
-				auto & trianglesRef = m_triangles;
-				const auto & verticesRef = m_vertices;
-
-#pragma omp parallel for default(none) shared(trianglesCount, trianglesRef, verticesRef)
-				for ( int64_t triangleIndex = 0; triangleIndex < trianglesCount; ++triangleIndex )
+				for ( auto & triangle : m_triangles )
 				{
-					auto & triangle = trianglesRef[static_cast< std::size_t >(triangleIndex)];
-					const auto & vertexA = verticesRef[triangle.vertexIndex(0)];
-					const auto & vertexB = verticesRef[triangle.vertexIndex(1)];
-					const auto & vertexC = verticesRef[triangle.vertexIndex(2)];
+					const auto & vertexA = m_vertices[triangle.vertexIndex(0)];
+					const auto & vertexB = m_vertices[triangle.vertexIndex(1)];
+					const auto & vertexC = m_vertices[triangle.vertexIndex(2)];
 
 					/* Compute the surface tangent frame (the tangent and its handedness). */
 					const auto [tangent, handedness] = triangleTangentFrame(vertexA, vertexB, vertexC);

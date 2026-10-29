@@ -88,7 +88,6 @@ option(EMERAUDE_ENABLE_BENCHMARKS "Build the Google Benchmark suite(s) (Default 
 # (windows.x86_64-*-MT/MD) and gtest's CRT. When consumed by emeraude-engine the value is
 # inherited (cache); declared here so a standalone Windows build of base works too.
 option(EMERAUDE_USE_STATIC_RUNTIME "Build with the static MSVC runtime (Windows only)." Off)
-option(EMERAUDE_ENABLE_OPENMP "Enable OpenMP (used by VertexFactory)." On)
 
 # EMERAUDE_ENABLE_SANITIZERS (ASan + UBSan) was replaced on 2026-10-17: a build directory that still carries it ON would
 # silently lose its sanitizers.
@@ -366,7 +365,7 @@ else ()
 	if ( _emeraudeUseTSAN )
 		list(APPEND _emeraudeSanitizerList thread)
 		list(APPEND _emeraudeSanitizerCompileOptions -O1)
-		message(STATUS "[EmeraudeBase] ThreadSanitizer ENABLED (-O1 -g). Run with TSAN_OPTIONS=halt_on_error=1 for a hard verdict, and OMP_NUM_THREADS=1 (libgomp is not instrumented: its loops would read as races).")
+		message(STATUS "[EmeraudeBase] ThreadSanitizer ENABLED (-O1 -g). Run with TSAN_OPTIONS=halt_on_error=1 for a hard verdict.")
 	endif ()
 
 	if ( _emeraudeUseUBSAN )
@@ -721,9 +720,6 @@ include(SetupASIO)
 include(SetupLibreSSL)
 include(SetupThreads)
 include(SetupMeshOptimizer) # Mesh simplification (VertexFactory::simplifyShape); the engine also decodes EXT_meshopt_compression with it
-if ( EMERAUDE_ENABLE_OPENMP AND NOT APPLE )
-	include(SetupOpenMP)
-endif ()
 
 unset(TARGET_BINARY_FOR_SETUP)
 
@@ -752,10 +748,8 @@ if ( _EMERAUDE_BASE_DEP_DEFS )
 endif ()
 unset(_EMERAUDE_BASE_DEP_DEFS)
 
-# Same reasoning for the compile OPTIONS a Setup script attaches to the umbrella: SetupOpenMP's -fopenmp never
-# reached the modules, so VertexFactory's `#pragma omp parallel for` loops compiled inside the vertex module
-# (ShapeSimplifier, TreeGenerator, …) were silently serial — found by -Wunknown-pragmas when the paranoid warning
-# set was turned on (Ave Robustus II, 2026-10-08).
+# Same reasoning for the compile OPTIONS a Setup script attaches to the umbrella: they must reach the modules (the
+# former SetupOpenMP's -fopenmp never did, found by -Wunknown-pragmas on 2026-10-08; OpenMP left the base 2026-10-29).
 get_target_property(_EMERAUDE_BASE_DEP_OPTIONS emeraude_base INTERFACE_COMPILE_OPTIONS)
 if ( _EMERAUDE_BASE_DEP_OPTIONS )
 	target_compile_options(emeraude_base_flags INTERFACE ${_EMERAUDE_BASE_DEP_OPTIONS})

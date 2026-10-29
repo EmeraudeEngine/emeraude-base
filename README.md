@@ -253,7 +253,6 @@ Declared here, inherited by the whole cascade:
 | `EMERAUDE_ENABLE_TSAN` | `Off` | ThreadSanitizer: data races (`-O1 -g`). GCC, Clang, AppleClang. Exclusive with ASan, LSan, MSan. |
 | `EMERAUDE_ENABLE_UBSAN` | `Off` | UndefinedBehaviorSanitizer: undefined behaviour at run time, the first report aborts. GCC, Clang, AppleClang. ASan + UBSan is the unit test gate. |
 | `EMERAUDE_ENABLE_MSAN` | `Off` | MemorySanitizer: uninitialised reads. Clang on Linux only; every linked library must be instrumented. Exclusive with ASan, LSan, TSan. |
-| `EMERAUDE_ENABLE_OPENMP` | `On` | OpenMP (used by VertexFactory). |
 | `EMERAUDE_USE_STATIC_RUNTIME` | `Off` | Windows: static MSVC runtime (`/MT`). |
 
 The five sanitizer switches instrument the whole cascade (base, the engine, the application). A switch the toolchain

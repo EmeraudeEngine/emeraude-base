@@ -20,7 +20,7 @@ Suite target: **`EmeraudeBaseUnitTests`**, gated by the CMake option
   **`EMERAUDE_ENABLE_ASAN` + `EMERAUDE_ENABLE_UBSAN`** (Debug, separate build dir; `EMERAUDE_ENABLE_SANITIZERS` was
   removed 2026-10-17). A fix is "proven" when the
   suite is green in Release AND under the sanitizers. **TSan** (data races): the separate
-  `EMERAUDE_ENABLE_TSAN` build (exclusive with ASan), run with `OMP_NUM_THREADS=1` — 2510 tests,
+  `EMERAUDE_ENABLE_TSAN` build (exclusive with ASan) — 2510 tests,
   0 report on 2026-10-12 (procedure: projet-alpha `docs/unit-testing.md` § "ThreadSanitizer").
 - **No CI yet**: both gates are run manually.
 

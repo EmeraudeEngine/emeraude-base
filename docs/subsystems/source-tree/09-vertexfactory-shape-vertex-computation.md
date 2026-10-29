@@ -26,7 +26,8 @@ for ( size_t v = 0; v < m_vertices.size(); ++v )
 }
 ```
 
-**OpenMP was removed** from all three functions. With the adjacency table, each vertex iteration is lightweight (typically 4-8 triangle lookups). The OMP fork/join overhead exceeds the benefit for such small work units, especially when the engine already uses the thread pool for parallelism.
+**OpenMP was removed** from all three functions (and from the whole base on 2026-10-29: the per-triangle computations
+too, `docs/caution-points.md` § No OpenMP). With the adjacency table, each vertex iteration is lightweight (typically 4-8 triangle lookups). The OMP fork/join overhead exceeds the benefit for such small work units, especially when the engine already uses the thread pool for parallelism.
 
 **Code references:**
 - `VertexFactory/Shape.hpp:buildVertexToTriangleAdjacency()` — Private O(T) adjacency builder
