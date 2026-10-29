@@ -828,6 +828,20 @@ Linux / macOS, slowly refused on Windows); `NetworkHTTPSClient.aNameResolvingToB
 
 ## VertexFactory
 
+### ⚠️⚠️ `ShapeAssembler::merge(shape, transform)` turned the NORMALS the other way — `Matrix::noTranslation()` transposed (2026-10-29, FIXED)
+
+`Matrix< 4 >::noTranslation()` rebuilt its 3 × 3 block reading the column-major storage back row by row: the TRANSPOSE,
+for a rotation its inverse. Its only caller, `ShapeAssembler::merge(shape, transform)`, turns the merged normals with it.
+A 0° or 180° turn is a symmetric matrix and hid it; a 90° / 270° one sent every normal the other way:
+- the TileWorld region meshes (`Builder` merges each tile turned by its rotation): the vertical faces of a tile turned by
+  90° / 270° (the kerbs) were shaded with inverted normals and, through `TriangleMeshCollisionModel::fromShape()` (which
+  re-winds each triangle to face the authored normals), COLLIDED from the inside;
+- projet-alpha's city: a street bin facing ±X pulled the player into it and held them jittering (macOS-PA and
+  Windows-PA, 2026-10-29), a lamp post facing ±X collided the same way;
+- the engine's debug axes (`ResourceGenerator::axis()`) and `ShapeGenerator::generateHollowedCube()`.
+Tests `MathMatrixNoTranslation.KeepsTheLinearPartAsIs` and `VertexFactoryShapeAssembler.aTurnedMergeKeepsTheNormalsOutward`
+(failing before). The normals of a NON-UNIFORM scale would need the inverse-transpose: no caller merges with one today.
+
 ### ⚠️⚠️ A triangle index from a FILE was trusted — the native format's raw blob (2026-10-17, FIXED)
 
 `FileFormatNative` reads its triangles as a raw blob: their vertex, color and edge indices come from the file, and the

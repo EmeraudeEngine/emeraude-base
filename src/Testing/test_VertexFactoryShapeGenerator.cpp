@@ -49,6 +49,7 @@
 #include "Thread.hpp"
 #include "VertexFactory/CapUVMapping.hpp"
 #include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeAssembler.hpp"
 #include "VertexFactory/ShapeBuilder.hpp"
 #include "VertexFactory/ShapeBuilderOptions.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
@@ -1828,5 +1829,33 @@ TEST(VertexFactoryShapeGenerator, generatedTextureCoordinatesAreTheVertexCubicPr
 	for ( const auto & vertex : sphere.vertices() )
 	{
 		expectScaledCubicCoordinates(vertex, {2.0F, 3.0F, 4.0F});
+	}
+}
+
+/* 2026-10-29: ShapeAssembler::merge(shape, transform) rotated the normals by the TRANSPOSE of the transform's linear part
+ * (Matrix::noTranslation()): a 90° turn sent them the other way, a 0° / 180° one hid it (a symmetric matrix). A unit cube
+ * centred on the origin, merged turned and moved: every normal must still point out of it. */
+TEST(VertexFactoryShapeAssembler, aTurnedMergeKeepsTheNormalsOutward)
+{
+	using EmEn::Base::Math::Matrix;
+	using EmEn::Base::Math::Vector;
+
+	const auto cube = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F);
+	const Vector< 3, float > centre{5.0F, -2.0F, 1.0F};
+
+	for ( const auto & axis : {Vector< 3, float >{0.0F, 1.0F, 0.0F}, Vector< 3, float >{1.0F, 0.0F, 0.0F}, Vector< 3, float >{0.0F, 0.0F, 1.0F}} )
+	{
+		Shape< float, uint32_t > merged;
+		ShapeAssembler< float, uint32_t > assembler{merged};
+
+		ASSERT_TRUE(assembler.merge(cube, Matrix< 4, float >::translation(centre) * Matrix< 4, float >::rotation(std::numbers::pi_v< float > * 0.5F, axis)));
+		ASSERT_FALSE(merged.vertices().empty());
+
+		for ( const auto & vertex : merged.vertices() )
+		{
+			const auto outward = Vector< 3, float >::dotProduct(vertex.normal(), vertex.position() - centre);
+
+			EXPECT_GT(outward, 0.0F);
+		}
 	}
 }

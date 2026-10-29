@@ -28,6 +28,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <initializer_list>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -1628,4 +1629,32 @@ TEST(MathMatrixTrace, TheTraceKeepsTheFractions)
 	EXPECT_FLOAT_EQ((Matrix< 4, float >::identity() * 0.5F).trace(), 2.0F);
 	EXPECT_DOUBLE_EQ((Matrix< 3, double >::identity() * 0.25).trace(), 0.75);
 	EXPECT_EQ((Matrix< 2, int >::identity() * 3).trace(), 6);
+}
+
+/* 2026-10-29: noTranslation() rebuilt the 3 × 3 block TRANSPOSED (column-major storage read back row by row): for a
+ * rotation, the inverse. ShapeAssembler::merge() rotates the normals with it, so a shape merged with a 90° turn got
+ * its normals the other way round (a street bin's collision faced inward; projet-alpha city, 2026-10-29). */
+namespace
+{
+	void
+	expectNear4 (const Vector< 4, float > & actual, const Vector< 4, float > & expected)
+	{
+		for ( size_t index = 0; index < 4; ++index )
+		{
+			EXPECT_NEAR(actual[index], expected[index], 1.0E-6F);
+		}
+	}
+}
+
+TEST(MathMatrixNoTranslation, KeepsTheLinearPartAsIs)
+{
+	const auto transform = Matrix< 4, float >::translation(1.0F, 2.0F, 3.0F) * Matrix< 4, float >::rotation(std::numbers::pi_v< float > * 0.5F, 0.0F, 1.0F, 0.0F);
+	const auto linear = transform.noTranslation();
+
+	for ( const auto & direction : {Vector< 4, float >{1.0F, 0.0F, 0.0F, 0.0F}, Vector< 4, float >{0.0F, 1.0F, 0.0F, 0.0F}, Vector< 4, float >{0.0F, 0.0F, 1.0F, 0.0F}} )
+	{
+		expectNear4(linear * direction, transform * direction);
+	}
+
+	expectNear4(linear * Vector< 4, float >{0.0F, 0.0F, 0.0F, 1.0F}, Vector< 4, float >{0.0F, 0.0F, 0.0F, 1.0F});
 }

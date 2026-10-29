@@ -1482,11 +1482,14 @@ namespace EmEn::Base::Math
 			noTranslation () const noexcept
 				requires (dim_t == 4)
 			{
+				/* Column-major, as m_data: the three first columns kept, the translation column zeroed. ⚠️ Until 2026-10-29
+				 * this read the block back row by row — the TRANSPOSE, for a rotation its inverse: ShapeAssembler::merge()
+				 * turned the normals the other way (test MathMatrixNoTranslation.KeepsTheLinearPartAsIs). */
 				const std::array< precision_t, dim_t * dim_t > data{
-					m_data[M4x4Col0Row0], m_data[M4x4Col1Row0], m_data[M4x4Col2Row0], 0,
-					m_data[M4x4Col0Row1], m_data[M4x4Col1Row1], m_data[M4x4Col2Row1], 0,
-					m_data[M4x4Col0Row2], m_data[M4x4Col1Row2], m_data[M4x4Col2Row2], 0,
-					m_data[M4x4Col0Row3], m_data[M4x4Col1Row3], m_data[M4x4Col2Row3], 1
+					m_data[M4x4Col0Row0], m_data[M4x4Col0Row1], m_data[M4x4Col0Row2], m_data[M4x4Col0Row3],
+					m_data[M4x4Col1Row0], m_data[M4x4Col1Row1], m_data[M4x4Col1Row2], m_data[M4x4Col1Row3],
+					m_data[M4x4Col2Row0], m_data[M4x4Col2Row1], m_data[M4x4Col2Row2], m_data[M4x4Col2Row3],
+					0, 0, 0, 1
 				};
 
 				return Matrix{data};
