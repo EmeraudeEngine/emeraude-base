@@ -80,7 +80,7 @@ inherits them and does not restate them.
 - **CMake** 3.25.1+
 - **C++20 compiler**
   - **Linux:** GCC 13.3+ / 14.2+ — tested on Debian 13 and Ubuntu 24.04 LTS
-  - **macOS:** Apple Clang 17+ with SDK 12.0+ — tested on macOS Sequoia 15.5
+  - **macOS:** Apple Clang 17+; deployment target 13.0 by default, 12.0 available (`APP_OSX_DEPLOYMENT_TARGET`)
   - **Windows:** MSVC 19.43+ (Visual Studio 2022) — tested on Windows 11
 - **Git** — submodules, and the clone-if-absent steps of the cascade
 - **Python** 3 — build helper scripts
@@ -179,7 +179,7 @@ The **folder name** carries the OS, the architecture, the build type and a per-O
 | Platform | Folder | ABI tag |
 |---|---|---|
 | Linux | `linux.<arch>-<Config>-glibc<ver>` | host **glibc** version, e.g. `glibc2.35` |
-| macOS | `macos.<arch>-<Config>-sdk<ver>` | **deployment target**, e.g. `sdk12.0` |
+| macOS | `macos.<arch>-<Config>-sdk<ver>` | **deployment target**: `sdk13.0` (default) or `sdk12.0` — `APP_OSX_DEPLOYMENT_TARGET`, set by a consumer before the base |
 | Windows | `windows.<arch>-<Config>-<CRT>` | MSVC runtime: `MT` (static) or `MD` (dynamic) |
 
 `<arch>` is `x86_64` or `arm64`; `<Config>` is `Release` or `Debug`. Examples:

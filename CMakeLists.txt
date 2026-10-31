@@ -218,7 +218,10 @@ elseif ( APPLE )
 	if ( CMAKE_OSX_ARCHITECTURES )
 		set(APP_ARCH ${CMAKE_OSX_ARCHITECTURES})
 	endif ()
-	set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
+	# The deployment target: 13.0 by default, the consumer's when it set one first (APP_OSX_DEPLOYMENT_TARGET); the
+	# archive folder carries it (sdk13.0, sdk12.0 — both published).
+	set(APP_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum SDK for macOS.")
+	set(CMAKE_OSX_DEPLOYMENT_TARGET ${APP_OSX_DEPLOYMENT_TARGET})
 	# macOS: os prefix is now "macos" (was "mac"), tagged with the deployment target.
 	set(EMERAUDE_EXT_LIBS_DIRNAME "macos.${APP_ARCH}-${EMERAUDE_EXT_LIBS_BUILD_TYPE}-sdk${CMAKE_OSX_DEPLOYMENT_TARGET}")
 elseif ( MSVC )
