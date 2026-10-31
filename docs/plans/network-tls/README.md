@@ -369,6 +369,8 @@ test (suite 2009/2009, live 3/3):
 Not fixed here, tracked separately: `totalTimeout` is still not a hard budget (per-operation timeouts
 add up, DNS is not cancellable), error reporting is still `bool`/`nullopt` with no cause, and the URI
 layer still decodes `%2F` and re-orders query parameters (breaks signed URLs).
+Items: `http-total-timeout-hard-budget`, `uri-layer-preserves-encoding`, `uri-parser-fuzzer`,
+`tls-certificate-revocation`, `tls-protocol-floor` (`docs/todo/`).
 
 ## Post-freeze increment — `request()`, the API-traffic entry point (2026-08-28)
 

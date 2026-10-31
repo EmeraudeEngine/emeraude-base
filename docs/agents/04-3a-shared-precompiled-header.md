@@ -54,12 +54,10 @@ by every consumer.
   > *visibility*, not the path resolution. Same-directory targets and absolute source lists are
   > unaffected, which is what makes the failure cross-directory-and-macOS-only.
 
-- **`EMERAUDE_ENABLE_PCH`** (option, default **On**) gates the whole feature; when Off the helper
-  is a no-op and the call sites stay unconditional. It is **live by default across the cascade** —
-  no build passes a `-D` for it, so base and its downstream consumers all compile with their PCH.
-  Turning it off is a deliberate `-DEMERAUDE_ENABLE_PCH=OFF`, worth doing periodically: the PCH
-  masks missing `#include`s, and **both configs must stay green** (see
-  [`docs/caution-points.md`](../caution-points.md)).
+- **`EMERAUDE_ENABLE_PCH`** (option, default **Off** — `CMakeLists.txt`, confirmed by the owner 2026-10-31) gates
+  the whole feature; when Off the helper is a no-op and the call sites stay unconditional. Turning it on is a
+  deliberate `-DEMERAUDE_ENABLE_PCH=ON` (useful for Visual Studio). The PCH masks missing `#include`s, so **both
+  configs must stay green** (see [`docs/caution-points.md`](../caution-points.md)).
 - **Applied across the whole cascade.** `emeraude_base_target_enable_pch()` is now called right
   after each target is declared: base's own compiled modules + the `emeraude_base` umbrella + the
   unit-test / benchmark executables (here), the **engine** SHARED library, and projet-alpha's
