@@ -233,6 +233,14 @@ for a local over a namespace-scope name. **Before pushing** a header under `Math
 `/usr/bin/grep -nE "(auto|double|float|int)[[:space:]]+(X|Y|Z|W|U|V|R|G|B|A)[[:space:]]*(=|\{|;)" src/Math/` must print only
 the declarations themselves (`Vector.hpp`, and `Quaternion.hpp`'s class constants).
 
+### ⚠️ MSVC quote-include hijack: no generic header names in base (2026-05)
+
+MSVC resolves `#include "x.hpp"` in the including file's directory, then in **the directory of every file open on
+the include stack**, then in `-I`. Base's former `Utility.hpp`, included as `"Utility.hpp"` from
+`WaveFactory/Wave.hpp`, resolved to the engine's `Audio/Utility.hpp` in every engine TU reaching `Wave.hpp` from
+`Audio/` (C3861 on `ceilDivision`). It was renamed `BaseUtility.hpp` (namespace `EmEn::Base::Utility` unchanged).
+**A base header never takes a name an engine subdirectory may also use**; GCC and clang never show the problem.
+
 ### The paranoid MSVC set, compiled for the first time on Windows — what it found (Ave Robustus II, 2026-10-08)
 
 The MSVC block of the PARANOID option (`/W4 /permissive- /w14242 … /WX`, without the former `/wd4100 /wd4127 /wd4702
