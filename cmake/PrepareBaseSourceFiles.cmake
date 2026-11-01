@@ -130,6 +130,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_BlobTrait.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Compression.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_Debug.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_ExactKey.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FastJSON.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_FlatHashMap.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_GameToolsCardDeck.cpp
