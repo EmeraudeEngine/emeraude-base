@@ -112,6 +112,24 @@ namespace EmEn::Base
 		EXPECT_NE(ExactKey{}.add(static_cast< const void * >(nullptr)), ExactKey{}.add(static_cast< const void * >(&first)));
 	}
 
+	TEST(ExactKey, ResetStartsAgainLikeAFreshKey)
+	{
+		/* A member key rebuilt once a frame: nothing of the previous, longer content may survive the reset. */
+		ExactKey key{"Combine"};
+		key.add(std::string_view{"a long snippet that the next frame no longer has"}).add(42U);
+
+		key.reset("Combine").add(std::string_view{"short"});
+
+		EXPECT_EQ(key, ExactKey{"Combine"}.add(std::string_view{"short"}));
+		EXPECT_EQ(key.size(), ExactKey{"Combine"}.add(std::string_view{"short"}).size());
+
+		/* The domain is the reset's own. */
+		key.reset("Denoise").add(std::string_view{"short"});
+
+		EXPECT_NE(key, ExactKey{"Combine"}.add(std::string_view{"short"}));
+		EXPECT_EQ(key, ExactKey{"Denoise"}.add(std::string_view{"short"}));
+	}
+
 	TEST(ExactKey, ServesTheRightObjectEvenWhenTheHashesMeet)
 	{
 		/* The map compares the keys, not the hashes: a collision of hash() never serves one object for another. With

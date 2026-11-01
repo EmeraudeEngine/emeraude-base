@@ -21,14 +21,19 @@ says nothing: the engine's program cache served a spot-shadow program for the su
   bytes are in native endianness too).
 - Floats compare by their bits: `-0.0` and `+0.0` are two keys, and so are two NaN payloads — what a creation would
   receive.
-- Built when the cached object is created or looked up (a cold path): it allocates.
+- Built when the cached object is created or looked up (a cold path): it allocates. A key looked up on a hot path
+  (once a frame) is a MEMBER rebuilt with `reset(domain)`, which empties it and starts it again for that domain while
+  keeping its storage: it allocates only while it grows past its largest size so far (`std::string::clear()` keeps the
+  capacity in libstdc++, libc++ and the MSVC STL; the standard does not require it). Added 2026-11-01 for the engine's
+  post-process variant caches, looked up once a frame per group.
 - A blob (an array of specialization-constant bytes) is added value by value, 8 bytes each; no `add(std::span< const
   std::byte >)` on purpose (owner, 2026-11-01: a raw block would not be told apart from a sequence of values, and the
   use is cold).
 
-**Users.** The engine's `Saphir::Generator::ProgramKey` (an alias), `Vulkan::GraphicsPipeline::getKey()` and the
-renderer's `m_programs` / `m_graphicsPipelines` (engine `docs/pipeline-caching-system.md`).
+**Users.** The engine's `Saphir::Generator::ProgramKey` (an alias), `Vulkan::GraphicsPipeline::getKey()`, the
+renderer's `m_programs` / `m_graphicsPipelines` / `m_samplers`, and the `m_variants` of `CombinePass` and `DenoisePass`
+through a member lookup key and `reset()` (engine `docs/pipeline-caching-system.md`).
 
-**Tests.** `src/Testing/test_ExactKey.cpp` (7 tests: same inputs same key, one different input, the text boundaries,
-the fixed widths, the float bits, the pointer address, and a hash map whose hashes all meet still serving the right
-object) and the template guard.
+**Tests.** `src/Testing/test_ExactKey.cpp` (8 tests: same inputs same key, one different input, the text boundaries,
+the fixed widths, the float bits, the pointer address, a reset leaving nothing of a longer previous content and taking
+its own domain, and a hash map whose hashes all meet still serving the right object) and the template guard.

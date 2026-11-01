@@ -47,7 +47,8 @@ namespace EmEn::Base
 	 * length in front — so two different input lists never give the same bytes. The equality compares those bytes; the
 	 * hash only places the key in a hash map. A cache keyed by the hash alone serves one object for another on a
 	 * collision (the engine's program cache did, 2026-10-31).
-	 * @note Built when the cached object is created or looked up (a cold path): it allocates.
+	 * @note Built when the cached object is created or looked up (a cold path): it allocates. A key looked up on a hot
+	 * path (once a frame) is a member rebuilt with reset(), which keeps its storage.
 	 * @note Floats are compared by their bits: -0.0 and +0.0 are two keys, and so are two NaN payloads — what a
 	 * creation would receive.
 	 */
@@ -66,6 +67,22 @@ namespace EmEn::Base
 			ExactKey (std::string_view domain) noexcept
 			{
 				this->add(domain);
+			}
+
+			/**
+			 * @brief Empties the key and starts it again for a domain, keeping its storage: a lookup key rebuilt once a
+			 * frame allocates only while it grows past its largest size so far.
+			 * @note The storage is a std::string: clear() keeps its capacity in libstdc++, libc++ and the MSVC STL (the
+			 * standard does not require it).
+			 * @param domain The domain name (a ClassId).
+			 * @return ExactKey &
+			 */
+			ExactKey &
+			reset (std::string_view domain) noexcept
+			{
+				m_bytes.clear();
+
+				return this->add(domain);
 			}
 
 			/**
