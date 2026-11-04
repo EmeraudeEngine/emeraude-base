@@ -119,7 +119,7 @@ namespace EmEn::Base::IO
 
 			if ( errorCode )
 			{
-				std::cerr << ClassId << " : Unable to name the entry " << toU8String(entry.path()) << " relative to " << toU8String(path) << " (" << errorCode.message() << ") !" "\n";
+				std::cerr << ClassId << " : Unable to name the entry " << toU8String(entry.path()) << " relative to " << toU8String(path) << " (" << systemErrorText(errorCode) << ") !" "\n";
 
 				return true;
 			}

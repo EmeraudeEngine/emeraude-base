@@ -37,6 +37,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
 #include <string>
 #include <string_view>
@@ -65,6 +66,7 @@
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
 #include "PixelFactory/FileIO.hpp"
+#include "String.hpp"
 #include "VertexFactory/FileIO.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "WaveFactory/FileIO.hpp"
@@ -602,6 +604,45 @@ TEST(IORenameFile, refusesEmptyAndMissingPaths)
 	const auto directory = std::filesystem::temp_directory_path(errorCode);
 
 	EXPECT_FALSE(EmEn::Base::IO::renameFile(directory / "emeraude-io-no-such-file", directory / "emeraude-io-target"));
+}
+
+/* IO::systemErrorText() (2026-11-04): MSVC's message() of the system category is in the ANSI code page ("Le chemin
+ * d'accès spécifié est introuvable." was not UTF-8 on a French Windows). On a localised Windows without the UTF-8 code
+ * page in the manifest (this test executable declares none), the first test fails with message(); on an English
+ * system, and off Windows, the texts are the same either way. */
+TEST(IOSystemErrorText, isUTF8WithoutATrailingNewLineInEveryCategory)
+{
+	const std::array< std::error_code, 9 > errorCodes{
+		std::error_code{},
+		std::error_code{2, std::system_category()},
+		std::error_code{3, std::system_category()},
+		std::error_code{5, std::system_category()},
+		std::error_code{32, std::system_category()},
+		std::make_error_code(std::errc::no_such_file_or_directory),
+		std::make_error_code(std::errc::permission_denied),
+		std::make_error_code(std::errc::no_space_on_device),
+		std::make_error_code(std::io_errc::stream)
+	};
+
+	for ( const auto & errorCode : errorCodes )
+	{
+		const auto text = EmEn::Base::IO::systemErrorText(errorCode);
+
+		ASSERT_FALSE(text.empty()) << errorCode.category().name() << ' ' << errorCode.value();
+		EXPECT_TRUE(EmEn::Base::String::isValidUTF8(text)) << errorCode.category().name() << ' ' << errorCode.value();
+		EXPECT_NE(text.back(), '\n') << errorCode.category().name() << ' ' << errorCode.value();
+		EXPECT_NE(text.back(), '\r') << errorCode.category().name() << ' ' << errorCode.value();
+		EXPECT_NE(text.back(), ' ') << errorCode.category().name() << ' ' << errorCode.value();
+	}
+}
+
+TEST(IOSystemErrorText, everyOtherCategoryAnswersMessage)
+{
+	const auto generic = std::make_error_code(std::errc::no_such_file_or_directory);
+	const auto stream = std::make_error_code(std::io_errc::stream);
+
+	EXPECT_EQ(EmEn::Base::IO::systemErrorText(generic), generic.message());
+	EXPECT_EQ(EmEn::Base::IO::systemErrorText(stream), stream.message());
 }
 
 /* The coverage pass (2026-10-18): the contracts of filesize(), createDirectory(), isDirectoryContentEmpty(),

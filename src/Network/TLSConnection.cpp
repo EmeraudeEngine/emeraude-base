@@ -39,6 +39,7 @@
 
 /* Local inclusions. */
 #include "HappyEyeballs.hpp"
+#include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Network
@@ -171,7 +172,7 @@ namespace EmEn::Base::Network
 
 		if ( resolveError || endpoints.empty() )
 		{
-			Logging::error(Tag, "establishTcp(), unable to resolve '" + host + "' : " + resolveError.message());
+			Logging::error(Tag, "establishTcp(), unable to resolve '" + host + "' : " + IO::systemErrorText(resolveError));
 
 			return false;
 		}
@@ -200,7 +201,7 @@ namespace EmEn::Base::Network
 
 		if ( connectError )
 		{
-			Logging::error(Tag, "establishTcp(), unable to reach '" + host + ':' + std::to_string(port) + "' : " + connectError.message());
+			Logging::error(Tag, "establishTcp(), unable to reach '" + host + ':' + std::to_string(port) + "' : " + IO::systemErrorText(connectError));
 
 			return false;
 		}
@@ -228,7 +229,7 @@ namespace EmEn::Base::Network
 
 		if ( writeError )
 		{
-			Logging::error(Tag, "tunnelThroughProxy(), unable to send the CONNECT request : " + writeError.message());
+			Logging::error(Tag, "tunnelThroughProxy(), unable to send the CONNECT request : " + IO::systemErrorText(writeError));
 
 			return false;
 		}
@@ -259,7 +260,7 @@ namespace EmEn::Base::Network
 
 			if ( readError )
 			{
-				Logging::error(Tag, "tunnelThroughProxy(), unable to read the proxy response : " + readError.message());
+				Logging::error(Tag, "tunnelThroughProxy(), unable to read the proxy response : " + IO::systemErrorText(readError));
 
 				return false;
 			}
@@ -350,7 +351,7 @@ namespace EmEn::Base::Network
 
 		if ( setupError )
 		{
-			Logging::error(Tag, "performHandshake(), unable to configure the peer verification : " + setupError.message());
+			Logging::error(Tag, "performHandshake(), unable to configure the peer verification : " + IO::systemErrorText(setupError));
 
 			return false;
 		}
@@ -366,7 +367,7 @@ namespace EmEn::Base::Network
 
 		if ( handshakeError )
 		{
-			Logging::error(Tag, "performHandshake(), the TLS handshake with '" + targetHost + "' failed : " + handshakeError.message());
+			Logging::error(Tag, "performHandshake(), the TLS handshake with '" + targetHost + "' failed : " + IO::systemErrorText(handshakeError));
 
 			return false;
 		}
@@ -484,7 +485,7 @@ namespace EmEn::Base::Network
 
 		if ( writeError || bytesWritten != size )
 		{
-			Logging::error(Tag, "write(), unable to send " + std::to_string(size) + " bytes : " + writeError.message());
+			Logging::error(Tag, "write(), unable to send " + std::to_string(size) + " bytes : " + IO::systemErrorText(writeError));
 
 			m_connected = false;
 
@@ -548,7 +549,7 @@ namespace EmEn::Base::Network
 			return std::nullopt;
 		}
 
-		Logging::error(Tag, "read(), unable to read from the peer : " + readError.message());
+		Logging::error(Tag, "read(), unable to read from the peer : " + IO::systemErrorText(readError));
 
 		m_connected = false;
 

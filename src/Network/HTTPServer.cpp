@@ -892,7 +892,7 @@ namespace EmEn::Base::Network
 
 		if ( ec )
 		{
-			Logging::error("HTTPServer", name + ": invalid bind address '" + m_options.address + "': " + ec.message() + ". It stays closed.");
+			Logging::error("HTTPServer", name + ": invalid bind address '" + m_options.address + "': " + IO::systemErrorText(ec) + ". It stays closed.");
 
 			return false;
 		}
@@ -918,7 +918,7 @@ namespace EmEn::Base::Network
 
 			if ( ec )
 			{
-				Logging::warning("HTTPServer", name + ": unable to set reuse_address: " + ec.message());
+				Logging::warning("HTTPServer", name + ": unable to set reuse_address: " + IO::systemErrorText(ec));
 
 				ec.clear();
 			}
@@ -944,7 +944,7 @@ namespace EmEn::Base::Network
 				" (the port is most likely taken by another process; Windows reports that as access denied)" :
 				"";
 
-			Logging::error("HTTPServer", name + ": unable to listen on " + m_options.address + ':' + std::to_string(m_options.port) + ": " + ec.message() + hint + ". It stays closed.");
+			Logging::error("HTTPServer", name + ": unable to listen on " + m_options.address + ':' + std::to_string(m_options.port) + ": " + IO::systemErrorText(ec) + hint + ". It stays closed.");
 
 			m_acceptor.reset();
 
@@ -1169,7 +1169,7 @@ namespace EmEn::Base::Network
 					return;
 				}
 
-				Logging::error("HTTPServer", m_options.name + ": accept failed: " + ec.message() + ".");
+				Logging::error("HTTPServer", m_options.name + ": accept failed: " + IO::systemErrorText(ec) + ".");
 
 				/* Never re-arm blindly on a permanent failure: it would spin this thread. */
 				if ( ec == asio::error::no_descriptors || ec == asio::error::no_memory )
@@ -1187,7 +1187,7 @@ namespace EmEn::Base::Network
 
 			if ( optionError )
 			{
-				Logging::warning("HTTPServer", m_options.name + ": unable to disable Nagle's algorithm for a client: " + optionError.message());
+				Logging::warning("HTTPServer", m_options.name + ": unable to disable Nagle's algorithm for a client: " + IO::systemErrorText(optionError));
 			}
 
 			if ( m_connections.size() >= m_options.maxConnections )

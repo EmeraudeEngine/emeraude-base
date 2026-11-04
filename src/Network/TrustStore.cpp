@@ -162,7 +162,7 @@ namespace EmEn::Base::Network::TrustStore
 
 		if ( error )
 		{
-			Logging::error(Tag, "applyCABundleFile(), unable to load the CA bundle file '" + IO::toU8String(bundleFilepath) + "' : " + error.message());
+			Logging::error(Tag, "applyCABundleFile(), unable to load the CA bundle file '" + IO::toU8String(bundleFilepath) + "' : " + IO::systemErrorText(error));
 
 			return false;
 		}

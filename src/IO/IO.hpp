@@ -326,6 +326,19 @@ namespace EmEn::Base::IO
 	std::optional< std::filesystem::path > confinedPath (const std::filesystem::path & base, const std::filesystem::path & relative) noexcept;
 
 	/**
+	 * @brief Returns the text of an error code, in UTF-8 on every OS.
+	 * @note On Windows, std::error_code::message() of the system category goes through FormatMessageA: the text is in the
+	 * process ANSI code page (CP-1252 on a French Windows: "Accès refusé" is not UTF-8) unless the executable declares
+	 * <activeCodePage>UTF-8</activeCodePage>. This reads the same localised text through FormatMessageW and converts it
+	 * with String::utf16ToUTF8(). Every other category, and every other OS, answers message(). Use it for every error
+	 * text that leaves the process or reaches a log, never message().
+	 * @param errorCode An error code.
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	std::string systemErrorText (const std::error_code & errorCode);
+
+	/**
 	 * @brief Logs a failed directory walk (the non-template half of forEachDirectoryEntry()).
 	 * @param path The walked directory.
 	 * @param errorCode The error.

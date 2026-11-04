@@ -608,6 +608,19 @@ Encoding", guarded by the engine's `tools/check-path-encoding.py`). In the base,
   the tests' `uniqueTemporaryPath()` convert explicitly. The test binary has no UTF-8 manifest: a test proves the
   conversion itself.
 
+### ⚠️⚠️ Windows: `std::error_code::message()` is the ANSI code page — `IO::systemErrorText()` (2026-11-04)
+
+MSVC's `message()` of the SYSTEM category goes through `FormatMessageA`: the localised text comes in the process ANSI
+code page, not UTF-8 ("Le chemin d'accès spécifié est introuvable." in CP-1252 on a French Windows; a consumer that
+reads it as UTF-8 shows U+FFFD for every accent, the typographic apostrophe included). Measured by a downstream
+application on a fr-BE Windows 11 (Win32 error 3). The generic category (errno) is not affected: MSVC's texts for it are
+English. `IO::systemErrorText(errorCode)` reads the same localised text through `FormatMessageW` and converts it with
+`String::utf16ToUTF8()`; every other category, and every other OS, answers `message()`. Every error text that reaches a
+log or leaves the process goes through it, never `message()`: `IO`, `ZipWriter`, `Network::HTTPServer`,
+`TLSConnection` and `TrustStore` do since 2026-11-04 (asio is standalone: its error code IS `std::error_code`).
+Tests `IOSystemErrorText.*`: the test binary has no UTF-8 manifest, so on a localised Windows the first test fails
+with `message()`; on an English system the texts are ASCII either way.
+
 ### ⚠️⚠️ A path from DATA goes through IO::confinedPath() — path::append() REPLACES the base with an absolute path
 
 `base / "/etc/passwd"` is `/etc/passwd`; `base / "../../x"` leaves `base`. Every path written in data (a resource

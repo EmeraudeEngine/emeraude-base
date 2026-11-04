@@ -191,7 +191,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::renameFile(), unable to rename "} + toU8String(from) + " to " + toU8String(to) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::renameFile(), unable to rename "} + toU8String(from) + " to " + toU8String(to) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
@@ -243,7 +243,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::fileExists(), unable to check the existence of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::fileExists(), unable to check the existence of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
@@ -388,7 +388,7 @@ namespace EmEn::Base::IO
 		 * file was 18446744073709551615 bytes). */
 		if ( errorCode ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::filesize(), unable to get the size of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::filesize(), unable to get the size of the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return 0;
 		}
@@ -425,7 +425,7 @@ namespace EmEn::Base::IO
 		{
 			if ( errorCode.value() > 0 ) [[unlikely]]
 			{
-				Logging::error("IO", std::string{"IO::eraseFile(), unable to check the path "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+				Logging::error("IO", std::string{"IO::eraseFile(), unable to check the path "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 			}
 			else
 			{
@@ -439,7 +439,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::eraseFile(), unable to delete the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::eraseFile(), unable to delete the file "} + toU8String(filepath) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
@@ -465,7 +465,7 @@ namespace EmEn::Base::IO
 			 * parent), is simply no directory: no error to print. */
 			if ( errorCode != std::errc::no_such_file_or_directory && errorCode != std::errc::not_a_directory ) [[unlikely]]
 			{
-				Logging::error("IO", std::string{"IO::directoryExists(), unable to check if the path "} + toU8String(path) + " is a directory (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+				Logging::error("IO", std::string{"IO::directoryExists(), unable to check if the path "} + toU8String(path) + " is a directory (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 			}
 
 			return false;
@@ -494,7 +494,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::isDirectoryContentEmpty(), unable to check the content of directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::isDirectoryContentEmpty(), unable to check the content of directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
@@ -535,10 +535,52 @@ namespace EmEn::Base::IO
 		return base / normalized;
 	}
 
+	std::string
+	systemErrorText (const std::error_code & errorCode)
+	{
+#if IS_WINDOWS
+		if ( errorCode.category() == std::system_category() )
+		{
+			LPWSTR buffer = nullptr;
+
+			/* NOTE: Language 0 is the language message() uses: the thread's, then the user's, then the system's. */
+			const DWORD length = FormatMessageW(
+				FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+				nullptr,
+				static_cast< DWORD >(errorCode.value()),
+				0,
+				reinterpret_cast< LPWSTR >(&buffer),
+				0,
+				nullptr
+			);
+
+			if ( buffer != nullptr )
+			{
+				std::u16string text(buffer, buffer + length);
+
+				LocalFree(buffer);
+
+				/* NOTE: The system texts end with "\r\n"; message() trims them too. */
+				while ( !text.empty() && (text.back() == u'\r' || text.back() == u'\n' || text.back() == u' ') )
+				{
+					text.pop_back();
+				}
+
+				if ( !text.empty() )
+				{
+					return String::utf16ToUTF8(text);
+				}
+			}
+		}
+#endif
+
+		return errorCode.message();
+	}
+
 	void
 	logDirectoryWalkError (const std::filesystem::path & path, const std::error_code & errorCode) noexcept
 	{
-		Logging::error("IO", std::string{"IO::forEachDirectoryEntry(), unable to walk the directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+		Logging::error("IO", std::string{"IO::forEachDirectoryEntry(), unable to walk the directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 	}
 
 	bool
@@ -571,7 +613,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::createDirectory(), unable to create the path "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::createDirectory(), unable to create the path "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
@@ -594,7 +636,7 @@ namespace EmEn::Base::IO
 		{
 			if ( errorCode.value() > 0 ) [[unlikely]]
 			{
-				Logging::error("IO", std::string{"IO::eraseDirectory(), unable to check the path "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+				Logging::error("IO", std::string{"IO::eraseDirectory(), unable to check the path "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 			}
 			else
 			{
@@ -617,7 +659,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::eraseDirectory(), Unable to delete the directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::eraseDirectory(), Unable to delete the directory "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
@@ -634,7 +676,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::getCurrentWorkingDirectory(), unable to get the current working directory ("} + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::getCurrentWorkingDirectory(), unable to get the current working directory ("} + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return {};
 		}
@@ -656,7 +698,7 @@ namespace EmEn::Base::IO
 
 		if ( errorCode.value() > 0 ) [[unlikely]]
 		{
-			Logging::error("IO", std::string{"IO::exists(), unable to check the existence of the entry "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + errorCode.message() + ")");
+			Logging::error("IO", std::string{"IO::exists(), unable to check the existence of the entry "} + toU8String(path) + " (" + std::to_string(errorCode.value()) + ": " + systemErrorText(errorCode) + ")");
 
 			return false;
 		}
