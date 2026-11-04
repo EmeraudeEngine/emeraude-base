@@ -599,3 +599,36 @@ TEST(PixelFactoryPixmap, averageColorKeepsTheFraction)
 
 	EXPECT_NEAR(image.averageColor().red(), 0.5F, 1e-6F);
 }
+
+TEST(PixelFactoryPixmap, markEverythingUpdatedCoversTheWholePixmap)
+{
+	/* markEverythingUpdated() reset the left and the right (a no-op right after the left) but never
+	 * the top: from a consumed marker the region came out invalid (the top stayed at the numeric
+	 * maximum, the height wrapped), from a marked rectangle it kept that rectangle's top and missed
+	 * every row above it. */
+	Pixmap< uint8_t > image{16, 8, ChannelMode::RGBA};
+
+	ASSERT_TRUE(image.isValid());
+
+	const auto expectWholePixmap = [&image] (const char * state) {
+		const auto & region = image.updatedRegion();
+
+		EXPECT_TRUE(region.isValid()) << state;
+		EXPECT_EQ(region.left(), 0U) << state;
+		EXPECT_EQ(region.top(), 0U) << state;
+		EXPECT_EQ(region.width(), 16U) << state;
+		EXPECT_EQ(region.height(), 8U) << state;
+	};
+
+	image.resetUpdatedRegionMarker();
+	image.markEverythingUpdated();
+	expectWholePixmap("from a consumed marker");
+
+	image.resetUpdatedRegionMarker();
+	image.markRectangleUpdated({5U, 3U, 2U, 2U});
+	image.markEverythingUpdated();
+	expectWholePixmap("from a rectangle away from the origin");
+
+	image.markEverythingUpdated();
+	expectWholePixmap("from the whole pixmap already marked");
+}

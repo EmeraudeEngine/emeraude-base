@@ -1621,6 +1621,19 @@ nothing). `move()` / `shiftTextArea()` take `std::abs()` in 64 bits (`std::abs(I
 (the same operations on 8-bit, 16-bit and float pixmaps give the same pixels), `moveVacatesWithEmptyPixels`,
 `moveExtremeDirections`; ASan/UBSan green.
 
+### ⚠️ `Pixmap::markEverythingUpdated()` never reset the TOP of the updated-region marker (2026-11-04, FIXED)
+
+It set the left, the right (a no-op: `setRight(0)` is refused right after `setLeft(0)`), the width and the height —
+never the top. From a consumed marker (`resetUpdatedRegionMarker()` leaves the top at the numeric maximum) the region
+came out INVALID (the height wrapped to 0); from a marked rectangle it kept that rectangle's top and claimed a region
+reaching past the bottom edge, missing every row above it. The consumer is a partial GPU upload driven by
+`updatedRegion()`: an invalid region fell back to a full upload (right by accident), a rectangle-anchored one uploaded
+the rows from that top down and left the rows above stale. Worse, `markRectangleUpdated()` merged into an invalid
+region REPLACES it, so a whole-pixmap operation (`fill()`, `Processor::resize()`…) followed by one dirty rectangle
+shrank the upload to that rectangle. Fixed: `setTop(0)`. Test:
+`PixelFactoryPixmap.markEverythingUpdatedCoversTheWholePixmap` (a consumed marker, a rectangle away from the origin,
+the whole pixmap already marked).
+
 ### ⚠️ A TrueType font size is the LINE height; a truncated `.ttf` loads as an INVISIBLE font unless checked (2026-10-08, FIXED)
 
 `Font::readTrueTypeFile()` never rendered a glyph (the copy was commented out), so every `.ttf` was refused, and the

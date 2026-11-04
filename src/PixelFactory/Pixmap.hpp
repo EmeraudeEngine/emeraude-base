@@ -1930,7 +1930,7 @@ namespace EmEn::Base::PixelFactory
 				if ( m_updatedRegionMarkerEnabled )
 				{
 					m_lastUpdatedRegion.setLeft(0);
-					m_lastUpdatedRegion.setRight(0);
+					m_lastUpdatedRegion.setTop(0);
 					m_lastUpdatedRegion.setWidth(m_width);
 					m_lastUpdatedRegion.setHeight(m_height);
 				}
