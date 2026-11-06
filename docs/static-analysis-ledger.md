@@ -288,6 +288,13 @@ namespace 'asio'"); kept with `// IWYU pragma: keep (<reason>)`. clang-tidy: 7 f
 (`std::cmp_less` / `std::cmp_greater` in `Frequency::fromHz()`, a computed hex digit instead of an array subscript in
 `PercentEncoding`, `const` test locals); cppcheck 0.
 
+**2026-11-07 lot** (`URI`'s two empty-string refusals moved from a raw `std::cerr` to `Logging::warning`; 5 base
+files): IWYU then dropped `<iostream>` from `Network/URI.hpp`, which broke `Network/HTTPRequest.{hpp,cpp}` (they use
+`std::cerr` and had it only through `URI.hpp`): both include it now and came out IWYU-clean (+3 / +7). A header that
+loses an include can break a file the gate does not see as touched: the build step catches it. clang-tidy: 3 findings
+on the new test, fixed (cognitive complexity 29 → the capture moved to a helper, a `const` stream, a forwarding
+reference never forwarded → `const &`); cppcheck 0.
+
 
 ## D11 — the disabled checks ruled (owner decision 2026-10-19, Ave Robustus II P-W (5))
 

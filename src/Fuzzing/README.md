@@ -28,7 +28,8 @@ the same `-fno-exceptions` policy the library uses, so a hidden `throw` (e.g. js
   AppleClang-built `libEmeraudeBase.a` links with it: the targets use the SYSTEM libc++ (`/usr/lib/libc++.1.dylib`,
   `otool -L`), the same one AppleClang links, plus Homebrew's ASan runtime. The script runs under macOS's
   `/bin/bash` 3.2: no associative array, no empty-array expansion under `set -u` (keep it that way). The 14 targets
-  build; `fuzz_ini` 60 s from an empty corpus: 1.12 M runs, 0 crash. (`fuzz_uri`, the 15th, added 2026-11-06: Linux only so far.)
+  build; `fuzz_ini` 60 s from an empty corpus: 1.12 M runs, 0 crash. (`fuzz_uri`, the 15th, added 2026-11-06, built there from a projet-alpha build dir: 1.31 M runs in 60 s, cov 1 498,
+  0 crash.)
 
 ## Design
 
@@ -106,8 +107,14 @@ directory and accumulated corpora are git-ignored (see `.gitignore`).
   in 120 s, 0 crash. macOS (M6, Homebrew LLVM) the same day: 1.1 million runs in 60 s, cov 1 486, 0 crash.
   ⚠️ The URI parsers trace every refusal, and nearly every fuzz input is one: 2.58 million Error / Warning lines
   (213 MB) in 60 s on one worker. `fuzz_uri` therefore installs a `Logging` sink in `LLVMFuzzerInitialize()` that keeps
-  only Fatal: 0 trace line, 0.9 MB of log, 14 808 → 15 599 exec/s (one run each, Linux, output to a file — within the
+  only Fatal: 213 MB → 0.9 MB of log, 14 808 → 15 599 exec/s (one run each, Linux, output to a file — within the
   noise; the gain is larger on a terminal). Another target flooded the same way takes the same sink.
+  ⚠️ That first count was wrong (corrected the same day, macOS peer): 8 937 of the 14 731 remaining lines were
+  `URI::URI(), empty string !`, written by the `URI(const std::string &)` constructor (and `operator=`) STRAIGHT to
+  `std::cerr`, past the sink (the re-parse of an input that re-emits as `""` reaches it). Those two refusals now go
+  through `Logging::warning` (tag `Network::URI`; test `NetworkURI.anEmptyStringIsRefusedThroughLoggingNotStderr`).
+  After that fix, 60 s on Linux: 1.02 M runs, cov 1 277, 0 crash, 476 KB of log made only of libFuzzer's own lines.
+  A trace that a fuzzer's sink does not silence is a raw stream write in the parser: route it through `Logging`.
 
 ### Extended campaign (PixelFactory, VertexFactory, Compression)
 

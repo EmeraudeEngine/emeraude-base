@@ -26,8 +26,18 @@
 
 #include "HTTPRequest.hpp"
 
+/* STL inclusions. */
+#include <filesystem>
+#include <iostream>
+#include <sstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "Network/HTTPHeaders.hpp"
+#include "Network/URI.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network

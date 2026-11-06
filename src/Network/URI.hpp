@@ -28,7 +28,6 @@
 
 /* STL inclusions. */
 #include <filesystem>
-#include <iostream>
 #include <sstream>
 #include <string>
 
@@ -61,32 +60,20 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Constructs a URI from a raw string.
+			 * @note An empty string is refused: the URI stays empty and a warning goes through Logging (tag
+			 * "Network::URI"), never straight to std::cerr.
 			 * @param rawURI A reference to a string.
 			 */
-			explicit
-			URI (const std::string & rawURI) noexcept
-			{
-				if ( !this->parseRawString(rawURI) )
-				{
-					std::cerr << "URI::URI(), empty string !" "\n";
-				}
-			}
+			explicit URI (const std::string & rawURI) noexcept;
 
 			/**
 			 * @brief Assignment operator for std::string.
+			 * @note An empty string is refused: the URI KEEPS its previous value and a warning goes through Logging
+			 * (tag "Network::URI"), never straight to std::cerr.
 			 * @param rawURI A reference of a string for URI.
 			 * @return URI &
 			 */
-			URI &
-			operator= (const std::string & rawURI) noexcept
-			{
-				if ( !this->parseRawString(rawURI) )
-				{
-					std::cerr << "URI::operator=(), empty string !" "\n";
-				}
-
-				return *this;
-			}
+			URI & operator= (const std::string & rawURI) noexcept;
 
 			/**
 			 * @brief Sets the scheme of the URI.

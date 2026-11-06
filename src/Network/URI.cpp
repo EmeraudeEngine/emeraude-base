@@ -33,6 +33,7 @@
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "Logging/Logging.hpp"
 #include "Network/Query.hpp"
 #include "Network/URIDomain.hpp"
 #include "PercentEncoding.hpp"
@@ -41,6 +42,8 @@ namespace EmEn::Base::Network
 {
 	namespace
 	{
+		constexpr auto Tag{"Network::URI"};
+
 		/**
 		 * @brief Returns whether a string is a syntactically valid scheme (RFC 3986 §3.1).
 		 * @param scheme The candidate scheme.
@@ -79,6 +82,25 @@ namespace EmEn::Base::Network
 		}
 
 		return output;
+	}
+
+	URI::URI (const std::string & rawURI) noexcept
+	{
+		if ( !this->parseRawString(rawURI) )
+		{
+			Logging::warning(Tag, "URI(), empty string, the URI stays empty.");
+		}
+	}
+
+	URI &
+	URI::operator= (const std::string & rawURI) noexcept
+	{
+		if ( !this->parseRawString(rawURI) )
+		{
+			Logging::warning(Tag, "URI::operator=(), empty string, the URI keeps its previous value.");
+		}
+
+		return *this;
 	}
 
 	bool

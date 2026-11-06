@@ -29,10 +29,16 @@
 /* Project configuration. */
 #include "emeraude_platform.hpp"
 
+/* STL inclusions. */
+#include <cstdint>
+#include <iostream>
+#include <string>
+
 /* Local inclusions for inheritances. */
 #include "HTTPHeaders.hpp"
 
 /* Local inclusions for usages. */
+#include "Network/URIDomain.hpp"
 #include "URI.hpp"
 
 #if IS_WINDOWS
