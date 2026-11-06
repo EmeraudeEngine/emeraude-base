@@ -480,6 +480,18 @@ handshake (a second HTTP exchange, a cache, a soft / hard-fail policy) is out of
 certificate lifetimes are shrinking toward 47 days (by 2029), which bounds the exposure. Browsers do not query either:
 they ship their own revocation sets (Chrome CRLSets, Firefox CRLite).
 
+### Three-OS validation (2026-11-06, heads base c201227, engine 9dcb620b, projet-alpha 79c630c8)
+
+| OS | Builds | Base suite (Release) | The lot's 87 tests | Runtime (`city`, validation layer) |
+|---|---|---|---|---|
+| Linux (i9-14900K, RTX 3070 Ti) | GCC Release 0 warning; base suite also ASan/UBSan 2824/2824 | 2824 run, 2820 passed, 4 skipped | 87/87 | not run on Linux |
+| macOS (Mac mini M6, AppleClang) | Release 0 warning; `-Wdocumentation -Werror` 18/18 TUs | 2823 run, 2816 passed, 7 skipped (macOS-specific) | 87/87 (budget test 2 014 ms, request < 1 500 ms) | 0 VUID, 0 `[Error]`, 55 sounds loaded, exit 0; `fuzz_uri` 60 s: 1.1 M runs, cov 1 486, 0 crash |
+| Windows (RTX 3500 Ada, MSVC 14.44 `/W4 /WX`) | Release + Debug 0 warning | 2821 run, 2817 passed, 4 skipped (3 POSIX-only tests not compiled) | 87/87 (`aServerBelowTLS12IsRefused` 520 ms) | 0 VUID, 0 `[Error]`, 55 sounds loaded, exit 0 |
+
+The `_WIN32` / macOS branches of `HTTPSClient.cpp` and `test_NetworkHTTPSClient.cpp` compiled clean on their first build.
+⚠️ Neither runtime run requested a 22 255 Hz file (`city` loads its car sounds at 11 025 / 16 000 / 22 050 Hz until a door
+slams): the non-standard rate is proven by the unit tests on the three OS, not yet at runtime.
+
 ## Cross-platform validation
 
 The three-OS record (handover procedure, per-OS results, traps), closed 2026-10-07:

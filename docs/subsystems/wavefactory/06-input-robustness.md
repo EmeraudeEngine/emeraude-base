@@ -14,6 +14,8 @@ in Release **and** under ASan/UBSan via `ctest`.
   `WaveFactorySNDFile.aNonStandardSampleRateLoadsAndResamples` (failed on the former code: "readStream(), invalid
   frequency !"), `aSampleRateOutsideTheRangeIsRefused` (999 / 384 001 Hz refused, 1 000 / 384 000 Hz loaded),
   `WaveFactoryFrequency.fromHzKeepsTheRangeAndTheNamedRates`, `WaveFactoryProcessor.aResampleOutsideTheConverterRatioIsRefused`.
+  Green on Linux, macOS and Windows (2026-11-06, base c201227). Not yet seen at runtime: no run has requested a
+  22 255 Hz file (`city` loads its door slam only when a door slams).
 - **MIDI — zero time division** (`FileFormatMIDI::parseHeader`): `division == 0` is now rejected.
   It is the divisor in the tick→sample tempo conversion; unchecked it produces `+inf` and the cast
   to a `uint32_t` sample count is UB.
