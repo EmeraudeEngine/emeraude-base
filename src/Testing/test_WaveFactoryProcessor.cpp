@@ -57,7 +57,7 @@ namespace
 	Wave< float >
 	sine (float hertz, float seconds, Frequency rate, Channels channels, float amplitude)
 	{
-		const auto sampleRate = static_cast< float >(rate);
+		const auto sampleRate = static_cast< float >(rate.hz());
 		const auto sampleCount = static_cast< size_t >(seconds * sampleRate);
 		const auto channelCount = static_cast< size_t >(channels);
 		std::vector< float > data(sampleCount * channelCount);

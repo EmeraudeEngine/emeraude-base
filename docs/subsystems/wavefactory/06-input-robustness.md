@@ -6,6 +6,14 @@ crash the engine — cancel the load (`return false`), nothing fancier.* Hardeni
 A.2 WaveFactory pass, each fix covered by `Testing/test_WaveFactoryFileFormats.cpp` and run green
 in Release **and** under ASan/UBSan via `ctest`.
 
+- **libsndfile — a non-standard sample rate (2026-11-06, owner decision: a strong `Frequency` type)**: the loader
+  mapped libsndfile's rate onto a closed enumeration of ten standard rates and refused every other one — 13 of 879
+  sounds of a downstream data store (9 at 22 255 Hz, a classic Mac rate; 22 222, 22 254, 16 007 and 12 500 Hz), though
+  libsndfile reads them and OpenAL plays any rate. Now any rate in [1 kHz, 384 kHz] loads (the engine resamples it once
+  to the playback rate); outside, the load is refused and the error names the rate and the range. Tests:
+  `WaveFactorySNDFile.aNonStandardSampleRateLoadsAndResamples` (failed on the former code: "readStream(), invalid
+  frequency !"), `aSampleRateOutsideTheRangeIsRefused` (999 / 384 001 Hz refused, 1 000 / 384 000 Hz loaded),
+  `WaveFactoryFrequency.fromHzKeepsTheRangeAndTheNamedRates`, `WaveFactoryProcessor.aResampleOutsideTheConverterRatioIsRefused`.
 - **MIDI — zero time division** (`FileFormatMIDI::parseHeader`): `division == 0` is now rejected.
   It is the divisor in the tick→sample tempo conversion; unchecked it produces `+inf` and the cast
   to a `uint32_t` sample count is UB.

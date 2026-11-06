@@ -68,4 +68,17 @@ namespace EmEn::Base::Network::PercentEncoding
 	 */
 	[[nodiscard]]
 	std::string encode (std::string_view input, Component component) noexcept;
+
+	/**
+	 * @brief Percent-encodes only what is not legal in a component, keeping the input's own escapes byte for byte.
+	 * @note For an ALREADY-ENCODED component (a path or a query as parsed): a well-formed escape ("%2F", "%2b") and every
+	 * character the component allows pass through unchanged, so a signed URL is re-emitted exactly; anything else
+	 * (a space, CR, LF, a non-ASCII byte, a '%' that does not start an escape) becomes %XX with uppercase hex. The
+	 * result is always a legal component, never one that can break a request line.
+	 * @param input The encoded (or partly encoded) string.
+	 * @param component The component the string belongs to.
+	 * @return std::string
+	 */
+	[[nodiscard]]
+	std::string encodePreservingEscapes (std::string_view input, Component component) noexcept;
 }

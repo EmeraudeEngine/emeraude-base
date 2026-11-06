@@ -4,7 +4,7 @@
 
 ```cpp
 Wave<int16_t> wave;
-Synthesizer synth{wave, sampleCount, Frequency::F44100};  // Always mono
+Synthesizer synth{wave, sampleCount, Frequency::PCM44100Hz};  // Always mono
 synth.sineWave(440.0F, 0.5F);
 synth.applyADSR(0.01F, 0.1F, 0.7F, 0.2F);
 ```
@@ -44,7 +44,7 @@ Wave<int16_t> loaded;
 loaded.readFile("sound.wav");
 Processor processor{loaded};
 processor.mixDown();      // Stereo -> Mono
-processor.resample(Frequency::F44100);
+processor.resample(Frequency::PCM44100Hz);
 processor.toWave(loaded); // Write back
 ```
 

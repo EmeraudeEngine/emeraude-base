@@ -25,7 +25,7 @@ the same `-fno-exceptions` policy the library uses, so a hidden `throw` (e.g. js
   AppleClang-built `libEmeraudeBase.a` links with it: the targets use the SYSTEM libc++ (`/usr/lib/libc++.1.dylib`,
   `otool -L`), the same one AppleClang links, plus Homebrew's ASan runtime. The script runs under macOS's
   `/bin/bash` 3.2: no associative array, no empty-array expansion under `set -u` (keep it that way). The 14 targets
-  build; `fuzz_ini` 60 s from an empty corpus: 1.12 M runs, 0 crash.
+  build; `fuzz_ini` 60 s from an empty corpus: 1.12 M runs, 0 crash. (`fuzz_uri`, the 15th, added 2026-11-06: Linux only so far.)
 
 ## Design
 
@@ -40,7 +40,7 @@ This avoids recompiling the whole library under clang while still instrumenting 
 > g++-built archive, so libFuzzer gets no coverage of it and ASan / UBSan see none of its accesses — the campaign is
 > blind. `fuzz_http_response` ran 520 M executions at 59 coverage edges that way. `build-fuzzers.sh` therefore
 > compiles such a target's parser sources into the target (`EXTRA_SOURCES`: compression, http_response, ini, jpeg,
-> png, wav). A new target whose parser has a `.cpp` gets its line there. Check the `cov:` figure of a first run: a
+> png, uri, wav). A new target whose parser has a `.cpp` gets its line there. Check the `cov:` figure of a first run: a
 > handful of edges means the parser is not instrumented. The third-party libraries (libpng, libjpeg-turbo, libsndfile,
 > zlib, xz) stay uninstrumented on purpose.
 `fuzz_midi` additionally compiles the TinySoundFont implementation in-target (the library does not
@@ -71,6 +71,7 @@ Targets:
 | `fuzz_compression`| `Compression::LZMA` + `Compression::ZLIB` decompressors |
 | `fuzz_ini`        | `INIParser` (via a per-process temp file)           |
 | `fuzz_http_response` | `Network::HTTPResponseParser` (whole + byte-sliced feeds) |
+| `fuzz_uri`        | `Network::URI` + `URIDomain` + `Query` + `PercentEncoding` + `Hostname` (parse, re-emit, re-parse, self-resolve; traps on CR / LF / NUL in a host or a request target, and on a space in a request target) |
 
 A crash writes a `crash-<hash>` reproducer in the run directory; replay it with
 `src/Fuzzing/build/<target> crash-<hash>` to get the full sanitizer stack. Reproducers, the `build/`
@@ -92,6 +93,14 @@ directory and accumulated corpora are git-ignored (see `.gitignore`).
   streams written by hand on the model of the unit tests — adaptive RLE (runs and literals), flat, legacy RLE (single
   and consecutive repeats), a `+Y … -X` orientation, and the hostile headers (65535², truncated, garbage); no real
   `.hdr` file exists in the repositories.
+
+- **`fuzz_uri`** (2026-11-06, Linux, clang 19, after the URI kept its encoded bytes): 25.9 million executions
+  (12 workers × 300 s, ASan + UBSan), 1 263 coverage edges (the URI sources are compiled into the target), 0 crash,
+  0 trap — no CR / LF / NUL reached a host or a request target, no space a request target. Seeds (the corpus is
+  git-ignored): a presigned URL with `%2F` and repeated keys, a bracketed IPv6 authority with dot-segments, a userinfo
+  with an escape, an LDAP URL with `?` in its query, `mailto:`, an RFC 3986 relative reference, an encoded CRLF in the
+  path, an escape inside the host. `fuzz_wav` re-run the same day after the `Frequency` change: 4.4 million executions
+  in 120 s, 0 crash.
 
 ### Extended campaign (PixelFactory, VertexFactory, Compression)
 

@@ -70,7 +70,7 @@ TARGETS=(
 	fuzz_png fuzz_jpeg fuzz_targa fuzz_hdr
 	fuzz_native fuzz_stl fuzz_mdx
 	fuzz_compression fuzz_ini
-	fuzz_http_response
+	fuzz_http_response fuzz_uri
 )
 
 # A parser implemented in a .cpp sits in the g++-built static library, uninstrumented: libFuzzer gets no coverage of
@@ -85,6 +85,7 @@ extra_sources ()
 		fuzz_ini) echo "src/INIParser.cpp" ;;
 		fuzz_jpeg) echo "src/PixelFactory/FileFormatJpeg.cpp" ;;
 		fuzz_png) echo "src/PixelFactory/FileFormatPNG.cpp" ;;
+		fuzz_uri) echo "src/Network/URI.cpp src/Network/URIDomain.cpp src/Network/Query.cpp src/Network/PercentEncoding.cpp src/Network/Hostname.cpp" ;;
 		fuzz_wav) echo "src/WaveFactory/FileFormatSNDFile.cpp" ;;
 		*) echo "" ;;
 	esac

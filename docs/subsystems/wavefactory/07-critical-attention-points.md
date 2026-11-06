@@ -16,4 +16,10 @@
   largest difference 0.0); stopped, the wave is left as it was. Measured (Linux, 328 s stereo 44.1 → 48 kHz, stop
   100 ms in): 0.35-2.2 ms (`DISABLED_ResampleStopLatency`). Why: a 328 s MP3 held a shutdown 4.3 s (Windows peer,
   2026-10-18). The engine's music / sound loads pass their job's token (engine item `music-load-honours-stop-token`).
-- **Wave Invalid Frequency**: Always check frequency validity before computing durations. `seconds()`/`milliseconds()` return 0.0F for invalid frequency.
+- **Wave Invalid Frequency**: Always check frequency validity (`Frequency::isValid()`) before computing durations. `seconds()`/`milliseconds()` return 0.0F for invalid frequency.
+- **`Frequency` is a strong type, not a closed enumeration (owner decision, 2026-11-06)**: any integer rate in
+  [`Frequency::MinimumHz`, `Frequency::MaximumHz`] = [1 000, 384 000] Hz, built only through `Frequency::fromHz()`
+  (Invalid outside the range) or a named constant (`Frequency::PCM48000Hz`…); the rate is read with `hz()`, never a
+  cast. A rate from a file, a setting or a device goes through `fromHz()` (the former `toFrequency()` is gone). Two
+  in-range rates can still be refused by `Processor::resample()`: libsamplerate takes a ratio in [1/256, 256] only
+  (1 kHz → 384 kHz is 384).

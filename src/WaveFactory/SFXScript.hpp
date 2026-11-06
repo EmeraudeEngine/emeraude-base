@@ -246,7 +246,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				/* Calculate sample count from duration. */
-				const auto sampleRate = static_cast< size_t >(m_frequency);
+				const auto sampleRate = static_cast< size_t >(m_frequency.hz());
 				const auto sampleCount = (sampleRate * durationMs.value()) / 1000;
 
 				/* Get finalInstructions early since they will be applied to each track. */

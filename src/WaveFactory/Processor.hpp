@@ -41,7 +41,7 @@
 namespace EmEn::Base::WaveFactory
 {
 	/* Forward declarations. */
-	enum class Frequency;
+	class Frequency;
 
 	/**
 	 * @brief The Processor class. Used to perform transformations on existing waves.

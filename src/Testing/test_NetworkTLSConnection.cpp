@@ -29,9 +29,17 @@
 /* STL inclusions. */
 #include <array>
 #include <chrono>
+#include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string>
 #include <thread>
+#include <utility>
+
+/* Third-party inclusions. */
+#include "asio.hpp"
+#include <openssl/ssl.h>
+#include <openssl/tls1.h>
 
 /* Local inclusions. */
 #include "Network/TLSConnection.hpp"
@@ -47,6 +55,8 @@ namespace
 	 * @brief A one-shot hermetic TLS server on 127.0.0.1 (ephemeral port).
 	 * @note Echo mode: reads one message and echoes it back, then shuts down.
 	 * Mute mode: performs the handshake then never answers (read-timeout tests).
+	 * @note A non-zero maximumVersion caps the protocol the server offers (TLS1_1_VERSION: an outdated server) and drops
+	 * its security level to 0, the only level at which the TLS library still negotiates below TLS 1.2.
 	 */
 	class TLSTestServer final
 	{
@@ -59,10 +69,20 @@ namespace
 			};
 
 			explicit
-			TLSTestServer (const ServerCredentials & credentials, Behavior behavior) noexcept
+			TLSTestServer (const ServerCredentials & credentials, Behavior behavior, uint16_t maximumVersion = 0) noexcept
 				: m_behavior(behavior)
 			{
 				asio::error_code error;
+
+				if ( maximumVersion != 0 )
+				{
+					SSL_CTX_set_security_level(m_serverContext.native_handle(), 0);
+
+					if ( SSL_CTX_set_max_proto_version(m_serverContext.native_handle(), maximumVersion) != 1 )
+					{
+						return;
+					}
+				}
 
 				m_serverContext.use_certificate(asio::buffer(credentials.certificatePEM), asio::ssl::context::pem, error);
 
@@ -243,6 +263,38 @@ TEST(NetworkTLSConnection, handshakeFailsWithUntrustedServer)
 
 	EXPECT_FALSE(connection.connect("localhost", server.port()));
 	EXPECT_FALSE(connection.isConnected());
+}
+
+TEST(NetworkTLSConnection, aServerBelowTLS12IsRefused)
+{
+	/* RFC 8996: TLS 1.0 and 1.1 are deprecated. The floor is the connection's own, so even a caller's permissive
+	 * context (security level 0, which re-enables them in the TLS library) cannot reach an outdated server. */
+	const auto credentials = generateServerCredentials("DNS:localhost,IP:127.0.0.1");
+	ASSERT_TRUE(credentials.valid);
+
+	/* Control: the same permissive client reaches a server capped at TLS 1.2. */
+	{
+		const TLSTestServer server{credentials, TLSTestServer::Behavior::Echo, TLS1_2_VERSION};
+		ASSERT_TRUE(server.isListening());
+
+		auto clientContext = makeTrustingClientContext(credentials.certificatePEM);
+		SSL_CTX_set_security_level(clientContext.native_handle(), 0);
+
+		Network::TLSConnection connection{clientContext};
+		EXPECT_TRUE(connection.connect("localhost", server.port()));
+	}
+
+	{
+		const TLSTestServer server{credentials, TLSTestServer::Behavior::Echo, TLS1_1_VERSION};
+		ASSERT_TRUE(server.isListening());
+
+		auto clientContext = makeTrustingClientContext(credentials.certificatePEM);
+		SSL_CTX_set_security_level(clientContext.native_handle(), 0);
+
+		Network::TLSConnection connection{clientContext};
+		EXPECT_FALSE(connection.connect("localhost", server.port()));
+		EXPECT_FALSE(connection.isConnected());
+	}
 }
 
 TEST(NetworkTLSConnection, hostnameVerificationRejectsWrongHost)

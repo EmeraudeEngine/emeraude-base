@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <iostream>
 #include <stop_token>
+#include <utility>
 
 /* Forward declarations. */
 
@@ -58,22 +59,129 @@ namespace EmEn::Base::WaveFactory
 	};
 
 	/**
-	 * @brief Standard PCM frequency enumeration.
+	 * @brief A PCM sample rate in Hz: any integer rate in [MinimumHz, MaximumHz], or Invalid (0 Hz).
+	 * @note A strong type, not a closed enumeration (owner decision, 2026-11-06): a sound file at a non-standard rate
+	 * (22255 Hz, a classic Mac rate; 22222, 16007, 12500 Hz…) is a valid wave, and the engine resamples it once to the
+	 * playback rate. The ten standard rates stay as named constants. An instance is only built through fromHz()
+	 * (validated) or a constant: it is always either Invalid or inside the range.
+	 * @note The range is a sanity bound for a rate read from a file, a setting or a device (a trust boundary), not a
+	 * playback limit: OpenAL takes any rate, and libsamplerate any ratio in [1/256, 256].
 	 */
-	enum class Frequency
+	class Frequency final
 	{
-		Invalid = 0,
-		PCM4000Hz = 4000,
-		PCM8000Hz = 8000,
-		PCM11025Hz = 11025,
-		PCM16000Hz = 16000,
-		PCM22050Hz = 22050,
-		PCM32000Hz = 32000,
-		PCM44100Hz = 44100,
-		PCM48000Hz = 48000,
-		PCM96000Hz = 96000,
-		PCM192000Hz = 192000
+		public:
+
+			/** @brief The lowest accepted rate in Hz. */
+			static constexpr std::uint32_t MinimumHz{1000U};
+			/** @brief The highest accepted rate in Hz. */
+			static constexpr std::uint32_t MaximumHz{384000U};
+
+			/* NOTE: declared here, defined inline constexpr after the class (a class is incomplete inside its own body). */
+			static const Frequency Invalid;
+			static const Frequency PCM4000Hz;
+			static const Frequency PCM8000Hz;
+			static const Frequency PCM11025Hz;
+			static const Frequency PCM16000Hz;
+			static const Frequency PCM22050Hz;
+			static const Frequency PCM32000Hz;
+			static const Frequency PCM44100Hz;
+			static const Frequency PCM48000Hz;
+			static const Frequency PCM96000Hz;
+			static const Frequency PCM192000Hz;
+
+			/**
+			 * @brief Constructs an invalid frequency (0 Hz).
+			 */
+			constexpr Frequency () noexcept = default;
+
+			/**
+			 * @brief Returns the frequency of a rate, or Invalid when the rate is outside [MinimumHz, MaximumHz].
+			 * @note The trust boundary: a rate coming from a file, a setting or a device goes through here. The caller
+			 * logs the refusal with its own context.
+			 * @param hz The rate in Hz.
+			 * @return Frequency
+			 */
+			[[nodiscard]]
+			static constexpr
+			Frequency
+			fromHz (std::int64_t hz) noexcept
+			{
+				if ( std::cmp_less(hz, MinimumHz) || std::cmp_greater(hz, MaximumHz) )
+				{
+					return Frequency{};
+				}
+
+				return Frequency{static_cast< std::uint32_t >(hz)};
+			}
+
+			/**
+			 * @brief Returns the rate in Hz (0 when invalid).
+			 * @return std::uint32_t
+			 */
+			[[nodiscard]]
+			constexpr
+			std::uint32_t
+			hz () const noexcept
+			{
+				return m_hz;
+			}
+
+			/**
+			 * @brief Returns whether the frequency is a usable rate (not Invalid).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			constexpr
+			bool
+			isValid () const noexcept
+			{
+				return m_hz != 0U;
+			}
+
+			/**
+			 * @brief Compares two frequencies.
+			 * @param lhs The left operand.
+			 * @param rhs The right operand.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			friend
+			constexpr
+			bool
+			operator== (const Frequency & lhs, const Frequency & rhs) noexcept = default;
+
+		private:
+
+			/**
+			 * @brief Constructs a frequency from a rate already known to be in range.
+			 * @param hz The rate in Hz.
+			 */
+			explicit
+			constexpr
+			Frequency (std::uint32_t hz) noexcept
+				: m_hz{hz}
+			{
+
+			}
+
+			std::uint32_t m_hz{0U};
 	};
+
+	inline constexpr Frequency Frequency::Invalid{};
+	inline constexpr Frequency Frequency::PCM4000Hz{4000U};
+	inline constexpr Frequency Frequency::PCM8000Hz{8000U};
+	inline constexpr Frequency Frequency::PCM11025Hz{11025U};
+	inline constexpr Frequency Frequency::PCM16000Hz{16000U};
+	inline constexpr Frequency Frequency::PCM22050Hz{22050U};
+	inline constexpr Frequency Frequency::PCM32000Hz{32000U};
+	inline constexpr Frequency Frequency::PCM44100Hz{44100U};
+	inline constexpr Frequency Frequency::PCM48000Hz{48000U};
+	inline constexpr Frequency Frequency::PCM96000Hz{96000U};
+	inline constexpr Frequency Frequency::PCM192000Hz{192000U};
+
+	static_assert(Frequency::fromHz(22255) == Frequency::fromHz(22255) && Frequency::fromHz(22255).hz() == 22255U);
+	static_assert(!Frequency::fromHz(999).isValid() && !Frequency::fromHz(384001).isValid() && !Frequency::fromHz(-48000).isValid());
+	static_assert(Frequency::fromHz(48000) == Frequency::PCM48000Hz && !Frequency::Invalid.isValid());
 
 	/**
 	 * @brief Supported audio output container formats.
@@ -147,55 +255,6 @@ namespace EmEn::Base::WaveFactory
 				std::cerr << "toChannels(), " << channelsCount << " channels is not handled !" "\n";
 
 				return Channels::Invalid;
-		}
-	}
-
-	/**
-	 * @brief Converts a frequency number to a corresponding enumeration.
-	 * @param frequency The frequency in Hz.
-	 * @return Frequency
-	 */
-	[[nodiscard]]
-	inline
-	Frequency
-	toFrequency (int frequency) noexcept
-	{
-		switch ( frequency )
-		{
-			case 4000 :
-				return Frequency::PCM4000Hz;
-
-			case 8000 :
-				return Frequency::PCM8000Hz;
-
-			case 11025 :
-				return Frequency::PCM11025Hz;
-
-			case 16000 :
-				return Frequency::PCM16000Hz;
-
-			case 22050 :
-				return Frequency::PCM22050Hz;
-
-			case 32000 :
-				return Frequency::PCM32000Hz;
-
-			case 44100 :
-				return Frequency::PCM44100Hz;
-
-			case 48000 :
-				return Frequency::PCM48000Hz;
-
-			case 96000 :
-				return Frequency::PCM96000Hz;
-
-			case 192000 :
-				return Frequency::PCM192000Hz;
-
-			default:
-				std::cerr << "toFrequency(), the frequency " << frequency << " is not standard !" "\n";
-
-				return Frequency::Invalid;
 		}
 	}
 }

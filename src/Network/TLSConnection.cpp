@@ -30,12 +30,23 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <compare>
 #include <cstddef>
+#include <memory>
+#include <new>
+#include <span>
 #include <string>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 /* Third-party inclusions. LibreSSL, through its OpenSSL-compatible API. */
 #include <openssl/ssl.h>
+
+/* Third-party inclusions. */
+#include <openssl/tls1.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 /* Local inclusions. */
 #include "HappyEyeballs.hpp"
@@ -134,11 +145,30 @@ namespace EmEn::Base::Network
 		this->disconnect();
 	}
 
+	std::chrono::milliseconds
+	TLSConnection::capped (std::chrono::milliseconds timeout) const noexcept
+	{
+		if ( m_deadline == std::chrono::steady_clock::time_point::max() )
+		{
+			return timeout;
+		}
+
+		const auto now = std::chrono::steady_clock::now();
+
+		if ( now >= m_deadline )
+		{
+			return std::chrono::milliseconds{0};
+		}
+
+		/* Rounded UP: a budget of 0.4 ms left must not become 0 and abort an operation that still has time. */
+		return std::min(timeout, std::chrono::ceil< std::chrono::milliseconds >(m_deadline - now));
+	}
+
 	void
 	TLSConnection::runWithTimeout (std::chrono::milliseconds timeout) noexcept
 	{
 		m_ioContext.restart();
-		m_ioContext.run_for(timeout);
+		m_ioContext.run_for(this->capped(timeout));
 
 		if ( !m_ioContext.stopped() )
 		{
@@ -197,7 +227,7 @@ namespace EmEn::Base::Network
 		/* TCP connection (Happy Eyeballs, RFC 8305, under the connect timeout): a name answering IPv6 and IPv4 must
 		 * not pay the whole failure of the first family — a refused ::1 costs ~2 s on Windows. */
 		const auto ordered = interleaveAddressFamilies(resolved);
-		const auto connectError = connectFirstReachable(m_ioContext, ordered, m_stream.next_layer(), m_options.connectTimeout);
+		const auto connectError = connectFirstReachable(m_ioContext, ordered, m_stream.next_layer(), this->capped(m_options.connectTimeout));
 
 		if ( connectError )
 		{
@@ -299,6 +329,17 @@ namespace EmEn::Base::Network
 		 * buffer is handed over without a const-dropping cast. */
 		auto verifiedHost = unbracket(targetHost);
 		const auto targetIsIP = isIPLiteral(verifiedHost);
+
+		/* Protocol floor: TLS 1.2 (RFC 8996 deprecates TLS 1.0 and 1.1). Set on THIS connection's SSL object, never on
+		 * the caller's shared context: every caller is covered, none can lower it, and the context stays untouched.
+		 * Cipher policy: the TLS library's defaults (LibreSSL's TLS 1.3 suites and its DEFAULT list for TLS 1.2) —
+		 * docs/plans/network-tls/README.md § Protocol floor. */
+		if ( SSL_set_min_proto_version(m_stream.native_handle(), TLS1_2_VERSION) != 1 )
+		{
+			Logging::error(Tag, "performHandshake(), unable to set the TLS 1.2 protocol floor !");
+
+			return false;
+		}
 
 		/* RFC 6066 §3: an IP literal must NOT be sent as SNI — some servers reject the
 		 * handshake outright when it is. */

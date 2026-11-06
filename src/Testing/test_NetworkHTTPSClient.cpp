@@ -27,21 +27,34 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
-#include <cstdlib>
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <initializer_list>
 #include <memory>
 #include <optional>
-#include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
+/* Third-party inclusions. */
+#include "asio.hpp"
+
 /* Local inclusions. */
-#include "TemporaryPath.hpp"
+#include "Network/Hostname.hpp"
+#include "Network/HTTPRequest.hpp"
+#include "Network/HTTPResponse.hpp"
 #include "Network/HTTPSClient.hpp"
+#include "Network/TLSConnection.hpp"
+#include "Network/URI.hpp"
+#include "Network/URIDomain.hpp"
+#include "TemporaryPath.hpp"
 #include "TLSTestHelpers.hpp"
 
 using namespace EmEn::Base;
@@ -1182,4 +1195,39 @@ TEST(NetworkHTTPSClient, closingAnIdleConnectionDoesNotWaitForASilentPeer)
 	const auto elapsed = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::steady_clock::now() - start);
 
 	EXPECT_LT(elapsed.count(), 2000);
+}
+
+TEST(NetworkHTTPSClient, theTotalTimeoutIsOneBudgetNotASumOfOperationTimeouts)
+{
+	/* Every transport step allows 10 s, the whole request 400 ms, and the server answers after 2 s: the request must
+	 * end at the total budget, not when the (allowed) read completes. */
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	const HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+		std::this_thread::sleep_for(std::chrono::seconds{2});
+
+		return plainResponse("late");
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	Network::HTTPSClientOptions options;
+	options.transportTimeouts.connectTimeout = std::chrono::seconds{10};
+	options.transportTimeouts.handshakeTimeout = std::chrono::seconds{10};
+	options.transportTimeouts.readTimeout = std::chrono::seconds{10};
+	options.transportTimeouts.writeTimeout = std::chrono::seconds{10};
+	options.totalTimeout = std::chrono::milliseconds{400};
+
+	const Network::HTTPSClient client{tlsContext, options};
+	Network::DownloadReport report;
+
+	const auto begin = std::chrono::steady_clock::now();
+	const auto result = client.request(Network::HTTPRequest::Method::GET, serverURI(server, "/slow"), {}, &report);
+	const auto elapsed = std::chrono::steady_clock::now() - begin;
+
+	EXPECT_FALSE(result.has_value());
+	EXPECT_EQ(report.outcome, Network::DownloadOutcome::Timeout);
+	EXPECT_LT(elapsed, std::chrono::milliseconds{1500});
 }

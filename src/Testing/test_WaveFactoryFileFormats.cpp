@@ -51,6 +51,7 @@
 #include "WaveFactory/FileFormatJSON.hpp"
 #include "WaveFactory/FileFormatMIDI.hpp"
 #include "WaveFactory/FileFormatSNDFile.hpp"
+#include "WaveFactory/Processor.hpp"
 #include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
 #include "WaveFactory/StreamIO.hpp"
@@ -741,6 +742,75 @@ namespace EmEn::Base::WaveFactory
 		{
 			EXPECT_NEAR(decoded.data()[i], source.data()[i], 2);
 		}
+	}
+
+	TEST(WaveFactorySNDFile, aNonStandardSampleRateLoadsAndResamples)
+	{
+		/* 22255 Hz, a classic Mac rate: libsndfile reads it and OpenAL plays any rate, so the loader must not refuse it
+		 * (2026-10-28: 13 of 879 sounds of a downstream data store were refused by the former closed enumeration). */
+		const auto buffer = makeWav(1, 22255, 16, 16);
+
+		MemoryStream stream{buffer};
+		FileFormatSNDFile< int16_t > format;
+		Wave< int16_t > wave;
+		ASSERT_TRUE(format.readStream(stream, wave, {}));
+
+		EXPECT_EQ(wave.frequency().hz(), 22255U);
+		EXPECT_EQ(wave.sampleCount(), 8U);
+
+		/* What the engine does next: one resample to the playback rate. */
+		Processor processor{wave};
+		ASSERT_TRUE(processor.resample(Frequency::PCM48000Hz));
+		EXPECT_EQ(processor.wave().frequency(), Frequency::PCM48000Hz);
+		EXPECT_GT(processor.wave().sampleCount(), wave.sampleCount());
+	}
+
+	TEST(WaveFactorySNDFile, aSampleRateOutsideTheRangeIsRefused)
+	{
+		for ( const uint32_t rate : {Frequency::MinimumHz - 1U, Frequency::MaximumHz + 1U} )
+		{
+			const auto buffer = makeWav(1, rate, 16, 16);
+
+			MemoryStream stream{buffer};
+			FileFormatSNDFile< int16_t > format;
+			Wave< int16_t > wave;
+			EXPECT_FALSE(format.readStream(stream, wave, {})) << rate << " Hz";
+		}
+
+		for ( const uint32_t rate : {Frequency::MinimumHz, Frequency::MaximumHz} )
+		{
+			const auto buffer = makeWav(1, rate, 16, 16);
+
+			MemoryStream stream{buffer};
+			FileFormatSNDFile< int16_t > format;
+			Wave< int16_t > wave;
+			ASSERT_TRUE(format.readStream(stream, wave, {})) << rate << " Hz";
+			EXPECT_EQ(wave.frequency().hz(), rate);
+		}
+	}
+
+	TEST(WaveFactoryFrequency, fromHzKeepsTheRangeAndTheNamedRates)
+	{
+		EXPECT_FALSE(Frequency{}.isValid());
+		EXPECT_EQ(Frequency{}, Frequency::Invalid);
+		EXPECT_FALSE(Frequency::fromHz(0).isValid());
+		EXPECT_FALSE(Frequency::fromHz(-22050).isValid());
+		EXPECT_FALSE(Frequency::fromHz(static_cast< int64_t >(Frequency::MaximumHz) + 1).isValid());
+		EXPECT_EQ(Frequency::fromHz(22255).hz(), 22255U);
+		EXPECT_EQ(Frequency::fromHz(44100), Frequency::PCM44100Hz);
+		EXPECT_NE(Frequency::fromHz(22255), Frequency::PCM22050Hz);
+	}
+
+	TEST(WaveFactoryProcessor, aResampleOutsideTheConverterRatioIsRefused)
+	{
+		/* Both rates are in range, but 1 kHz to 384 kHz is a ratio of 384, beyond libsamplerate's 256. */
+		Wave< int16_t > wave;
+		ASSERT_TRUE(wave.initialize(8U, Channels::Mono, Frequency::fromHz(Frequency::MinimumHz)));
+
+		Processor processor{wave};
+		EXPECT_FALSE(processor.resample(Frequency::fromHz(Frequency::MaximumHz)));
+		EXPECT_EQ(processor.wave().frequency().hz(), Frequency::MinimumHz);
+		EXPECT_FALSE(processor.resample(Frequency::Invalid));
 	}
 
 	TEST(WaveFactorySNDFile, forgedHugeFrameCountNeverOverAllocates)

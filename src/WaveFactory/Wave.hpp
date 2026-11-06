@@ -359,7 +359,7 @@ namespace EmEn::Base::WaveFactory
 			float
 			seconds () const noexcept
 			{
-				const auto freq = static_cast< float >(m_frequency);
+				const auto freq = static_cast< float >(m_frequency.hz());
 
 				return (freq > 0.0F) ? (static_cast< float >(this->sampleCount()) / freq) : 0.0F;
 			}
@@ -372,7 +372,7 @@ namespace EmEn::Base::WaveFactory
 			float
 			milliseconds () const noexcept
 			{
-				const auto freq = static_cast< float >(m_frequency);
+				const auto freq = static_cast< float >(m_frequency.hz());
 
 				return (freq > 0.0F) ? ((static_cast< float >(this->sampleCount()) * 1000.0F) / freq) : 0.0F;
 			}
@@ -391,7 +391,7 @@ namespace EmEn::Base::WaveFactory
 					"Wave (wave_t) data :\n" <<
 					"Samples count : " << obj.sampleCount() << "\n"
 					"Channels count : " << static_cast< int >(obj.m_channels) <<"\n"
-					"Frequency : " << static_cast< int >(obj.m_frequency) << "\n"
+					"Frequency : " << obj.m_frequency.hz() << "\n"
 					"Wave data count : " << obj.elementCount() << "\n"
 					"Wave data size : " << obj.bytes() << "\n"
 					"Wave data : " << ( obj.isValid() ? "Loaded" : "Not loaded" ) << '\n';

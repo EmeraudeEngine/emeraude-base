@@ -113,15 +113,30 @@ namespace EmEn::Base::WaveFactory
 			return false;
 		}
 
+		if ( !frequency.isValid() || !m_wave.frequency().isValid() )
+		{
+			Logging::error("WaveFactory::Processor", "resample(), from " + std::to_string(m_wave.frequency().hz()) + " Hz to " + std::to_string(frequency.hz()) + " Hz: invalid frequency !");
+
+			return false;
+		}
+
 		if ( m_wave.frequency() == frequency )
 		{
-			Logging::info("WaveFactory::Processor", std::string{"resample(), the frequency is already at "} + std::to_string(static_cast< int >(frequency)) + " Hz !");
+			Logging::info("WaveFactory::Processor", std::string{"resample(), the frequency is already at "} + std::to_string(frequency.hz()) + " Hz !");
 
 			return true;
 		}
 
 		const auto channels = static_cast< size_t >(m_wave.channels());
-		const auto ratio = static_cast< double >(frequency) / static_cast< double >(m_wave.frequency());
+		const auto ratio = static_cast< double >(frequency.hz()) / static_cast< double >(m_wave.frequency().hz());
+
+		/* Two in-range rates can still exceed libsamplerate's ratio bounds [1/256, 256] (1 kHz to 384 kHz is 384). */
+		if ( src_is_valid_ratio(ratio) == 0 )
+		{
+			Logging::error("WaveFactory::Processor", "resample(), from " + std::to_string(m_wave.frequency().hz()) + " Hz to " + std::to_string(frequency.hz()) + " Hz: the ratio is outside libsamplerate's bounds !");
+
+			return false;
+		}
 		const auto inputFrames = m_wave.sampleCount();
 		const auto outputCapacity = static_cast< size_t >(std::ceil(static_cast< double >(inputFrames) * ratio));
 
@@ -586,12 +601,12 @@ namespace EmEn::Base::WaveFactory
 	float
 	Processor::getDuration () const noexcept
 	{
-		if ( !m_wave.isValid() )
+		if ( !m_wave.isValid() || !m_wave.frequency().isValid() )
 		{
 			return 0.0F;
 		}
 
-		return static_cast< float >(m_wave.sampleCount()) / static_cast< float >(m_wave.frequency());
+		return static_cast< float >(m_wave.sampleCount()) / static_cast< float >(m_wave.frequency().hz());
 	}
 
 	std::vector< std::pair< size_t, size_t > >
@@ -607,7 +622,7 @@ namespace EmEn::Base::WaveFactory
 		const auto thresholdLinear = std::pow(10.0F, thresholdDb / 20.0F);
 		const auto channelCount = static_cast< size_t >(m_wave.channels());
 		const auto sampleCount = m_wave.sampleCount();
-		const auto sampleRate = static_cast< float >(m_wave.frequency());
+		const auto sampleRate = static_cast< float >(m_wave.frequency().hz());
 		const auto minSamples = static_cast< size_t >(minDurationMs * sampleRate / 1000.0F);
 
 		bool inSilence = false;

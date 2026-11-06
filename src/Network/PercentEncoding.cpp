@@ -27,8 +27,8 @@
 #include "PercentEncoding.hpp"
 
 /* STL inclusions. */
-#include <array>
 #include <cctype>
+#include <cstddef>
 
 namespace EmEn::Base::Network::PercentEncoding
 {
@@ -126,6 +126,24 @@ namespace EmEn::Base::Network::PercentEncoding
 
 			return false;
 		}
+
+		/**
+		 * @brief Appends the %XX escape of a byte (uppercase hex, RFC 3986 §6.2.2.1).
+		 * @param output The string to append to.
+		 * @param byte The byte.
+		 */
+		void
+		appendEscape (std::string & output, unsigned char byte) noexcept
+		{
+			/* A nibble (0-15) as an uppercase hexadecimal digit. */
+			constexpr auto hexDigit = [] (unsigned int nibble) noexcept {
+				return static_cast< char >(nibble < 10U ? '0' + nibble : 'A' + (nibble - 10U));
+			};
+
+			output.push_back('%');
+			output.push_back(hexDigit(static_cast< unsigned int >(byte) >> 4U));
+			output.push_back(hexDigit(static_cast< unsigned int >(byte) & 0x0FU));
+		}
 	}
 
 	std::string
@@ -160,8 +178,6 @@ namespace EmEn::Base::Network::PercentEncoding
 	std::string
 	encode (std::string_view input, Component component) noexcept
 	{
-		static constexpr std::array< char, 16 > HexDigits{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
-
 		std::string output;
 		output.reserve(input.size());
 
@@ -175,9 +191,39 @@ namespace EmEn::Base::Network::PercentEncoding
 			}
 			else
 			{
-				output.push_back('%');
-				output.push_back(HexDigits[byte >> 4]);
-				output.push_back(HexDigits[byte & 0x0F]);
+				appendEscape(output, byte);
+			}
+		}
+
+		return output;
+	}
+
+	std::string
+	encodePreservingEscapes (std::string_view input, Component component) noexcept
+	{
+		std::string output;
+		output.reserve(input.size());
+
+		for ( size_t index = 0; index < input.size(); ++index )
+		{
+			const auto byte = static_cast< unsigned char >(input[index]);
+
+			if ( input[index] == '%' && index + 2 < input.size() && hexValue(input[index + 1]) >= 0 && hexValue(input[index + 2]) >= 0 )
+			{
+				/* A well-formed escape: kept as written (its hex case included). */
+				output.append(input.substr(index, 3));
+				index += 2;
+
+				continue;
+			}
+
+			if ( isAllowed(byte, component) )
+			{
+				output.push_back(input[index]);
+			}
+			else
+			{
+				appendEscape(output, byte);
 			}
 		}
 

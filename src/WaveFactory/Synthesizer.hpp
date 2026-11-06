@@ -799,7 +799,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Phase accumulation is ~6x faster than time-based calculation.
@@ -846,7 +846,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Phase accumulation avoids expensive sin() call entirely for square wave. */
@@ -893,7 +893,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Phase accumulation for triangle wave. */
@@ -946,7 +946,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Phase accumulation for sawtooth wave. */
@@ -998,7 +998,7 @@ namespace EmEn::Base::WaveFactory
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto regionSampleCount = endSample - startSample;
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Calculate sample boundaries for each phase. */
@@ -1075,7 +1075,7 @@ namespace EmEn::Base::WaveFactory
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto regionSampleCount = endSample - startSample;
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				float phase = 0.0F;
@@ -1134,7 +1134,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				const auto decaySamples = static_cast< size_t >(decayTime * sampleRateFloat);
@@ -1183,7 +1183,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Create a copy of original data for the region. */
@@ -1242,7 +1242,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
@@ -1283,7 +1283,7 @@ namespace EmEn::Base::WaveFactory
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto regionSampleCount = endSample - startSample;
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				const auto fadeSamples = static_cast< size_t >(fadeTime * sampleRateFloat);
@@ -1323,7 +1323,7 @@ namespace EmEn::Base::WaveFactory
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
 				const auto regionSampleCount = endSample - startSample;
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				const auto fadeSamples = static_cast< size_t >(fadeTime * sampleRateFloat);
@@ -1364,7 +1364,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Simple first-order low-pass filter coefficient. */
@@ -1411,7 +1411,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Simple first-order high-pass filter coefficient. */
@@ -1504,7 +1504,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				for ( size_t sampleIndex = startSample; sampleIndex < endSample; ++sampleIndex )
@@ -1777,7 +1777,7 @@ namespace EmEn::Base::WaveFactory
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Convert depth from ms to samples. */
@@ -1857,7 +1857,7 @@ namespace EmEn::Base::WaveFactory
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Convert depth from ms to samples. */
@@ -1949,7 +1949,7 @@ namespace EmEn::Base::WaveFactory
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Frequency range for the sweeping notches. */
@@ -2033,7 +2033,7 @@ namespace EmEn::Base::WaveFactory
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Convert delay from ms to samples. */
@@ -2093,7 +2093,7 @@ namespace EmEn::Base::WaveFactory
 				mix = std::clamp(mix, 0.0F, 1.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Comb filter delay times (in samples at 44100 Hz, scaled for actual sample rate). */
@@ -2214,7 +2214,7 @@ namespace EmEn::Base::WaveFactory
 				maxFreq = std::clamp(maxFreq, minFreq + 100.0F, 5000.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* State variable filter state. */
@@ -2293,7 +2293,7 @@ namespace EmEn::Base::WaveFactory
 				maxFreq = std::clamp(maxFreq, minFreq + 100.0F, 5000.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Envelope follower coefficients. */
@@ -2379,7 +2379,7 @@ namespace EmEn::Base::WaveFactory
 				makeupGain = std::clamp(makeupGain, 0.0F, 30.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Convert threshold to linear. */
@@ -2473,7 +2473,7 @@ namespace EmEn::Base::WaveFactory
 				releaseTime = std::clamp(releaseTime, 0.001F, 2.0F);
 
 				const auto [startSample, endSample] = this->getEffectiveRange();
-				const auto sampleRateFloat = static_cast< float >(m_wave.frequency());
+				const auto sampleRateFloat = static_cast< float >(m_wave.frequency().hz());
 				auto & data = m_wave.data();
 
 				/* Convert threshold to linear. */
@@ -2844,7 +2844,7 @@ namespace EmEn::Base::WaveFactory
 			float
 			nyquist () const noexcept
 			{
-				return static_cast< float >(m_wave.frequency()) * 0.5F;
+				return static_cast< float >(m_wave.frequency().hz()) * 0.5F;
 			}
 
 			/**

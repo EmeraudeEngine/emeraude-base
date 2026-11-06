@@ -281,6 +281,13 @@ includes added and 167 removed in 65 files at the first pass, then converged. Kn
 namespace-scope forward declaration of `ShapeDecimator::ArenaList` (a nested class template is declared inside its
 class only; every use follows its definition).
 
+**2026-11-06 lot** (the 2026-08-27 network leftovers + the `WaveFactory::Frequency` strong type; 11 base and 4 engine
+files): converged at the second pass. Known IWYU false suggestion, kept: removing `"asio/ssl.hpp"` from
+`Network/TLSConnection.hpp` — its `asio::ssl::stream` member needs the definition (clang: "no member named 'ssl' in
+namespace 'asio'"); kept with `// IWYU pragma: keep (<reason>)`. clang-tidy: 7 findings on the changed lines, all fixed
+(`std::cmp_less` / `std::cmp_greater` in `Frequency::fromHz()`, a computed hex digit instead of an array subscript in
+`PercentEncoding`, `const` test locals); cppcheck 0.
+
 
 ## D11 — the disabled checks ruled (owner decision 2026-10-19, Ave Robustus II P-W (5))
 

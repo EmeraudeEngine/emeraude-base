@@ -29,6 +29,8 @@
 /* STL inclusions. */
 #include <atomic>
 #include <chrono>
+#include <compare>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -42,15 +44,25 @@
 /* Third-party inclusions.
  * NOTE: the no-exceptions hook MUST be included before any asio header. */
 #include "Network/asio_throw_exception.hpp"
-#include "asio/ssl.hpp"
 
 /* Local inclusions. */
 #include "HTTPRequest.hpp"
 #include "HTTPResponse.hpp"
 #include "HTTPResponseParser.hpp"
 #include "Mutex.hpp"
+#include "ThreadSafety.hpp"
 #include "TLSConnection.hpp"
-#include "URI.hpp"
+
+/* Forward declarations. */
+namespace asio::ssl
+{
+	class context;
+}
+
+namespace EmEn::Base::Network
+{
+	class URI;
+}
 
 namespace EmEn::Base::Network
 {
@@ -139,7 +151,12 @@ namespace EmEn::Base::Network
 		/** @brief Per-operation transport timeouts (connect / handshake / read / write). */
 		TLSConnectionOptions transportTimeouts{};
 
-		/** @brief Total budget for a whole request including all redirect hops. */
+		/**
+		 * @brief Total budget for a whole request including all redirect hops: ONE deadline every transport step is
+		 * capped by (each gets min(its own timeout, the time left)); a step failing past it reports Timeout.
+		 * @note ⚠️ The one overrun left: a stalled name resolution (getaddrinfo() cannot be interrupted) holds the request
+		 * until the system resolver gives up — docs/plans/network-tls/README.md § The total budget.
+		 */
 		std::chrono::milliseconds totalTimeout{120000};
 
 		/**

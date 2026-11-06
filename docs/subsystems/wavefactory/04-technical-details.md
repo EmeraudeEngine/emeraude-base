@@ -128,7 +128,7 @@ broken bank falls back to sound).
 **Robustness:**
 - **EOF protection**: `readVariableLength()` guards against truncated files to prevent infinite loops
 - **NaN guards**: All output samples checked with `std::isfinite()` before writing
-- **Invalid frequency handling**: `Wave::seconds()`/`milliseconds()` return 0.0F when frequency is Invalid
+- **Invalid frequency handling**: `Wave::seconds()`/`milliseconds()` and `Processor::getDuration()` return 0.0F when the frequency is Invalid; `Processor::resample()` refuses an Invalid source or target
 - See: `FileFormatMIDI.hpp:readVariableLength()`, `Wave.hpp:seconds()`
 
 **Limitations:**

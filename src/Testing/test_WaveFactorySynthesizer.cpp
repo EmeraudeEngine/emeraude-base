@@ -35,13 +35,17 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
+#include <stop_token>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
 #include "IO/MemoryStream.hpp"
 #include "WaveFactory/FileFormatJSON.hpp"
 #include "WaveFactory/Synthesizer.hpp"
+#include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
 
 /* The coverage pass (2026-10-17): the generators and effects, their documented parameter domains (owner decision: a
@@ -344,7 +348,7 @@ TEST(WaveFactorySFXScript, everyInstructionTypeRuns)
 		Wave< int16_t > wave;
 
 		EXPECT_TRUE(decodeSFX(script, wave)) << instruction;
-		EXPECT_EQ(wave.sampleCount(), 60U * static_cast< size_t >(wave.frequency()) / 1000U) << instruction;
+		EXPECT_EQ(wave.sampleCount(), 60U * static_cast< size_t >(wave.frequency().hz()) / 1000U) << instruction;
 	}
 }
 
@@ -355,7 +359,7 @@ TEST(WaveFactorySFXScript, regionsFinalInstructionsAndStereo)
 		Wave< int16_t > wave;
 		ASSERT_TRUE(decodeSFX(R"({"duration":60,"channels":1,"tracks":[{"regions":[{"offset":20,"length":20,"instructions":[{"type":"sineWave","frequency":1000,"amplitude":0.5}]}]}]})", wave));
 
-		const auto rate = static_cast< size_t >(wave.frequency());
+		const auto rate = static_cast< size_t >(wave.frequency().hz());
 		const auto & data = wave.data();
 		const auto loudest = [&data] (size_t from, size_t to) {
 			int peak = 0;

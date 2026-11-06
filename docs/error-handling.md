@@ -83,6 +83,8 @@ These either throw (→ `terminate` under `-fno-exceptions`) or hide failures:
   `new` whose failure is unchecked is not. Validate first, then use the non-throwing form
   (`operator[]` after a bounds check, `std::from_chars`, etc.).
 - **Swallowing errors silently** (e.g. ignoring a `bool`/`optional`, empty `catch`).
+- **Anything that needs RTTI** (`dynamic_cast`, `typeid`, `std::type_index`, `std::any`, `std::function::target()`):
+  § RTTI below.
 
 ## 4. Abort policy (owner-ruled)
 
@@ -249,7 +251,29 @@ compile-time FNV-1a hash of the compiler's function signature naming `std::remov
 - A value of at most 32 bytes, nothrow-movable, is stored inline (a `std::shared_ptr` payload allocates nothing,
   unlike libstdc++'s `std::any`); a larger one on the heap.
 - asio is built with `ASIO_NO_TYPEID` (it only detects Boost's `BOOST_NO_TYPEID`, never `-fno-rtti`).
+- Option B (not chosen): typed payloads per subject — a redesign of every observable and observer. Keeping `std::any` on
+  GCC / Clang only was rejected too: MSVC cannot compile it under `/GR-`.
 Tests: `BaseAny.*`, `Observer.*`.
+
+## RTTI — the counterpart of the exceptions rule (owner goal, 2026-09-08)
+
+The cascade is meant to build without RTTI as it builds without exceptions: `EMERAUDE_DISABLE_RTTI` (`-fno-rtti` /
+`/GR-`). emeraude-base ALONE is RTTI-free since 2026-10-07 (accepted on the three OS: Linux `-fno-rtti` +
+`ASIO_NO_TYPEID`, macOS, Windows MSVC `/GR-` with no STL1003). The option's default stays `Off` until the engine
+(`rtti-removal`) and projet-alpha (`actor-trait-queries-without-rtti`) are RTTI-free too; flipping it is the last step
+of base's `rtti-free-observer-payload` item. New code never adds an RTTI dependency:
+
+| Forbidden | Why | What replaces it |
+|---|---|---|
+| `dynamic_cast` / `std::dynamic_pointer_cast` | needs the type_info of the hierarchy; a cross-cast to a mixin walks it comparing `type_info` (a cost on a hot path) | a virtual accessor returning `nullptr` by default, overridden by the class that has the capability (the engine's `Renderable::Abstract::skeletalData()` contract); or a type tag (`ClassId`, an enum) then `static_cast` when the hierarchy is closed |
+| `typeid` | needs RTTI; its `name()` is implementation-defined | a `ClassId` constant, or `Base::typeHashOf< T >()` for a compile-time identity (never persisted or transmitted: the hash differs between compiler families) |
+| `std::type_index` (a map key) | built from `typeid` | `Base::typeHashOf< T >()` as the key |
+| `std::any` / `std::any_cast` | MSVC refuses `<any>` under `/GR-` (STL1003); libstdc++ / libc++ hide it | `Base::Any` + `Base::anyCast< T >()` / `Base::anyValue< T >()` (§ The Observer payload) |
+| `std::function::target()` / `target_type()` | returns a `type_info` | keep the callable's identity beside it (a token, an id) instead of asking the wrapper |
+
+`std::function` itself, `std::variant`, `std::shared_ptr` (without `dynamic_pointer_cast`) and virtual functions need no
+RTTI. A prebuilt third-party archive compiled with RTTI stays linkable as long as no class of ours derives from one of its
+polymorphic classes.
 
 ## JSON: the checked FastJSON reads, never jsoncpp's as*() (2026-09-30)
 

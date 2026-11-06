@@ -33,6 +33,8 @@
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "Network/Query.hpp"
+#include "Network/URIDomain.hpp"
 #include "PercentEncoding.hpp"
 
 namespace EmEn::Base::Network
@@ -182,26 +184,16 @@ namespace EmEn::Base::Network
 			m_uriDomain = URIDomain{};
 		}
 
-		/* Path: percent-decode, then remove dot-segments for an absolute path. */
-		auto decodedPath = PercentEncoding::decode(path);
+		/* Path and query: the encoded bytes kept for the wire, the decoded views derived from them. */
+		this->assignEncodedPath(path);
 
-		if ( !decodedPath.empty() && decodedPath.front() == '/' )
-		{
-			decodedPath = removeDotSegments(decodedPath);
-		}
-
-		/* NOTE: UTF-8 (the decoded bytes): IO::u8path(), never the narrow path conversion (the ANSI code page on Windows);
-		 * read back through IO::toGenericU8String(). */
-		m_path = IO::u8path(decodedPath);
-
-		/* Query and fragment (both percent-decoded on the way in). */
 		if ( hasQuery )
 		{
-			m_query = Query::fromString(query);
+			this->assignEncodedQuery(query);
 		}
 		else
 		{
-			m_query = Query{};
+			this->assignEncodedQuery({});
 		}
 
 		if ( hasFragment )
@@ -282,24 +274,63 @@ namespace EmEn::Base::Network
 		return output;
 	}
 
+	void
+	URI::assignEncodedPath (const std::string & encodedPath) noexcept
+	{
+		/* NOTE: dot-segments are removed on the ENCODED path: a "%2F" stays inside its segment, as the server sees it. */
+		m_encodedPath = PercentEncoding::encodePreservingEscapes(encodedPath, PercentEncoding::Component::Path);
+
+		if ( !m_encodedPath.empty() && m_encodedPath.front() == '/' )
+		{
+			m_encodedPath = removeDotSegments(m_encodedPath);
+		}
+
+		/* NOTE: UTF-8 (the decoded bytes): IO::u8path(), never the narrow path conversion (the ANSI code page on Windows);
+		 * read back through IO::toGenericU8String(). */
+		m_path = IO::u8path(PercentEncoding::decode(m_encodedPath));
+	}
+
+	void
+	URI::assignEncodedQuery (const std::string & encodedQuery) noexcept
+	{
+		m_encodedQuery = PercentEncoding::encodePreservingEscapes(encodedQuery, PercentEncoding::Component::Query);
+		m_query = Query::fromString(m_encodedQuery);
+	}
+
+	void
+	URI::setPath (const std::filesystem::path & path) noexcept
+	{
+		m_path = path;
+		m_encodedPath = PercentEncoding::encode(IO::toGenericU8String(m_path), PercentEncoding::Component::Path);
+	}
+
+	void
+	URI::setQuery (const Query & query) noexcept
+	{
+		std::stringstream encoded;
+		encoded << query;
+
+		m_query = query;
+		m_encodedQuery = encoded.str();
+	}
+
 	std::string
 	URI::mergePath (const std::string & referencePath) const noexcept
 	{
 		/* RFC 3986 §5.2.3. */
-		if ( !m_uriDomain.empty() && m_path.empty() )
+		if ( !m_uriDomain.empty() && m_encodedPath.empty() )
 		{
 			return '/' + referencePath;
 		}
 
-		const auto basePath = IO::toGenericU8String(m_path);
-		const auto lastSlash = basePath.find_last_of('/');
+		const auto lastSlash = m_encodedPath.find_last_of('/');
 
 		if ( lastSlash == std::string::npos )
 		{
 			return referencePath;
 		}
 
-		return basePath.substr(0, lastSlash + 1) + referencePath;
+		return m_encodedPath.substr(0, lastSlash + 1) + referencePath;
 	}
 
 	URI
@@ -310,13 +341,13 @@ namespace EmEn::Base::Network
 
 		URI target;
 
-		/* RFC 3986 §5.2.2 — Transform References. */
+		/* RFC 3986 §5.2.2 — Transform References, on the ENCODED path and query (the decoded views follow). */
 		if ( !ref.m_scheme.empty() )
 		{
 			target.m_scheme = ref.m_scheme;
 			target.m_uriDomain = ref.m_uriDomain;
-			target.m_path = IO::u8path(removeDotSegments(IO::toGenericU8String(ref.m_path)));
-			target.m_query = ref.m_query;
+			target.assignEncodedPath(removeDotSegments(ref.m_encodedPath));
+			target.assignEncodedQuery(ref.m_encodedQuery);
 		}
 		else
 		{
@@ -325,32 +356,32 @@ namespace EmEn::Base::Network
 			if ( !ref.m_uriDomain.empty() )
 			{
 				target.m_uriDomain = ref.m_uriDomain;
-				target.m_path = IO::u8path(removeDotSegments(IO::toGenericU8String(ref.m_path)));
-				target.m_query = ref.m_query;
+				target.assignEncodedPath(removeDotSegments(ref.m_encodedPath));
+				target.assignEncodedQuery(ref.m_encodedQuery);
 			}
 			else
 			{
 				target.m_uriDomain = base.m_uriDomain;
 
-				const auto referencePath = IO::toGenericU8String(ref.m_path);
+				const auto & referencePath = ref.m_encodedPath;
 
 				if ( referencePath.empty() )
 				{
-					target.m_path = base.m_path;
-					target.m_query = ref.m_query.empty() ? base.m_query : ref.m_query;
+					target.assignEncodedPath(base.m_encodedPath);
+					target.assignEncodedQuery(ref.m_encodedQuery.empty() ? base.m_encodedQuery : ref.m_encodedQuery);
 				}
 				else
 				{
 					if ( referencePath.front() == '/' )
 					{
-						target.m_path = IO::u8path(removeDotSegments(referencePath));
+						target.assignEncodedPath(removeDotSegments(referencePath));
 					}
 					else
 					{
-						target.m_path = IO::u8path(removeDotSegments(base.mergePath(referencePath)));
+						target.assignEncodedPath(removeDotSegments(base.mergePath(referencePath)));
 					}
 
-					target.m_query = ref.m_query;
+					target.assignEncodedQuery(ref.m_encodedQuery);
 				}
 			}
 		}
@@ -365,18 +396,18 @@ namespace EmEn::Base::Network
 	{
 		std::stringstream string;
 
-		if ( m_path.empty() )
+		if ( m_encodedPath.empty() )
 		{
 			string << '/';
 		}
 		else
 		{
-			string << PercentEncoding::encode(IO::toGenericU8String(m_path), PercentEncoding::Component::Path);
+			string << m_encodedPath;
 		}
 
-		if ( !m_query.empty() )
+		if ( !m_encodedQuery.empty() )
 		{
-			string << '?' << m_query;
+			string << '?' << m_encodedQuery;
 		}
 
 		return string.str();
@@ -397,9 +428,9 @@ namespace EmEn::Base::Network
 			string << "//" << m_uriDomain.host();
 		}
 
-		string << PercentEncoding::encode(IO::toGenericU8String(m_path), PercentEncoding::Component::Path);
+		string << m_encodedPath;
 
-		if ( !m_query.empty() )
+		if ( !m_encodedQuery.empty() )
 		{
 			string << "?<redacted>";
 		}
@@ -420,11 +451,11 @@ namespace EmEn::Base::Network
 			out << "//" << obj.m_uriDomain;
 		}
 
-		out << PercentEncoding::encode(IO::toGenericU8String(obj.m_path), PercentEncoding::Component::Path);
+		out << obj.m_encodedPath;
 
-		if ( !obj.m_query.empty() )
+		if ( !obj.m_encodedQuery.empty() )
 		{
-			out << '?' << obj.m_query;
+			out << '?' << obj.m_encodedQuery;
 		}
 
 		if ( !obj.m_fragment.empty() )

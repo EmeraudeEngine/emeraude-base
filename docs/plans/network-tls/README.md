@@ -366,11 +366,9 @@ test (suite 2009/2009, live 3/3):
 | One header with an empty value (`X-Cache:`, legal per RFC 9110 §5.5) rejected the whole response | The header line is split on its first colon; an empty value is kept |
 | A zero-length 2xx body never called the progress hook, though the contract promises a terminal call | One final call is emitted |
 
-Not fixed here, tracked separately: `totalTimeout` is still not a hard budget (per-operation timeouts
-add up, DNS is not cancellable), error reporting is still `bool`/`nullopt` with no cause, and the URI
-layer still decodes `%2F` and re-orders query parameters (breaks signed URLs).
-Items: `http-total-timeout-hard-budget`, `uri-layer-preserves-encoding`, `uri-parser-fuzzer`,
-`tls-certificate-revocation`, `tls-protocol-floor` (`docs/todo/`).
+Not fixed in that pass: the total budget, the URI encoding, the URI fuzzer, the TLS floor and revocation — all
+settled on 2026-11-06, see § The 2026-08-27 leftovers below. (Error reporting gained its cause with
+`DownloadReport` on 2026-08-28.)
 
 ## Post-freeze increment — `request()`, the API-traffic entry point (2026-08-28)
 
@@ -425,6 +423,62 @@ addresses, never through a proxy), `HTTPRequestOptions::cancel` (`DownloadOutcom
 overload with headers, and the `Host` field now carries a non-default port (RFC 9110 § 7.2). Detail and tests:
 `docs/subsystems/source-tree/24-network-http-server.md`. TLS for the LAN case stays open (engine item
 `resource-sharing-tls`).
+
+## The 2026-08-27 leftovers (2026-11-06, owner decisions)
+
+### Protocol floor
+
+`TLSConnection::performHandshake()` sets **TLS 1.2 as the minimum** (`SSL_set_min_proto_version`, RFC 8996) on the
+connection's OWN `SSL` object, never on the caller's shared context: every caller is covered, none can lower it, the
+context is untouched. Cipher policy: LibreSSL's defaults (its TLS 1.3 suites, its `DEFAULT` list for TLS 1.2).
+⚠️ **LibreSSL 4.3.2 (the ext-deps build, the same on the three OS) negotiates nothing below TLS 1.2 at all**: a server
+context capped at TLS 1.1 fails with "no protocols available" even at security level 0, although
+`SSL_CTX_set_max_proto_version(TLS1_1_VERSION)` succeeds. The floor is therefore defence in depth (a library change, a
+build of a downstream consumer against another OpenSSL-compatible library), and its test
+`NetworkTLSConnection.aServerBelowTLS12IsRefused` passes on the former code too: no local peer can speak TLS 1.1.
+
+### The total budget
+
+`HTTPSClientOptions::totalTimeout` is ONE deadline (`TLSConnection::setDeadline()`): every transport step — the
+resolution, the connection race, the handshake, each read and write, the close_notify grace — runs for
+min(its own timeout, the time left), none starts once the deadline has passed, and a step failing past it reports
+`DownloadOutcome::Timeout`. A connection put back in the keep-alive pool drops its request's deadline
+(`clearDeadline()`). Test: `NetworkHTTPSClient.theTotalTimeoutIsOneBudgetNotASumOfOperationTimeouts` (10 s per step,
+400 ms total, a server answering after 2 s): 2 045 ms on the former code, under the budget now.
+⚠️ **The one overrun left: name resolution.** asio runs `getaddrinfo()` on its resolver thread; a timeout abandons the
+handler, but the pending operation is drained (`io_context::run()`) before the step reports, and the `io_context`'s
+destruction joins that thread (`resolver_thread_pool.ipp`). A stalled system resolver therefore holds the request until
+it gives up itself (glibc: `timeout` × `attempts` of `resolv.conf`, 5 s × 2 by default). This was already true of the
+former `connectTimeout`. Owner decision 2026-11-06: no new dependency (c-ares) for it; documented.
+
+### The URI keeps its encoded bytes
+
+`URI` keeps the path and the query AS PARSED (`encodedPath()`, `encodedQuery()`) and re-emits them byte for byte in
+`resource()` (the request target) and `operator<<`: a `%2F` inside an object key, the parameters' order, a repeated key
+and the escapes' hex case reach the wire unchanged, so a presigned URL keeps its signature. `path()` and `query()` are
+DECODED views for inspection only (a `%2F` is a `/` there; the query is a sorted map with one value per key).
+Dot-segments are removed on the encoded path (a `%2F` stays inside its segment), and so is `resolve()`'s merge.
+The parsed bytes only lose what is illegal in their component: `PercentEncoding::encodePreservingEscapes()` keeps a
+well-formed escape and every allowed character, and escapes the rest (a space, CR, LF, a non-ASCII byte, a stray `%`)
+— the guarantee the former decode-then-encode gave against a request-line injection. `setPath()` / `setQuery()` set
+the encoded form from the decoded one. Tests: `NetworkURI.aPresignedURLIsReEmittedByteForByte` and
+`resolveKeepsAnEncodedSlashInsideItsSegment` (both failed on the former code: `%2F` decoded, `a=3` dropped, the
+parameters sorted), `illegalBytesAreEscapedOnTheWire`.
+
+### The URI fuzzer
+
+`src/Fuzzing/fuzz_uri.cpp`: parse, re-emit, parse again, resolve the input against itself; traps on a CR, LF or NUL in
+a host or a request target and on a space in a request target (`src/Fuzzing/README.md`).
+
+### Certificate revocation: not supported, on purpose
+
+`TLSConnection` checks the chain and the identity, never revocation (no OCSP, no CRL): a revoked certificate is accepted
+until it expires. Why (owner decision, 2026-11-06): OCSP is being retired — the CA/Browser Forum made it optional in
+2023 (ballot SC063, CRLs mandatory), Let's Encrypt removed the OCSP URL from its certificates in May 2025 and shut its
+responders down in August 2025, so an OCSP check would cover a shrinking minority of servers; a CRL download during the
+handshake (a second HTTP exchange, a cache, a soft / hard-fail policy) is out of proportion for a game client; and the
+certificate lifetimes are shrinking toward 47 days (by 2029), which bounds the exposure. Browsers do not query either:
+they ship their own revocation sets (Chrome CRLSets, Firefox CRLite).
 
 ## Cross-platform validation
 

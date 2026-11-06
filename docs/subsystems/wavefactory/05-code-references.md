@@ -6,7 +6,7 @@
 | `Synthesizer.hpp` | All generation/effects (header-only template) |
 | `SFXScript.hpp` | JSON parser for procedural sound effects |
 | `Processor.hpp/.cpp` | Transformation operations |
-| `Types.hpp` | Channels, Frequency, AudioFormat enums + ReadOptions/WriteOptions structs |
+| `Types.hpp` | Channels, AudioFormat enums, the `Frequency` strong type (any rate in [1 kHz, 384 kHz], named standard rates) + ReadOptions/WriteOptions structs |
 | `FileIO.hpp` | File-backed format dispatcher (IO::FileStream) |
 | `StreamIO.hpp` | Memory buffer I/O (IO::MemoryStream, libsndfile only) |
 | `FileFormatInterface.hpp` | Abstract base: `readStream(ByteStream &)` / `writeStream(ByteStream &)` |

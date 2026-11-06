@@ -29,6 +29,7 @@
 /* STL inclusions. */
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <string>
 
 /* Local inclusions. */
@@ -40,6 +41,11 @@ namespace EmEn::Base::Network
 	/**
 	 * @brief The URI class.
 	 * @note [protocol:][//[user-info@]host[:port]][path]
+	 * @note Two views of the path and of the query (owner decision, 2026-11-06): the ENCODED bytes, kept as parsed and
+	 * re-emitted unchanged by resource() and operator<< (a presigned URL signs them: "%2F" inside an object key, the
+	 * parameters' order and duplicates, the escapes' hex case), and the DECODED view, path() and query(), for
+	 * inspection only (a "%2F" there is a '/', the query a sorted map that keeps one value per key). The encoded bytes
+	 * only ever lose what is illegal in their component: PercentEncoding::encodePreservingEscapes().
 	 */
 	class URI
 	{
@@ -105,24 +111,18 @@ namespace EmEn::Base::Network
 			}
 
 			/**
-			 * @brief Sets the path of the URI.
-			 * @param path A reference to a filesystem path.
+			 * @brief Sets the path of the URI from its DECODED form.
+			 * @note The encoded path becomes its percent-encoding (PercentEncoding::Component::Path).
+			 * @param path A reference to a filesystem path (UTF-8).
 			 */
-			void
-			setPath (const std::filesystem::path & path) noexcept
-			{
-				m_path = path;
-			}
+			void setPath (const std::filesystem::path & path) noexcept;
 
 			/**
-			 * @brief Sets the query of the URI.
+			 * @brief Sets the query of the URI from its decoded variables.
+			 * @note The encoded query becomes the variables' encoding, in the map's (sorted) order.
 			 * @param query A reference to a query.
 			 */
-			void
-			setQuery (const Query & query) noexcept
-			{
-				m_query = query;
-			}
+			void setQuery (const Query & query) noexcept;
 
 			/**
 			 * @brief Sets the fragment of the URI.
@@ -157,7 +157,7 @@ namespace EmEn::Base::Network
 			}
 
 			/**
-			 * @brief Returns the path part.
+			 * @brief Returns the path part, DECODED (inspection: a "%2F" is a '/' here).
 			 * @return const std::filesystem::path &
 			 */
 			[[nodiscard]]
@@ -168,7 +168,7 @@ namespace EmEn::Base::Network
 			}
 
 			/**
-			 * @brief Returns the query part.
+			 * @brief Returns the query part, DECODED (inspection: sorted, one value per key).
 			 * @return const Query &
 			 */
 			[[nodiscard]]
@@ -176,6 +176,29 @@ namespace EmEn::Base::Network
 			query () const noexcept
 			{
 				return m_query;
+			}
+
+			/**
+			 * @brief Returns the path as it goes on the wire (the parsed bytes, or the encoding of setPath()).
+			 * @return const std::string &
+			 */
+			[[nodiscard]]
+			const std::string &
+			encodedPath () const noexcept
+			{
+				return m_encodedPath;
+			}
+
+			/**
+			 * @brief Returns the query as it goes on the wire, without its '?' (the parsed bytes, or the encoding of
+			 * setQuery()).
+			 * @return const std::string &
+			 */
+			[[nodiscard]]
+			const std::string &
+			encodedQuery () const noexcept
+			{
+				return m_encodedQuery;
 			}
 
 			/**
@@ -190,7 +213,7 @@ namespace EmEn::Base::Network
 			}
 
 			/**
-			 * @brief Returns the resource part.
+			 * @brief Returns the resource part, the HTTP request target: the encoded path, then '?' and the encoded query.
 			 * @return std::string
 			 */
 			[[nodiscard]]
@@ -280,12 +303,26 @@ namespace EmEn::Base::Network
 			bool parseRawString (const std::string & rawString) noexcept;
 
 			/**
-			 * @brief Merges a reference path onto this (base) path (RFC 3986 §5.2.3).
-			 * @param referencePath The reference path.
+			 * @brief Merges a reference path onto this (base) path (RFC 3986 §5.2.3), both ENCODED.
+			 * @param referencePath The encoded reference path.
 			 * @return std::string
 			 */
 			[[nodiscard]]
 			std::string mergePath (const std::string & referencePath) const noexcept;
+
+			/**
+			 * @brief Sets the path from its encoded bytes: illegal bytes escaped, dot-segments removed from an absolute
+			 * path, and the decoded view derived from them.
+			 * @param encodedPath The encoded path as parsed.
+			 */
+			void assignEncodedPath (const std::string & encodedPath) noexcept;
+
+			/**
+			 * @brief Sets the query from its encoded bytes (without the '?'): illegal bytes escaped, and the decoded view
+			 * derived from them.
+			 * @param encodedQuery The encoded query as parsed.
+			 */
+			void assignEncodedQuery (const std::string & encodedQuery) noexcept;
 
 			/**
 			 * @brief STL streams printable object.
@@ -298,7 +335,9 @@ namespace EmEn::Base::Network
 			std::string m_scheme;
 			URIDomain m_uriDomain;
 			std::filesystem::path m_path;
+			std::string m_encodedPath;
 			Query m_query;
+			std::string m_encodedQuery;
 			std::string m_fragment;
 	};
 

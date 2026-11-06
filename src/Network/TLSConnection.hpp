@@ -37,14 +37,15 @@
  * NOTE: the no-exceptions hook MUST be included before any asio header. */
 #include "Network/asio_throw_exception.hpp"
 #include "asio.hpp"
-#include "asio/ssl.hpp"
+#include "asio/ssl.hpp" // IWYU pragma: keep (the asio::ssl::stream member needs its definition; IWYU 0.23 proposes removing it)
 
 namespace EmEn::Base::Network
 {
 	/**
 	 * @brief Timeout configuration for a TLS connection.
 	 * @note Transport-level timeouts only (connect / TLS handshake / single read or
-	 * write). The HTTP client adds its own response/total budgets on top.
+	 * write). Each one is further capped by the connection's deadline, when one is set
+	 * (TLSConnection::setDeadline(): the HTTP client's total budget).
 	 */
 	struct TLSConnectionOptions final
 	{
@@ -75,6 +76,9 @@ namespace EmEn::Base::Network
 	 * @note Certificate-chain verification (against the trust store configured on the
 	 * shared TLS context, see TrustStore) and hostname verification (X509_check_host)
 	 * are always enforced — there is deliberately no "insecure" switch.
+	 * @note TLS 1.2 is the protocol floor, set on the connection itself (the shared context is never modified).
+	 * @note Certificate REVOCATION is not checked (no OCSP, no CRL), on purpose: a revoked certificate is accepted until
+	 * it expires (owner decision 2026-11-06, docs/plans/network-tls/README.md § Certificate revocation).
 	 * @note Single-use: one connect() per instance; create a new instance to reconnect.
 	 */
 	class TLSConnection final
@@ -210,13 +214,45 @@ namespace EmEn::Base::Network
 			[[nodiscard]]
 			bool isOpenAndIdle () noexcept;
 
+			/**
+			 * @brief Sets an absolute deadline every following operation is capped by: each one gets
+			 * min(its own timeout, the time left), and none starts once the deadline has passed.
+			 * @note ⚠️ A name resolution in flight cannot be interrupted: asio runs getaddrinfo() on its resolver thread,
+			 * and the pending operation is drained (getaddrinfo() returns) before the step reports its failure. A stalled
+			 * resolver overruns the deadline by the system resolver's own timeout (docs/plans/network-tls/README.md
+			 * § The total budget).
+			 * @param deadline The deadline.
+			 */
+			void
+			setDeadline (std::chrono::steady_clock::time_point deadline) noexcept
+			{
+				m_deadline = deadline;
+			}
+
+			/**
+			 * @brief Removes the deadline (a connection put back in an idle pool outlives its request's budget).
+			 */
+			void
+			clearDeadline () noexcept
+			{
+				m_deadline = std::chrono::steady_clock::time_point::max();
+			}
+
 		private:
+
+			/**
+			 * @brief Returns an operation's timeout capped by the time left before the deadline (zero once it passed).
+			 * @param timeout The operation's own timeout.
+			 * @return std::chrono::milliseconds
+			 */
+			[[nodiscard]]
+			std::chrono::milliseconds capped (std::chrono::milliseconds timeout) const noexcept;
 
 			/**
 			 * @brief Runs the private io_context until the pending operation completes or a timeout expires.
 			 * @note On timeout the socket is closed, which completes the pending
 			 * operation with asio::error::operation_aborted.
-			 * @param timeout The time budget for the pending operation.
+			 * @param timeout The time budget for the pending operation, capped by the deadline (capped()).
 			 */
 			void runWithTimeout (std::chrono::milliseconds timeout) noexcept;
 
@@ -250,6 +286,7 @@ namespace EmEn::Base::Network
 			asio::io_context m_ioContext;
 			asio::ssl::stream< asio::ip::tcp::socket > m_stream;
 			TLSConnectionOptions m_options;
+			std::chrono::steady_clock::time_point m_deadline{std::chrono::steady_clock::time_point::max()};
 			bool m_connected{false};
 			bool m_handshakeRefused{false};
 			bool m_cleartext{false};

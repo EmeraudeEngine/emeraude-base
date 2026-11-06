@@ -27,23 +27,30 @@
 #include "HTTPSClient.hpp"
 
 /* STL inclusions. */
-#include <charconv>
-#include <cctype>
-#include <cstdlib>
 #include <algorithm>
 #include <array>
+#include <cctype>
+#include <charconv>
+#include <cstdlib>
 #include <fstream>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 /* Local inclusions. */
 #include "emeraude_platform.hpp"
 #include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
+#include "Network/Hostname.hpp"
+#include "Network/HTTPRequest.hpp"
+#include "Network/HTTPResponse.hpp"
+#include "Network/HTTPResponseParser.hpp"
+#include "Network/TLSConnection.hpp"
+#include "Network/URIDomain.hpp"
 #include "String.hpp"
 #include "URI.hpp"
 
@@ -775,6 +782,9 @@ namespace EmEn::Base::Network
 			return;
 		}
 
+		/* The request's budget ends with the request: an idle connection, and its eventual close, have their own. */
+		connection->clearDeadline();
+
 		/* Closed after the lock is released: a connection over the cap, and every expired one. */
 		std::vector< std::unique_ptr< TLSConnection > > closing;
 
@@ -932,7 +942,18 @@ namespace EmEn::Base::Network
 		{
 			connection = this->takeIdleConnection(connectionKey);
 			reused = connection != nullptr;
+
+			if ( reused )
+			{
+				connection->setDeadline(deadline);
+			}
 		}
+
+		/* ONE budget: every transport step is capped by the time left before the deadline, so the per-operation
+		 * timeouts no longer add up past totalTimeout. A step that fails once the deadline has passed is a Timeout. */
+		const auto expired = [deadline] () noexcept {
+			return std::chrono::steady_clock::now() >= deadline;
+		};
 
 		std::array< char, TransportReadBufferSize > buffer{};
 		std::optional< size_t > firstRead;
@@ -942,6 +963,7 @@ namespace EmEn::Base::Network
 			if ( connection == nullptr )
 			{
 				connection = std::make_unique< TLSConnection >(m_tlsContext, m_options.transportTimeouts);
+				connection->setDeadline(deadline);
 				reused = false;
 
 				bool connected = false;
@@ -966,7 +988,16 @@ namespace EmEn::Base::Network
 					 * until 2026-08-28 nothing in this file ever produced it - an expired certificate came
 					 * back as Unreachable, which invites the retry that must never happen and hides the
 					 * one thing the caller has to show the user. */
-					outcome = connection->handshakeRefused() ? DownloadOutcome::TLSFailure : DownloadOutcome::Unreachable;
+					if ( expired() )
+					{
+						outcome = DownloadOutcome::Timeout;
+
+						Logging::error(Tag, "performHop(), the total time budget expired while connecting.");
+					}
+					else
+					{
+						outcome = connection->handshakeRefused() ? DownloadOutcome::TLSFailure : DownloadOutcome::Unreachable;
+					}
 
 					return std::nullopt;
 				}
@@ -993,6 +1024,11 @@ namespace EmEn::Base::Network
 
 			if ( !written )
 			{
+				if ( expired() )
+				{
+					outcome = DownloadOutcome::Timeout;
+				}
+
 				return std::nullopt;
 			}
 
@@ -1068,7 +1104,7 @@ namespace EmEn::Base::Network
 				return std::nullopt;
 			}
 
-			if ( std::chrono::steady_clock::now() >= deadline )
+			if ( expired() )
 			{
 				outcome = DownloadOutcome::Timeout;
 
@@ -1086,6 +1122,13 @@ namespace EmEn::Base::Network
 
 			if ( !bytesRead.has_value() )
 			{
+				if ( expired() )
+				{
+					outcome = DownloadOutcome::Timeout;
+
+					Logging::error(Tag, "performHop(), the total time budget expired while reading.");
+				}
+
 				discardPartialFile();
 
 				return std::nullopt;

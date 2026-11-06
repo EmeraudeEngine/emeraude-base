@@ -213,7 +213,7 @@ namespace EmEn::Base::WaveFactory
 
 		const auto samples = static_cast< size_t >(soundFileInfos.frames);
 		const auto channels = toChannels(soundFileInfos.channels);
-		const auto frequency = toFrequency(soundFileInfos.samplerate);
+		const auto frequency = Frequency::fromHz(soundFileInfos.samplerate);
 
 		if ( channels == Channels::Invalid )
 		{
@@ -222,9 +222,9 @@ namespace EmEn::Base::WaveFactory
 			isDataValid = false;
 		}
 
-		if ( frequency == Frequency::Invalid )
+		if ( !frequency.isValid() )
 		{
-			Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), invalid frequency !");
+			Logging::error("WaveFactory::FileFormatSNDFile", "readStream(), the sample rate " + std::to_string(soundFileInfos.samplerate) + " Hz is outside [" + std::to_string(Frequency::MinimumHz) + ", " + std::to_string(Frequency::MaximumHz) + "] Hz !");
 
 			isDataValid = false;
 		}
@@ -352,7 +352,7 @@ namespace EmEn::Base::WaveFactory
 
 		SF_INFO infos;
 		infos.channels = static_cast< int >(wave.channels());
-		infos.samplerate = static_cast< int >(wave.frequency());
+		infos.samplerate = static_cast< int >(wave.frequency().hz());
 		infos.format = format;
 
 		auto * file = sf_open_virtual(&virtualIO, SFM_WRITE, &infos, &stream);

@@ -27,12 +27,17 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <filesystem>
+#include <map>
 #include <string>
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "Network/Hostname.hpp"
 #include "Network/PercentEncoding.hpp"
+#include "Network/Query.hpp"
 #include "Network/URI.hpp"
+#include "Network/URIDomain.hpp"
 
 using namespace EmEn::Base::Network;
 
@@ -105,11 +110,47 @@ TEST(NetworkURI, queryValueDelimitersSurviveARoundTrip)
 	const URI uri{"https://bucket.s3.amazonaws.com/a.zip?X-Amz-Security-Token=a%2Bb%3Dc%26d%3Be%2Ff&x-id=PutObject"};
 
 	EXPECT_EQ(uri.query().variables().at("X-Amz-Security-Token"), "a+b=c&d;e/f");
-	EXPECT_EQ(uri.resource(), "/a.zip?X-Amz-Security-Token=a%2Bb%3Dc%26d%3Be/f&x-id=PutObject");
+	EXPECT_EQ(uri.resource(), "/a.zip?X-Amz-Security-Token=a%2Bb%3Dc%26d%3Be%2Ff&x-id=PutObject");
 
 	const URI reparsed{"https://bucket.s3.amazonaws.com" + uri.resource()};
 
 	EXPECT_EQ(reparsed.query().variables(), uri.query().variables());
+}
+
+TEST(NetworkURI, aPresignedURLIsReEmittedByteForByte)
+{
+	/* A presigned URL signs the exact path and query bytes: a "%2F" inside an object key, the parameters' order, a
+	 * repeated key and the escapes' hex case must all reach the wire unchanged. */
+	const std::string raw{"https://bucket.example.com/dir%2Fkey%20v2.zip?b=2&a=1&a=3&X-Sig=ab%2bcd%3D"};
+	const URI uri{raw};
+
+	EXPECT_EQ(uri.resource(), "/dir%2Fkey%20v2.zip?b=2&a=1&a=3&X-Sig=ab%2bcd%3D");
+	EXPECT_EQ(to_string(uri), raw);
+
+	const URI reparsed{to_string(uri)};
+
+	EXPECT_EQ(reparsed.resource(), uri.resource());
+}
+
+TEST(NetworkURI, illegalBytesAreEscapedOnTheWire)
+{
+	/* What the parse keeps verbatim is only what is legal: a space, CR, LF or a stray '%' can never reach a request
+	 * line as such (the former decode-then-encode guaranteed it; the encoded view must too). */
+	const URI uri{"https://example.com/a b\r\nX: y/100%?q=1 2\n&r=%zz"};
+	const auto resource = uri.resource();
+
+	EXPECT_EQ(resource, "/a%20b%0D%0AX:%20y/100%25?q=1%202%0A&r=%25zz");
+	EXPECT_EQ(resource.find_first_of(" \r\n"), std::string::npos) << resource;
+}
+
+TEST(NetworkURI, resolveKeepsAnEncodedSlashInsideItsSegment)
+{
+	const URI base{"https://example.com/a/b%2Fc?x=1"};
+
+	/* "b%2Fc" is ONE segment: the merge replaces it whole. */
+	EXPECT_EQ(URI::resolve(base, "d?z=2&y=1").resource(), "/a/d?z=2&y=1");
+	EXPECT_EQ(URI::resolve(base, "").resource(), "/a/b%2Fc?x=1");
+	EXPECT_EQ(URI::resolve(base, "/k%2Fl/../m").resource(), "/m");
 }
 
 TEST(NetworkURI, redactedLeavesCredentialsOut)

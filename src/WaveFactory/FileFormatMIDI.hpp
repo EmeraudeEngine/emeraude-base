@@ -1216,7 +1216,7 @@ namespace EmEn::Base::WaveFactory
 			bool
 			renderWithSoundfont (Wave< precision_t > & wave, const std::vector< MIDINote > & notes, const std::vector< ControlEvent > & controlEvents, const std::vector< TempoEvent > & tempoEvents, const MIDIHeader & header, const std::array< ChannelState, 16 > & channelStates) noexcept
 			{
-				const auto sampleRate = static_cast< uint32_t >(m_frequency);
+				const auto sampleRate = m_frequency.hz();
 
 				/* Configure TSF for stereo interleaved output. */
 				tsf_set_output(m_soundfont, TSF_STEREO_INTERLEAVED, static_cast< int >(sampleRate), 0.0F);
@@ -1665,7 +1665,7 @@ namespace EmEn::Base::WaveFactory
 				}
 
 				/* Otherwise, fall back to additive synthesis. */
-				const auto sampleRate = static_cast< uint32_t >(m_frequency);
+				const auto sampleRate = m_frequency.hz();
 				const auto sampleRateF = static_cast< float >(sampleRate);
 
 				/* Find the last note end to determine total duration. */
