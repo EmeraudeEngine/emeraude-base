@@ -18,8 +18,11 @@ the same `-fno-exceptions` policy the library uses, so a hidden `throw` (e.g. js
   ```
   sudo apt install libclang-rt-19-dev
   ```
-- A configured/built emeraude-base build dir for the generated config header and the static
-  library — defaults to `.claude-build-debug` (override with `BASE_BUILD_DIR`).
+- A configured/built build dir for the generated config header and the static library — defaults to
+  `.claude-build-debug` (override with `BASE_BUILD_DIR`, absolute or relative to the emeraude-base root). A standalone
+  emeraude-base tree or a projet-alpha / engine tree both work (2026-11-06): the script SEARCHES the tree for
+  `emeraude_base_config.hpp` — `<build>/include` in a standalone base tree, `<build>/Emeraude/emeraude-base/include`
+  when the base is a subproject (it used to look in `<build>/include` only, so a projet-alpha tree failed: macOS peer).
 - **macOS** (validated 2026-10-19, M6): AppleClang ships no libFuzzer runtime — the script defaults to Homebrew's LLVM
   (`brew install llvm`; `$(brew --prefix llvm)/bin/clang++`, clang 23.1.3 tested), `CXX` overrides it. The
   AppleClang-built `libEmeraudeBase.a` links with it: the targets use the SYSTEM libc++ (`/usr/lib/libc++.1.dylib`,
@@ -100,7 +103,11 @@ directory and accumulated corpora are git-ignored (see `.gitignore`).
   git-ignored): a presigned URL with `%2F` and repeated keys, a bracketed IPv6 authority with dot-segments, a userinfo
   with an escape, an LDAP URL with `?` in its query, `mailto:`, an RFC 3986 relative reference, an encoded CRLF in the
   path, an escape inside the host. `fuzz_wav` re-run the same day after the `Frequency` change: 4.4 million executions
-  in 120 s, 0 crash.
+  in 120 s, 0 crash. macOS (M6, Homebrew LLVM) the same day: 1.1 million runs in 60 s, cov 1 486, 0 crash.
+  ⚠️ The URI parsers trace every refusal, and nearly every fuzz input is one: 2.58 million Error / Warning lines
+  (213 MB) in 60 s on one worker. `fuzz_uri` therefore installs a `Logging` sink in `LLVMFuzzerInitialize()` that keeps
+  only Fatal: 0 trace line, 0.9 MB of log, 14 808 → 15 599 exec/s (one run each, Linux, output to a file — within the
+  noise; the gain is larger on a terminal). Another target flooded the same way takes the same sink.
 
 ### Extended campaign (PixelFactory, VertexFactory, Compression)
 

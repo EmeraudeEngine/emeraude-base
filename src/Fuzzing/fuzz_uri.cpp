@@ -7,15 +7,22 @@
  * percent-decode was a CRLF-injection site during the 2026-08-27 network audit. Each input is parsed, re-emitted,
  * parsed again, and resolved as a reference against itself; the target traps on any CR, LF, space or NUL in a request
  * target or a host (a request-line or header injection), on top of ASan / UBSan with -fno-exceptions.
+ * The parsers trace every refusal (an illegal host, an invalid option): almost every input is one, so the target keeps
+ * only Fatal diagnostics — the flood of stderr writes cost throughput and buried libFuzzer's own lines (macOS peer,
+ * 2026-11-06).
  */
 
 /* STL inclusions. */
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
+#include <span>
 #include <string>
 #include <string_view>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
+#include "Logging/Severity.hpp"
 #include "Network/URI.hpp"
 
 namespace
@@ -65,9 +72,27 @@ namespace
 }
 
 extern "C" int
+LLVMFuzzerInitialize (int * /*argc*/, char *** /*argv*/)
+{
+	using namespace EmEn::Base;
+
+	/* Every refusal of a hostile input is an expected Error / Warning trace: only a Fatal one is news. */
+	Logging::setSink([] (Severity severity, const char * tag, std::string_view message) {
+		if ( severity == Severity::Fatal )
+		{
+			std::cerr << '[' << tag << "] (Fatal) " << message << '\n';
+		}
+	});
+
+	return 0;
+}
+
+extern "C" int
 LLVMFuzzerTestOneInput (const uint8_t * data, size_t size)
 {
-	const std::string input(reinterpret_cast< const char * >(data), size);
+	/* NOTE: the bytes copied one by one into chars, through a span: no reinterpret_cast, no pointer arithmetic. */
+	const std::span< const uint8_t > bytes{data, size};
+	const std::string input(bytes.begin(), bytes.end());
 
 	const URI uri{input};
 	check(uri);

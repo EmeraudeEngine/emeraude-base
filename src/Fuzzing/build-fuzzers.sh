@@ -8,8 +8,10 @@
 # and instruments the (header-only) parser code it pulls in. The parsers are exercised with
 # the SAME flags base uses (-fno-exceptions), plus ASan + UBSan + libFuzzer coverage.
 #
-# Prerequisites: a configured emeraude-base build dir providing the generated config header
-# and the static library. Defaults to .claude-build-debug; override with BASE_BUILD_DIR.
+# Prerequisites: a configured build dir providing the generated config header and the static
+# library — a standalone emeraude-base build dir, or a projet-alpha / engine one (the header is then
+# under <build>/Emeraude/emeraude-base/include: it is searched for). Defaults to .claude-build-debug;
+# override with BASE_BUILD_DIR (absolute, or relative to the emeraude-base root).
 #
 # Usage:   src/Fuzzing/build-fuzzers.sh
 #          BASE_BUILD_DIR=.claude-build-release src/Fuzzing/build-fuzzers.sh
@@ -40,15 +42,18 @@ OUT_DIR="${OUT_DIR:-src/Fuzzing/build}"
 # Resolve the ext-deps root and the static library produced by the base build.
 EXT_LIBS_PATH="$(sed -n 's/^EMERAUDE_EXT_LIBS_PATH:PATH=//p' "${BASE_BUILD_DIR}/CMakeCache.txt")"
 STATIC_LIB="$(find "${BASE_BUILD_DIR}" -name 'libEmeraudeBase.a' -print -quit)"
+# The generated configuration header: <build>/include in a standalone base build, <build>/Emeraude/emeraude-base/include
+# when the base is built as a subproject (projet-alpha, the engine). CMakeFiles/ holds no copy worth taking.
+CONFIG_HEADER="$(find "${BASE_BUILD_DIR}" -name 'emeraude_base_config.hpp' -not -path '*/CMakeFiles/*' -print -quit)"
 
-if [ -z "${EXT_LIBS_PATH}" ] || [ -z "${STATIC_LIB}" ]; then
-	echo "error: configure/build ${BASE_BUILD_DIR} first (need libEmeraudeBase.a + CMakeCache)." >&2
+if [ -z "${EXT_LIBS_PATH}" ] || [ -z "${STATIC_LIB}" ] || [ -z "${CONFIG_HEADER}" ]; then
+	echo "error: configure/build ${BASE_BUILD_DIR} first (need libEmeraudeBase.a, emeraude_base_config.hpp + CMakeCache)." >&2
 	exit 1
 fi
 
 INCLUDES=(
 	-I src
-	-I "${BASE_BUILD_DIR}/include"
+	-I "$(dirname "${CONFIG_HEADER}")"
 	-I "${EXT_LIBS_PATH}/include"
 	-I dependencies/tinysoundfont
 )
