@@ -113,7 +113,9 @@ directory and accumulated corpora are git-ignored (see `.gitignore`).
   `URI::URI(), empty string !`, written by the `URI(const std::string &)` constructor (and `operator=`) STRAIGHT to
   `std::cerr`, past the sink (the re-parse of an input that re-emits as `""` reaches it). Those two refusals now go
   through `Logging::warning` (tag `Network::URI`; test `NetworkURI.anEmptyStringIsRefusedThroughLoggingNotStderr`).
-  After that fix, 60 s on Linux: 1.02 M runs, cov 1 277, 0 crash, 476 KB of log made only of libFuzzer's own lines.
+  After that fix, 60 s on Linux: 1.02 M runs, cov 1 277, 0 crash, 476 KB of log made only of libFuzzer's own lines;
+  macOS (560a488, M6): 1.25 M runs, cov 1 499, 0 crash, 528 KB, libFuzzer's lines only. The fix (`<iostream>` left
+  `URI.hpp`) built with 0 warning on GCC, clang, AppleClang and MSVC `/W4 /WX`; base suite green on the three OS.
   A trace that a fuzzer's sink does not silence is a raw stream write in the parser: route it through `Logging`.
 
 ### Extended campaign (PixelFactory, VertexFactory, Compression)
