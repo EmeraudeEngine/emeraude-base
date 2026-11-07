@@ -31,7 +31,6 @@
 
 /* STL inclusions. */
 #include <cstdint>
-#include <iostream>
 #include <string>
 
 /* Local inclusions for inheritances. */
@@ -130,22 +129,22 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Constructs an HTTP request from a raw string.
+			 * @note A malformed request is refused through Logging (Error, tag "Network::HTTPRequest"): isValid() is then
+			 * false.
 			 * @param rawHeaders A reference to string.
 			 */
-			explicit
-			HTTPRequest (const std::string & rawHeaders) noexcept
-			{
-				if ( !this->parse(rawHeaders) )
-				{
-					std::cerr << "HTTPRequest::HTTPRequest(), unable to parse the HTTP request !" "\n";
-				}
-			}
+			explicit HTTPRequest (const std::string & rawHeaders) noexcept;
 
 			/** @copydoc EmEn::Base::Network::HTTPHeaders::isValid() */
 			[[nodiscard]]
 			bool isValid () const noexcept override;
 
-			/** @copydoc EmEn::Base::Network::HTTPHeaders::toString() */
+			/**
+			 * @copydoc EmEn::Base::Network::HTTPHeaders::toString()
+			 * @note The request target is the resource's encoded path and query (URI::resource()), with one leading
+			 * slash. An invalid request (isValid() false: no method, or neither a URI nor a path) writes nothing: an empty
+			 * string and an Error on tag "Network::HTTPRequest".
+			 */
 			[[nodiscard]]
 			std::string toString () const noexcept override;
 

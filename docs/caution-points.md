@@ -603,7 +603,14 @@ Encoding", guarded by the engine's `tools/check-path-encoding.py`). In the base,
   (test `bundleFileUnderANonASCIIDirectory`, aborting before);
 - `Network::HTTPRequest::toString()` wrote `" /" << path` through std's `operator<<`: a quoted path after a second slash
   (`GET /"/a/b"`); it writes one leading slash and the path as is (tests `NetworkHTTPRequest.requestLine*`: "/a/b", "a/b",
-  "" → `GET /a/b`, `GET /a/b`, `GET /`);
+  "" → `GET /a/b`, `GET /a/b`, `GET /`). ⚠️ It still wrote the DECODED path and dropped the query (2026-11-07, base
+  item `http-request-tostring-drops-query`, FIXED): `%20` went out as a raw space (an invalid request line), `%2F` as a
+  separator, `?x=1` vanished. The target is now `URI::resource()` (the encoded bytes, as parsed), with the same one
+  leading slash; an invalid request (no method, or neither a URI nor a path) writes NOTHING — `method()` is `nullptr`
+  for `Method::NONE` and was streamed (undefined behaviour) — and logs an Error. Its parse refusals went to `std::cerr`
+  raw; they go through `Logging` (tag `Network::HTTPRequest`). Tests `NetworkHTTPRequest.requestLineCarriesTheEncodedPathAndTheQuery`,
+  `requestLineEscapesARawSpaceInThePath`, `requestLineKeepsTheQueryOfARelativePath`, `anInvalidRequestWritesNothingAndLogsAnError`,
+  `aMalformedRequestIsRefusedThroughLoggingNotStderr`;
 - `Network::URI` keeps its path UTF-8 both ways; `IO`'s own error logs, the zip reader / writer, the file IO helpers and
   the tests' `uniqueTemporaryPath()` convert explicitly. The test binary has no UTF-8 manifest: a test proves the
   conversion itself.
@@ -794,6 +801,10 @@ contacted the target, which the caller cannot tell apart from a transport failur
 ⚠️ **The media type does not travel through `options.headers`**, so it needed its own explicit
 check. Any future field that reaches the request the same way needs one too: the validation is not
 automatic, it is a list.
+
+⚠️ `HTTPHeaders::add()` / `set()` (the `HTTPRequest` / `HTTPResponse` header map) do NOT validate: a CR or LF in a name
+or a value reaches `toString()` as is. Latent (no production caller serializes an `HTTPRequest`; `HTTPSClient` builds
+its own request), open as base item `http-headers-accept-crlf`.
 
 ### ⚠️ A response's status line is read strictly (RFC 9112 § 4); a parsed request may target a path (2026-10-17, FIXED)
 

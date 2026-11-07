@@ -227,7 +227,8 @@ Step 1 executed on the Linux host:
      cerr→Logging across the touched files. **21 tests** (`test_NetworkHTTPResponseParser.cpp`),
      nominal AND hostile, every payload also fed byte-by-byte to exercise the incremental
      paths. Suite **1926/1926** Release AND ASan/UBSan; cascade links. The request side
-     needed no codec work: `HTTPRequest::toString()` already serializes correctly.
+     needed no codec work: `HTTPRequest::toString()` already serializes correctly. (It did not: it wrote the decoded
+     path and dropped the query — fixed 2026-11-07, `docs/caution-points.md`.)
 3b. **Proxy support DONE 2026-07-04.** `TLSConnection` refactored into reusable phases
     (`establishTcp` / `tunnelThroughProxy` / `performHandshake`) and gained
     `connectViaProxy(proxyHost, proxyPort, targetHost, targetPort)`: reaches the proxy,

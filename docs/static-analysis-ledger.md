@@ -295,6 +295,12 @@ loses an include can break a file the gate does not see as touched: the build st
 on the new test, fixed (cognitive complexity 29 → the capture moved to a helper, a `const` stream, a forwarding
 reference never forwarded → `const &`); cppcheck 0.
 
+**2026-11-07 lot 2** (`HTTPRequest::toString()` writes the encoded target, refuses an invalid request; its three raw
+`std::cerr` through `Logging`; the shared test helper `src/Testing/DiagnosticsCapture.hpp`; 6 base files): `<iostream>`
+left `Network/HTTPRequest.{hpp,cpp}` again (no raw stream write remains in `src/Network/` outside
+`asio_throw_exception.hpp`'s fatal handler); IWYU converged after one pass on the two tests (+3). clang-tidy 0,
+cppcheck 0 on the changed lines.
+
 
 ## D11 — the disabled checks ruled (owner decision 2026-10-19, Ave Robustus II P-W (5))
 

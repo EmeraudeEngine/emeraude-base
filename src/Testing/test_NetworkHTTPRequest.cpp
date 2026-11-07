@@ -28,10 +28,14 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <initializer_list>
 #include <string>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "IO/IO.hpp"
+#include "Logging/Severity.hpp"
+#include "Network/HTTPHeaders.hpp"
 #include "Network/HTTPRequest.hpp"
 #include "Network/HTTPResponse.hpp"
 #include "Network/URI.hpp"
@@ -68,6 +72,71 @@ TEST(NetworkHTTPRequest, requestLineRelativePath)
 TEST(NetworkHTTPRequest, requestLineEmptyPath)
 {
 	EXPECT_EQ(requestLine(""), "GET / HTTP/1.1");
+}
+
+/* 2026-11-07 (base item http-request-tostring-drops-query): the request line was built from the DECODED path and dropped
+ * the query — "%20" went out as a raw space (an invalid request line), "%2F" as a separator, "?x=1" vanished. It now
+ * carries the URI's encoded bytes (URI::resource()), still with ONE leading slash. */
+TEST(NetworkHTTPRequest, requestLineCarriesTheEncodedPathAndTheQuery)
+{
+	const HTTPRequest request{HTTPRequest::Method::GET, URI{"https://example.com/a%20b/c%2Fd?x=1&y=%26z"}};
+	const auto text = request.toString();
+
+	EXPECT_EQ(text.substr(0, text.find("\r\n")), "GET /a%20b/c%2Fd?x=1&y=%26z HTTP/1.1");
+}
+
+TEST(NetworkHTTPRequest, requestLineEscapesARawSpaceInThePath)
+{
+	EXPECT_EQ(requestLine("/a b"), "GET /a%20b HTTP/1.1");
+}
+
+TEST(NetworkHTTPRequest, requestLineKeepsTheQueryOfARelativePath)
+{
+	const HTTPRequest request{"GET a/b?k=v HTTP/1.1\r\n"};
+	const auto text = request.toString();
+
+	EXPECT_EQ(text.substr(0, text.find("\r\n")), "GET /a/b?k=v HTTP/1.1");
+}
+
+/* An invalid request (no method, or neither a URI nor a path) is never written: method() is nullptr for Method::NONE,
+ * and streaming it was undefined behaviour (2026-11-07). toString() returns an empty string and logs an error. */
+TEST(NetworkHTTPRequest, anInvalidRequestWritesNothingAndLogsAnError)
+{
+	std::string withoutMethod{"unset"};
+	std::string withoutResource{"unset"};
+
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&withoutMethod, &withoutResource] () {
+		withoutMethod = HTTPRequest{}.toString();
+
+		HTTPRequest request;
+		request.setMethod(HTTPRequest::Method::GET);
+		withoutResource = request.toString();
+	});
+
+	EXPECT_EQ(withoutMethod, "");
+	EXPECT_EQ(withoutResource, "");
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPRequest"), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}
+
+/* A malformed incoming request is refused through Logging, never straight to std::cerr (2026-11-07): parseFirstLine()
+ * and the parsing constructor wrote their refusals raw, past the sink. */
+TEST(NetworkHTTPRequest, aMalformedRequestIsRefusedThroughLoggingNotStderr)
+{
+	bool noTargetValid{true};
+	bool unknownMethodValid{true};
+
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&noTargetValid, &unknownMethodValid] () {
+		noTargetValid = HTTPRequest{"GET\r\n"}.isValid();
+		unknownMethodValid = HTTPRequest{"FETCH /a HTTP/1.1\r\n"}.isValid();
+	});
+
+	EXPECT_FALSE(noTargetValid);
+	EXPECT_FALSE(unknownMethodValid);
+	/* Per request: parseFirstLine()'s refusal, then the constructor's. */
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPRequest"), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	EXPECT_TRUE(captured.standardOutput.empty()) << captured.standardOutput;
 }
 
 /* The coverage pass (2026-10-17): the method table, the request parse path, HTTP/0.9 output, the version table, and the

@@ -28,15 +28,13 @@
 
 /* STL inclusions. */
 #include <filesystem>
-#include <iostream>
 #include <map>
-#include <sstream>
 #include <string>
-#include <string_view>
+#include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "IO/IO.hpp"
-#include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
 #include "Network/Hostname.hpp"
 #include "Network/PercentEncoding.hpp"
@@ -369,56 +367,6 @@ TEST(NetworkURI, emptyAndDegenerateInputs)
 	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(relative.path()), "just/a/path");
 }
 
-namespace
-{
-	/** @brief What a piece of code sent to the Logging sink and to std::cerr. */
-	struct CapturedDiagnostics
-	{
-		std::string standardError;
-		std::string lastTag;
-		int warnings{0};
-		int otherSeverities{0};
-	};
-
-	/**
-	 * @brief Runs an action with the Logging sink and std::cerr captured, both restored before returning.
-	 * @param action The code under test.
-	 * @return CapturedDiagnostics
-	 */
-	template< typename action_t >
-	CapturedDiagnostics
-	captureDiagnostics (const action_t & action)
-	{
-		using namespace EmEn::Base;
-
-		CapturedDiagnostics captured;
-		const std::ostringstream standardError;
-		auto * const previousBuffer = std::cerr.rdbuf(standardError.rdbuf());
-
-		Logging::setSink([&captured] (Severity severity, const char * tag, std::string_view /*message*/) {
-			if ( severity == Severity::Warning )
-			{
-				++captured.warnings;
-			}
-			else
-			{
-				++captured.otherSeverities;
-			}
-
-			captured.lastTag = tag != nullptr ? tag : "";
-		});
-
-		action();
-
-		Logging::setSink(nullptr); /* reset before returning (the lambda captures a local) */
-		std::cerr.rdbuf(previousBuffer);
-
-		captured.standardError = standardError.str();
-
-		return captured;
-	}
-}
-
 /* An empty string is refused through Logging, never straight to std::cerr (2026-11-06): the raw write bypassed the
  * sink, so neither an application nor the URI fuzzer could filter it (63 k lines a minute on macOS). The refusal
  * itself is unchanged: the constructor leaves the URI empty, the assignment keeps the previous value. */
@@ -427,14 +375,13 @@ TEST(NetworkURI, anEmptyStringIsRefusedThroughLoggingNotStderr)
 	URI constructed;
 	URI assigned{"https://example.com/kept"};
 
-	const auto captured = captureDiagnostics([&constructed, &assigned] () {
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&constructed, &assigned] () {
 		constructed = URI{std::string{}};
 		assigned = std::string{};
 	});
 
-	EXPECT_EQ(captured.warnings, 2);
-	EXPECT_EQ(captured.otherSeverities, 0);
-	EXPECT_EQ(captured.lastTag, "Network::URI");
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "Network::URI"), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	EXPECT_TRUE(constructed.empty());
 	EXPECT_EQ(assigned.resource(), "/kept");

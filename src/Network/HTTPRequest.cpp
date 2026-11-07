@@ -28,20 +28,32 @@
 
 /* STL inclusions. */
 #include <filesystem>
-#include <iostream>
 #include <sstream>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
-#include "IO/IO.hpp"
+#include "Logging/Logging.hpp"
 #include "Network/HTTPHeaders.hpp"
 #include "Network/URI.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
 {
+	namespace
+	{
+		constexpr auto Tag{"Network::HTTPRequest"};
+	}
+
+	HTTPRequest::HTTPRequest (const std::string & rawHeaders) noexcept
+	{
+		if ( !this->parse(rawHeaders) )
+		{
+			Logging::error(Tag, "HTTPRequest(), unable to parse the HTTP request.");
+		}
+	}
+
 	bool
 	HTTPRequest::isValid () const noexcept
 	{
@@ -67,7 +79,7 @@ namespace EmEn::Base::Network
 
 		if ( chunks.size() < 2 )
 		{
-			std::cerr << "HTTPRequest::parseFirstLine(), invalid HTTP request : " << line << "\n";
+			Logging::error(Tag, "parseFirstLine(), invalid HTTP request line '" + line + "'.");
 
 			return false;
 		}
@@ -77,7 +89,7 @@ namespace EmEn::Base::Network
 
 		if ( m_method == Method::NONE )
 		{
-			std::cerr << "HTTPRequest::parseFirstLine(), invalid method for the request : " << line << "\n";
+			Logging::error(Tag, "parseFirstLine(), invalid method in the request line '" + line + "'.");
 
 			return false;
 		}
@@ -97,11 +109,22 @@ namespace EmEn::Base::Network
 	std::string
 	HTTPRequest::toString () const noexcept
 	{
+		/* NOTE: method() is nullptr for Method::NONE: streaming it was undefined behaviour (2026-11-07). An invalid
+		 * request is never written. */
+		if ( !this->isValid() )
+		{
+			Logging::error(Tag, "toString(), the request has no method or no resource, nothing written.");
+
+			return {};
+		}
+
 		std::stringstream string;
 
-		/* NOTE: ONE leading slash and the path as is (UTF-8): " /" was written before a path that already starts with one
-		 * ("GET //a/b"), through std's operator<<, which quotes a path. */
-		auto target = IO::toGenericU8String(m_resource.path());
+		/* NOTE: The request target is the URI's ENCODED path and query, re-emitted as parsed (URI::resource()): the
+		 * decoded path put a raw space or a '/' for "%2F" on the request line and the query was dropped (2026-11-07).
+		 * ONE leading slash: " /" was written before a path that already starts with one ("GET //a/b", 2026-10-12), and a
+		 * relative path gets one. */
+		auto target = m_resource.resource();
 
 		if ( target.empty() || target.front() != '/' )
 		{

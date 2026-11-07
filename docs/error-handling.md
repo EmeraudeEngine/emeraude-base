@@ -208,6 +208,11 @@ the A.1 sanitizers.
   failure (no UB/OOM/crash) — not just the happy path.
 - Fail-fast abort paths (§4): a `*DeathTest` suite with `EXPECT_DEATH`. Keep template commas
   out of the macro arguments (use a `using` alias).
+- A refusal that must be LOGGED (§6): `Testing::captureDiagnostics(action)` (`src/Testing/DiagnosticsCapture.hpp`,
+  2026-11-07) runs the action with the Logging sink, `std::cout` and `std::cerr` captured, restores all three, and
+  returns the messages (`count(severity, tag)`) and the raw stream text. Assert the expected severity and tag AND an
+  empty `standardError`: a raw `std::cerr` write bypasses the sink, so neither an application nor a fuzz target can
+  filter it (the URI refusals flooded `fuzz_uri`, 2026-11-06).
 
 ## Cross-references
 
