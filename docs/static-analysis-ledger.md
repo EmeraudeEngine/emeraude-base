@@ -306,6 +306,11 @@ cppcheck 0 on the changed lines.
 (one rule). `HTTPRequest`'s `Host` insertion keeps `set()`'s `[[nodiscard]]` result in a `[[maybe_unused]]` local
 checked by `assert()`: `URIDomain` already refuses an illegal host, so a refusal there is a broken internal contract
 (`docs/error-handling.md` § 4: Debug only).
+Peers on `b011c94`: Windows (MSVC 14.44 `/W4 /WX`) Release and Debug 0 error / 0 warning, suite 2831 = 2827 + 4
+skipped, `NetworkHTTPRequest.*` 18/18 in Release and Debug (the `Host` assert never fired); macOS (AppleClang) 0 / 0,
+`-Wdocumentation -Werror` silent on the 7 touched TUs, suite 2833 = 2826 + 7 skipped. The Windows peer found the older
+`malformedRequestsAreRefused` writing its 11 expected refusals to the suite's stderr (uncaptured `Logging`): it now
+captures them and checks their counts (9 errors, 2 warnings) and an empty stderr.
 
 
 ## D11 — the disabled checks ruled (owner decision 2026-10-19, Ave Robustus II P-W (5))

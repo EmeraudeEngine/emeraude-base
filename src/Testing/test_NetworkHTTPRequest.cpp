@@ -31,6 +31,7 @@
 #include <array>
 #include <initializer_list>
 #include <string>
+#include <vector>
 
 /* Local inclusions. */
 #include "DiagnosticsCapture.hpp"
@@ -174,15 +175,30 @@ TEST(NetworkHTTPRequest, parsedRequestKeepsItsLineAndHeaders)
 
 TEST(NetworkHTTPRequest, malformedRequestsAreRefused)
 {
-	/* No target, an unknown method, nothing at all. */
-	EXPECT_FALSE(HTTPRequest{"GET\r\n"}.isValid());
-	EXPECT_FALSE(HTTPRequest{"FETCH /a HTTP/1.1\r\n"}.isValid());
-	EXPECT_FALSE(HTTPRequest{""}.isValid());
+	std::array< bool, 5 > accepted{true, true, true, true, true};
 
-	/* A header line without a colon, or with an empty name: the parse reports it. */
-	HTTPRequest request;
-	EXPECT_FALSE(request.parse("GET /a HTTP/1.1\r\nno colon here\r\n"));
-	EXPECT_FALSE(request.parse("GET /a HTTP/1.1\r\n: no name\r\n"));
+	/* The refusals are captured (2026-11-07, Windows peer): uncaptured, they reached the suite's stderr. */
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&accepted] () {
+		/* No target, an unknown method, nothing at all. */
+		accepted[0] = HTTPRequest{"GET\r\n"}.isValid();
+		accepted[1] = HTTPRequest{"FETCH /a HTTP/1.1\r\n"}.isValid();
+		accepted[2] = HTTPRequest{""}.isValid();
+
+		/* A header line without a colon, or with an empty name: the parse reports it. */
+		HTTPRequest request;
+		accepted[3] = request.parse("GET /a HTTP/1.1\r\nno colon here\r\n");
+		accepted[4] = request.parse("GET /a HTTP/1.1\r\n: no name\r\n");
+	});
+
+	EXPECT_EQ(accepted, (std::array< bool, 5 >{false, false, false, false, false}));
+	/* Per invalid request line: parseFirstLine()'s refusal, the header parse's, then the constructor's. */
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPRequest"), 6U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 3U);
+	/* One per malformed header line. */
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "Network::HTTPHeaders"), 2U);
+	EXPECT_EQ(captured.messages.size(), 11U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	EXPECT_TRUE(captured.standardOutput.empty()) << captured.standardOutput;
 }
 
 TEST(NetworkHTTPRequest, http09RequestHasNoVersionAndHeadersFollow)
