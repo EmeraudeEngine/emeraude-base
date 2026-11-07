@@ -30,6 +30,7 @@
 #include "emeraude_platform.hpp"
 
 /* STL inclusions. */
+#include <cassert>
 #include <cstdint>
 #include <string>
 
@@ -123,8 +124,10 @@ namespace EmEn::Base::Network
 				m_resource{resource}
 			{
 				/* NOTE: RFC 9110 § 7.2: the Host field is the URI's authority (the port included when the URI has one),
-				 * without the userinfo. It held the host name alone ("alpha.example.net" for ":8080", 2026-10-18). */
-				this->set(Host, resource.uriDomain().host());
+				 * without the userinfo. It held the host name alone ("alpha.example.net" for ":8080", 2026-10-18).
+				 * URIDomain refuses any illegal host (isValidHost(): no control character), so set() cannot refuse it. */
+				[[maybe_unused]] const bool hostAccepted = this->set(Host, resource.uriDomain().host());
+				assert(hostAccepted);
 			}
 
 			/**
@@ -183,7 +186,9 @@ namespace EmEn::Base::Network
 				 * name), a request rebuilt for another host still named the old one (2026-10-18). */
 				if ( !doNotAddHeader )
 				{
-					this->set(Host, resource.uriDomain().host());
+					/* NOTE: URIDomain refuses any illegal host: set() cannot refuse it (see the constructor). */
+					[[maybe_unused]] const bool hostAccepted = this->set(Host, resource.uriDomain().host());
+					assert(hostAccepted);
 				}
 			}
 

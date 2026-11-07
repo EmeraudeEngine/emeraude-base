@@ -30,9 +30,14 @@
 #include <algorithm>
 #include <optional>
 #include <sstream>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
+#include "Network/HTTPHeaders.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
@@ -104,6 +109,35 @@ namespace EmEn::Base::Network
 		}
 	}
 
+	HTTPResponse::HTTPResponse (int code, std::string text, Version version) noexcept
+		: HTTPHeaders{version},
+		m_codeResponse{code}
+	{
+		if ( !HTTPHeaders::isFieldValueValid(text) )
+		{
+			Logging::error("Network::HTTPResponse", "HTTPResponse(), a control character in the reason phrase, refused: the text stays empty.");
+
+			return;
+		}
+
+		m_textResponse = std::move(text);
+	}
+
+	bool
+	HTTPResponse::setTextResponse (const std::string & text) noexcept
+	{
+		if ( !HTTPHeaders::isFieldValueValid(text) )
+		{
+			Logging::error("Network::HTTPResponse", "setTextResponse(), a control character in the reason phrase, refused.");
+
+			return false;
+		}
+
+		m_textResponse = text;
+
+		return true;
+	}
+
 	bool
 	HTTPResponse::parseFirstLine (const std::string & line) noexcept
 	{
@@ -151,8 +185,18 @@ namespace EmEn::Base::Network
 
 		m_codeResponse = code;
 
-		/* Optional reason phrase. */
-		m_textResponse = chunks.size() == 3 ? chunks[2] : std::string{};
+		/* Optional reason phrase: HTAB, SP, VCHAR and obs-text only (RFC 9112 § 4). A control character refuses the status
+		 * line, like a refused header field refuses the message (owner decision 2026-11-07, strict). */
+		auto reason = chunks.size() == 3 ? chunks[2] : std::string{};
+
+		if ( !HTTPHeaders::isFieldValueValid(reason) )
+		{
+			Logging::error("Network::HTTPResponse", "parseFirstLine(), a control character in the reason phrase, refused.");
+
+			return false;
+		}
+
+		m_textResponse = std::move(reason);
 
 		return true;
 	}

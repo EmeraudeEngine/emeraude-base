@@ -76,17 +76,13 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Constructs an HTTP response.
+			 * @note A text with a control character other than HTAB is refused (RFC 9112 § 4, HTTPHeaders::isFieldValueValid()):
+			 * the text stays empty and an Error is logged (tag "Network::HTTPResponse").
 			 * @param code The code of the HTTP response.
 			 * @param text The text of the HTTP response [std::move].
 			 * @param version The HTTP version. Default HTTP 1.1.
 			 */
-			HTTPResponse (int code, std::string text, Version version = Version::HTTP11) noexcept
-				: HTTPHeaders{version},
-				m_codeResponse{code},
-				m_textResponse{std::move(text)}
-			{
-
-			}
+			HTTPResponse (int code, std::string text, Version version = Version::HTTP11) noexcept;
 
 			/**
 			 * @brief Constructs an HTTP response from raw headers.
@@ -131,13 +127,13 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Sets the HTTP text response.
+			 * @note A text with a control character other than HTAB is refused (RFC 9112 § 4): the previous text stays and
+			 * an Error is logged (tag "Network::HTTPResponse"). toString() writes it on the status line.
 			 * @param text The code text.
+			 * @return bool False when the text is refused.
 			 */
-			void
-			setTextResponse (const std::string & text) noexcept
-			{
-				m_textResponse = text;
-			}
+			[[nodiscard]]
+			bool setTextResponse (const std::string & text) noexcept;
 
 			/**
 			 * @brief Returns the HTTP code response.

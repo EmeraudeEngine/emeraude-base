@@ -26,12 +26,103 @@
 
 #include "HTTPHeaders.hpp"
 
+/* STL inclusions. */
+#include <algorithm>
+#include <cctype>
+#include <iterator>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
+#include "Network/PercentEncoding.hpp"
 #include "String.hpp"
 
 namespace EmEn::Base::Network
 {
+	namespace
+	{
+		constexpr auto Tag{"Network::HTTPHeaders"};
+
+		/**
+		 * @brief Returns whether a character is a RFC 9110 § 5.6.2 token character.
+		 * @param character The character.
+		 * @return bool
+		 */
+		[[nodiscard]]
+		bool
+		isTokenChar (char character) noexcept
+		{
+			if ( std::isalnum(static_cast< unsigned char >(character)) != 0 )
+			{
+				return true;
+			}
+
+			constexpr std::string_view Specials{"!#$%&'*+-.^_`|~"};
+
+			return Specials.find(character) != std::string_view::npos;
+		}
+	}
+
+	bool
+	HTTPHeaders::isFieldNameValid (std::string_view name) noexcept
+	{
+		return !name.empty() && std::ranges::all_of(name, isTokenChar);
+	}
+
+	bool
+	HTTPHeaders::isFieldValueValid (std::string_view value) noexcept
+	{
+		/* ⚠️ A message is built by concatenation ("name: value\r\n"), so a CR or LF inside a value ends the line early and
+		 * injects everything after it — header injection, and with a body, message splitting. Every other C0 control
+		 * (and DEL) is refused too; only HTAB is legal in a field value (RFC 9110 § 5.5) and a reason phrase
+		 * (RFC 9112 § 4). */
+		return std::ranges::none_of(value, [] (char character) {
+			const auto byte = static_cast< unsigned char >(character);
+
+			if ( byte == '\t' )
+			{
+				return false;
+			}
+
+			return byte < 0x20 || byte == 0x7F;
+		});
+	}
+
+	bool
+	HTTPHeaders::add (const std::string & key, const std::string & value) noexcept
+	{
+		if ( !isFieldNameValid(key) || !isFieldValueValid(value) )
+		{
+			/* NOTE: The name is escaped: a refused name may hold the very CR / LF the check is for. */
+			Logging::error(Tag, "add(), the field '" + PercentEncoding::encode(key, PercentEncoding::Component::Userinfo) + "' has an invalid name or value, refused.");
+
+			return false;
+		}
+
+		m_headers.emplace(key, value);
+
+		return true;
+	}
+
+	bool
+	HTTPHeaders::set (const std::string & key, const std::string & value) noexcept
+	{
+		if ( !isFieldNameValid(key) || !isFieldValueValid(value) )
+		{
+			/* NOTE: The name is escaped: a refused name may hold the very CR / LF the check is for. */
+			Logging::error(Tag, "set(), the field '" + PercentEncoding::encode(key, PercentEncoding::Component::Userinfo) + "' has an invalid name or value, refused.");
+
+			return false;
+		}
+
+		m_headers.insert_or_assign(key, value);
+
+		return true;
+	}
+
 	std::string
 	HTTPHeaders::value (const std::string & key) const noexcept
 	{
@@ -50,7 +141,7 @@ namespace EmEn::Base::Network
 
 		if ( empty(lines) )
 		{
-			Logging::error("Network::HTTPHeaders", "parse(), empty HTTP header !");
+			Logging::error(Tag, "parse(), empty HTTP header !");
 
 			return false;
 		}
@@ -62,7 +153,7 @@ namespace EmEn::Base::Network
 		}
 		else
 		{
-			Logging::error("Network::HTTPHeaders", "parse(), unable to identify the HTTP header !");
+			Logging::error(Tag, "parse(), unable to identify the HTTP header !");
 
 			return false;
 		}
@@ -79,14 +170,19 @@ namespace EmEn::Base::Network
 
 			if ( separator == std::string::npos || separator == 0 )
 			{
-				Logging::warning("Network::HTTPHeaders", "parse(), unable to parse header line : " + line);
+				Logging::warning(Tag, "parse(), unable to parse header line : " + line);
 
 				errors++;
 
 				continue;
 			}
 
-			this->add(String::trim(line.substr(0, separator)), String::trim(line.substr(separator + 1)));
+			/* NOTE: A field add() refuses (a name that is not a token, a control character in the value) is a parse
+			 * error: the message is refused (RFC 9110 § 5.5 allows it; owner decision 2026-11-07, strict). */
+			if ( !this->add(String::trim(line.substr(0, separator)), String::trim(line.substr(separator + 1))) )
+			{
+				errors++;
+			}
 		}
 
 		return errors == 0;

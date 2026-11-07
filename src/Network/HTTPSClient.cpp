@@ -46,6 +46,7 @@
 #include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 #include "Network/Hostname.hpp"
+#include "Network/HTTPHeaders.hpp"
 #include "Network/HTTPRequest.hpp"
 #include "Network/HTTPResponse.hpp"
 #include "Network/HTTPResponseParser.hpp"
@@ -280,25 +281,6 @@ namespace EmEn::Base::Network
 		}
 
 		/**
-		 * @brief Returns whether a character is a RFC 9110 §5.6.2 token character.
-		 * @param character The character.
-		 * @return bool
-		 */
-		[[nodiscard]]
-		bool
-		isTokenChar (char character) noexcept
-		{
-			if ( std::isalnum(static_cast< unsigned char >(character)) != 0 )
-			{
-				return true;
-			}
-
-			constexpr std::string_view Specials{"!#$%&'*+-.^_`|~"};
-
-			return Specials.find(character) != std::string_view::npos;
-		}
-
-		/**
 		 * @brief Returns whether a header name is one the client writes itself.
 		 * @note A second copy of a framing header is a request-smuggling primitive, so a caller
 		 * supplying one is refused rather than silently overridden. User-Agent is deliberately
@@ -459,7 +441,10 @@ namespace EmEn::Base::Network
 	bool
 	HTTPSClient::isRequestHeaderAcceptable (const std::string & name, const std::string & value) noexcept
 	{
-		if ( name.empty() || !std::ranges::all_of(name, isTokenChar) )
+		/* NOTE: The field syntax is HTTPHeaders' rule (one rule in the base, 2026-11-07): a token name, a value with no
+		 * control character but HTAB — the request is built by concatenation, so a CR or LF inside a value would inject
+		 * headers and split the request. The framing headers the client owns are refused on top. */
+		if ( !HTTPHeaders::isFieldNameValid(name) )
 		{
 			return false;
 		}
@@ -469,20 +454,7 @@ namespace EmEn::Base::Network
 			return false;
 		}
 
-		/* ⚠️ The request is built by concatenation, so a CR or LF inside a value ends the header
-		 * line early and injects everything after it — header injection, and with a body, request
-		 * splitting. Every other C0 control (and DEL) is refused too; only HTAB is legal in a
-		 * field value (RFC 9110 §5.5). */
-		return std::ranges::none_of(value, [] (char character) {
-			const auto byte = static_cast< unsigned char >(character);
-
-			if ( byte == '\t' )
-			{
-				return false;
-			}
-
-			return byte < 0x20 || byte == 0x7F;
-		});
+		return HTTPHeaders::isFieldValueValid(value);
 	}
 
 	std::optional< HTTPResult >

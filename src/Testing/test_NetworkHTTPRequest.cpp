@@ -28,6 +28,7 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <array>
 #include <initializer_list>
 #include <string>
 
@@ -265,10 +266,117 @@ TEST(NetworkHTTPRequest, theHostFieldFollowsTheResourceAuthority)
 	EXPECT_EQ(request.value("Host"), "beta.example.net");
 
 	/* set() replaces, add() keeps the first value. */
-	request.add("Accept", "text/plain");
-	request.add("Accept", "text/html");
+	EXPECT_TRUE(request.add("Accept", "text/plain"));
+	EXPECT_TRUE(request.add("Accept", "text/html"));
 	EXPECT_EQ(request.value("Accept"), "text/plain");
-	request.set("accept", "application/json");
+	EXPECT_TRUE(request.set("accept", "application/json"));
 	EXPECT_EQ(request.value("Accept"), "application/json");
 }
 
+
+/* 2026-11-07 (base item http-headers-accept-crlf): add() / set() stored any name and value, and toString() wrote them as
+ * "name: value\r\n" — a CR or LF injected a header (and with a body, split the message). A field is now refused unless
+ * its name is an RFC 9110 § 5.6.2 token and its value holds no control character but HTAB (§ 5.5; obs-text allowed):
+ * nothing is stored, an Error is logged on "Network::HTTPHeaders". The result is ignored with a cast here so the test also
+ * compiled against the old void API (failing before). */
+TEST(NetworkHTTPRequest, aHeaderFieldWithAControlCharacterOrABadNameIsRefused)
+{
+	struct Field
+	{
+		std::string name;
+		std::string value;
+	};
+
+	const std::array< Field, 6 > refused{{
+		{.name = "X-Crlf", .value = "a\r\nInjected: yes"},
+		{.name = "X-Nul", .value = std::string{"a\0b", 3}},
+		{.name = "X-Del", .value = "a\x7F"},
+		{.name = "Bad Name", .value = "v"},
+		{.name = "X\r\nInjected", .value = "v"},
+		{.name = "", .value = "v"}
+	}};
+
+	HTTPRequest request{HTTPRequest::Method::GET, URI{"https://example.com/a"}};
+	std::string text;
+
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&refused, &request, &text] () {
+		for ( const auto & field : refused )
+		{
+			static_cast< void >(request.add(field.name, field.value));
+		}
+
+		static_cast< void >(request.set("X-Lf", "a\nInjected: yes"));
+		text = request.toString();
+	});
+
+	/* Nothing but the Host field reached the message. */
+	EXPECT_EQ(text, "GET /a HTTP/1.1\r\nHost: example.com\r\n\r\n");
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), refused.size() + 1);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}
+
+/* What the rule keeps: HTAB inside a value, an empty value, obs-text (a UTF-8 "é", RFC 9110 § 5.5). */
+TEST(NetworkHTTPRequest, aHeaderFieldWithHTABAnEmptyValueOrObsTextIsKept)
+{
+	HTTPRequest request{HTTPRequest::Method::GET, URI{"https://example.com/a"}};
+
+	EXPECT_TRUE(request.add("X-Tab", "a\tb"));
+	EXPECT_TRUE(request.add("X-Empty", ""));
+	EXPECT_TRUE(request.set("X-Latin", "caf\xC3\xA9"));
+
+	const auto text = request.toString();
+
+	EXPECT_NE(text.find("X-Tab: a\tb\r\n"), std::string::npos) << text;
+	EXPECT_NE(text.find("X-Empty: \r\n"), std::string::npos) << text;
+	EXPECT_NE(text.find("X-Latin: caf\xC3\xA9\r\n"), std::string::npos) << text;
+}
+
+/* The parse goes through add(): a received field that add() refuses makes the parse fail, so a response carrying one is
+ * refused (RFC 9110 § 5.5 allows rejecting it; owner decision 2026-11-07, strict). */
+TEST(NetworkHTTPRequest, aReceivedHeaderFieldThatIsRefusedInvalidatesTheResponse)
+{
+	bool controlValid{true};
+	bool badNameValid{true};
+	bool goodValid{false};
+
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&controlValid, &badNameValid, &goodValid] () {
+		controlValid = HTTPResponse{"HTTP/1.1 200 OK\r\nX-A: a\x01" "b\r\n"}.isValid();
+		badNameValid = HTTPResponse{"HTTP/1.1 200 OK\r\nBad Name: v\r\n"}.isValid();
+		goodValid = HTTPResponse{"HTTP/1.1 200 OK\r\nX-A: a\tb\r\nX-Empty:\r\n"}.isValid();
+	});
+
+	EXPECT_FALSE(controlValid);
+	EXPECT_FALSE(badNameValid);
+	EXPECT_TRUE(goodValid);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}
+
+/* The reason phrase reached toString() as given (2026-11-07): RFC 9112 § 4 allows HTAB, SP, VCHAR and obs-text only. The
+ * setter refuses a text with any other control character (the previous text stays), the constructor keeps an empty
+ * text, and a received status line carrying one is refused. */
+TEST(NetworkHTTPRequest, aReasonPhraseWithAControlCharacterIsRefused)
+{
+	std::string constructedText{"unset"};
+	std::string constructedString;
+	std::string setText;
+	bool receivedValid{true};
+
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([&] () {
+		const HTTPResponse constructed{200, "OK\r\nInjected: yes"};
+		constructedText = constructed.textResponse();
+		constructedString = constructed.toString();
+
+		HTTPResponse response{404, "Not Found"};
+		static_cast< void >(response.setTextResponse("A\nB"));
+		setText = response.textResponse();
+
+		receivedValid = HTTPResponse{"HTTP/1.1 200 O\x01K\r\n"}.isValid();
+	});
+
+	EXPECT_EQ(constructedText, "");
+	EXPECT_EQ(constructedString.find("Injected"), std::string::npos) << constructedString;
+	EXPECT_EQ(setText, "Not Found");
+	EXPECT_FALSE(receivedValid);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}

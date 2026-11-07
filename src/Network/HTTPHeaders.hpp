@@ -31,6 +31,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 namespace EmEn::Base::Network
@@ -165,27 +166,26 @@ namespace EmEn::Base::Network
 
 			/**
 			 * @brief Adds a new header line.
+			 * @note A field whose name is not a token or whose value holds a control character is refused: nothing is
+			 * stored, an Error is logged (tag "Network::HTTPHeaders"). toString() writes "name: value\r\n", so a CR or LF
+			 * would inject a header (isFieldNameValid(), isFieldValueValid()).
 			 * @param key The name of the header.
 			 * @param value The value of the header.
+			 * @return bool False when the field is refused.
 			 */
-			void
-			add (const std::string & key, const std::string & value) noexcept
-			{
-				m_headers.emplace(key, value);
-			}
+			[[nodiscard]]
+			bool add (const std::string & key, const std::string & value) noexcept;
 
 			/**
 			 * @brief Sets a header line, replacing the value it had.
 			 * @note add() keeps the first value of a name (an emplace): a field that must follow its source (Host) is
-			 * set, never added (2026-10-18).
+			 * set, never added (2026-10-18). A field add() refuses is refused here too, and the previous value stays.
 			 * @param key The name of the header.
 			 * @param value The value of the header.
+			 * @return bool False when the field is refused.
 			 */
-			void
-			set (const std::string & key, const std::string & value) noexcept
-			{
-				m_headers.insert_or_assign(key, value);
-			}
+			[[nodiscard]]
+			bool set (const std::string & key, const std::string & value) noexcept;
 
 			/**
 			 * @brief Returns the value of a header.
@@ -216,6 +216,23 @@ namespace EmEn::Base::Network
 			 */
 			[[nodiscard]]
 			virtual std::string toString () const noexcept = 0;
+
+			/**
+			 * @brief Returns whether a string is a valid HTTP field name: a non-empty RFC 9110 § 5.6.2 token.
+			 * @param name The field name.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static bool isFieldNameValid (std::string_view name) noexcept;
+
+			/**
+			 * @brief Returns whether a string is a valid HTTP field value (RFC 9110 § 5.5) or reason phrase (RFC 9112 § 4):
+			 * no control character but HTAB — no CR, LF, NUL or DEL. Empty is valid; obs-text (0x80-0xFF) is allowed.
+			 * @param value The field value.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static bool isFieldValueValid (std::string_view value) noexcept;
 
 			/**
 			 * @brief Returns the string of an HTTP protocol version.

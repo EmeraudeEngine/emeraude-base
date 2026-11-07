@@ -301,6 +301,12 @@ left `Network/HTTPRequest.{hpp,cpp}` again (no raw stream write remains in `src/
 `asio_throw_exception.hpp`'s fatal handler); IWYU converged after one pass on the two tests (+3). clang-tidy 0,
 cppcheck 0 on the changed lines.
 
+**2026-11-07 lot 3** (`HTTPHeaders` field validation, item `http-headers-accept-crlf`; `HTTPHeaders`, `HTTPRequest`,
+`HTTPResponse`, `HTTPSClient`, the HTTP tests): `isTokenChar()` moved from `HTTPSClient.cpp` to `HTTPHeaders.cpp`
+(one rule). `HTTPRequest`'s `Host` insertion keeps `set()`'s `[[nodiscard]]` result in a `[[maybe_unused]]` local
+checked by `assert()`: `URIDomain` already refuses an illegal host, so a refusal there is a broken internal contract
+(`docs/error-handling.md` § 4: Debug only).
+
 
 ## D11 — the disabled checks ruled (owner decision 2026-10-19, Ave Robustus II P-W (5))
 

@@ -802,9 +802,19 @@ contacted the target, which the caller cannot tell apart from a transport failur
 check. Any future field that reaches the request the same way needs one too: the validation is not
 automatic, it is a list.
 
-⚠️ `HTTPHeaders::add()` / `set()` (the `HTTPRequest` / `HTTPResponse` header map) do NOT validate: a CR or LF in a name
-or a value reaches `toString()` as is. Latent (no production caller serializes an `HTTPRequest`; `HTTPSClient` builds
-its own request), open as base item `http-headers-accept-crlf`.
+⚠️ `HTTPHeaders::add()` / `set()` (the `HTTPRequest` / `HTTPResponse` header map) did not validate: a CR or LF in a
+name or a value reached `toString()` as is (2026-11-07, base item `http-headers-accept-crlf`, FIXED; latent — no
+production caller serialized one). ONE rule now, in `HTTPHeaders`: `isFieldNameValid()` (a non-empty RFC 9110 § 5.6.2
+token) and `isFieldValueValid()` (no control character but HTAB — no CR, LF, NUL, DEL; obs-text allowed; also the
+reason-phrase rule of RFC 9112 § 4). `add()` / `set()` refuse such a field (`[[nodiscard]] bool`, nothing stored, an
+Error with the name percent-escaped — a refused name may hold the CR / LF itself); `HTTPSClient::isRequestHeaderAcceptable()`
+calls the same two, plus its framing-header refusal. ⚠️ **The parse goes through `add()`**: a RECEIVED field that is
+refused makes `parse()` fail, so an HTTPS response carrying a non-token name or a control character in a value is
+refused (owner decision, strict: RFC 9110 § 5.5 allows rejecting it). A lax server doing that now fails the download
+— the log names `Network::HTTPHeaders` `add(), the field '…' has an invalid name or value`. The reason phrase is
+checked the same way (`HTTPResponse` constructor: the text stays empty; `setTextResponse()`: refused, the previous text
+stays; a received status line: refused). Tests `NetworkHTTPRequest.aHeaderFieldWithAControlCharacterOrABadNameIsRefused`,
+`aReceivedHeaderFieldThatIsRefusedInvalidatesTheResponse`, `aReasonPhraseWithAControlCharacterIsRefused`.
 
 ### ⚠️ A response's status line is read strictly (RFC 9112 § 4); a parsed request may target a path (2026-10-17, FIXED)
 
