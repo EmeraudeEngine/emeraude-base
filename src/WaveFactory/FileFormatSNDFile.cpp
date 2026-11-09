@@ -33,9 +33,9 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <optional>
 #include <span>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -45,6 +45,7 @@
 
 /* Local inclusions. */
 #include "IO/ByteStream.hpp"
+#include "Logging/Logging.hpp"
 #include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
 
@@ -247,15 +248,14 @@ namespace EmEn::Base::WaveFactory
 
 		if constexpr ( WaveFactoryDebugEnabled )
 		{
-			std::cout <<
-				"[WaveFactory::FileFormatSNDFile] Stream loaded.\n"
+			Logging::debug("WaveFactory::FileFormatSNDFile", (std::stringstream{} << "Stream loaded.\n"
 				"\t" "Frames (Samples) : " << soundFileInfos.frames << "\n"
 				"\t" "Sample rates (Frequency) : " << soundFileInfos.samplerate << " Hz\n"
 				"\t" "Duration : " << ( static_cast< float >(soundFileInfos.frames) / static_cast< float >(soundFileInfos.samplerate) ) << " seconds\n"
 				"\t" "Channels : " << soundFileInfos.channels << "\n"
 				"\t" "Format (Bits) : " << soundFileInfos.format << "\n"
 				"\t" "Sections : " << soundFileInfos.sections << "\n"
-				"\t" "Seekable : " << soundFileInfos.seekable << '\n';
+				"\t" "Seekable : " << soundFileInfos.seekable).str());
 		}
 
 		if ( isDataValid )

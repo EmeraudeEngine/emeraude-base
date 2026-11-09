@@ -35,6 +35,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <type_traits>
 #include <vector>
 
@@ -121,9 +122,7 @@ namespace EmEn::Base::PixelFactory
 
 					if constexpr ( PixelFactoryDebugEnabled )
 					{
-						std::cout <<
-							"[TARGA_DEBUG] Reading header.\n" <<
-							"\t" "idCharCount : " << static_cast< int >(fileHeader.idCharCount) << "\n"
+						Logging::debug("PixelFactory::FileFormatTarga", (std::stringstream{} << "Reading header.\n" << "\t" "idCharCount : " << static_cast< int >(fileHeader.idCharCount) << "\n"
 							"\t" "colorMapType : " << static_cast< int >(fileHeader.colorMapType) << "\n"
 							"\t" "imageTypeCode : " << static_cast< int >(fileHeader.imageTypeCode) << "\n"
 							"\t" "colorMapOrigin : " << static_cast< int >(fileHeader.colorMapOrigin) << "\n"
@@ -134,7 +133,7 @@ namespace EmEn::Base::PixelFactory
 							"\t" "width : " << static_cast< int >(fileHeader.width) << "\n"
 							"\t" "height : " << static_cast< int >(fileHeader.height) << "\n"
 							"\t" "imagePixelSize : " << static_cast< int >(fileHeader.imagePixelSize) << "\n"
-							"\t" "imageDescriptorByte : " << static_cast< int >(fileHeader.imageDescriptorByte) << '\n';
+							"\t" "imageDescriptorByte : " << static_cast< int >(fileHeader.imageDescriptorByte)).str());
 					}
 
 					/* The image kind and its pixel encoding (TGA 2.0). Every variant the format defines for these three
@@ -394,7 +393,7 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( !pixmap.isValid() )
 				{
-					std::cerr << "FileFormatTarga::writeStream(), pixmap parameter is invalid !" "\n";
+					Logging::error("PixelFactory::FileFormatTarga", "FileFormatTarga::writeStream(), pixmap parameter is invalid !");
 
 					return false;
 				}
@@ -423,7 +422,7 @@ namespace EmEn::Base::PixelFactory
 						break;
 
 					case ChannelMode::GrayscaleAlpha :
-						std::cerr << "FileFormatTarga::writeStream(), unhandled color channel format to write a Targa image." "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "FileFormatTarga::writeStream(), unhandled color channel format to write a Targa image.");
 
 						return false;
 				}
@@ -432,7 +431,7 @@ namespace EmEn::Base::PixelFactory
 				 * type at 0, which is TGA's "no image data". */
 				if ( fileHeader.imageTypeCode == 0 )
 				{
-					std::cerr << "FileFormatTarga::writeStream(), unhandled color channel format to write a Targa image." "\n";
+					Logging::error("PixelFactory::FileFormatTarga", "FileFormatTarga::writeStream(), unhandled color channel format to write a Targa image.");
 
 					return false;
 				}
@@ -440,9 +439,7 @@ namespace EmEn::Base::PixelFactory
 
 				if constexpr ( PixelFactoryDebugEnabled )
 				{
-					std::cout <<
-						"[TARGA_DEBUG] Writing header.\n" <<
-						"\t" "idCharCount : " << static_cast< int >(fileHeader.idCharCount) << "\n"
+					Logging::debug("PixelFactory::FileFormatTarga", (std::stringstream{} << "Writing header.\n" << "\t" "idCharCount : " << static_cast< int >(fileHeader.idCharCount) << "\n"
 						"\t" "colorMapType : " << static_cast< int >(fileHeader.colorMapType) << "\n"
 						"\t" "imageTypeCode : " << static_cast< int >(fileHeader.imageTypeCode) << "\n"
 						"\t" "colorMapOrigin : " << static_cast< int >(fileHeader.colorMapOrigin) << "\n"
@@ -453,7 +450,7 @@ namespace EmEn::Base::PixelFactory
 						"\t" "width : " << static_cast< int >(fileHeader.width) << "\n"
 						"\t" "height : " << static_cast< int >(fileHeader.height) << "\n"
 						"\t" "imagePixelSize : " << static_cast< int >(fileHeader.imagePixelSize) << "\n"
-						"\t" "imageDescriptorByte : " << static_cast< int >(fileHeader.imageDescriptorByte) << '\n';
+						"\t" "imageDescriptorByte : " << static_cast< int >(fileHeader.imageDescriptorByte)).str());
 				}
 
 				/* Write the Targa header, field by field. */
@@ -461,7 +458,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !stream.write(field.data, field.bytes) )
 					{
-						std::cerr << "FileFormatTarga::writeStream(), unable to write the Targa header !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "FileFormatTarga::writeStream(), unable to write the Targa header !");
 
 						return false;
 					}
@@ -497,7 +494,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !writeRLEData(stream, processedPixmap) )
 					{
-						std::cerr << "FileFormatTarga::writeStream(), unable to write the Targa RLE data !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "FileFormatTarga::writeStream(), unable to write the Targa RLE data !");
 
 						return false;
 					}
@@ -506,7 +503,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !stream.write(processedPixmap.data().data(), processedPixmap.bytes()) )
 					{
-						std::cerr << "FileFormatTarga::writeStream(), unable to write the Targa data !" "\n";
+						Logging::error("PixelFactory::FileFormatTarga", "FileFormatTarga::writeStream(), unable to write the Targa data !");
 
 						return false;
 					}

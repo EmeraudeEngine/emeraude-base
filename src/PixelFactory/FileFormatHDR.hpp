@@ -35,6 +35,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -42,6 +43,7 @@
 
 /* Local inclusions. */
 #include "FileFormatInterface.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::PixelFactory
 {
@@ -79,7 +81,7 @@ namespace EmEn::Base::PixelFactory
 
 				if ( line.rfind("#?", 0) != 0 )
 				{
-					std::cerr << "FileFormatHDR::readStream(), invalid magic (expected '#?RADIANCE' or '#?RGBE') !" "\n";
+					Logging::error("PixelFactory::FileFormatHDR", "FileFormatHDR::readStream(), invalid magic (expected '#?RADIANCE' or '#?RGBE') !");
 
 					return false;
 				}
@@ -99,7 +101,7 @@ namespace EmEn::Base::PixelFactory
 					{
 						if ( line != "FORMAT=32-bit_rle_rgbe" )
 						{
-							std::cerr << "FileFormatHDR::readStream(), unsupported format '" << line << "' !" "\n";
+							Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::readStream(), unsupported format '" << line << "' !").str());
 
 							return false;
 						}
@@ -113,7 +115,7 @@ namespace EmEn::Base::PixelFactory
 
 				if ( !formatDeclared )
 				{
-					std::cerr << "FileFormatHDR::readStream(), no 'FORMAT=32-bit_rle_rgbe' declaration !" "\n";
+					Logging::error("PixelFactory::FileFormatHDR", "FileFormatHDR::readStream(), no 'FORMAT=32-bit_rle_rgbe' declaration !");
 
 					return false;
 				}
@@ -130,7 +132,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( !resolution.has_value() || resolution->first == 0 || resolution->second == 0 )
 					{
-						std::cerr << "FileFormatHDR::readStream(), unsupported resolution line '" << line << "' (expected '-Y h +X w') !" "\n";
+						Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::readStream(), unsupported resolution line '" << line << "' (expected '-Y h +X w') !").str());
 
 						return false;
 					}
@@ -143,7 +145,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( rows > maxDimension || columns > maxDimension )
 					{
-						std::cerr << "FileFormatHDR::readStream(), resolution line '" << line << "' exceeds the pixmap dimension type !" "\n";
+						Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::readStream(), resolution line '" << line << "' exceeds the pixmap dimension type !").str());
 
 						return false;
 					}
@@ -177,7 +179,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( pixelCount > payloadBytes * maxRLEExpansion )
 					{
-						std::cerr << "FileFormatHDR::readStream(), declared resolution " << width << 'x' << height << " exceeds the stream payload (" << payloadBytes << " bytes) !" "\n";
+						Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::readStream(), declared resolution " << width << 'x' << height << " exceeds the stream payload (" << payloadBytes << " bytes) !").str());
 
 						return false;
 					}
@@ -185,7 +187,7 @@ namespace EmEn::Base::PixelFactory
 
 				if ( !pixmap.initialize(width, height, ChannelMode::RGB) )
 				{
-					std::cerr << "FileFormatHDR::readStream(), unable to initialize the pixmap !" "\n";
+					Logging::error("PixelFactory::FileFormatHDR", "FileFormatHDR::readStream(), unable to initialize the pixmap !");
 
 					return false;
 				}
@@ -196,7 +198,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !readScanline(stream, scanline, width) )
 					{
-						std::cerr << "FileFormatHDR::readStream(), unable to read the scanline " << rowIndex << " !" "\n";
+						Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::readStream(), unable to read the scanline " << rowIndex << " !").str());
 
 						return false;
 					}
@@ -249,14 +251,14 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( !pixmap.isValid() )
 				{
-					std::cerr << "FileFormatHDR::writeStream(), pixmap parameter is invalid !" "\n";
+					Logging::error("PixelFactory::FileFormatHDR", "FileFormatHDR::writeStream(), pixmap parameter is invalid !");
 
 					return false;
 				}
 
 				if ( pixmap.channelMode() != ChannelMode::RGB && pixmap.channelMode() != ChannelMode::RGBA )
 				{
-					std::cerr << "FileFormatHDR::writeStream(), only RGB/RGBA pixmaps can be written (alpha is dropped) !" "\n";
+					Logging::error("PixelFactory::FileFormatHDR", "FileFormatHDR::writeStream(), only RGB/RGBA pixmaps can be written (alpha is dropped) !");
 
 					return false;
 				}
@@ -272,7 +274,7 @@ namespace EmEn::Base::PixelFactory
 
 				if ( !stream.write(header.data(), header.size()) )
 				{
-					std::cerr << "FileFormatHDR::writeStream(), unable to write the header !" "\n";
+					Logging::error("PixelFactory::FileFormatHDR", "FileFormatHDR::writeStream(), unable to write the header !");
 
 					return false;
 				}
@@ -330,7 +332,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( !stream.write(scanline.data(), scanline.size()) )
 					{
-						std::cerr << "FileFormatHDR::writeStream(), unable to write the scanline " << rowIndex << " !" "\n";
+						Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::writeStream(), unable to write the scanline " << rowIndex << " !").str());
 
 						return false;
 					}

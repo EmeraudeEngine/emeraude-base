@@ -34,9 +34,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <numbers>
 #include <ranges>
+#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -1470,8 +1470,9 @@ TEST(MathSpace3DContacts, DISABLED_BoxBoxManifoldCost)
 	const auto [unrotated, unrotatedPoints] = measure(crate, floor);
 	const auto [turned, turnedPoints] = measure(turnedA, turnedB);
 
-	std::cout << "[cost] box-box manifold, unrotated pair: " << unrotated << " ns per call (" << unrotatedPoints / Calls << " points)\n";
-	std::cout << "[cost] box-box manifold, turned pair: " << turned << " ns per call (" << turnedPoints / Calls << " points)\n";
+	/* NOTE: A measurement goes to the test report (--gtest_output=xml), never to the terminal (2026-11-09). */
+	RecordProperty("unrotatedPairNsPerCall", (std::stringstream{} << unrotated << " ns (" << unrotatedPoints / Calls << " points)").str());
+	RecordProperty("turnedPairNsPerCall", (std::stringstream{} << turned << " ns (" << turnedPoints / Calls << " points)").str());
 
 	EXPECT_GT(unrotatedPoints, 0U);
 	EXPECT_GT(turnedPoints, 0U);

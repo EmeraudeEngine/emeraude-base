@@ -28,7 +28,11 @@
 
 /* STL inclusions. */
 #include <iostream>
+#include <sstream>
 #include <utility>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Debug
 {
@@ -48,7 +52,7 @@ namespace EmEn::Base::Debug
 			{
 				s_instanceCount++;
 
-				std::cout << "[DEBUG] Default constructor called! " << *this << "\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Default constructor called! " << *this).str());
 			}
 
 			/**
@@ -61,7 +65,7 @@ namespace EmEn::Base::Debug
 			{
 				s_instanceCount++;
 
-				std::cout << "[DEBUG] Parametric constructor called! " << *this << "\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Parametric constructor called! " << *this).str());
 			}
 
 			/**
@@ -73,7 +77,7 @@ namespace EmEn::Base::Debug
 			{
 				s_instanceCount++;
 
-				std::cout << "[DEBUG] Copy constructor called! " << *this << "\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Copy constructor called! " << *this).str());
 			}
 
 			/**
@@ -85,7 +89,7 @@ namespace EmEn::Base::Debug
 			{
 				s_instanceCount++;
 
-				std::cout << "[DEBUG] Move constructor called! " << *this << "\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Move constructor called! " << *this).str());
 			}
 
 			/**
@@ -96,7 +100,7 @@ namespace EmEn::Base::Debug
 			Dummy &
 			operator= (const Dummy & other) noexcept
 			{
-				std::cout << "[DEBUG] Copy assignment called (from old value : " << other.value() << ") ! " << *this << "\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Copy assignment called (from old value : " << other.value() << ") ! " << *this).str());
 
 				if ( this != &other )
 				{
@@ -122,7 +126,7 @@ namespace EmEn::Base::Debug
 					m_value = std::exchange(other.m_value, -1);
 				}
 
-				std::cout << "[DEBUG] Move assignment (from: " << oldValueFrom << " to: " << oldValueTo << ")\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Move assignment (from: " << oldValueFrom << " to: " << oldValueTo << ")").str());
 
 				return *this;
 			}
@@ -134,7 +138,7 @@ namespace EmEn::Base::Debug
 			{
 				s_instanceCount--;
 
-				std::cout << "[DEBUG] Destructor called! " << *this << "\n";
+				Logging::debug("Debug::Dummy", (std::stringstream{} << "Destructor called! " << *this).str());
 			}
 
 			/**

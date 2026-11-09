@@ -48,6 +48,9 @@
 #include "VertexFactory/ShapeVertex.hpp"
 #include "VertexFactory/TextureCoordinates.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::VertexFactory
 {
 	/**
@@ -134,7 +137,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_constructionMode != ConstructionMode::None )
 				{
-					std::cerr << "[ShapeBuilder::setDestinationShape()] You can't set an other Geometry while constructing !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "You can't set an other Geometry while constructing !");
 
 					return;
 				}
@@ -164,14 +167,14 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_constructionMode != ConstructionMode::None )
 				{
-					std::cerr << "[ShapeBuilder::beginConstruction()] A construction is already begun !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "A construction is already begun !");
 
 					return;
 				}
 
 				if ( m_destinationShape == nullptr )
 				{
-					std::cerr << "[ShapeBuilder::beginConstruction()] Unable to begin a construction on a null Geometry !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "Unable to begin a construction on a null Geometry !");
 
 					return;
 				}
@@ -185,7 +188,7 @@ namespace EmEn::Base::VertexFactory
 
 				if constexpr ( VertexFactoryDebugEnabled )
 				{
-					std::cout << "[DEBUG:VERTEX_FACTORY] Ready for construction ... " "\n";
+					Logging::debug("VertexFactory::ShapeBuilder", "Ready for construction ... ");
 				}
 			}
 
@@ -197,7 +200,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_constructionMode == ConstructionMode::None )
 				{
-					std::cerr << "[ShapeBuilder::newGroup()] Builder is not in construction mode !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "Builder is not in construction mode !");
 
 					return;
 				}
@@ -334,7 +337,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_constructionMode == ConstructionMode::None )
 				{
-					std::cerr << "[ShapeBuilder::newVertex()] There is no construction !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "There is no construction !");
 
 					return false;
 				}
@@ -342,7 +345,7 @@ namespace EmEn::Base::VertexFactory
 				/* The vertex position will be never optional. */
 				if ( !m_declaredAttributes[PositionDeclared] )
 				{
-					std::cerr << "[ShapeBuilder::newVertex()] The position attribute is not declared for this vertex !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "The position attribute is not declared for this vertex !");
 
 					return false;
 				}
@@ -358,7 +361,7 @@ namespace EmEn::Base::VertexFactory
 					/* ... Or if the attribute has been declared. */
 					else if ( !m_declaredAttributes[NormalDeclared] )
 					{
-						std::cerr << "[ShapeBuilder::newVertex()] The normal attribute is not declared for this vertex !" "\n";
+						Logging::error("VertexFactory::ShapeBuilder", "The normal attribute is not declared for this vertex !");
 
 						return false;
 					}
@@ -378,7 +381,7 @@ namespace EmEn::Base::VertexFactory
 					/* ... Or if the attribute has been declared. */
 					else if ( !m_declaredAttributes[TextureCoordinatesDeclared] )
 					{
-						std::cerr << "[ShapeBuilder::newVertex()] The texture coordinates attribute is not declared for this vertex !" "\n";
+						Logging::error("VertexFactory::ShapeBuilder", "The texture coordinates attribute is not declared for this vertex !");
 
 						return false;
 					}
@@ -400,7 +403,7 @@ namespace EmEn::Base::VertexFactory
 					/* ... Or if the attribute has been declared. */
 					else if ( !m_declaredAttributes[VertexColorDeclared] )
 					{
-						std::cerr << "[ShapeBuilder::newVertex()] The vertex color attribute is not declared for this vertex !" "\n";
+						Logging::error("VertexFactory::ShapeBuilder", "The vertex color attribute is not declared for this vertex !");
 
 						return false;
 					}
@@ -419,7 +422,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_constructionMode == ConstructionMode::None )
 				{
-					std::cerr << "[ShapeBuilder::endConstruction()] There was no construction to end !" "\n";
+					Logging::error("VertexFactory::ShapeBuilder", "There was no construction to end !");
 
 					return;
 				}
@@ -438,7 +441,7 @@ namespace EmEn::Base::VertexFactory
 
 					if constexpr ( VertexFactoryDebugEnabled )
 					{
-						std::cout << "[DEBUG:VERTEX_FACTORY] Generating texture coordinates !" "\n";
+						Logging::debug("VertexFactory::ShapeBuilder", "Generating texture coordinates !");
 					}
 
 					m_destinationShape->generateTextureCoordinates(textureCoordinatesMultiplier[Math::X], textureCoordinatesMultiplier[Math::Y]);
@@ -467,7 +470,7 @@ namespace EmEn::Base::VertexFactory
 				{
 					if constexpr ( VertexFactoryDebugEnabled )
 					{
-						std::cout << "[DEBUG:VERTEX_FACTORY] Flipping the shape !" "\n";
+						Logging::debug("VertexFactory::ShapeBuilder", "Flipping the shape !");
 					}
 
 					m_destinationShape->flipSurface();
@@ -485,7 +488,7 @@ namespace EmEn::Base::VertexFactory
 
 				if constexpr ( VertexFactoryDebugEnabled )
 				{
-					std::cout << "[DEBUG:VERTEX_FACTORY] Construction finished !" "\n";
+					Logging::debug("VertexFactory::ShapeBuilder", "Construction finished !");
 				}
 			}
 
@@ -642,7 +645,7 @@ namespace EmEn::Base::VertexFactory
 							break;
 
 						default:
-							std::cerr << "ShapeBuilder::newVertexAdded(), invalid usage !" "\n";
+							Logging::error("VertexFactory::ShapeBuilder", "ShapeBuilder::newVertexAdded(), invalid usage !");
 							break;
 					}
 				}

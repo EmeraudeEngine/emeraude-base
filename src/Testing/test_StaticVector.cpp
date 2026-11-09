@@ -37,6 +37,7 @@
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "StaticVector.hpp"
 
 namespace EmEn::Base
@@ -726,6 +727,7 @@ namespace EmEn::Base
 		using Vector = StaticVector< int, 2 >;
 
 		EXPECT_DEATH({
+			EmEn::Base::Testing::useDefaultSinkInDeathTest();
 			Vector vector;
 			vector.emplace_back(1);
 			vector.emplace_back(2);

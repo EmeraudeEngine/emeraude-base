@@ -29,13 +29,23 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cctype>
+#include <cstdint>
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
+/* Third-party inclusions. */
+#include "asio.hpp"
+
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
+#include "Network/HTTPRequest.hpp"
+#include "Network/HTTPResponse.hpp"
 #include "Network/HTTPSClient.hpp"
+#include "Network/URI.hpp"
 #include "TLSTestHelpers.hpp"
 
 using namespace EmEn::Base;
@@ -409,6 +419,8 @@ TEST(NetworkHTTPSClientRequest, everyMethodReachesTheServerUnderItsOwnName)
 
 TEST(NetworkHTTPSClientRequest, refusesAHeaderValueCarryingCRLF)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -434,6 +446,12 @@ TEST(NetworkHTTPSClientRequest, refusesAHeaderValueCarryingCRLF)
 	/* ⚠️ Refused BEFORE the socket is opened: a request rejected only at concatenation time would
 	 * already have resolved and contacted the target. */
 	EXPECT_EQ(server.requestCount(), 0U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClientRequest, refusesAHeaderValueCarryingABareControlCharacter)
@@ -476,6 +494,8 @@ TEST(NetworkHTTPSClientRequest, refusesTheFramingHeadersTheClientOwns)
 
 TEST(NetworkHTTPSClientRequest, refusesAContentTypeCarryingCRLF)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -501,6 +521,12 @@ TEST(NetworkHTTPSClientRequest, refusesAContentTypeCarryingCRLF)
 	EXPECT_FALSE(result.has_value());
 	EXPECT_EQ(report.outcome, Network::DownloadOutcome::BadRequest);
 	EXPECT_EQ(server.requestCount(), 0U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* ---- Redirect hygiene ---- */
@@ -544,6 +570,8 @@ TEST(NetworkHTTPSClientRequest, callerHeadersSurviveASameOriginRedirect)
 
 TEST(NetworkHTTPSClientRequest, callerHeadersAreDroppedOnACrossOriginRedirect)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -578,6 +606,12 @@ TEST(NetworkHTTPSClientRequest, callerHeadersAreDroppedOnACrossOriginRedirect)
 
 	/* ⚠️ The credential must NOT follow the Location: whoever controls that host would receive it. */
 	EXPECT_TRUE(requestHeaderValues(secondHop, "Authorization").empty());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClientRequest, aBodyIsDroppedWhenA302RewritesThePostToAGet)
@@ -721,6 +755,8 @@ TEST(NetworkHTTPSClientRequest, aSuccessfulRequestReportsSuccess)
 
 TEST(NetworkHTTPSClientRequest, refusesAPlainHTTPTarget)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	auto tlsContext = makeTrustingClientContext({});
 
 	Network::HTTPSClient client{tlsContext};
@@ -731,4 +767,10 @@ TEST(NetworkHTTPSClientRequest, refusesAPlainHTTPTarget)
 
 	EXPECT_FALSE(result.has_value());
 	EXPECT_EQ(report.outcome, Network::DownloadOutcome::BadScheme);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

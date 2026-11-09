@@ -48,6 +48,7 @@
 #include "Color.hpp"
 #include "Gradient.hpp"
 #include "Algorithms/PerlinNoise.hpp"
+#include "Logging/Logging.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "Types.hpp"
 
@@ -363,7 +364,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !this->initAlphaChannel() )
 					{
-						std::cerr << "Unable to check alpha channel initialization !" "\n";
+						Logging::error("PixelFactory::Pixmap", "Unable to check alpha channel initialization !");
 					}
 				}
 				else
@@ -397,7 +398,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "Pixmap construction from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".\n";
+						Logging::error("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap construction from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".").str());
 					}
 
 					this->clear();
@@ -435,7 +436,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !this->fill(color) )
 					{
-						std::cerr << "Unable to initialize color !" "\n";
+						Logging::error("PixelFactory::Pixmap", "Unable to initialize color !");
 					}
 				}
 				else
@@ -458,7 +459,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "Invalid pixmap dimensions !" "\n";
+						Logging::error("PixelFactory::Pixmap", "Invalid pixmap dimensions !");
 					}
 
 					return false;
@@ -494,7 +495,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "Invalid pixmap dimensions for span initialization!\n";
+						Logging::error("PixelFactory::Pixmap", "Invalid pixmap dimensions for span initialization!");
 					}
 
 					return false;
@@ -517,7 +518,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "Pixmap initialization from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".\n";
+						Logging::error("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap initialization from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".").str());
 					}
 
 					this->clear();
@@ -3032,7 +3033,7 @@ namespace EmEn::Base::PixelFactory
 
 				if ( elements > std::numeric_limits< uint32_t >::max() )
 				{
-					std::cerr << "Pixmap : " << width << "x" << height << " with " << static_cast< uint32_t >(channelMode) << " channels exceeds the 4294967295 elements a pixmap can address, refused !" "\n";
+					Logging::error("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap : " << width << "x" << height << " with " << static_cast< uint32_t >(channelMode) << " channels exceeds the 4294967295 elements a pixmap can address, refused !").str());
 
 					return false;
 				}

@@ -57,7 +57,7 @@ namespace EmEn::Base
 	 *
 	 * All value-retrieval methods (`as*()`) operate with `std::get_if` rather than `std::get`,
 	 * complying with the project-wide `-fno-exceptions` policy. On a type mismatch the method emits
-	 * a diagnostic message to `std::cerr` and returns the zero-value for the requested type (0,
+	 * a diagnostic through `Logging` (tag "Variant") and returns the zero-value for the requested type (0,
 	 * 0.0, false, or a default-constructed object). Callers should always verify the active type
 	 * with `type()` or `isNull()` before extracting a value.
 	 *
@@ -340,7 +340,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a signed 8-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Integer8`, emits
-			 * a diagnostic to `std::cerr` and returns `0`.
+			 * a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::Integer8`
 			 * @return The stored `int8_t` value, or `0` on type mismatch.
@@ -352,7 +352,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as an unsigned 8-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::UnsignedInteger8`,
-			 * emits a diagnostic to `std::cerr` and returns `0`.
+			 * emits a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::UnsignedInteger8`
 			 * @return The stored `uint8_t` value, or `0` on type mismatch.
@@ -364,7 +364,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a signed 16-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Integer16`, emits
-			 * a diagnostic to `std::cerr` and returns `0`.
+			 * a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::Integer16`
 			 * @return The stored `int16_t` value, or `0` on type mismatch.
@@ -376,7 +376,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as an unsigned 16-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::UnsignedInteger16`,
-			 * emits a diagnostic to `std::cerr` and returns `0`.
+			 * emits a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::UnsignedInteger16`
 			 * @return The stored `uint16_t` value, or `0` on type mismatch.
@@ -388,7 +388,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a signed 32-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Integer32`, emits
-			 * a diagnostic to `std::cerr` and returns `0`.
+			 * a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::Integer32`
 			 * @return The stored `int32_t` value, or `0` on type mismatch.
@@ -400,7 +400,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as an unsigned 32-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::UnsignedInteger32`,
-			 * emits a diagnostic to `std::cerr` and returns `0`.
+			 * emits a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::UnsignedInteger32`
 			 * @return The stored `uint32_t` value, or `0` on type mismatch.
@@ -412,7 +412,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a signed 64-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Integer64`, emits
-			 * a diagnostic to `std::cerr` and returns `0`.
+			 * a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::Integer64`
 			 * @return The stored `int64_t` value, or `0` on type mismatch.
@@ -424,7 +424,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as an unsigned 64-bit integer.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::UnsignedInteger64`,
-			 * emits a diagnostic to `std::cerr` and returns `0`.
+			 * emits a diagnostic through `Logging` and returns `0`.
 			 *
 			 * @pre `type() == Type::UnsignedInteger64`
 			 * @return The stored `uint64_t` value, or `0` on type mismatch.
@@ -436,7 +436,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a single-precision floating-point number.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Float`, emits a
-			 * diagnostic to `std::cerr` and returns `0.0f`.
+			 * diagnostic through `Logging` and returns `0.0f`.
 			 *
 			 * @pre `type() == Type::Float`
 			 * @return The stored `float` value, or `0.0f` on type mismatch.
@@ -448,7 +448,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a double-precision floating-point number.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Double`, emits a
-			 * diagnostic to `std::cerr` and returns `0.0`.
+			 * diagnostic through `Logging` and returns `0.0`.
 			 *
 			 * @pre `type() == Type::Double`
 			 * @return The stored `double` value, or `0.0` on type mismatch.
@@ -460,7 +460,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as an extended-precision floating-point number.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::LongDouble`, emits
-			 * a diagnostic to `std::cerr` and returns `0.0L`.
+			 * a diagnostic through `Logging` and returns `0.0L`.
 			 *
 			 * @pre `type() == Type::LongDouble`
 			 * @return The stored `long double` value, or `0.0L` on type mismatch.
@@ -472,7 +472,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a boolean.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Boolean`, emits a
-			 * diagnostic to `std::cerr` and returns `false`.
+			 * diagnostic through `Logging` and returns `false`.
 			 *
 			 * @pre `type() == Type::Boolean`
 			 * @return The stored `bool` value, or `false` on type mismatch.
@@ -484,7 +484,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a 2-component single-precision vector.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Vector2Float`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed `Math::Vector2F`.
+			 * emits a diagnostic through `Logging` and returns a default-constructed `Math::Vector2F`.
 			 *
 			 * @pre `type() == Type::Vector2Float`
 			 * @return The stored `Math::Vector2F` value, or a zero-initialized vector on type mismatch.
@@ -496,7 +496,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a 3-component single-precision vector.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Vector3Float`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed `Math::Vector3F`.
+			 * emits a diagnostic through `Logging` and returns a default-constructed `Math::Vector3F`.
 			 *
 			 * @pre `type() == Type::Vector3Float`
 			 * @return The stored `Math::Vector3F` value, or a zero-initialized vector on type mismatch.
@@ -508,7 +508,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a 4-component single-precision vector.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Vector4Float`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed `Math::Vector4F`.
+			 * emits a diagnostic through `Logging` and returns a default-constructed `Math::Vector4F`.
 			 *
 			 * @pre `type() == Type::Vector4Float`
 			 * @return The stored `Math::Vector4F` value, or a zero-initialized vector on type mismatch.
@@ -520,7 +520,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a 2x2 single-precision matrix.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Matrix2Float`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed `Math::Matrix2F`.
+			 * emits a diagnostic through `Logging` and returns a default-constructed `Math::Matrix2F`.
 			 *
 			 * @pre `type() == Type::Matrix2Float`
 			 * @return The stored `Math::Matrix2F` value, or a default-constructed matrix on type mismatch.
@@ -532,7 +532,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a 3x3 single-precision matrix.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Matrix3Float`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed `Math::Matrix3F`.
+			 * emits a diagnostic through `Logging` and returns a default-constructed `Math::Matrix3F`.
 			 *
 			 * @pre `type() == Type::Matrix3Float`
 			 * @return The stored `Math::Matrix3F` value, or a default-constructed matrix on type mismatch.
@@ -544,7 +544,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a 4x4 single-precision matrix.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Matrix4Float`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed `Math::Matrix4F`.
+			 * emits a diagnostic through `Logging` and returns a default-constructed `Math::Matrix4F`.
 			 *
 			 * @pre `type() == Type::Matrix4Float`
 			 * @return The stored `Math::Matrix4F` value, or a default-constructed matrix on type mismatch.
@@ -556,7 +556,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a single-precision Cartesian frame.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::CartesianFrameFloat`,
-			 * emits a diagnostic to `std::cerr` and returns a default-constructed
+			 * emits a diagnostic through `Logging` and returns a default-constructed
 			 * `Math::CartesianFrameF`.
 			 *
 			 * @pre `type() == Type::CartesianFrameFloat`
@@ -570,7 +570,7 @@ namespace EmEn::Base
 			 * @brief Returns the held value as a single-precision RGBA color.
 			 *
 			 * Uses `std::get_if` internally. If the active type is not `Type::Color`, emits a
-			 * diagnostic to `std::cerr` and returns a default-constructed `PixelFactory::ColorF`.
+			 * diagnostic through `Logging` and returns a default-constructed `PixelFactory::ColorF`.
 			 *
 			 * @pre `type() == Type::Color`
 			 * @return The stored `PixelFactory::ColorF` value, or a default-constructed color on

@@ -32,7 +32,8 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cstdlib>
-#include <iostream>
+#include <sstream>
+#include <string>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
@@ -349,12 +350,12 @@ namespace EmEn::Base
 
 		if ( m_workers.size() < threadCount )
 		{
-			std::cerr << "[ThreadPool] Only " << m_workers.size() << " of " << threadCount << " worker threads could start" << (m_workers.empty() ? ": the tasks run on the calling thread." : ".") << "\n";
+			Logging::error("ThreadPool", (std::stringstream{} << "Only " << m_workers.size() << " of " << threadCount << " worker threads could start" << (m_workers.empty() ? ": the tasks run on the calling thread." : ".")).str());
 		}
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] " << m_workers.size() << " threads spawned in the pool." "\n";
+			Logging::debug("ThreadPool", (std::stringstream{} << m_workers.size() << " threads spawned in the pool.").str());
 		}
 	}
 
@@ -362,7 +363,7 @@ namespace EmEn::Base
 	{
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] Cleaning the thread pool..." "\n";
+			Logging::debug("ThreadPool", "Cleaning the thread pool...");
 		}
 
 		/* Signal all workers to stop. */
@@ -377,7 +378,7 @@ namespace EmEn::Base
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] Stopped and waiting for all threads to quit..." "\n";
+			Logging::debug("ThreadPool", "Stopped and waiting for all threads to quit...");
 		}
 
 		for ( auto & worker : m_workers )
@@ -387,7 +388,7 @@ namespace EmEn::Base
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] Thread pool terminated." "\n";
+			Logging::debug("ThreadPool", "Thread pool terminated.");
 		}
 	}
 
@@ -462,7 +463,7 @@ namespace EmEn::Base
 			{
 				if constexpr ( ThreadPoolDebugEnabled )
 				{
-					std::cerr << "[ThreadPool-debug] Enqueue on a stopped thread pool!" "\n";
+					Logging::error("ThreadPool", "Enqueue on a stopped thread pool!");
 				}
 
 				return false;
@@ -474,7 +475,7 @@ namespace EmEn::Base
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] New task added to queue." "\n";
+			Logging::debug("ThreadPool", "New task added to queue.");
 		}
 
 		m_condition.notifyOne();
@@ -487,9 +488,8 @@ namespace EmEn::Base
 	{
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout <<
-				"[ThreadPool-debug] Waiting for " << m_busyWorkers.load(std::memory_order_relaxed) << " workers to finish "
-				"(" << m_pendingTasks.load(std::memory_order_relaxed) << " tasks left)..." "\n";
+			Logging::debug("ThreadPool", (std::stringstream{} << "Waiting for " << m_busyWorkers.load(std::memory_order_relaxed) << " workers to finish "
+				"(" << m_pendingTasks.load(std::memory_order_relaxed) << " tasks left)...").str());
 		}
 
 		MutexLock lock{m_mutex};
@@ -500,7 +500,7 @@ namespace EmEn::Base
 
 		if constexpr ( ThreadPoolDebugEnabled )
 		{
-			std::cout << "[ThreadPool-debug] All tasks completed." "\n";
+			Logging::debug("ThreadPool", "All tasks completed.");
 		}
 	}
 
@@ -552,9 +552,8 @@ namespace EmEn::Base
 			/* Execute task outside any locks. */
 			if constexpr ( ThreadPoolDebugEnabled )
 			{
-				std::cout <<
-					"[ThreadPool-debug] Worker running task... "
-					"(" << m_busyWorkers.load(std::memory_order_relaxed) << " busy, " << m_pendingTasks.load(std::memory_order_relaxed) << " pending)" "\n";
+				Logging::debug("ThreadPool", (std::stringstream{} << "Worker running task... "
+					"(" << m_busyWorkers.load(std::memory_order_relaxed) << " busy, " << m_pendingTasks.load(std::memory_order_relaxed) << " pending)").str());
 
 				{
 					const Time::Elapsed::PrintScopeRealTime stat{"[ThreadPool-debug] Task finished"};
@@ -562,7 +561,7 @@ namespace EmEn::Base
 					task();
 				}
 
-				std::cout << "[ThreadPool-debug] Worker finished task." "\n";
+				Logging::debug("ThreadPool", "Worker finished task.");
 			}
 			else
 			{

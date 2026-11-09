@@ -36,6 +36,8 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/Space3D/AACuboid.hpp"
 #include "Math/Vector.hpp"
 #include "PixelFactory/Pixmap.hpp"
@@ -51,6 +53,8 @@ using namespace EmEn::Base::VertexFactory;
 
 TEST(VertexFactoryGrid, ACellCountWhosePointCountOverflowsTheIndexTypeIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Grid< float, uint16_t > smallGrid;
 
 	ASSERT_EQ((Grid< float, uint16_t >::MaxCellCount), 254U);
@@ -68,10 +72,18 @@ TEST(VertexFactoryGrid, ACellCountWhosePointCountOverflowsTheIndexTypeIsRefused)
 	/* cellCount + 1 itself would wrap to 0. */
 	ASSERT_FALSE(grid.initializeByGridSize(1.0F, UINT32_MAX));
 	ASSERT_FALSE(grid.initializeByCellSize(UINT32_MAX));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 5U);
+	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(VertexFactoryGrid, ANonFiniteSizeIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Grid< float > grid;
 
 	ASSERT_FALSE(grid.initializeByGridSize(NAN, 4U));
@@ -82,6 +94,12 @@ TEST(VertexFactoryGrid, ANonFiniteSizeIsRefused)
 	/* A finite one still goes. */
 	ASSERT_TRUE(grid.initializeByGridSize(8.0F, 4U));
 	ASSERT_EQ(grid.pointCount(), 25U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* A 1024 m grid of 1 m cells, streamed through a 256-cell window: the window's centre may travel
@@ -168,6 +186,8 @@ TEST(VertexFactoryGrid, ASubGridKeepsTheTextureCoordinatesOfItsParent)
 
 TEST(VertexFactoryGrid, ACoarsenedGridCoincidesWithItsParentAtTheSharedPoints)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Grid< float > grid;
 	ASSERT_TRUE(grid.initializeByGridSize(1024.0F, 1024U));
 	grid.setUVMultiplier(64.0F);
@@ -190,6 +210,12 @@ TEST(VertexFactoryGrid, ACoarsenedGridCoincidesWithItsParentAtTheSharedPoints)
 
 	/* A step that does not divide the cell count gives an invalid grid, not a wrong one. */
 	ASSERT_FALSE(grid.coarsened(48U).isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(VertexFactoryGrid, ASubGridBoundingBoxIsWhereTheWindowIs)
@@ -213,6 +239,8 @@ TEST(VertexFactoryGrid, ASubGridBoundingBoxIsWhereTheWindowIs)
 
 TEST(VertexFactoryGrid, AHalvedTentGridIsTheTentMeanOfItsParent)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Grid< float > grid;
 	ASSERT_TRUE(grid.initializeByGridSize(512.0F, 256U));
 	grid.applyPerlinNoise(16.0F, 40.0F);
@@ -252,6 +280,12 @@ TEST(VertexFactoryGrid, AHalvedTentGridIsTheTentMeanOfItsParent)
 	Grid< float > odd;
 	ASSERT_TRUE(odd.initializeByGridSize(96.0F, 3U));
 	ASSERT_FALSE(odd.halvedTent().isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(VertexFactoryGrid, AHalvedTentGridIsSmootherThanAPointSampledOne)

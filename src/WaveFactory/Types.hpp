@@ -29,8 +29,12 @@
 /* STL inclusions. */
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <stop_token>
 #include <utility>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 /* Forward declarations. */
 
@@ -252,7 +256,7 @@ namespace EmEn::Base::WaveFactory
 				return Channels::Stereo;
 
 			default:
-				std::cerr << "toChannels(), " << channelsCount << " channels is not handled !" "\n";
+				Logging::error("WaveFactory::Types", (std::stringstream{} << "toChannels(), " << channelsCount << " channels is not handled !").str());
 
 				return Channels::Invalid;
 		}

@@ -36,6 +36,8 @@
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "PixelFactory/Color.hpp"
 #include "PixelFactory/FileIO.hpp"
@@ -54,6 +56,8 @@ using namespace EmEn::Base::Time::Elapsed;
  * constructor read a Pixmap::area() that does not exist (that template constructor was never instantiated). */
 TEST(PixelFactoryTextProcessor, write)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Pixmap< uint8_t > image{1024, 1024, ChannelMode::RGB};
 
 	{
@@ -101,6 +105,12 @@ TEST(PixelFactoryTextProcessor, write)
 	}
 
 	ASSERT_TRUE(FileIO::write(image, AssetsDirectory / "tmp_textPixmap.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The pixmap font (the coverage pass, 2026-10-17). */
@@ -170,6 +180,8 @@ TEST(PixelFactoryFont, fixedWidthGlyphsKeepTheCellWidth)
 
 TEST(PixelFactoryFont, refusalsAndClosestSize)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Font< uint8_t > font;
 
 	/* No size loaded yet. */
@@ -194,6 +206,12 @@ TEST(PixelFactoryFont, refusalsAndClosestSize)
 	Font< uint8_t > fromFile;
 	EXPECT_TRUE(fromFile.readFile(FixedFont, 16U, false));
 	EXPECT_FALSE(fromFile.readFile(std::filesystem::path{"font.xyz"}, 16U, false));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::Font"), 5U);
+	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The text layout in pixels (2026-10-18). */

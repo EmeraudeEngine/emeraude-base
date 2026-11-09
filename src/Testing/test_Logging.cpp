@@ -32,6 +32,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 
 /* Local inclusions. */
 #include "Logging/Logging.hpp"
@@ -46,7 +47,7 @@ namespace EmEn::Base
 		std::string capturedMessage;
 		int callCount{0};
 
-		Logging::setSink([&] (Severity severity, const char * tag, std::string_view message) {
+		auto previousSink = Logging::setSink([&] (Severity severity, const char * tag, std::string_view message) {
 			capturedSeverity = severity;
 			capturedTag = tag != nullptr ? tag : "";
 			capturedMessage = std::string{message};
@@ -65,13 +66,14 @@ namespace EmEn::Base
 		EXPECT_EQ(capturedSeverity, Severity::Warning);
 		EXPECT_EQ(capturedMessage, "almost full");
 
-		/* MUST reset: the captured lambda references locals that die at scope end. */
-		Logging::setSink(nullptr);
+		/* MUST put the previous sink (the suite's guard) back: the captured lambda references locals that die at scope end. */
+		static_cast< void >(Logging::setSink(std::move(previousSink)));
 	}
 
 	TEST(Logging, defaultSinkSplitsStdoutStderr)
 	{
-		Logging::setSink(nullptr);
+		/* The DEFAULT sink is under test: the suite's guard is set aside, then put back. */
+		auto previousSink = Logging::setSink(nullptr);
 
 		std::stringstream outBuffer;
 		std::stringstream errBuffer;
@@ -83,6 +85,7 @@ namespace EmEn::Base
 
 		std::cout.rdbuf(previousOut);
 		std::cerr.rdbuf(previousErr);
+		static_cast< void >(Logging::setSink(std::move(previousSink)));
 
 		const auto out = outBuffer.str();
 		const auto err = errBuffer.str();

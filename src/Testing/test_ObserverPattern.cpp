@@ -28,12 +28,17 @@
 #include <atomic>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "Any.hpp"
 #include "AnyValue.hpp"
+#include "DiagnosticsCapture.hpp"
+#include "Hash/FNV1a.hpp"
+#include "Logging/Severity.hpp"
 #include "ObservableTrait.hpp"
 #include "ObserverTrait.hpp"
 #include "Thread.hpp"
@@ -206,6 +211,8 @@ TEST(Observer, watch)
 
 TEST(Observer, anyValueNeverThrowsOnAMismatchedPayload)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* anyValue() answers the value, or nullptr (and logs) on a mismatch or an empty payload — never a throw (the value
 	 * form of std::any_cast aborted under -fno-exceptions; the payload is a Base::Any since 2026-10-07). */
 	const Any integer{42};
@@ -223,6 +230,12 @@ TEST(Observer, anyValueNeverThrowsOnAMismatchedPayload)
 	const auto * string = EmEn::Base::anyValue< std::string >(text, "test");
 	ASSERT_NE(string, nullptr);
 	EXPECT_EQ(*string, "payload");
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "test"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* isObserved() / isObserving() read the observer sets UNLOCKED until 2026-10-17, while observe() / forget() change them

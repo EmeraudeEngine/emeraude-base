@@ -40,9 +40,13 @@
 #include <iostream>
 #include <iterator>
 #include <memory>
+#include <sstream>
 #include <stdexcept> // IWYU pragma: keep (std::length_error, under __cpp_exceptions: a consumer built WITH exceptions)
 #include <type_traits>
 #include <utility>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 #if IS_WINDOWS
 #undef min
@@ -972,7 +976,7 @@ namespace EmEn::Base
 #if defined(__cpp_exceptions)
 					throw std::length_error{"StaticVector::emplace_back: Capacity exceeded!"};
 #else
-					std::cerr << "StaticVector::emplace_back: Capacity (" << max_capacity << ") exceeded!" << std::endl;
+					Logging::fatal("StaticVector", (std::stringstream{} << "StaticVector::emplace_back: Capacity (" << max_capacity << ") exceeded!").str());
 
 					std::abort();
 #endif

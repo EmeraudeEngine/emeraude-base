@@ -51,7 +51,9 @@
 #include "asio.hpp"
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "IO/IO.hpp"
+#include "Logging/Severity.hpp"
 #include "Network/GracefulCloser.hpp"
 #include "Network/HTTPSClient.hpp"
 #include "Network/HTTPServer.hpp"
@@ -356,6 +358,8 @@ TEST(NetworkHTTPServer, BearerToken)
 
 TEST(NetworkHTTPServer, NonLoopbackNeedsAToken)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	auto options = testOptions();
 	options.address = "0.0.0.0";
 
@@ -367,6 +371,12 @@ TEST(NetworkHTTPServer, NonLoopbackNeedsAToken)
 
 	HTTPServer invalid{options};
 	EXPECT_FALSE(invalid.start(helloHandler));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "HTTPServer"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPServer, RefusesSmugglingAndBadFraming)
@@ -764,6 +774,8 @@ TEST(NetworkHTTPServer, PrivateNetworkAddresses)
 
 TEST(NetworkHTTPServer, CleartextDownloadFromAPrivatePeer)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	constexpr size_t Size{(300 * 1024) + 5};
 	const auto source = patternFile(Size);
 	std::error_code ec;
@@ -835,6 +847,13 @@ TEST(NetworkHTTPServer, CleartextDownloadFromAPrivatePeer)
 
 	std::filesystem::remove(source, ec);
 	std::filesystem::remove(destination, ec);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* Ave Robustus II P0 (2026-10-08): stop() posted its shutdown handler with references to its own stack frame and waited

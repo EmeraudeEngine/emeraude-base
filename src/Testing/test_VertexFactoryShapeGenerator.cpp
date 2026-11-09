@@ -32,7 +32,6 @@
 #include <cstdint>
 #include <fstream>
 #include <initializer_list>
-#include <iterator>
 #include <map>
 #include <numbers>
 #include <optional>
@@ -43,6 +42,8 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/Matrix.hpp"
 #include "Math/Space3D/AACuboid.hpp"
 #include "Math/Vector.hpp"
@@ -505,6 +506,8 @@ TEST(VertexFactoryShapeGenerator, cuboidTopFaceAgreesWithPlane)
  */
 TEST(VertexFactoryShapeGenerator, loopDrivenGeneratorsWindCCWAroundTheirNormals)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Controls — audited and shipped before this gate existed. */
 	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F, uvOptions()), "cuboid [control]");
 	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generatePlane< float, uint32_t >(1.0F, 1.0F, 1, 1, uvOptions()), "plane [control]");
@@ -524,6 +527,12 @@ TEST(VertexFactoryShapeGenerator, loopDrivenGeneratorsWindCCWAroundTheirNormals)
 	/* The recursive one. It was absent from this gate until Sep 2026, when a normal-mapped geodesic
 	 * sphere rendered at half the brightness of the UV sphere carrying the same material. */
 	expectFrontFacesWindCCWAroundTheirNormal(ShapeGenerator::generateGeodesicSphere< float, uint32_t >(1.0F, 3U, uvOptions()), "geodesic sphere");
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::ShapeBuilder"), 112U);
+	EXPECT_EQ(captured.messages.size(), 112U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /*

@@ -30,9 +30,12 @@
 #include <algorithm>
 #include <cstddef>
 #include <iostream>
+#include <mutex>
 #include <sstream>
 #include <string>
+#include <streambuf>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
@@ -73,11 +76,131 @@ namespace EmEn::Base::Testing
 	};
 
 	/**
+	 * @brief Puts the default Logging sink back in a death-test child, first statement of the EXPECT_DEATH block.
+	 * @note EXPECT_DEATH matches the child's stderr, where only the default sink writes: the suite's guard
+	 * (src/Testing/main.cpp) would turn the fatal message into a test failure the parent never reads. The child dies,
+	 * so nothing has to be restored.
+	 */
+	inline
+	void
+	useDefaultSinkInDeathTest () noexcept
+	{
+		static_cast< void >(Logging::setSink(nullptr));
+	}
+
+	/**
+	 * @brief Captures the Logging sink, std::cout and std::cerr from its construction to stop() (or its destruction).
+	 * @note Declared FIRST in a test body: it is then destroyed LAST, after every object of the body (a server, a pool)
+	 * whose threads may still log; its destructor puts everything back even when an ASSERT_* left the body early.
+	 * @note The sink comes back as it was (the suite's guard, src/Testing/main.cpp): Logging::setSink() returns it.
+	 * @note Messages from other threads (a test server, a worker) are recorded under a mutex. The streams are
+	 * process-wide: one capture at a time (gtest runs the bodies one after the other).
+	 */
+	class DiagnosticsCapture final
+	{
+		public:
+
+			/** @brief Starts the capture. */
+			DiagnosticsCapture () noexcept
+				: m_previousOutput{std::cout.rdbuf(m_standardOutput.rdbuf())},
+				m_previousError{std::cerr.rdbuf(m_standardError.rdbuf())},
+				m_previousSink{Logging::setSink([this] (Severity severity, const char * tag, std::string_view message) {
+					const std::scoped_lock lock{m_access};
+
+					m_messages.push_back({tag != nullptr ? tag : "", std::string{message}, severity});
+				})}
+			{
+
+			}
+
+			/** @brief Deleted copy constructor (the sink captures this object). */
+			DiagnosticsCapture (const DiagnosticsCapture &) = delete;
+
+			/** @brief Deleted move constructor (the sink captures this object). */
+			DiagnosticsCapture (DiagnosticsCapture &&) = delete;
+
+			/** @brief Deleted copy assignment. */
+			DiagnosticsCapture & operator= (const DiagnosticsCapture &) = delete;
+
+			/** @brief Deleted move assignment. */
+			DiagnosticsCapture & operator= (DiagnosticsCapture &&) = delete;
+
+			/** @brief Puts the sink and the streams back if stop() did not. */
+			~DiagnosticsCapture ()
+			{
+				this->restore();
+			}
+
+			/**
+			 * @brief Ends the capture (idempotent) and returns what it recorded.
+			 * @return CapturedDiagnostics
+			 */
+			[[nodiscard]]
+			CapturedDiagnostics
+			stop () noexcept
+			{
+				this->restore();
+
+				return this->snapshot();
+			}
+
+			/**
+			 * @brief Returns what was recorded so far; the capture goes on (until stop() or the destruction).
+			 * @note A test body asserts on it at its end: what the body's objects log while they are destroyed afterwards
+			 * stays captured (never on the terminal, never a guard failure).
+			 * @return CapturedDiagnostics
+			 */
+			[[nodiscard]]
+			CapturedDiagnostics
+			snapshot () noexcept
+			{
+				CapturedDiagnostics captured;
+
+				{
+					const std::scoped_lock lock{m_access};
+
+					captured.messages = m_messages;
+				}
+
+				captured.standardOutput = m_standardOutput.str();
+				captured.standardError = m_standardError.str();
+
+				return captured;
+			}
+
+		private:
+
+			/** @brief Puts the previous sink, then the streams, back once. */
+			void
+			restore () noexcept
+			{
+				if ( !m_active )
+				{
+					return;
+				}
+
+				m_active = false;
+
+				static_cast< void >(Logging::setSink(std::move(m_previousSink)));
+				std::cerr.rdbuf(m_previousError);
+				std::cout.rdbuf(m_previousOutput);
+			}
+
+			std::mutex m_access;
+			std::vector< LoggedMessage > m_messages;
+			std::ostringstream m_standardOutput;
+			std::ostringstream m_standardError;
+			std::streambuf * m_previousOutput;
+			std::streambuf * m_previousError;
+			Logging::Sink m_previousSink;
+			bool m_active{true};
+	};
+
+	/**
 	 * @brief Runs an action with the Logging sink, std::cout and std::cerr captured; all three are restored before
-	 * returning, so the test asserts on the result with the default sink back in place.
+	 * returning, so the test asserts on the result with the previous sink (the suite's guard) back in place.
 	 * @note A raw stream write (std::cerr << ...) in base code bypasses the sink: neither an application nor a fuzz
 	 * target can filter it. A test asserts an empty standardError to keep a refusal on the Logging path.
-	 * @note Not thread-safe: the sink and the stream buffers are process-wide (gtest runs a test body on one thread).
 	 * @param action The code under test.
 	 * @return CapturedDiagnostics
 	 */
@@ -86,25 +209,10 @@ namespace EmEn::Base::Testing
 	CapturedDiagnostics
 	captureDiagnostics (const action_t & action)
 	{
-		CapturedDiagnostics captured;
-		const std::ostringstream standardOutput;
-		const std::ostringstream standardError;
-		auto * const previousOutput = std::cout.rdbuf(standardOutput.rdbuf());
-		auto * const previousError = std::cerr.rdbuf(standardError.rdbuf());
-
-		Logging::setSink([&captured] (Severity severity, const char * tag, std::string_view message) {
-			captured.messages.push_back({tag != nullptr ? tag : "", std::string{message}, severity});
-		});
+		DiagnosticsCapture capture;
 
 		action();
 
-		Logging::setSink(nullptr); /* reset before returning (the lambda captures a local) */
-		std::cerr.rdbuf(previousError);
-		std::cout.rdbuf(previousOutput);
-
-		captured.standardOutput = standardOutput.str();
-		captured.standardError = standardError.str();
-
-		return captured;
+		return capture.stop();
 	}
 }

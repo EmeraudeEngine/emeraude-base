@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <type_traits>
 
 /* Local inclusions. */
@@ -39,6 +40,7 @@
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Logging.hpp"
 #include "Wave.hpp"
 
 namespace EmEn::Base::WaveFactory::FileIO
@@ -59,7 +61,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 	{
 		if ( !IO::fileExists(filepath) )
 		{
-			std::cerr << "[WaveFactory::FileIO] read(), the file '" << IO::toU8String(filepath) << "' doesn't exist !\n";
+			Logging::error("WaveFactory::FileIO", (std::stringstream{} << "read(), the file '" << IO::toU8String(filepath) << "' doesn't exist !").str());
 
 			return false;
 		}
@@ -68,7 +70,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "[WaveFactory::FileIO] read(), unable to open '" << IO::toU8String(filepath) << "' !\n";
+			Logging::error("WaveFactory::FileIO", (std::stringstream{} << "read(), unable to open '" << IO::toU8String(filepath) << "' !").str());
 
 			return false;
 		}
@@ -112,7 +114,7 @@ namespace EmEn::Base::WaveFactory::FileIO
 	{
 		if ( IO::fileExists(filepath) && !overwrite )
 		{
-			std::cerr << "[WaveFactory::FileIO] write(), the file '" << IO::toU8String(filepath) << "' already exists !\n";
+			Logging::error("WaveFactory::FileIO", (std::stringstream{} << "write(), the file '" << IO::toU8String(filepath) << "' already exists !").str());
 
 			return false;
 		}
@@ -121,14 +123,14 @@ namespace EmEn::Base::WaveFactory::FileIO
 
 		if ( extension == "json" )
 		{
-			std::cerr << "[WaveFactory::FileIO] write(), JSON format is read-only (procedural audio) !\n";
+			Logging::error("WaveFactory::FileIO", "write(), JSON format is read-only (procedural audio) !");
 
 			return false;
 		}
 
 		if ( extension == "mid" || extension == "midi" )
 		{
-			std::cerr << "[WaveFactory::FileIO] write(), MIDI format is read-only !\n";
+			Logging::error("WaveFactory::FileIO", "write(), MIDI format is read-only !");
 
 			return false;
 		}

@@ -36,7 +36,7 @@
 #include <cstdint>
 #include <csetjmp>
 #include <cstdlib>
-#include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -87,6 +87,18 @@ namespace EmEn::Base::PixelFactory
 
 			std::longjmp(manager->escape, 1);
 		}
+
+		/* NOTE: libjpeg's default output_message writes its warnings ("Premature end of JPEG file") to stderr: they go
+		 * through Logging instead (owner, 2026-11-09: no direct stream access in the base). */
+		void
+		outputMessage (j_common_ptr cinfo) noexcept
+		{
+			std::array< char, JMSG_LENGTH_MAX > message{};
+
+			(*cinfo->err->format_message)(cinfo, message.data());
+
+			Logging::warning("PixelFactory::FileFormatJpeg", message.data());
+		}
 	}
 
 	template< typename pixel_data_t, typename dimension_t >
@@ -135,6 +147,7 @@ namespace EmEn::Base::PixelFactory
 
 		info.err = jpeg_std_error(&error.pub);
 		error.pub.error_exit = errorExit;
+		error.pub.output_message = outputMessage;
 
 		jpeg_create_decompress(&info);
 
@@ -180,11 +193,7 @@ namespace EmEn::Base::PixelFactory
 
 		if constexpr ( PixelFactoryDebugEnabled )
 		{
-			std::cout <<
-				"[Jpeg_DEBUG] Reading header." << '\n' <<
-				"\tWidth : " << info.output_width << '\n' <<
-				"\tHeight : " << info.output_height << '\n' <<
-				"\tComponents : " << info.output_components << '\n';
+			Logging::debug("PixelFactory::FileFormatJpeg", (std::stringstream{} << "Reading header." << '\n' << "\tWidth : " << info.output_width << '\n' << "\tHeight : " << info.output_height << '\n' << "\tComponents : " << info.output_components).str());
 		}
 
 		auto pixmapAllocated = false;
@@ -256,6 +265,7 @@ namespace EmEn::Base::PixelFactory
 
 		info.err = jpeg_std_error(&error.pub);
 		error.pub.error_exit = errorExit;
+		error.pub.output_message = outputMessage;
 
 		jpeg_create_compress(&info);
 
@@ -312,11 +322,7 @@ namespace EmEn::Base::PixelFactory
 
 		if constexpr ( PixelFactoryDebugEnabled )
 		{
-			std::cout <<
-				"[Jpeg_DEBUG] Writing header." << '\n' <<
-				"\tWidth : " << info.image_width << '\n' <<
-				"\tHeight : " << info.image_height << '\n' <<
-				"\tComponents : " << info.input_components << '\n';
+			Logging::debug("PixelFactory::FileFormatJpeg", (std::stringstream{} << "Writing header." << '\n' << "\tWidth : " << info.image_width << '\n' << "\tHeight : " << info.image_height << '\n' << "\tComponents : " << info.input_components).str());
 		}
 
 		jpeg_set_defaults(&info);

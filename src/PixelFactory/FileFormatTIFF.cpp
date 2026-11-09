@@ -27,15 +27,22 @@
 #include "FileFormatTIFF.hpp"
 
 /* STL inclusions. */
-#include <cstddef>
+#include <array>
+#include <cstdarg>
 #include <cstdint>
+#include <cstdio>
+#include <string>
 #include <vector>
 
 /* Third-party inclusions. */
 #include <tiffio.h>
 
 /* Local inclusions. */
+#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
+#include "Logging/Severity.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 
 namespace EmEn::Base::PixelFactory
 {
@@ -100,6 +107,48 @@ namespace EmEn::Base::PixelFactory
 
 			return static_cast< toff_t >(stream->size());
 		}
+
+		/* NOTE: libtiff's default error and warning handlers write to stderr: every message goes through Logging
+		 * instead (owner, 2026-11-09: no direct stream access in the base). The handlers are set per handle
+		 * (TIFFOpenOptions, libtiff >= 4.5), never process-wide. Returning 1 stops libtiff from calling the global
+		 * handler as well. */
+#ifdef __GNUC__
+		__attribute__((format(printf, 3, 0)))
+#endif
+		void
+		report (const char * module, Severity severity, const char * format, va_list arguments) noexcept
+		{
+			std::array< char, 512 > text{};
+
+			if ( std::vsnprintf(text.data(), text.size(), format, arguments) < 0 )
+			{
+				text[0] = '\0';
+			}
+
+			Logging::log(severity, "PixelFactory::FileFormatTIFF", std::string{module != nullptr ? module : "libtiff"} + ": " + text.data());
+		}
+
+#ifdef __GNUC__
+		__attribute__((format(printf, 4, 0)))
+#endif
+		int
+		errorProc (TIFF * /*tif*/, void * /*userData*/, const char * module, const char * format, va_list arguments) noexcept
+		{
+			report(module, Severity::Error, format, arguments);
+
+			return 1;
+		}
+
+#ifdef __GNUC__
+		__attribute__((format(printf, 4, 0)))
+#endif
+		int
+		warningProc (TIFF * /*tif*/, void * /*userData*/, const char * module, const char * format, va_list arguments) noexcept
+		{
+			report(module, Severity::Warning, format, arguments);
+
+			return 1;
+		}
 	}
 
 	template< typename pixel_data_t, typename dimension_t >
@@ -119,15 +168,30 @@ namespace EmEn::Base::PixelFactory
 		{
 			/* libtiff talks to a client through these callbacks, so the stream stays the
 			 * single I/O path of the library — no temporary file, no whole-file copy. */
-			auto * handle = TIFFClientOpen(
+			auto * options = TIFFOpenOptionsAlloc();
+
+			if ( options == nullptr )
+			{
+				Logging::error("PixelFactory::FileFormatTIFF", "readStream(), unable to allocate the libtiff open options !");
+
+				return false;
+			}
+
+			TIFFOpenOptionsSetErrorHandlerExtR(options, &errorProc, nullptr);
+			TIFFOpenOptionsSetWarningHandlerExtR(options, &warningProc, nullptr);
+
+			auto * handle = TIFFClientOpenExt(
 				"ByteStream", "r", reinterpret_cast< thandle_t >(&stream),
 				&readProc,
 				&writeProc,
 				&seekProc,
 				&closeProc,
 				&sizeProc,
-				nullptr, nullptr
+				nullptr, nullptr,
+				options
 			);
+
+			TIFFOpenOptionsFree(options);
 
 			if ( handle == nullptr )
 			{

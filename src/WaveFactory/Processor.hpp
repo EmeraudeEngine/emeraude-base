@@ -29,13 +29,13 @@
 /* STL inclusions. */
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <stop_token>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Wave.hpp"
 
 namespace EmEn::Base::WaveFactory
@@ -110,7 +110,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !wave.isValid() )
 				{
-					std::cerr << "Processor::requires(), input wave is invalid !" "\n";
+					Logging::error("WaveFactory::Processor", "Processor::requires(), input wave is invalid !");
 
 					return false;
 				}
@@ -133,7 +133,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Processor::requires(), no processed wave available !" "\n";
+					Logging::error("WaveFactory::Processor", "Processor::requires(), no processed wave available !");
 
 					return false;
 				}

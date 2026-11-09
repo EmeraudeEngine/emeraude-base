@@ -32,10 +32,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <type_traits>
 #include <vector>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Math/Base.hpp"
 #include "Randomizer.hpp"
 
@@ -128,7 +130,7 @@ namespace EmEn::Base::Algorithms
 				/* Size must be at least 3. */
 				if ( size < 3 )
 				{
-					std::cerr << "The size must be at least 3! (size:" << size << ", roughness:" << roughness << ")" "\n";
+					Logging::error("Algorithms::DiamondSquare", (std::stringstream{} << "The size must be at least 3! (size:" << size << ", roughness:" << roughness << ")").str());
 
 					return false;
 				}
@@ -136,7 +138,7 @@ namespace EmEn::Base::Algorithms
 				/* Size must be of the form 2^n + 1, meaning (size - 1) must be a power of two. */
 				if ( !Math::isPowerOfTwo(size - 1) )
 				{
-					std::cerr << "The size minus one must be a power of two! (size:" << size << ", roughness:" << roughness << ")" "\n";
+					Logging::error("Algorithms::DiamondSquare", (std::stringstream{} << "The size minus one must be a power of two! (size:" << size << ", roughness:" << roughness << ")").str());
 
 					return false;
 				}

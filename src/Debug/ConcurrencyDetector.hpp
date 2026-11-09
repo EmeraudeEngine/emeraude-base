@@ -31,17 +31,16 @@
 #include <mutex>
 #include <optional>
 #include <source_location>
+#include <sstream>
 #include <string>
 #include <thread>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Mutex.hpp"
 
 namespace EmEn::Base::Debug
 {
-	/* NOTE: Serializes the console output of this development tool (no data guarded): std::mutex on purpose. */
-	inline std::mutex g_console_mutex;
-
 	/**
 	 * @brief Class to detect concurrent access to a scope.
 	 * @note This is basically used like a std::mutex.
@@ -96,12 +95,9 @@ namespace EmEn::Base::Debug
 					/* NOTE: Another thread is already in the section! */
 					if ( m_activeThreadId.value() != currentThreadId )
 					{
-						/* NOTE: We lock the console for a clean display. */
-						const std::lock_guard< std::mutex > consoleLock{g_console_mutex};
-
-						std::cerr << "[CONCURRENCY DETECTED] Section '" << m_contextName << "' at " <<
-							location.file_name() << ':' << location.line() << " (" << location.function_name() << ")" "\n"
-							"Thread " << currentThreadId << " entered while Thread " << m_activeThreadId.value() << " was already inside!" "\n";
+						/* NOTE: Logging serializes the sink itself: the report needs no console lock of its own. */
+						Logging::error("Debug::ConcurrencyDetector", (std::stringstream{} << "Section '" << m_contextName << "' at " << location.file_name() << ':' << location.line() << " (" << location.function_name() << ")" "\n"
+							"Thread " << currentThreadId << " entered while Thread " << m_activeThreadId.value() << " was already inside!").str());
 					}
 				}
 				else

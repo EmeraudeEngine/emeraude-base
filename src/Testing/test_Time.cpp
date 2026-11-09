@@ -44,6 +44,8 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Thread.hpp"
 #include "Time/Elapsed/CPUTime.hpp"
 #include "Time/Elapsed/RealTime.hpp"
@@ -334,6 +336,8 @@ namespace EmEn::Base::Time
 	 * an empty handle and keeps nothing, startTimer() answers false. TimedEvent used to start a std::thread — an abort there. */
 	TEST(TimeEventTrait, aTimerWhoseThreadCannotStartIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		TestableEventTrait events;
 
 		Thread::failNextStartsForTesting(1);
@@ -352,6 +356,12 @@ namespace EmEn::Base::Time
 		EXPECT_TRUE(events.isTimerStarted(timerID));
 
 		events.destroyTimers();
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* 2026-10-12, found by the first ThreadSanitizer run of this suite: the timer thread waited for its next tick with

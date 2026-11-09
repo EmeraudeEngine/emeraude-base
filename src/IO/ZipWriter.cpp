@@ -31,12 +31,14 @@
 
 /* STL inclusions. */
 #include <algorithm>
-#include <iostream>
+#include <sstream>
+#include <system_error>
 #include <tuple>
 #include <utility>
 
 /* Local inclusions. */
 #include "IO.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -59,14 +61,14 @@ namespace EmEn::Base::IO
 		/* NOTE: "&&" here used to accept an existing DIRECTORY as a file (the message always said "or"). */
 		if ( !IO::fileExists(path) )
 		{
-			std::cerr << ClassId << " : The path " << toU8String(path) << " is not a regular file or doesn't exists !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The path " << toU8String(path) << " is not a regular file or doesn't exists !").str());
 
 			return false;
 		}
 
 		if ( ZipWriter::sourceExists(path) )
 		{
-			std::cerr << ClassId << " : The file " << toU8String(path) << " already exists in source !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The file " << toU8String(path) << " already exists in source !").str());
 
 			return false;
 		}
@@ -75,7 +77,7 @@ namespace EmEn::Base::IO
 		 * decision, 2026-10-18). */
 		if ( this->entryNameExists(entryName) )
 		{
-			std::cerr << ClassId << " : The entry name " << entryName << " is already taken in source !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The entry name " << entryName << " is already taken in source !").str());
 
 			return false;
 		}
@@ -91,7 +93,7 @@ namespace EmEn::Base::IO
 		/* NOTE: "&&" here used to accept an existing regular FILE, then walk it (the message always said "or"). */
 		if ( !IO::directoryExists(path) )
 		{
-			std::cerr << ClassId << " : The path " << toU8String(path) << " is not a directory or doesn't exists !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The path " << toU8String(path) << " is not a directory or doesn't exists !").str());
 
 			return false;
 		}
@@ -108,7 +110,7 @@ namespace EmEn::Base::IO
 
 			if ( ZipWriter::sourceExists(entry.path()) )
 			{
-				std::cerr << ClassId << " : The file " << toU8String(entry.path()) << " already exists in source !" "\n";
+				Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The file " << toU8String(entry.path()) << " already exists in source !").str());
 
 				duplicate = true;
 
@@ -119,7 +121,7 @@ namespace EmEn::Base::IO
 
 			if ( errorCode )
 			{
-				std::cerr << ClassId << " : Unable to name the entry " << toU8String(entry.path()) << " relative to " << toU8String(path) << " (" << systemErrorText(errorCode) << ") !" "\n";
+				Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to name the entry " << toU8String(entry.path()) << " relative to " << toU8String(path) << " (" << systemErrorText(errorCode) << ") !").str());
 
 				return true;
 			}
@@ -128,7 +130,7 @@ namespace EmEn::Base::IO
 
 			if ( this->entryNameExists(entryName) )
 			{
-				std::cerr << ClassId << " : The entry name " << entryName << " is already taken in source !" "\n";
+				Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The entry name " << entryName << " is already taken in source !").str());
 
 				duplicate = true;
 
@@ -148,14 +150,14 @@ namespace EmEn::Base::IO
 	{
 		if ( IO::exists(m_filepath) )
 		{
-			std::cerr << ClassId << " : The archive file " << toU8String(m_filepath) << " already exists !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : The archive file " << toU8String(m_filepath) << " already exists !").str());
 
 			return false;
 		}
 
 		if ( !this->openArchive() )
 		{
-			std::cerr << ClassId << " : Unable to create the archive " << toU8String(m_filepath) << " !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to create the archive " << toU8String(m_filepath) << " !").str());
 
 			return false;
 		}
@@ -165,7 +167,7 @@ namespace EmEn::Base::IO
 			/* NOTE: libzip opens the file itself when it writes: the regular-file check comes right before. */
 			if ( !IO::isReadableRegularFile(filepath) )
 			{
-				std::cerr << ClassId << " : Unable to read the source " << toU8String(filepath) << " !" "\n";
+				Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to read the source " << toU8String(filepath) << " !").str());
 
 				this->discardArchive();
 
@@ -184,7 +186,7 @@ namespace EmEn::Base::IO
 
 			if ( source == nullptr )
 			{
-				std::cerr << ClassId << " : Failed to create the source of " << toU8String(filepath) << " ! Error : " << zip_strerror(m_zip.get()) << "\n";
+				Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Failed to create the source of " << toU8String(filepath) << " ! Error : " << zip_strerror(m_zip.get())).str());
 
 				this->discardArchive();
 
@@ -194,7 +196,7 @@ namespace EmEn::Base::IO
 			/* NOTE: The entry names are unique (checked when the sources are added): no overwrite flag. */
 			if ( zip_file_add(m_zip.get(), entryName.c_str(), source, 0) < 0 )
 			{
-				std::cerr << ClassId << " : Failed to add " << entryName << " to the archive ! Error : " << zip_strerror(m_zip.get()) << "\n";
+				Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Failed to add " << entryName << " to the archive ! Error : " << zip_strerror(m_zip.get())).str());
 
 				/* NOTE: A source that was not added still belongs to the caller. */
 				zip_source_free(source);
@@ -219,7 +221,7 @@ namespace EmEn::Base::IO
 
 		if ( source == nullptr )
 		{
-			std::cerr << ClassId << " : Unable to create LibZip source. Error : " << zip_error_strerror(&zipError) << " !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to create LibZip source. Error : " << zip_error_strerror(&zipError) << " !").str());
 
 			zip_error_fini(&zipError);
 
@@ -230,7 +232,7 @@ namespace EmEn::Base::IO
 
 		if ( !m_zip )
 		{
-			std::cerr << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&zipError) << " !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&zipError) << " !").str());
 
 			zip_source_free(source);
 			zip_error_fini(&zipError);
@@ -249,7 +251,7 @@ namespace EmEn::Base::IO
 			zip_error_t error;
 			zip_error_init_with_code(&error, errorCode);
 
-			std::cerr << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&error) << " !" "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&error) << " !").str());
 
 			zip_error_fini(&error);
 
@@ -275,7 +277,7 @@ namespace EmEn::Base::IO
 		 * failed answered true (2026-10-18). */
 		if ( zip_close(m_zip.get()) != 0 )
 		{
-			std::cerr << ClassId << " : Unable to write the archive " << toU8String(m_filepath) << " ! Error : " << zip_strerror(m_zip.get()) << "\n";
+			Logging::error("IO::ZipWriter", (std::stringstream{} << ClassId << " : Unable to write the archive " << toU8String(m_filepath) << " ! Error : " << zip_strerror(m_zip.get())).str());
 
 			m_zip.reset();
 

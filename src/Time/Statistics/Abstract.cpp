@@ -27,7 +27,10 @@
 #include "Abstract.hpp"
 
 /* STL inclusions. */
-#include <iostream>
+#include <sstream>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Time::Statistics
 {
@@ -79,20 +82,11 @@ namespace EmEn::Base::Time::Statistics
 		{
 			const auto * warning = m_topCount < m_range ? " [IRRELEVANT]" : " ";
 
-			std::cout <<
-				"Time statistics (Top count: " << m_topCount << ", range: " << m_range << ")" "\n" <<
-				"Duration : " << this->duration() << " ms" "\n" <<
-				"Average duration : " << this->averageDuration() << " ms" << warning << '\n' <<
-				"Executions per second : " << this->executionsPerSecond() << " times" "\n" <<
-				"Average executions per second : " << this->averageExecutionsPerSecond() << " times" << warning << "\n" <<
-				"Dropped samples : " << m_droppedSampleCount << "\n\n";
+			Logging::info("Time::Statistics::Abstract", (std::stringstream{} << "Time statistics (Top count: " << m_topCount << ", range: " << m_range << ")" "\n" << "Duration : " << this->duration() << " ms" "\n" << "Average duration : " << this->averageDuration() << " ms" << warning << '\n' << "Executions per second : " << this->executionsPerSecond() << " times" "\n" << "Average executions per second : " << this->averageExecutionsPerSecond() << " times" << warning << "\n" << "Dropped samples : " << m_droppedSampleCount << "\n").str());
 		}
 		else
 		{
-			std::cout <<
-				"Time statistics" "\n" <<
-				"Duration : " << this->averageDuration() << " ms" "\n" <<
-				"Dropped samples : " << m_droppedSampleCount << "\n\n";
+			Logging::info("Time::Statistics::Abstract", (std::stringstream{} << "Time statistics" "\n" << "Duration : " << this->averageDuration() << " ms" "\n" << "Dropped samples : " << m_droppedSampleCount << "\n").str());
 		}
 	}
 }

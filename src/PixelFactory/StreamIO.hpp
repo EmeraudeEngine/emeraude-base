@@ -40,6 +40,7 @@
 #include "FileFormatTarga.hpp"
 #include "IOCommon.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Logging.hpp"
 #include "Pixmap.hpp"
 
 namespace EmEn::Base::PixelFactory::StreamIO
@@ -66,7 +67,7 @@ namespace EmEn::Base::PixelFactory::StreamIO
 	{
 		if ( data == nullptr || size == 0 )
 		{
-			std::cerr << "PixelFactory::StreamIO::read(), empty input buffer !" "\n";
+			Logging::error("PixelFactory::StreamIO", "PixelFactory::StreamIO::read(), empty input buffer !");
 
 			return false;
 		}
@@ -110,7 +111,7 @@ namespace EmEn::Base::PixelFactory::StreamIO
 				break;
 
 			default:
-				std::cerr << "PixelFactory::StreamIO::read(), unhandled format !" "\n";
+				Logging::error("PixelFactory::StreamIO", "PixelFactory::StreamIO::read(), unhandled format !");
 
 				return false;
 		}
@@ -192,7 +193,7 @@ namespace EmEn::Base::PixelFactory::StreamIO
 			}
 
 			default:
-				std::cerr << "PixelFactory::StreamIO::write(), unhandled format !" "\n";
+				Logging::error("PixelFactory::StreamIO", "PixelFactory::StreamIO::write(), unhandled format !");
 
 				return false;
 		}

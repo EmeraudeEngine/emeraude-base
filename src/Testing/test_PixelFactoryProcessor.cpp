@@ -36,7 +36,6 @@
 #include <filesystem>
 #include <functional>
 #include <initializer_list>
-#include <iterator>
 #include <limits>
 #include <numbers>
 #include <span>
@@ -47,6 +46,8 @@
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "Math/Vector.hpp"
 #include "PixelFactory/Color.hpp"
@@ -142,6 +143,8 @@ TEST(PixelFactoryProcessor, resampleTextureRefusesAnInvalidRequest)
 
 TEST(PixelFactoryProcessor, scale)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::scale(2.0F) [OVERALL]"};
 
 	Pixmap< uint8_t > source;
@@ -167,10 +170,18 @@ TEST(PixelFactoryProcessor, scale)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_scaleAllValue.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, scaleRed)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::scale(1.5F, Channel::Red) [OVERALL]"};
 
 	Pixmap< uint8_t > source;
@@ -196,10 +207,18 @@ TEST(PixelFactoryProcessor, scaleRed)
 	ASSERT_EQ(source.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_scaleRedValue.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, drawing)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::drawXXX() [OVERALL]"};
 
 	Pixmap< uint8_t > emptyImage{800, 600};
@@ -251,10 +270,18 @@ TEST(PixelFactoryProcessor, drawing)
 	ASSERT_EQ(emptyImage.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(emptyImage, AssetsDirectory / "tmp_drawing.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, move)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::move(600, -200) [OVERALL]"};
 
 	Pixmap< uint8_t > source;
@@ -278,10 +305,18 @@ TEST(PixelFactoryProcessor, move)
 	ASSERT_EQ(source.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(source, AssetsDirectory / "tmp_moved.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, shift)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::shift(600, -400) [OVERALL]"};
 
 	Pixmap< uint8_t > source;
@@ -305,10 +340,18 @@ TEST(PixelFactoryProcessor, shift)
 	ASSERT_EQ(source.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(source, AssetsDirectory / "tmp_shifted.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, shiftTextArea)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::shiftTextArea(100) [OVERALL]"};
 
 	Pixmap< uint8_t > source;
@@ -332,10 +375,18 @@ TEST(PixelFactoryProcessor, shiftTextArea)
 	ASSERT_EQ(source.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(source, AssetsDirectory / "tmp_textShifted.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeNearestDown)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::resize(50%,Nearest) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -357,10 +408,18 @@ TEST(PixelFactoryProcessor, resizeNearestDown)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_resizeDownNearest.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeLinearDown)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::resize(50%,Linear) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -382,10 +441,18 @@ TEST(PixelFactoryProcessor, resizeLinearDown)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_resizeDownLinear.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeCubicDown)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::resize(50%,Cubic) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -407,10 +474,18 @@ TEST(PixelFactoryProcessor, resizeCubicDown)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_resizeDownCubic.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeNearestUp)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::resize(200%,Nearest) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -432,10 +507,18 @@ TEST(PixelFactoryProcessor, resizeNearestUp)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_resizeUpNearest.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeLinearUp)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::resize(200%,Linear) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -457,10 +540,18 @@ TEST(PixelFactoryProcessor, resizeLinearUp)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_resizeUpLinear.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeCubicUp)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::resize(200%,Cubic) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -482,10 +573,18 @@ TEST(PixelFactoryProcessor, resizeCubicUp)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_resizeUpCubic.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, crop)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::crop() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -515,10 +614,18 @@ TEST(PixelFactoryProcessor, crop)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_cropped.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, extractChannelRed)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::extractChannel(Red) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -540,10 +647,18 @@ TEST(PixelFactoryProcessor, extractChannelRed)
 	ASSERT_EQ(output.colorCount(), 1);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_extractChannelRed.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, extractChannelGreen)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::extractChannel(Green) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -565,10 +680,18 @@ TEST(PixelFactoryProcessor, extractChannelGreen)
 	ASSERT_EQ(output.colorCount(), 1);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_extractChannelGreen.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, extractChannelBlue)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::extractChannel(Blue) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -590,10 +713,18 @@ TEST(PixelFactoryProcessor, extractChannelBlue)
 	ASSERT_EQ(output.colorCount(), 1);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_extractChannelBlue.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, toGrayscale)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::toGrayscale() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -615,10 +746,18 @@ TEST(PixelFactoryProcessor, toGrayscale)
 	ASSERT_EQ(output.colorCount(), 1);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_toGrayscale.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, toRGB)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::toRGB() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -640,10 +779,18 @@ TEST(PixelFactoryProcessor, toRGB)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_toRGB.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, toRGBA)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::toRGBA() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -665,10 +812,18 @@ TEST(PixelFactoryProcessor, toRGBA)
 	ASSERT_EQ(output.colorCount(), 4);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_toRGBA.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, mirrorX)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::mirror(X) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -690,10 +845,18 @@ TEST(PixelFactoryProcessor, mirrorX)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_mirrorX.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, mirrorY)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::mirror(Y) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -715,10 +878,18 @@ TEST(PixelFactoryProcessor, mirrorY)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_mirrorY.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, mirrorBoth)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::mirror(Both) [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -740,10 +911,18 @@ TEST(PixelFactoryProcessor, mirrorBoth)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_mirrorBoth.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, extend)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::extend() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -765,10 +944,18 @@ TEST(PixelFactoryProcessor, extend)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_extend.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, rotateQuarterTurn)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::rotateQuarterTurn() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -790,10 +977,18 @@ TEST(PixelFactoryProcessor, rotateQuarterTurn)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_rotated+90.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, rotateHalfTurn)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::rotateHalfTurn() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -815,10 +1010,18 @@ TEST(PixelFactoryProcessor, rotateHalfTurn)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_rotated+180.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, rotateThreeQuarterTurn)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::rotateThreeQuarterTurn() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -840,10 +1043,18 @@ TEST(PixelFactoryProcessor, rotateThreeQuarterTurn)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_rotated+270.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, inverseColors)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::inverseColors() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -865,10 +1076,18 @@ TEST(PixelFactoryProcessor, inverseColors)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_inverseColors.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, swapChannels)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::swapChannels() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -890,6 +1109,12 @@ TEST(PixelFactoryProcessor, swapChannels)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_swapChannels.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, blit)
@@ -921,6 +1146,8 @@ TEST(PixelFactoryProcessor, blit)
 
 TEST(PixelFactoryProcessor, copy)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Pixmap< uint8_t > source;
 
 	ASSERT_TRUE(FileIO::read(LargeRGB, source));
@@ -964,10 +1191,18 @@ TEST(PixelFactoryProcessor, copy)
 	}
 
 	ASSERT_TRUE(FileIO::write(source, AssetsDirectory / "tmp_copy.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, addAlphaChannel)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::addAlphaChannel() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -989,10 +1224,18 @@ TEST(PixelFactoryProcessor, addAlphaChannel)
 	ASSERT_EQ(output.colorCount(), 4);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_addAlphaChannel.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, removeAlphaChannel)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PrintScopeRealTime globalStat{"Processor::removeAlphaChannel() [OVERALL]"};
 
 	Pixmap< uint8_t > source, output;
@@ -1014,6 +1257,12 @@ TEST(PixelFactoryProcessor, removeAlphaChannel)
 	ASSERT_EQ(output.colorCount(), 3);
 
 	ASSERT_TRUE(FileIO::write(output, AssetsDirectory / "tmp_removeAlphaChannel.png", true));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
+	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryProcessor, resizeCubicParallelMatchesSerial)

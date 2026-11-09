@@ -30,9 +30,16 @@
 /* STL inclusions. */
 #include <sstream>
 #include <string>
+#include <vector>
 
 /* Local inclusions. */
+#include "Animation/AnimationChannel.hpp"
+#include "Animation/AnimationClip.hpp"
 #include "Animation/MD5AnimParser.hpp"
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
+#include "Math/Quaternion.hpp"
+#include "Math/Vector.hpp"
 
 /* Robustness characterization for the MD5 animation parser (Ave robustus! — A.3, I/O boundary
  * hardening). The parser consumes untrusted .md5anim text; malformed/truncated input must
@@ -49,15 +56,25 @@ namespace EmEn::Base::Animation
 
 	TEST(MD5AnimParser, emptyStreamYieldsEmptyClip)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		std::istringstream stream{""};
 
 		const auto clip = Parser::parseStream(stream, "test");
 
 		EXPECT_TRUE(clip.empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(MD5AnimParser, truncatedHierarchyEmptyJointNameDoesNotCrash)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* numJoints announces one joint, but the joint line is blank: `hs >> name` leaves
 		 * `name` empty, so name.front()/back() used to be UB. The parse must complete. */
 		const std::string md5 =
@@ -75,10 +92,18 @@ namespace EmEn::Base::Animation
 
 		/* No frames -> no channels; the contract verified under ASan/UBSan is "no crash". */
 		EXPECT_TRUE(clip.empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(MD5AnimParser, singleQuoteJointNameDoesNotCrash)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* A one-character `"` token: front()==back()=='"' but size<2, so the quote-strip must
 		 * be skipped (otherwise substr(1, size-2) underflows the length). */
 		const std::string md5 =
@@ -95,6 +120,12 @@ namespace EmEn::Base::Animation
 		const auto clip = Parser::parseStream(stream, "weird");
 
 		EXPECT_TRUE(clip.empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 	/* ⚠️⚠️ REGRESSION PIN (Aug 2026) — the MD5 -> engine conversion must be a ROTATION (det +1),
 	 * never a reflection. This parser was a FIFTH conversion site the Y-up migration missed: it
@@ -180,6 +211,8 @@ namespace EmEn::Base::Animation
 	 * more frames declared than present and an out-of-range firstComponent read out of bounds. */
 	TEST(MD5AnimParser, negativeJointCountRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		std::istringstream stream{
 			"numFrames 1\n"
 			"numJoints -1\n"
@@ -193,10 +226,18 @@ namespace EmEn::Base::Animation
 			"}\n"};
 
 		EXPECT_TRUE(Parser::parseStream(stream, "negative-joints").empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(MD5AnimParser, hugeJointCountRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		std::istringstream stream{
 			"numFrames 1\n"
 			"numJoints 2000000000\n"
@@ -212,10 +253,18 @@ namespace EmEn::Base::Animation
 			"}\n"};
 
 		EXPECT_TRUE(Parser::parseStream(stream, "huge-joints").empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(MD5AnimParser, moreFramesDeclaredThanPresentRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		std::istringstream stream{
 			"numFrames 3\n"
 			"numJoints 1\n"
@@ -231,10 +280,18 @@ namespace EmEn::Base::Animation
 			"}\n"};
 
 		EXPECT_TRUE(Parser::parseStream(stream, "missing-frames").empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(MD5AnimParser, componentIndexOutsideFrameRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* flags 63 animates 6 components starting at 1000, in a frame that carries 6. */
 		std::istringstream stream{
 			"numFrames 1\n"
@@ -252,5 +309,11 @@ namespace EmEn::Base::Animation
 			"}\n"};
 
 		EXPECT_TRUE(Parser::parseStream(stream, "component-out-of-frame").empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 }

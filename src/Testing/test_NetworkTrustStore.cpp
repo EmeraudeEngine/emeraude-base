@@ -27,12 +27,22 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <limits>
 #include <string>
+#include <system_error>
+#include <vector>
+
+/* Third-party inclusions. */
+#include "asio.hpp"
+#include <openssl/ossl_typ.h>
+#include <openssl/ssl.h>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "TemporaryPath.hpp"
 #include "Network/TrustStore.hpp"
 #include "Constants.hpp"
@@ -42,7 +52,6 @@
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
-#include <openssl/x509_vfy.h>
 
 using namespace EmEn::Base;
 
@@ -175,14 +184,24 @@ TEST(NetworkTrustStore, bundleFileUnderANonASCIIDirectory)
 
 TEST(NetworkTrustStore, missingBundleFileFails)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	asio::ssl::context context{asio::ssl::context::tls_client};
 
 	EXPECT_FALSE(Network::TrustStore::applyCABundleFile(context, AssetsDirectory / "does-not-exist.pem"));
 	EXPECT_EQ(Network::TrustStore::certificateCount(context), 0U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TrustStore"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTrustStore, malformedBundleFileFails)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto malformedFilepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-malformed-bundle.pem");
 
 	{
@@ -196,6 +215,12 @@ TEST(NetworkTrustStore, malformedBundleFileFails)
 	EXPECT_EQ(Network::TrustStore::certificateCount(context), 0U);
 
 	std::filesystem::remove(malformedFilepath);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TrustStore"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* Utility proof (the plan's "blind its utility" criterion): a leaf certificate

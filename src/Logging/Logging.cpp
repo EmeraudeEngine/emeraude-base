@@ -32,6 +32,9 @@
 #include <shared_mutex>
 #include <utility>
 
+/* Local inclusions. */
+#include "Logging/Severity.hpp"
+
 namespace EmEn::Base::Logging
 {
 	namespace
@@ -74,12 +77,12 @@ namespace EmEn::Base::Logging
 		}
 	}
 
-	void
+	Sink
 	setSink (Sink sink) noexcept
 	{
 		const std::unique_lock lock{sinkMutex()};
 
-		activeSink() = std::move(sink);
+		return std::exchange(activeSink(), std::move(sink));
 	}
 
 	void

@@ -35,6 +35,7 @@
 #include <iostream>
 #include <limits>
 #include <numbers>
+#include <sstream>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -51,6 +52,9 @@
 #include "ShapeBuilder.hpp"
 #include "VertexFactory/Shape.hpp"
 #include "VertexFactory/ShapeBuilderOptions.hpp"
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::VertexFactory::ShapeGenerator
 {
@@ -1231,7 +1235,7 @@ namespace EmEn::Base::VertexFactory::ShapeGenerator
 
 		if ( depth > maxDepth )
 		{
-			std::cerr << "requires(), depth " << depth << " clamped to " << maxDepth << " to prevent excessive computation." "\n";
+			Logging::error("VertexFactory::ShapeGenerator", (std::stringstream{} << "requires(), depth " << depth << " clamped to " << maxDepth << " to prevent excessive computation.").str());
 
 			depth = maxDepth;
 		}

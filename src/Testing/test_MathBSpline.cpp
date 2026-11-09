@@ -34,6 +34,8 @@
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/BSpline.hpp"
 #include "Math/Vector.hpp"
 
@@ -135,6 +137,8 @@ TEST(MathBSpline, everySegmentStartsAtItsOwnPoint)
  * setDefaultSegments() refuse it, and synthesize() then divided by zero (infinite times). */
 TEST(MathBSpline, zeroSegmentsAreClampedToOne)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const Vector< 3, float > position{1.0F, 2.0F, 3.0F};
 	const Vector< 3, float > handle{0.0F, 1.0F, 0.0F};
 
@@ -161,4 +165,10 @@ TEST(MathBSpline, zeroSegmentsAreClampedToOne)
 
 	EXPECT_EQ(sampleCount, 2U);
 	EXPECT_TRUE(everyTimeFinite);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Math::BSpline"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

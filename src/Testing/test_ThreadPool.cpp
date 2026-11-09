@@ -34,12 +34,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <iostream>
-#include <iterator>
 #include <memory>
 #include <mutex>
 #include <numeric>
 #include <random>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <thread>
@@ -51,6 +50,8 @@
 #include <gtest/gtest.h>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "Math/Vector.hpp"
 #include "PixelFactory/Color.hpp"
@@ -1563,9 +1564,10 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 	const auto parallelMs = static_cast< double >(parallelDuration.count()) / 1000.0;
 	const auto speedup = parallelMs > 0.0 ? sequentialMs / parallelMs : 0.0;
 
-	std::cout << "[		  ] Sequential: " << sequentialMs << " ms\n";
-	std::cout << "[		  ] Parallel:   " << parallelMs << " ms (" << pool.threadCount() << " threads)\n";
-	std::cout << "[		  ] Speedup:	" << speedup << "x\n";
+	/* NOTE: A measurement goes to the test report (--gtest_output=xml), never to the terminal (2026-11-09). */
+	RecordProperty("sequentialMs", (std::stringstream{} << sequentialMs).str());
+	RecordProperty("parallelMs", (std::stringstream{} << parallelMs << " (" << pool.threadCount() << " threads)").str());
+	RecordProperty("speedup", (std::stringstream{} << speedup).str());
 
 	if ( pool.threadCount() >= 4 )
 	{
@@ -1573,7 +1575,7 @@ TEST(ThreadPool, ParallelPixmapDrawing)
 	}
 	else
 	{
-		std::cout << "[		  ] Speedup not asserted: only " << pool.threadCount() << " worker thread(s).\n";
+		RecordProperty("speedupNotAsserted", (std::stringstream{} << "only " << pool.threadCount() << " worker thread(s)").str());
 	}
 }
 
@@ -1581,6 +1583,8 @@ TEST(ThreadPool, ParallelPixmapDrawing)
  * every task on the calling thread instead of queueing it for nobody. */
 TEST(ThreadPool, runsOnTheCallingThreadWhenNoWorkerCouldStart)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EmEn::Base::Thread::failNextStartsForTesting(64);
 
 	EmEn::Base::ThreadPool pool{4};
@@ -1611,10 +1615,19 @@ TEST(ThreadPool, runsOnTheCallingThreadWhenNoWorkerCouldStart)
 	EXPECT_EQ(batchRuns.load(), 3);
 
 	pool.wait();
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 4U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "ThreadPool"), 1U);
+	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(ThreadPool, keepsTheWorkersThatStarted)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EmEn::Base::Thread::failNextStartsForTesting(1);
 
 	EmEn::Base::ThreadPool pool{3};
@@ -1633,6 +1646,13 @@ TEST(ThreadPool, keepsTheWorkersThatStarted)
 	pool.wait();
 
 	EXPECT_EQ(runs.load(), 16);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "ThreadPool"), 1U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* ===== TaskHandle / ThreadPool::submit() — Ave Robustus II, decision D1 (2026-10-08) ===== */
@@ -1860,6 +1880,7 @@ TEST(ThreadPoolTaskHandle, CallableIsDestroyedBeforeWaitReturns)
 TEST(ThreadPoolTaskHandleDeathTest, TaskWaitingForItsOwnHandleAborts)
 {
 	EXPECT_DEATH({
+		EmEn::Base::Testing::useDefaultSinkInDeathTest();
 		ThreadPool pool{2};
 		auto holder = std::make_shared< TaskHandle >();
 		std::atomic_bool handleStored{false};
@@ -2226,6 +2247,7 @@ TEST(ThreadPoolTaskGroup, ConcurrentSubmittersAndAStop)
 TEST(ThreadPoolTaskGroupDeathTest, TaskWaitingForItsOwnGroupAborts)
 {
 	EXPECT_DEATH({
+		EmEn::Base::Testing::useDefaultSinkInDeathTest();
 		ThreadPool pool{2};
 		TaskGroup group;
 
@@ -2305,6 +2327,7 @@ TEST(ThreadPoolTaskGroup, WaitForAllReturnsOnceTheDiscardedTasksAreDestroyed)
 TEST(ThreadPoolTaskGroupDeathTest, WaitForAllFromAPoolWorkerAborts)
 {
 	EXPECT_DEATH({
+		EmEn::Base::Testing::useDefaultSinkInDeathTest();
 		ThreadPool pool{2};
 		TaskGroup group;
 

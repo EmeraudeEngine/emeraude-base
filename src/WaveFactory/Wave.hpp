@@ -42,6 +42,7 @@
 
 /* Local inclusions. */
 #include "BaseUtility.hpp"
+#include "Logging/Logging.hpp"
 #include "Types.hpp"
 
 namespace EmEn::Base::WaveFactory
@@ -100,7 +101,7 @@ namespace EmEn::Base::WaveFactory
 
 				if ( bufferSize == 0UL )
 				{
-					std::cerr << "Wave::initialize(), trying to allocate a zero-length audio buffer !" "\n";
+					Logging::error("WaveFactory::Wave", "Wave::initialize(), trying to allocate a zero-length audio buffer !");
 
 					return false;
 				}
@@ -119,7 +120,7 @@ namespace EmEn::Base::WaveFactory
 					/* Shows memory usage */
 					auto memoryAllocated = m_data.size() * sizeof(precision_t);
 
-					std::cout << "[DEBUG] Wave::initialize(), " << ( static_cast< float >(memoryAllocated) / 1048576 ) << " Mib" "\n";
+					Logging::debug("WaveFactory::Wave", (std::stringstream{} << "Wave::initialize(), " << ( static_cast< float >(memoryAllocated) / 1048576 ) << " Mib").str());
 				}
 
 				return true;
@@ -266,7 +267,7 @@ namespace EmEn::Base::WaveFactory
 				{
 					if ( offset >= m_data.size() )
 					{
-						std::cerr << "Wave::samplePointer(), buffer overflow !" "\n";
+						Logging::error("WaveFactory::Wave", "Wave::samplePointer(), buffer overflow !");
 
 						return nullptr;
 					}
@@ -290,7 +291,7 @@ namespace EmEn::Base::WaveFactory
 				{
 					if ( offset >= m_data.size() )
 					{
-						std::cerr << "Wave::samplePointer(), buffer overflow !" "\n";
+						Logging::error("WaveFactory::Wave", "Wave::samplePointer(), buffer overflow !");
 
 						return nullptr;
 					}
@@ -342,7 +343,7 @@ namespace EmEn::Base::WaveFactory
 
 				if constexpr ( WaveFactoryDebugEnabled )
 				{
-					std::cout << "Chunk #" << chunkIndex << " (size: " << chunkSize << ") -> offset " << output.offset << " of " << m_data.size() << "." "\n";
+					Logging::debug("WaveFactory::Wave", (std::stringstream{} << "Chunk #" << chunkIndex << " (size: " << chunkSize << ") -> offset " << output.offset << " of " << m_data.size() << ".").str());
 				}
 
 				/* Note: sizeof = 2 */

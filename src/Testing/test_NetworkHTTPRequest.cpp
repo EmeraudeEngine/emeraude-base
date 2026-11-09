@@ -221,6 +221,8 @@ TEST(NetworkHTTPRequest, versionTableRoundTrips)
 
 TEST(NetworkHTTPResponse, statusLines)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	{
 		const HTTPResponse response{"HTTP/1.1 404\r\n"};
 
@@ -243,10 +245,19 @@ TEST(NetworkHTTPResponse, statusLines)
 	EXPECT_FALSE(HTTPResponse{"HTTP/1.1 600 High\r\n"}.isValid());
 	EXPECT_FALSE(HTTPResponse{"HTTP/1.1 abc\r\n"}.isValid());
 	EXPECT_FALSE(HTTPResponse{"HTTP/1.1\r\n"}.isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 4U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 4U);
+	EXPECT_EQ(captured.messages.size(), 8U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponse, statusLineIsStrict)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* RFC 9112 § 4: status-line = HTTP-version SP 3DIGIT SP [ reason-phrase ]; HTTP-version = "HTTP/" DIGIT "." DIGIT. */
 	EXPECT_FALSE(HTTPResponse{"HTTP/1.1 200abc OK\r\n"}.isValid());
 	EXPECT_FALSE(HTTPResponse{"HTTP/1.1 +200 OK\r\n"}.isValid());
@@ -262,6 +273,13 @@ TEST(NetworkHTTPResponse, statusLineIsStrict)
 	const HTTPResponse response{"HTTP/1.2 200 OK\r\n"};
 	ASSERT_TRUE(response.isValid());
 	EXPECT_EQ(response.version(), HTTPHeaders::Version::HTTP11);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 9U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 9U);
+	EXPECT_EQ(captured.messages.size(), 18U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPRequest, theHostFieldFollowsTheResourceAuthority)

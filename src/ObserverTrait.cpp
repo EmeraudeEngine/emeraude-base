@@ -30,10 +30,12 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
-#include <iostream>
+#include <sstream>
+#include <utility>
 
 /* Local inclusions. */
 #include "ObservableTrait.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base
 {
@@ -70,7 +72,7 @@ namespace EmEn::Base
 		{
 			if constexpr ( ObserverDebugEnabled )
 			{
-				std::cout << "observe() : (@" << this << ") already observing ('" << observable->classUID() << "')." "\n";
+				Logging::debug("ObserverTrait", (std::stringstream{} << "observe() : (@" << this << ") already observing ('" << observable->classUID() << "').").str());
 			}
 
 			return;
@@ -88,7 +90,7 @@ namespace EmEn::Base
 		{
 			if constexpr ( ObserverDebugEnabled )
 			{
-				std::cout << "release() : (@" << this << ") wasn't observing ('" << observable->classUID() << "')." "\n";
+				Logging::debug("ObserverTrait", (std::stringstream{} << "release() : (@" << this << ") wasn't observing ('" << observable->classUID() << "').").str());
 			}
 
 			return;

@@ -30,11 +30,12 @@
 #include "emeraude_base_config.hpp"
 
 /* STL inclusions. */
-#include <iostream>
+#include <sstream>
 #include <vector>
 
 /* Local inclusions. */
 #include "ObserverTrait.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base
 {
@@ -73,7 +74,7 @@ namespace EmEn::Base
 			{
 				if ( m_observers.empty() )
 				{
-					std::cout << "Observable @" << this << " tries to notify the code '" << notificationCode << "', but no one was listening !" "\n";
+					Logging::debug("ObservableTrait", (std::stringstream{} << "Observable @" << this << " tries to notify the code '" << notificationCode << "', but no one was listening !").str());
 
 					return;
 				}

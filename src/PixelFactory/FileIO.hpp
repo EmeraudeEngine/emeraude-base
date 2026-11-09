@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <type_traits>
 
 /* Local inclusions. */
@@ -43,6 +44,7 @@
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Logging.hpp"
 #include "Pixmap.hpp"
 
 namespace EmEn::Base::PixelFactory::FileIO
@@ -63,7 +65,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 	{
 		if ( !IO::fileExists(filepath) )
 		{
-			std::cerr << "PixelFactory::FileIO::read(), the file '" << IO::toU8String(filepath) << "' doesn't exist !" "\n";
+			Logging::error("PixelFactory::FileIO", (std::stringstream{} << "PixelFactory::FileIO::read(), the file '" << IO::toU8String(filepath) << "' doesn't exist !").str());
 
 			return false;
 		}
@@ -72,7 +74,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 
 		if ( !stream.isOpen() )
 		{
-			std::cerr << "PixelFactory::FileIO::read(), unable to open '" << IO::toU8String(filepath) << "' !" "\n";
+			Logging::error("PixelFactory::FileIO", (std::stringstream{} << "PixelFactory::FileIO::read(), unable to open '" << IO::toU8String(filepath) << "' !").str());
 
 			return false;
 		}
@@ -93,7 +95,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::read(), JPEG requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::read(), JPEG requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -108,7 +110,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::read(), PNG requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::read(), PNG requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -123,7 +125,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::read(), Targa requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::read(), Targa requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -138,7 +140,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::read(), WebP requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::read(), WebP requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -153,7 +155,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::read(), TIFF requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::read(), TIFF requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -166,7 +168,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 		}
 		else
 		{
-			std::cerr << "PixelFactory::FileIO::read(), the file '" << IO::toU8String(filepath) << "' format is not handled !" "\n";
+			Logging::error("PixelFactory::FileIO", (std::stringstream{} << "PixelFactory::FileIO::read(), the file '" << IO::toU8String(filepath) << "' format is not handled !").str());
 
 			return false;
 		}
@@ -197,7 +199,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 	{
 		if ( IO::fileExists(filepath) && !overwrite )
 		{
-			std::cerr << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' already exists !" "\n";
+			Logging::error("PixelFactory::FileIO", (std::stringstream{} << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' already exists !").str());
 
 			return false;
 		}
@@ -224,7 +226,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::write(), JPEG requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::write(), JPEG requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -240,7 +242,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::write(), PNG requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::write(), PNG requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -256,7 +258,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::write(), Targa requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::write(), Targa requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -272,7 +274,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			}
 			else
 			{
-				std::cerr << "PixelFactory::FileIO::write(), WebP requires an 8-bit pixmap !" "\n";
+				Logging::error("PixelFactory::FileIO", "PixelFactory::FileIO::write(), WebP requires an 8-bit pixmap !");
 
 				return false;
 			}
@@ -285,7 +287,7 @@ namespace EmEn::Base::PixelFactory::FileIO
 			return commit(fileFormat.writeStream(stream, pixmap, options));
 		}
 
-		std::cerr << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' format is not handled !" "\n";
+		Logging::error("PixelFactory::FileIO", (std::stringstream{} << "PixelFactory::FileIO::write(), the file '" << IO::toU8String(filepath) << "' format is not handled !").str());
 
 		return false;
 	}

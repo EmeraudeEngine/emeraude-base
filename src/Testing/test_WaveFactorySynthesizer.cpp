@@ -42,7 +42,9 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Severity.hpp"
 #include "WaveFactory/FileFormatJSON.hpp"
 #include "WaveFactory/Synthesizer.hpp"
 #include "WaveFactory/Types.hpp"
@@ -139,6 +141,8 @@ TEST(WaveFactorySynthesizer, anAmplitudeAboveOneIsClipped)
 
 TEST(WaveFactorySynthesizer, outOfDomainParametersAreRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto nan = std::numeric_limits< float >::quiet_NaN();
 	const std::vector< std::function< bool (FloatSynth &) > > calls{
 		[] (FloatSynth & s) { return s.sineWave(-440.0F, 0.5F); },
@@ -183,6 +187,12 @@ TEST(WaveFactorySynthesizer, outOfDomainParametersAreRefused)
 		EXPECT_FALSE(calls[index](synth)) << "call " << index;
 		EXPECT_EQ(wave.data(), before) << "call " << index << ": a refused call must leave the wave untouched";
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Synthesizer"), 30U);
+	EXPECT_EQ(captured.messages.size(), 30U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactorySynthesizer, envelopesFadesReverseNormalizeAndRegions)
@@ -231,6 +241,8 @@ TEST(WaveFactorySynthesizer, envelopesFadesReverseNormalizeAndRegions)
 
 TEST(WaveFactorySynthesizer, everyEffectAtItsDefaultsKeepsTheSignalInRange)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const std::vector< std::function< bool (FloatSynth &) > > effects{
 		[] (FloatSynth & s) { return s.whiteNoise(); },
 		[] (FloatSynth & s) { return s.pinkNoise(); },
@@ -280,10 +292,18 @@ TEST(WaveFactorySynthesizer, everyEffectAtItsDefaultsKeepsTheSignalInRange)
 	ASSERT_TRUE(otherSynth.sineWave(440.0F, 0.5F));
 	ASSERT_TRUE(synth.mix(other, 0.5F));
 	EXPECT_FALSE(synth.mix(other, 2.0F));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Synthesizer"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactorySynthesizer, anSFXScriptWithAnOutOfDomainParameterIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto decode = [] (std::string_view script) {
 		std::vector< std::byte > buffer(script.size());
 		std::ranges::transform(script, buffer.begin(), [] (char character) { return static_cast< std::byte >(character); });
@@ -298,6 +318,14 @@ TEST(WaveFactorySynthesizer, anSFXScriptWithAnOutOfDomainParameterIsRefused)
 	EXPECT_TRUE(decode(R"({"duration":50,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":440.0,"amplitude":0.5},{"type":"applyDistortion","gain":20.0}]}]})"));
 	EXPECT_FALSE(decode(R"({"duration":50,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":440.0,"amplitude":0.5},{"type":"applyDistortion","gain":100.0}]}]})"));
 	EXPECT_FALSE(decode(R"({"duration":50,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":-440.0,"amplitude":0.5}]}]})"));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Synthesizer"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 2U);
+	EXPECT_EQ(captured.messages.size(), 6U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* SFXScript (the coverage pass, 2026-10-17): every instruction type, regions, final instructions, stereo, and the
@@ -397,6 +425,8 @@ TEST(WaveFactorySFXScript, regionsFinalInstructionsAndStereo)
 
 TEST(WaveFactorySFXScript, structuralRefusals)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EXPECT_FALSE(decodeSFX(R"({"channels":1,"tracks":[{}]})")) << "no duration";
 	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":3,"tracks":[{},{},{}]})")) << "3 channels";
 	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1})")) << "no tracks";
@@ -407,10 +437,19 @@ TEST(WaveFactorySFXScript, structuralRefusals)
 	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"regions":[{"instructions":[{"type":"explode"}]}]}]})")) << "a bad instruction in a region";
 	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{}],"finalInstructions":[{"type":"explode"}]})")) << "a bad final instruction";
 	EXPECT_FALSE(decodeSFX(R"([1,2,3])")) << "not an object";
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 14U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 10U);
+	EXPECT_EQ(captured.messages.size(), 24U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactorySFXScript, aParameterOfTheWrongTypeIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* "880" (a string) was read as absent: the tone played at the default 440 Hz without a word. */
 	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"sineWave","frequency":"880"}]}]})"));
 	EXPECT_FALSE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"applyBitCrush","bits":"6"}]}]})"));
@@ -424,5 +463,13 @@ TEST(WaveFactorySFXScript, aParameterOfTheWrongTypeIsRefused)
 
 	/* An unknown key is only a warning: the script plays. */
 	EXPECT_TRUE(decodeSFX(R"({"duration":10,"channels":1,"tracks":[{"instructions":[{"type":"applyBitCrush","bitDepth":6}]}]})"));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 10U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 6U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "SFXScript"), 1U);
+	EXPECT_EQ(captured.messages.size(), 17U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

@@ -39,8 +39,11 @@
 #include <thread>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Thread.hpp"
 
 namespace
@@ -107,6 +110,8 @@ TEST(BaseThread, theDestructorJoins)
 
 TEST(BaseThread, aRefusedStartIsAValueAndTheCallableNeverRuns)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::atomic_bool ran{false};
 	Thread thread;
 
@@ -120,10 +125,18 @@ TEST(BaseThread, aRefusedStartIsAValueAndTheCallableNeverRuns)
 	thread.join();
 
 	EXPECT_FALSE(ran.load());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(BaseThread, aSecondStartOnARunningThreadIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::atomic_bool release{false};
 	Thread thread;
 
@@ -132,6 +145,12 @@ TEST(BaseThread, aSecondStartOnARunningThreadIsRefused)
 
 	release = true;
 	thread.join();
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(BaseThread, moveOnlyCallablesAndMovesTransferTheThread)
@@ -338,6 +357,7 @@ TEST(BaseThread, aBodyTakingNoTokenStillRunsAndTheDestructorStillJoinsIt)
 TEST(BaseThreadDeathTest, aThreadJoiningItselfAborts)
 {
 	EXPECT_DEATH({
+		EmEn::Base::Testing::useDefaultSinkInDeathTest();
 		Thread thread;
 		std::atomic_bool started{false};
 		auto * self = &thread;

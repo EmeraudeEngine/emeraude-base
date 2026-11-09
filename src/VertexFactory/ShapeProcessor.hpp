@@ -54,6 +54,9 @@
 #include "VertexFactory/ShapeTriangle.hpp"
 #include "VertexFactory/ShapeVertex.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::VertexFactory
 {
 	/**
@@ -273,7 +276,7 @@ namespace EmEn::Base::VertexFactory
 				 * indexed by the triangles' vertices (a throwing .at() aborted there until 2026-10-08). */
 				if ( !m_shape.indicesInRange() )
 				{
-					std::cerr << "ShapeProcessor::findBoundaryLoops(), a triangle refers to a vertex that does not exist !" "\n";
+					Logging::error("VertexFactory::ShapeProcessor", "ShapeProcessor::findBoundaryLoops(), a triangle refers to a vertex that does not exist !");
 
 					return {};
 				}

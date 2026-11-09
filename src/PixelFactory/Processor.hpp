@@ -43,6 +43,7 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Math/Base.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "Math/Space2D/Circle.hpp"
@@ -712,7 +713,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "The clipping area is outside the pixmap !" "\n";
+						Logging::error("PixelFactory::Processor", "The clipping area is outside the pixmap !");
 					}
 
 					return false;
@@ -872,7 +873,7 @@ namespace EmEn::Base::PixelFactory
 					{
 						if constexpr ( IsDebug )
 						{
-							std::cerr << "The source pixmap do not lie in target pixmap on X axis !" "\n";
+							Logging::error("PixelFactory::Processor", "The source pixmap do not lie in target pixmap on X axis !");
 						}
 
 						return false;
@@ -903,7 +904,7 @@ namespace EmEn::Base::PixelFactory
 					{
 						if constexpr ( IsDebug )
 						{
-							std::cerr << "The source pixmap do not lie in target pixmap on Y axis !" "\n";
+							Logging::error("PixelFactory::Processor", "The source pixmap do not lie in target pixmap on Y axis !");
 						}
 
 						return false;
@@ -2942,7 +2943,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "Target pixmap is invalid !" "\n";
+						Logging::error("PixelFactory::Processor", "Target pixmap is invalid !");
 					}
 
 					return false;
@@ -2952,7 +2953,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "The clipping area is invalid !" "\n";
+						Logging::error("PixelFactory::Processor", "The clipping area is invalid !");
 					}
 
 					return false;
@@ -2962,7 +2963,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "The clipping area is outside the pixmap !" "\n";
+						Logging::error("PixelFactory::Processor", "The clipping area is outside the pixmap !");
 					}
 
 					return false;
@@ -2988,7 +2989,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "Target pixmap is invalid !" "\n";
+						Logging::error("PixelFactory::Processor", "Target pixmap is invalid !");
 					}
 
 					return false;
@@ -2998,7 +2999,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "The clipping area is invalid !" "\n";
+						Logging::error("PixelFactory::Processor", "The clipping area is invalid !");
 					}
 
 					return false;
@@ -3008,7 +3009,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						std::cerr << "The clipping area is outside the pixmap !" "\n";
+						Logging::error("PixelFactory::Processor", "The clipping area is outside the pixmap !");
 					}
 
 					return false;

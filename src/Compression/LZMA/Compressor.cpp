@@ -29,7 +29,10 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
-#include <iostream>
+#include <cstddef>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Compression::LZMA
 {
@@ -88,19 +91,19 @@ namespace EmEn::Base::Compression::LZMA
 			switch ( ret )
 			{
 				case LZMA_MEM_ERROR :
-					std::cerr << "LZMA encoder init error : Memory allocation failed !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init error : Memory allocation failed !");
 					break;
 
 				case LZMA_OPTIONS_ERROR :
-					std::cerr << "LZMA encoder init error : Specified filter chain is not supported !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init error : Specified filter chain is not supported !");
 					break;
 
 				case LZMA_UNSUPPORTED_CHECK :
-					std::cerr << "LZMA encoder init error : Specified integrity check is not supported !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init error : Specified integrity check is not supported !");
 					break;
 
 				default :
-					std::cerr << "LZMA encoder init error : Unknown error, possibly a bug !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init error : Unknown error, possibly a bug !");
 					break;
 			}
 
@@ -132,19 +135,19 @@ namespace EmEn::Base::Compression::LZMA
 			switch ( ret )
 			{
 				case LZMA_MEM_ERROR :
-					std::cerr << "LZMA encoder init (MT) error : Memory allocation failed !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init (MT) error : Memory allocation failed !");
 					break;
 
 				case LZMA_OPTIONS_ERROR :
-					std::cerr << "LZMA encoder init (MT) error : Specified filter chain is not supported !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init (MT) error : Specified filter chain is not supported !");
 					break;
 
 				case LZMA_UNSUPPORTED_CHECK :
-					std::cerr << "LZMA encoder init (MT) error : Specified integrity check is not supported !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init (MT) error : Specified integrity check is not supported !");
 					break;
 
 				default :
-					std::cerr << "LZMA encoder init (MT) error : Unknown error, possibly a bug !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder init (MT) error : Unknown error, possibly a bug !");
 					break;
 			}
 
@@ -188,7 +191,7 @@ namespace EmEn::Base::Compression::LZMA
 
 				if ( input.read(reinterpret_cast< char * >(inbuf.data()), inbuf.size()).bad() )
 				{
-					std::cerr << "LZMA encoder error: Read error !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder error: Read error !");
 
 					return false;
 				}
@@ -208,7 +211,7 @@ namespace EmEn::Base::Compression::LZMA
 			{
 				if ( output.write(reinterpret_cast< char * >(outbuf.data()), static_cast< long >(outbuf.size() - m_stream.avail_out)).bad() )
 				{
-					std::cerr << "LZMA encoder error: Write error !" "\n";
+					Logging::error("Compression::LZMA::Compressor", "LZMA encoder error: Write error !");
 
 					return false;
 				}
@@ -227,15 +230,15 @@ namespace EmEn::Base::Compression::LZMA
 				switch ( ret )
 				{
 					case LZMA_MEM_ERROR:
-						std::cerr << "LZMA encoder error: Memory allocation failed !" "\n";
+						Logging::error("Compression::LZMA::Compressor", "LZMA encoder error: Memory allocation failed !");
 						break;
 
 					case LZMA_DATA_ERROR:
-						std::cerr << "LZMA encoder error: File size limits exceeded !" "\n";
+						Logging::error("Compression::LZMA::Compressor", "LZMA encoder error: File size limits exceeded !");
 						break;
 
 					default:
-						std::cerr << "LZMA encoder error: Unknown error, possibly a bug !" "\n";
+						Logging::error("Compression::LZMA::Compressor", "LZMA encoder error: Unknown error, possibly a bug !");
 						break;
 				}
 

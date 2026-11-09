@@ -28,10 +28,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
 #include "Algorithms/DiamondSquare.hpp"
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 
 using namespace EmEn::Base::Algorithms;
 
@@ -115,6 +118,8 @@ namespace
 
 TEST(AlgorithmsDiamondSquare, RejectsASizeThatIsNotAPowerOfTwoPlusOne)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	DiamondSquare< float > generator{1, false};
 
 	ASSERT_FALSE(generator.generate(2, 0.5F));
@@ -122,6 +127,12 @@ TEST(AlgorithmsDiamondSquare, RejectsASizeThatIsNotAPowerOfTwoPlusOne)
 	ASSERT_FALSE(generator.generate(100, 0.5F));
 	ASSERT_TRUE(generator.generate(5, 0.5F));
 	ASSERT_TRUE(generator.generate(257, 0.5F));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Algorithms::DiamondSquare"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(AlgorithmsDiamondSquare, NormalisesToTheUnitRange)

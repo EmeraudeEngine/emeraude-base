@@ -42,7 +42,9 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/Vector.hpp"
 #include "VertexFactory/FileFormatInterface.hpp"
 #include "VertexFactory/FileFormatMDx.hpp"
@@ -178,6 +180,8 @@ namespace EmEn::Base::VertexFactory
 	 * stride. The rejection is the feature. */
 	TEST(VertexFactoryNative, version1IsRejectedNotMisparsed)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const size_t blob = (3 * sizeof(ShapeVertex< float >)) + (1 * sizeof(ShapeTriangle< float, uint32_t >));
 		const auto buffer = makeNative(3, 1, 0, blob, 1);
 
@@ -185,12 +189,20 @@ namespace EmEn::Base::VertexFactory
 		Native format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* ===== Malformed / hostile (run under ASan/UBSan: must reject, never crash) ===== */
 
 	TEST(VertexFactoryNative, hugeVertexCountIsRejectedNotAllocated)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* The headline bug: an unvalidated 64-bit count fed straight to resize() would request
 		 * a multi-exabyte allocation -> std::length_error -> std::terminate under -fno-exceptions.
 		 * The reader must reject it from the (tiny) actual stream size instead. */
@@ -200,10 +212,18 @@ namespace EmEn::Base::VertexFactory
 		Native format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryNative, hugeTriangleAndColorCountsAreRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		{
 			const auto buffer = makeNative(0, std::numeric_limits< uint64_t >::max(), 0, 0);
 			MemoryStream stream{buffer};
@@ -218,10 +238,18 @@ namespace EmEn::Base::VertexFactory
 			Result result;
 			EXPECT_FALSE(format.readStream(stream, result, {}));
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryNative, truncatedPayloadIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Counts claim 3 vertices but no payload bytes follow. */
 		const auto buffer = makeNative(3, 0, 0, 0);
 
@@ -229,12 +257,20 @@ namespace EmEn::Base::VertexFactory
 		Native format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* The triangles are a raw blob: their vertex and color indices come from the FILE (the coverage pass,
 	 * 2026-10-17). One pointing past the vertex table was accepted, and the first consumer read out of bounds. */
 	TEST(VertexFactoryNative, aTriangleIndexOutOfItsTableIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto build = [] (uint32_t vertexIndex, uint32_t colorIndex, uint64_t colorCount) {
 			const size_t vertexBytes = 3 * sizeof(ShapeVertex< float >);
 			const size_t triangleBytes = sizeof(ShapeTriangle< float, uint32_t >);
@@ -270,10 +306,18 @@ namespace EmEn::Base::VertexFactory
 			Result result;
 			EXPECT_FALSE(StreamIO::read(buffer, FileFormatType::Native, result)) << "a color index past the color table";
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryNative, everyTruncationOfARealFileIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* The coverage pass (2026-10-18): a real file, cut at EVERY length, is refused at every stage (header, metadata,
 		 * counts, vertices, triangles, colors) — never read short, never past its end (ASan). */
 		const ShapeBuilderOptions< float > options{true, true, true, false, false};
@@ -314,10 +358,18 @@ namespace EmEn::Base::VertexFactory
 		}
 
 		EXPECT_EQ(refused, written.size());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 3160U);
+		EXPECT_EQ(captured.messages.size(), 3160U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryNative, aPrecisionMismatchIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		auto buffer = makeNative(1, 0, 0, sizeof(ShapeVertex< float >));
 		buffer[10] = static_cast< std::byte >(sizeof(double));
 
@@ -325,10 +377,18 @@ namespace EmEn::Base::VertexFactory
 		MemoryStream stream{input};
 		Result result;
 		EXPECT_FALSE(Native{}.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryNative, badMagicIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		auto buffer = makeNative(0, 0, 0, 0);
 		buffer[0] = static_cast< std::byte >('X');
 
@@ -336,16 +396,30 @@ namespace EmEn::Base::VertexFactory
 		Native format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryNative, shortHeaderIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const std::vector< std::byte > buffer(10, std::byte{0});   /* < 32-byte header */
 
 		MemoryStream stream{buffer};
 		Native format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* ===== Binary STL ===== */
@@ -384,6 +458,8 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactorySTL, hugeTriangleCountIsRejectedNotAllocated)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Count claims ~4 billion triangles (would reserve ~12 billion vertices) but the
 		 * stream carries none. Must be rejected from the actual stream size, never reserved. */
 		const auto buffer = makeBinarySTL(std::numeric_limits< uint32_t >::max(), 0);
@@ -392,12 +468,20 @@ namespace EmEn::Base::VertexFactory
 		STL format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* 2026-10-19 (cppcheck invalidPointerCast): the binary records go through a 50-byte buffer, no float pointer cast;
 	 * the writer checks every write (it returned true on a stream that refused them). */
 	TEST(VertexFactorySTL, binaryWriteReadsBackAndRefusesAFailingStream)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto cube = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 2.0F, 3.0F);
 
 		ASSERT_TRUE(cube.isValid());
@@ -436,10 +520,18 @@ namespace EmEn::Base::VertexFactory
 		MemoryStream refusing{readOnly};
 
 		EXPECT_FALSE(format.writeStream(refusing, cube, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactorySTL, countLargerThanPayloadIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Claims 10 triangles, provides 2. */
 		const auto buffer = makeBinarySTL(10, 2);
 
@@ -447,6 +539,12 @@ namespace EmEn::Base::VertexFactory
 		STL format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* ===== ASCII STL — a malformed or non-finite triplet refuses the file (owner, 2026-10-08) ===== */
@@ -507,30 +605,54 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactorySTL, asciiMalformedVertexRefusesTheFile)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Each one used to load as a (0, 0, 0) vertex, silently. */
 		for ( const auto * const vertexLine : {"1 2", "", "1 2 x", "a b c", "1 2 3 garbage", "1,0 2,0 3,0", "++1 2 3"} )
 		{
 			Result result;
 			EXPECT_FALSE(readAsciiSTL("0 0 1", vertexLine, result)) << "vertex '" << vertexLine << "'";
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 7U);
+		EXPECT_EQ(captured.messages.size(), 7U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactorySTL, asciiNonFiniteValueRefusesTheFile)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		for ( const auto * const vertexLine : {"nan 0 0", "0 inf 0", "0 0 -inf", "1e40 0 0"} )
 		{
 			Result result;
 			EXPECT_FALSE(readAsciiSTL("0 0 1", vertexLine, result)) << "vertex '" << vertexLine << "'";
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 4U);
+		EXPECT_EQ(captured.messages.size(), 4U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactorySTL, asciiMalformedNormalRefusesTheFile)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		for ( const auto * const normalLine : {"0 0", "0 0 nan", "x y z"} )
 		{
 			Result result;
 			EXPECT_FALSE(readAsciiSTL(normalLine, "0 0 0", result)) << "normal '" << normalLine << "'";
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 3U);
+		EXPECT_EQ(captured.messages.size(), 3U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* ===== Legacy id Tech formats (MDL/MD2/MD3) — read-only; goal is "never crash the engine,
@@ -612,36 +734,62 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactoryMDx, mdlHugeSkinCountIsRejectedNotAllocated)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto buffer = makeMDL(std::numeric_limits< int32_t >::max());
 
 		MemoryStream stream{buffer};
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, garbageMD2DoesNotCrash)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto buffer = makeGarbageWithMagic('2');
 
 		MemoryStream stream{buffer};
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, garbageMD3DoesNotCrash)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto buffer = makeGarbageWithMagic('3');
 
 		MemoryStream stream{buffer};
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md3TruncatedHeaderIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* NOTE: "IDP3" then 8 bytes of a 108-byte header. Before 2026-10-16 the rest of the header stayed indeterminate
 		 * and only the stream's fail state (tellg() == -1 in exceedsStream()) refused the file; a regression guard for
 		 * the explicit refusal that replaced that luck. */
@@ -655,10 +803,18 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md2EmptyFrameTableIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* num_frames = 0 with otherwise-consistent counts: the build read frames[0] on an empty
 		 * vector (null data) -> SEGV (fuzz_mdx). Must cancel the load instead. */
 		const auto buffer = makeMD2(/* numVertices */ 1, /* numFrames */ 0, /* triVertexIndex */ 0);
@@ -667,10 +823,18 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md2OutOfRangeTriangleIndexIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* A triangle vertex index past num_vertices indexed frame.verts out of bounds (OOB read). */
 		const auto buffer = makeMD2(/* numVertices */ 1, /* numFrames */ 1, /* triVertexIndex */ 0xFFFF);
 
@@ -678,12 +842,20 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* Ave Robustus II (2026-10-08): the skin size divides every texture coordinate — a zero size from the file put inf /
 	 * NaN into the geometry and the load SUCCEEDED. The control (size 1) proves the layout itself loads. */
 	TEST(VertexFactoryMDx, md2ZeroSkinSizeIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		{
 			const auto control = makeMD2(/* numVertices */ 1, /* numFrames */ 1, /* triVertexIndex */ 0, /* skinSize */ 1);
 
@@ -702,11 +874,19 @@ namespace EmEn::Base::VertexFactory
 			Result result;
 			EXPECT_FALSE(format.readStream(stream, result, {})) << "skin size " << skinSize;
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* An MD5 block shorter than its declared count read the closing brace and the next blocks as entries. */
 	TEST(VertexFactoryMDx, md5ShortJointBlockIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto md5 = [] (int numJoints) {
 			const std::string text =
 				"MD5Version 10\n"
@@ -753,10 +933,18 @@ namespace EmEn::Base::VertexFactory
 			Result result;
 			EXPECT_FALSE(format.readStream(stream, result, {}));
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md3HostileSurfaceDoesNotCrash)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* The exact 171-byte input fuzz_mdx reached after the MD2/MDL fixes: a structurally-plausible
 		 * MD3 whose surface triangle indices point outside the surface vertex table -> OOB read / SEGV
 		 * in loadMD3. The bounds check must cancel the load instead. */
@@ -789,10 +977,18 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md5HostileReferencesDoNotCrash)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* 136-byte input fuzz_mdx found in the text MD5 loader: weight/joint/vertex cross-references
 		 * pointing outside their tables -> null-deref / OOB. The validation pass must cancel the load. */
 		static constexpr std::array< uint8_t, 136 > md5{{
@@ -821,6 +1017,12 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md5VertexWithMoreThanFourWeightsLoads)
@@ -888,6 +1090,8 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactoryMDx, md3HugeTriangleTotalDoesNotOOM)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* 175-byte input fuzz_mdx found next: a surface declaring a huge num_triangles made loadMD3
 		 * reserveData() request ~64 GB before the per-triangle bounds check. The triangle total must
 		 * be bounded against the stream size -> cancel the load. */
@@ -920,16 +1124,30 @@ namespace EmEn::Base::VertexFactory
 		MDx format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, writeIsRejectedReadOnly)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* MDx is read-only: writeStream must fail cleanly, never assert. */
 		std::vector< std::byte > sink;
 		MemoryStream stream{sink};
 		MDx format;
 		Shape< float, uint32_t > shape;
 		EXPECT_FALSE(format.writeStream(stream, shape, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* The coverage pass (2026-10-17): files that LOAD, checked value by value. The MDL skin / frame GROUPS were read as
@@ -1084,6 +1302,8 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactoryMDx, mdlTruncatedOrBadGroupIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Cut in the middle of the frame: the reads used to leave zeros and load. */
 		{
 			auto buffer = makeQuakeMDL(false);
@@ -1106,6 +1326,12 @@ namespace EmEn::Base::VertexFactory
 			Result result;
 			EXPECT_FALSE(format.readStream(stream, result, {}));
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryMDx, md3NormalsFollowQuake3)
@@ -1197,6 +1423,8 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactoryOBJ, outOfRangeVertexIndexIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* 3 vertices, face references the 999th -> must cancel, not terminate. */
 		const auto buffer = toBytes("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 999\n");
 
@@ -1204,10 +1432,18 @@ namespace EmEn::Base::VertexFactory
 		OBJ format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryOBJ, outOfRangeIndexWithFullAttributesIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Exercises the V/VT/VN assembly path with an out-of-range position index. */
 		const auto buffer = toBytes(
 			"v 0 0 0\nv 1 0 0\nv 0 1 0\n"
@@ -1219,6 +1455,12 @@ namespace EmEn::Base::VertexFactory
 		OBJ format;
 		Result result;
 		EXPECT_FALSE(format.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	namespace
@@ -1469,6 +1711,8 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactoryOBJ, writerEmitsTheFaceFormOfItsAttributes)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto faceLine = [] (std::string_view obj) {
 			const auto text = writeOBJ(readOBJ(obj).shape);
 			const auto start = text.find("\nf ");
@@ -1483,6 +1727,12 @@ namespace EmEn::Base::VertexFactory
 
 		/* An empty shape is not written. */
 		EXPECT_TRUE(writeOBJ(Shape< float, uint32_t >{}).empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryOBJ, groupsScaleAndLineEndings)
@@ -1536,16 +1786,26 @@ namespace EmEn::Base::VertexFactory
 
 	TEST(VertexFactoryOBJ, malformedFilesAreRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nf 1 2\n").shape.triangles().empty()) << "a face of two vertices";
 		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 x 3\n").shape.triangles().empty()) << "a face token that is not a number";
 		EXPECT_TRUE(readOBJ("f 1 2 3\n").shape.triangles().empty()) << "no vertex";
 		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\n").shape.triangles().empty()) << "no face";
 		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nf 1/1 2/1 3/9\n").shape.triangles().empty()) << "a texture index out of range";
 		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nf 1//1 2//1 3//9\n").shape.triangles().empty()) << "a normal index out of range";
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 9U);
+		EXPECT_EQ(captured.messages.size(), 9U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryStreamIO, nonFiniteGeometryIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* NOTE: Owner decision 2026-10-16 (base item shape-merge-quantization-overflow): the file readers refuse a
 		 * geometry holding a NaN or an infinity. The native format stores raw floats, so a NaN survives the round trip
 		 * and only the read path's check can refuse it. */
@@ -1581,10 +1841,18 @@ namespace EmEn::Base::VertexFactory
 
 		Result controlResult;
 		EXPECT_TRUE(StreamIO::read(controlBuffer, FileFormatType::Native, controlResult));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryStreamIO, formatParity)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Ave robustus! (Axis B): StreamIO must reach every format FileIO does. OBJ read gives a shape;
 		 * Native and STL round-trip through the buffer; MDx is read-only but dispatch-reachable. */
 		const auto objBuffer = toBytes("v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n");
@@ -1612,6 +1880,12 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_FALSE(StreamIO::read(mdxGarbage, FileFormatType::MDx, mdxResult));
 		std::vector< std::byte > mdxBuffer;
 		EXPECT_FALSE(StreamIO::write(objResult.shape, FileFormatType::MDx, mdxBuffer));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(VertexFactoryFileIO, readableExtensionPredicate)

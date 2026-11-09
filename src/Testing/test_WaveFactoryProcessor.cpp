@@ -34,7 +34,6 @@
 #include <cmath>
 #include <cstddef>
 #include <initializer_list>
-#include <iostream>
 #include <numbers>
 #include <stop_token>
 #include <string>
@@ -43,6 +42,8 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "WaveFactory/Processor.hpp"
 #include "WaveFactory/Types.hpp"
 #include "WaveFactory/Wave.hpp"
@@ -123,6 +124,8 @@ TEST(WaveFactoryProcessor, mixDownAveragesTheChannels)
 
 TEST(WaveFactoryProcessor, resampleKeepsTheDurationAndThePitch)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* One second of 440 Hz at 48 kHz, to 22.05 kHz: ~22 050 samples, still 440 periods. */
 	Processor processor{sine(440.0F, 1.0F, Frequency::PCM48000Hz, Channels::Stereo, 0.5F)};
 
@@ -136,10 +139,18 @@ TEST(WaveFactoryProcessor, resampleKeepsTheDurationAndThePitch)
 	const auto before = processor.wave().sampleCount();
 	EXPECT_TRUE(processor.resample(Frequency::PCM22050Hz));
 	EXPECT_EQ(processor.wave().sampleCount(), before);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::Processor"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactoryProcessor, structuralOperations)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* trim: the silent edges go, not the silence inside. */
 	{
 		Processor processor{waveOf({0.0F, 0.0F, 0.5F, 0.0F, -0.5F, 0.0F}, Channels::Mono)};
@@ -170,10 +181,18 @@ TEST(WaveFactoryProcessor, structuralOperations)
 		EXPECT_EQ(second.data(), (std::vector< float >{0.0F, 9.0F}));
 		EXPECT_FALSE(processor.split(10, second));
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Processor"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactoryProcessor, channelOperations)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Processor processor{waveOf({0.25F, -0.5F}, Channels::Mono)};
 
 	EXPECT_FALSE(processor.swapChannels()) << "mono";
@@ -189,6 +208,12 @@ TEST(WaveFactoryProcessor, channelOperations)
 	ASSERT_TRUE(stereo.extractChannel(1));
 	EXPECT_EQ(stereo.wave().data(), (std::vector< float >{1.0F, 3.0F}));
 	EXPECT_EQ(stereo.wave().channels(), Channels::Mono);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Processor"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactoryProcessor, levelsAndSilence)
@@ -236,6 +261,8 @@ TEST(WaveFactoryProcessor, levelsAndSilence)
 
 TEST(WaveFactoryProcessor, normalizeAndBitDepth)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	{
 		Processor processor{sine(1000.0F, 0.1F, Frequency::PCM48000Hz, Channels::Mono, 0.25F)};
 
@@ -270,10 +297,18 @@ TEST(WaveFactoryProcessor, normalizeAndBitDepth)
 			ASSERT_TRUE(std::isfinite(sample) && sample >= -1.0F && sample <= 1.0F) << bits << " bits: " << sample;
 		}
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Processor"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactoryProcessor, anEmptyProcessorRefusesEveryOperation)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Processor processor;
 	Wave< float > second;
 
@@ -289,6 +324,12 @@ TEST(WaveFactoryProcessor, anEmptyProcessorRefusesEveryOperation)
 	EXPECT_FALSE(processor.swapChannels());
 	EXPECT_FALSE(processor.normalize());
 	EXPECT_FALSE(processor.convertBitDepth(16));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Processor"), 12U);
+	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The resample is stoppable and streamed (docs/subsystems/wavefactory/07, 2026-10-27): the chunked libsamplerate
@@ -328,6 +369,8 @@ TEST(WaveFactoryProcessor, theStreamedResampleGivesTheOneShotSamples)
 
 TEST(WaveFactoryProcessor, aRequestedStopLeavesTheWaveUnresampled)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	Processor processor{sine(440.0F, 2.0F, Frequency::PCM44100Hz, Channels::Stereo, 0.5F)};
 	const auto before = processor.wave().sampleCount();
 	std::stop_source stop;
@@ -337,6 +380,12 @@ TEST(WaveFactoryProcessor, aRequestedStopLeavesTheWaveUnresampled)
 	EXPECT_FALSE(processor.resample(Frequency::PCM48000Hz, stop.get_token()));
 	EXPECT_EQ(processor.wave().frequency(), Frequency::PCM44100Hz);
 	EXPECT_EQ(processor.wave().sampleCount(), before);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::Processor"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The measured stop latency of a long resample (the 328 s track of the Windows peer's report, stereo, 44.1 -> 48 kHz):
@@ -362,6 +411,6 @@ TEST(WaveFactoryProcessor, DISABLED_ResampleStopLatency)
 
 	const auto latency = std::chrono::duration_cast< std::chrono::microseconds >(returnedAt - requestedAt).count();
 
-	std::cout << "[latency] resample stop: " << latency << " us\n";
+	RecordProperty("resampleStopUs", std::to_string(latency));
 	EXPECT_LT(latency, 50'000);
 }

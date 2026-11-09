@@ -31,10 +31,12 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <sstream>
 #include <stack>
 #include <string>
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Math/CartesianFrame.hpp"
 
 namespace EmEn::Base
@@ -245,14 +247,14 @@ namespace EmEn::Base
 			{
 				if ( name == Root )
 				{
-					std::cerr << "The node name '" << Root << "' is reserved !" "\n";
+					Logging::error("NodeTrait", (std::stringstream{} << "The node name '" << Root << "' is reserved !").str());
 
 					return nullptr;
 				}
 
 				if ( m_children.contains(name) )
 				{
-					std::cerr << "The node name '" << name << "' is already used at this level !" "\n";
+					Logging::error("NodeTrait", (std::stringstream{} << "The node name '" << name << "' is already used at this level !").str());
 
 					return nullptr;
 				}

@@ -88,11 +88,19 @@ TEST(NetworkURI, hostIncludesPortSeparator)
 
 TEST(NetworkURI, rejectsOutOfRangePort)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const URI uri{"https://example.com:99999/"};
 
 	/* Out-of-range port dropped; host still parses. */
 	EXPECT_EQ(uri.uriDomain().port(), 0U);
 	EXPECT_EQ(uri.uriDomain().hostname().name(), "example.com");
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* --- Percent-encoding --- */
@@ -259,6 +267,8 @@ TEST(NetworkURI, resolvesAbsoluteReferenceUnchanged)
 
 TEST(NetworkURI, handlesGnarlyButValidURIs)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Each is a legal or plausibly-hostile URI/reference that must be handled
 	 * gracefully — never a crash, never UB (verified here + under ASan/UBSan). */
 	const char * inputs[] = {
@@ -301,6 +311,12 @@ TEST(NetworkURI, handlesGnarlyButValidURIs)
 	}
 
 	SUCCEED();
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkURI, rfc3986Section112SchemeDiversity)
@@ -360,11 +376,19 @@ TEST(NetworkURI, deeplyNestedDotSegmentsDoNotUnderflow)
 
 TEST(NetworkURI, emptyAndDegenerateInputs)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EXPECT_TRUE(URI{""}.empty());
 	/* A bare path reference: no scheme, no authority — must not crash. */
 	const URI relative{"just/a/path"};
 	EXPECT_TRUE(relative.scheme().empty());
 	EXPECT_EQ(EmEn::Base::IO::toGenericU8String(relative.path()), "just/a/path");
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "Network::URI"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* An empty string is refused through Logging, never straight to std::cerr (2026-11-06): the raw write bypassed the
@@ -400,10 +424,18 @@ TEST(NetworkURI, resourceReflectsSetPath)
 /* URI::isURL() replaced Network::URL::isURL() when URL was folded into URI (2026-10-08): a scheme AND a host. */
 TEST(NetworkURI, isURLNeedsSchemeAndHost)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EXPECT_TRUE(URI::isURL("https://example.com/path?query=1"));
 	EXPECT_TRUE(URI::isURL("http://127.0.0.1:17778/mcp"));
 	EXPECT_FALSE(URI::isURL(""));
 	EXPECT_FALSE(URI::isURL("example.com/path"));
 	EXPECT_FALSE(URI::isURL("/an/absolute/path"));
 	EXPECT_FALSE(URI::isURL("not a url at all"));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "Network::URI"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

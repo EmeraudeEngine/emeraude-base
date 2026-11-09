@@ -30,11 +30,15 @@
 #include <chrono>
 #include <cstdint>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <utility>
 
 /* Local inclusions for usages. */
 #include "Time/Types.hpp"
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Time::Elapsed
 {
@@ -99,22 +103,22 @@ namespace EmEn::Base::Time::Elapsed
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Seconds) )
 				{
-					std::cout << m_label << " : " << static_cast< double >(nanoseconds) / 1000000000.0 << " s" "\n";
+					Logging::info("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << static_cast< double >(nanoseconds) / 1000000000.0 << " s").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Milliseconds) )
 				{
-					std::cout << m_label << " : " << static_cast< double >(nanoseconds) / 1000000.0 << " ms" "\n";
+					Logging::info("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << static_cast< double >(nanoseconds) / 1000000.0 << " ms").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Microseconds) )
 				{
-					std::cout << m_label << " : " << static_cast< double >(nanoseconds) / 1000.0 << " μs" "\n";
+					Logging::info("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << static_cast< double >(nanoseconds) / 1000.0 << " μs").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Nanoseconds) )
 				{
-					std::cout << m_label << " : " << nanoseconds << " ns" "\n" "\n";
+					Logging::info("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << nanoseconds << " ns").str());
 				}
 			}
 
@@ -199,7 +203,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " : " << interval << " s" "\n";
+					Logging::error("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << interval << " s").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Milliseconds) )
@@ -211,7 +215,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " : " << interval << " ms" "\n";
+					Logging::error("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << interval << " ms").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Microseconds) )
@@ -223,7 +227,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " : " << interval << " μs" "\n";
+					Logging::error("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << interval << " μs").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Nanoseconds) )
@@ -233,7 +237,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " : " << nanoseconds << " ns" "\n";
+					Logging::error("Time::Elapsed::PrintScopeRealTime", (std::stringstream{} << m_label << " : " << nanoseconds << " ns").str());
 				}
 			}
 

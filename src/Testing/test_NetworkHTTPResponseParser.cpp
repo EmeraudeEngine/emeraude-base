@@ -27,9 +27,18 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <initializer_list>
+#include <limits>
 #include <string>
+#include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
+#include "Network/HTTPResponse.hpp"
 #include "Network/HTTPResponseParser.hpp"
 
 using namespace EmEn::Base::Network;
@@ -227,6 +236,8 @@ TEST(NetworkHTTPResponseParser, headerFieldNamesAreCaseInsensitive)
 
 TEST(NetworkHTTPResponseParser, rejectsOversizedHeaderSection)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	HTTPResponseParserLimits limits;
 	limits.maxHeaderSectionSize = 128;
 
@@ -236,10 +247,18 @@ TEST(NetworkHTTPResponseParser, rejectsOversizedHeaderSection)
 	payload.append(512, 'a');
 
 	EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, rejectsMalformedStatusLines)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	for ( const auto * hostile : {
 		"GARBAGE\r\n\r\n",
 		"HTTP/1.1 999 Out of range\r\n\r\n",
@@ -253,19 +272,37 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedStatusLines)
 
 		EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure) << hostile;
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 4U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 4U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 4U);
+	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, rejectsUpgradeResponse)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	HTTPResponseParser parser;
 
 	const std::string payload{"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"};
 
 	EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, rejectsMalformedContentLength)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	for ( const auto * hostile : {
 		"HTTP/1.1 200 OK\r\nContent-Length: 12x\r\n\r\n",
 		"HTTP/1.1 200 OK\r\nContent-Length: -5\r\n\r\n",
@@ -279,10 +316,18 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedContentLength)
 
 		EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure) << hostile;
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, rejectsDuplicateContentLength)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	HTTPResponseParser parser;
 
 	/* Request-smuggling vector: two lengths, the header map would silently
@@ -290,6 +335,12 @@ TEST(NetworkHTTPResponseParser, rejectsDuplicateContentLength)
 	const std::string payload{"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 10\r\n\r\nHello"};
 
 	EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, transferEncodingOverridesContentLength)
@@ -313,6 +364,8 @@ TEST(NetworkHTTPResponseParser, transferEncodingOverridesContentLength)
 
 TEST(NetworkHTTPResponseParser, rejectsMalformedChunkSizes)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	for ( const auto * hostile : {
 		"zz\r\n",                    /* not hexadecimal */
 		"FFFFFFFFFFFFFFFFFF\r\n",    /* uint64 overflow */
@@ -326,19 +379,35 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedChunkSizes)
 
 		EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure) << hostile;
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, rejectsMalformedChunkTerminator)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	HTTPResponseParser parser;
 
 	const std::string payload{"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nHelloXX"};
 
 	EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, enforcesBodySizeCap)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	HTTPResponseParserLimits limits;
 	limits.maxBodySize = 8;
 
@@ -359,10 +428,18 @@ TEST(NetworkHTTPResponseParser, enforcesBodySizeCap)
 
 		EXPECT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::Failure);
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, rejectsTruncatedResponses)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Truncated fixed body. */
 	{
 		HTTPResponseParser parser;
@@ -392,6 +469,12 @@ TEST(NetworkHTTPResponseParser, rejectsTruncatedResponses)
 		ASSERT_EQ(parser.feed(payload.data(), payload.size()), HTTPResponseParser::Result::NeedMoreData);
 		EXPECT_EQ(parser.finish(), HTTPResponseParser::Result::Failure);
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPResponseParser, streamingConsumerCanDrainBody)

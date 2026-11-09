@@ -36,7 +36,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <initializer_list>
-#include <iostream>
 #include <memory>
 #include <stop_token>
 #include <string>
@@ -47,7 +46,9 @@
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "DiagnosticsCapture.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Severity.hpp"
 #include "WaveFactory/FileFormatJSON.hpp"
 #include "WaveFactory/FileFormatMIDI.hpp"
 #include "WaveFactory/FileFormatSNDFile.hpp"
@@ -204,6 +205,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactoryMIDI, zeroTimeDivisionIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* division == 0 is the divisor in the tick->sample tempo conversion. Unchecked it yields
 		 * +inf and the cast to a uint32_t sample count is UB. The header parse must reject it. */
 		const auto buffer = makeMidi(0, 1, 0, minimalTrackPayload());
@@ -213,10 +216,18 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryMIDI, hugeTrackCountWithNoTracksIsRejectedNotAllocated)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* The header claims 65535 tracks but only a single (empty) MTrk chunk follows. The
 		 * speculative reserve hint must be clamped (no ~100 MB transient alloc) and the parse
 		 * must fail fast on the missing tracks. */
@@ -227,10 +238,18 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryMIDI, badHeaderMagicIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		auto mutable_buffer = makeMidi(0, 1, 480, minimalTrackPayload());
 		mutable_buffer[0] = static_cast< std::byte >('X');
 		MemoryStream stream{std::as_const(mutable_buffer)};
@@ -238,6 +257,12 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryMIDI, truncatedTrackPayloadDoesNotCrash)
@@ -259,6 +284,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactoryMIDI, emptyStreamIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const std::vector< std::byte > buffer;
 
 		MemoryStream stream{buffer};
@@ -266,6 +293,12 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* The coverage pass (2026-10-17): the tempo map, the duration ceiling (owner decision: 30 minutes for both
@@ -450,6 +483,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactoryMIDI, declaredDurationBeyondTheLimitIsTruncated)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* One 4-byte delta (2^28 - 1 ticks, ~77 hours): the rendering stops at 30 minutes. It used to convert ~1.3e10
 		 * samples to uint32_t (undefined behaviour), and below that limit the additive renderer allocated without bound
 		 * (2 hours: 6 GB, then std::bad_alloc -> abort). */
@@ -472,12 +507,20 @@ namespace EmEn::Base::WaveFactory
 			ASSERT_TRUE(decodeMidi(file, wave, soundfont.get()));
 			EXPECT_EQ(wave.sampleCount(), ThirtyMinutes);
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "WaveFactory::FileFormatMIDI"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* The rendering is stoppable and the additive renderer's polyphony bounded (owner decision 2026-10-27,
 	 * wavefactory doc 06): 256 voices, the oldest stolen, as TinySoundFont. */
 	TEST(WaveFactoryMIDI, aRequestedStopRefusesBothRenderers)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto file = makeMidi(0, 1, 480, heldNoteTrack(4800));
 		std::stop_source stop;
 
@@ -493,6 +536,13 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > sampled;
 
 		EXPECT_FALSE(decodeMidi(file, sampled, soundfont.get(), stop.get_token()));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatMIDI"), 2U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 2U);
+		EXPECT_EQ(captured.messages.size(), 4U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryMIDI, theAdditiveRendererStealsTheOldestVoiceBeyondItsPolyphony)
@@ -554,12 +604,14 @@ namespace EmEn::Base::WaveFactory
 
 		const auto latency = std::chrono::duration_cast< std::chrono::microseconds >(returnedAt - requestedAt).count();
 
-		std::cout << "[latency] additive MIDI render stop: " << latency << " us\n";
+		RecordProperty("additiveMidiRenderStopUs", std::to_string(latency));
 		EXPECT_LT(latency, 50'000);
 	}
 
 	TEST(WaveFactoryMIDI, headerRefusals)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		Wave< int16_t > wave;
 
 		/* SMPTE time division (bit 15). */
@@ -591,6 +643,12 @@ namespace EmEn::Base::WaveFactory
 
 		/* A track without a single note. */
 		EXPECT_FALSE(decodeMidi(makeMidi(0, 1, 480, std::string_view{"\x00\xFF\x2F\x00", 4}), wave));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 8U);
+		EXPECT_EQ(captured.messages.size(), 8U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryMIDI, rmidWrapperDecodesLikeThePlainFile)
@@ -614,6 +672,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactoryMIDI, writeIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		Wave< int16_t > wave;
 		ASSERT_TRUE(decodeMidi(makeMidi(0, 1, 480, minimalTrackPayload()), wave));
 
@@ -622,6 +682,12 @@ namespace EmEn::Base::WaveFactory
 		const FileFormatMIDI< int16_t > format;
 
 		EXPECT_FALSE(format.writeStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryMIDI, everyChannelEventRendersWithBothRenderers)
@@ -767,6 +833,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactorySNDFile, aSampleRateOutsideTheRangeIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		for ( const uint32_t rate : {Frequency::MinimumHz - 1U, Frequency::MaximumHz + 1U} )
 		{
 			const auto buffer = makeWav(1, rate, 16, 16);
@@ -787,6 +855,12 @@ namespace EmEn::Base::WaveFactory
 			ASSERT_TRUE(format.readStream(stream, wave, {})) << rate << " Hz";
 			EXPECT_EQ(wave.frequency().hz(), rate);
 		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryFrequency, fromHzKeepsTheRangeAndTheNamedRates)
@@ -803,6 +877,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactoryProcessor, aResampleOutsideTheConverterRatioIsRefused)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Both rates are in range, but 1 kHz to 384 kHz is a ratio of 384, beyond libsamplerate's 256. */
 		Wave< int16_t > wave;
 		ASSERT_TRUE(wave.initialize(8U, Channels::Mono, Frequency::fromHz(Frequency::MinimumHz)));
@@ -811,6 +887,12 @@ namespace EmEn::Base::WaveFactory
 		EXPECT_FALSE(processor.resample(Frequency::fromHz(Frequency::MaximumHz)));
 		EXPECT_EQ(processor.wave().frequency().hz(), Frequency::MinimumHz);
 		EXPECT_FALSE(processor.resample(Frequency::Invalid));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Processor"), 2U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactorySNDFile, forgedHugeFrameCountNeverOverAllocates)
@@ -832,6 +914,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactorySNDFile, garbageBytesAreRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto buffer = bytesOf("not an audio file at all, just random text payload");
 
 		MemoryStream stream{buffer};
@@ -839,10 +923,18 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactorySNDFile, emptyStreamIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const std::vector< std::byte > buffer;
 
 		MemoryStream stream{buffer};
@@ -850,6 +942,12 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* ============================ JSON SFX ============================ */
@@ -871,6 +969,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactoryJSON, oversizedDurationIsRejectedNotAllocated)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* sampleCount = sampleRate * durationMs / 1000 sizes one Synthesizer buffer per track;
 		 * an unbounded duration would request a multi-hundred-GiB allocation -> terminate. */
 		const auto buffer = bytesOf(
@@ -882,10 +982,19 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryJSON, channelTrackMismatchIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto buffer = bytesOf(
 			R"({"duration":10,"channels":2,"tracks":[)"
 			R"({"instructions":[{"type":"sineWave","frequency":440.0,"amplitude":0.5}]}]})");
@@ -895,10 +1004,19 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
+		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryJSON, malformedJsonIsRejected)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto buffer = bytesOf("{ this is not valid json ");
 
 		MemoryStream stream{buffer};
@@ -906,10 +1024,20 @@ namespace EmEn::Base::WaveFactory
 		Wave< int16_t > wave;
 
 		EXPECT_FALSE(format.readStream(stream, wave, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "FastJSON"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
+		EXPECT_EQ(captured.messages.size(), 3U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(WaveFactoryStreamIO, formatParity)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		/* Ave robustus! (Axis B): StreamIO read now reaches all three handlers, not just libsndfile. */
 		Wave< int16_t > source;
 		ASSERT_TRUE(source.initialize(8U, Channels::Mono, Frequency::PCM8000Hz));
@@ -931,6 +1059,14 @@ namespace EmEn::Base::WaveFactory
 		const std::vector< std::byte > jsonBad(8, std::byte{'{'});
 		Wave< int16_t > jsonDecoded;
 		EXPECT_FALSE(StreamIO::read(jsonBad, SoundFileFormat::JSON, jsonDecoded));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "FastJSON"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
+		EXPECT_EQ(captured.messages.size(), 3U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	/* The decode is stoppable (Ave Robustus II, docs/subsystems/wavefactory/07, 2026-10-27): a file longer than one
@@ -995,6 +1131,8 @@ namespace EmEn::Base::WaveFactory
 
 	TEST(WaveFactorySNDFile, aRequestedStopRefusesTheDecode)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto encoded = encodedRamp(50'000);
 
 		ASSERT_FALSE(encoded.empty());
@@ -1009,5 +1147,11 @@ namespace EmEn::Base::WaveFactory
 		options.stopToken = stop.get_token();
 
 		EXPECT_FALSE(format.readStream(in, decoded, options));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatSNDFile"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 }

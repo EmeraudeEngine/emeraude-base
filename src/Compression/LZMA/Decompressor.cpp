@@ -29,10 +29,10 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
-#include <iostream>
 
 /* Local inclusions. */
 #include "Compression/LZMA.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Compression::LZMA
 {
@@ -93,15 +93,15 @@ namespace EmEn::Base::Compression::LZMA
 			switch ( ret )
 			{
 				case LZMA_MEM_ERROR :
-					std::cerr << "LZMA decoder init error : Memory allocation failed !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init error : Memory allocation failed !");
 					break;
 
 				case LZMA_OPTIONS_ERROR :
-					std::cerr << "LZMA decoder init error : Specified filter chain is not supported !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init error : Specified filter chain is not supported !");
 					break;
 
 				default :
-					std::cerr << "LZMA decoder init error : Unknown error, possibly a bug !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init error : Unknown error, possibly a bug !");
 					break;
 			}
 
@@ -131,19 +131,19 @@ namespace EmEn::Base::Compression::LZMA
 			switch ( ret )
 			{
 				case LZMA_MEM_ERROR :
-					std::cerr << "LZMA decoder init (MT) error : Memory allocation failed !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init (MT) error : Memory allocation failed !");
 					break;
 
 				case LZMA_OPTIONS_ERROR :
-					std::cerr << "LZMA decoder init (MT) error : Specified filter chain is not supported !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init (MT) error : Specified filter chain is not supported !");
 					break;
 
 				case LZMA_UNSUPPORTED_CHECK :
-					std::cerr << "LZMA decoder init (MT) error : Specified integrity check is not supported !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init (MT) error : Specified integrity check is not supported !");
 					break;
 
 				default :
-					std::cerr << "LZMA decoder init (MT) error : Unknown error, possibly a bug !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder init (MT) error : Unknown error, possibly a bug !");
 					break;
 			}
 
@@ -189,7 +189,7 @@ namespace EmEn::Base::Compression::LZMA
 
 				if ( input.read(reinterpret_cast< char * >(inbuf.data()), inbuf.size()).bad() )
 				{
-					std::cerr << "LZMA decoder error: Read error !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Read error !");
 
 					return false;
 				}
@@ -211,7 +211,7 @@ namespace EmEn::Base::Compression::LZMA
 
 				if ( produced > maxOutput - written )
 				{
-					std::cerr << "LZMA decoder error: The output exceeds its bound, refused !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: The output exceeds its bound, refused !");
 
 					return false;
 				}
@@ -220,7 +220,7 @@ namespace EmEn::Base::Compression::LZMA
 
 				if ( output.write(reinterpret_cast< char * >(outbuf.data()), static_cast< long >(outbuf.size() - m_stream.avail_out)).bad() )
 				{
-					std::cerr << "LZMA decoder error: Write error !" "\n";
+					Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Write error !");
 
 					return false;
 				}
@@ -239,31 +239,31 @@ namespace EmEn::Base::Compression::LZMA
 				switch ( ret )
 				{
 					case LZMA_MEM_ERROR :
-						std::cerr << "LZMA decoder error: Memory allocation failed !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Memory allocation failed !");
 						break;
 
 					case LZMA_MEMLIMIT_ERROR :
-						std::cerr << "LZMA decoder error: The stream needs more decoder memory than the limit, refused !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: The stream needs more decoder memory than the limit, refused !");
 						break;
 
 					case LZMA_FORMAT_ERROR :
-						std::cerr << "LZMA decoder error: The input is not in the .xz format !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: The input is not in the .xz format !");
 						break;
 
 					case LZMA_OPTIONS_ERROR :
-						std::cerr << "LZMA decoder error: Unsupported compression options !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Unsupported compression options !");
 						break;
 
 					case LZMA_DATA_ERROR :
-						std::cerr << "LZMA decoder error: Compressed file is corrupt !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Compressed file is corrupt !");
 						break;
 
 					case LZMA_BUF_ERROR :
-						std::cerr << "LZMA decoder error: Compressed file is truncated or otherwise corrupt !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Compressed file is truncated or otherwise corrupt !");
 						break;
 
 					default :
-						std::cerr << "LZMA decoder error: Unknown error, possibly a bug !" "\n";
+						Logging::error("Compression::LZMA::Decompressor", "LZMA decoder error: Unknown error, possibly a bug !");
 						break;
 				}
 

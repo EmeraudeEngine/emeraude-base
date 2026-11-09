@@ -30,7 +30,6 @@
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
-#include <iostream>
 #include <random>
 #include <string>
 #include <string_view>
@@ -38,6 +37,7 @@
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Testing
 {
@@ -77,7 +77,7 @@ namespace EmEn::Base::Testing
 
 		if ( errorCode )
 		{
-			std::cerr << "uniqueTemporaryPath(), no temporary directory (" << errorCode.message() << "): the current directory is used." "\n";
+			Logging::warning("Testing::TemporaryPath", "uniqueTemporaryPath(), no temporary directory (" + errorCode.message() + "): the current directory is used.");
 
 			directory = std::filesystem::path{"."};
 		}

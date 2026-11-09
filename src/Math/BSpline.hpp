@@ -31,11 +31,15 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <sstream>
 #include <type_traits>
 #include <vector>
 
 /* Local inclusions for usages. */
 #include "Vector.hpp"
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Math
 {
@@ -63,7 +67,7 @@ namespace EmEn::Base::Math
 	{
 		if ( segments < 1 )
 		{
-			std::cerr << caller << ", 0 segment requested: clamped to 1 !" "\n";
+			Logging::error("Math::BSpline", (std::stringstream{} << caller << ", 0 segment requested: clamped to 1 !").str());
 
 			return 1;
 		}
@@ -165,7 +169,7 @@ namespace EmEn::Base::Math
 			{
 				if ( segments < 1 )
 				{
-					std::cerr << "BSplinePoint::setSegments(), segment should at least be 1 !" "\n";
+					Logging::error("Math::BSpline", "BSplinePoint::setSegments(), segment should at least be 1 !");
 				}
 				else
 				{
@@ -269,7 +273,7 @@ namespace EmEn::Base::Math
 			{
 				if ( defaultSegments < 1 )
 				{
-					std::cerr << "BSpline::setDefaultSegments(), default segment should at least be 1 !" "\n";
+					Logging::error("Math::BSpline", "BSpline::setDefaultSegments(), default segment should at least be 1 !");
 
 					return;
 				}

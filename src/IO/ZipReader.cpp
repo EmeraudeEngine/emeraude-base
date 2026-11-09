@@ -30,14 +30,20 @@
 #include "emeraude_platform.hpp"
 
 /* STL inclusions. */
-#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <fstream>
-#include <iostream>
+#include <optional>
+#include <ranges>
+#include <sstream>
 #include <utility>
+
+/* Third-party inclusions. */
+#include <zipconf.h>
 
 /* Local inclusions. */
 #include "IO.hpp"
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -110,14 +116,14 @@ namespace EmEn::Base::IO
 
 		if ( !IO::exists(m_filepath) )
 		{
-			std::cerr << ClassId << " : The archive file " << toU8String(m_filepath) << " doesn't exists !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The archive file " << toU8String(m_filepath) << " doesn't exists !").str());
 
 			return false;
 		}
 
 		if ( !this->openArchive() )
 		{
-			std::cerr << ClassId << " : Unable to open the archive " << toU8String(m_filepath) << " !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to open the archive " << toU8String(m_filepath) << " !").str());
 
 			return false;
 		}
@@ -153,7 +159,7 @@ namespace EmEn::Base::IO
 		/* NOTE: A size of 0 is a legitimate empty file or a directory entry: only the call's result says "missing". */
 		if ( zip_stat(m_zip.get(), entryName.c_str(), 0, &stat) != 0 )
 		{
-			std::cerr << ClassId << " : The entry " << entryName << " doesn't exists !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The entry " << entryName << " doesn't exists !").str());
 
 			return false;
 		}
@@ -162,7 +168,7 @@ namespace EmEn::Base::IO
 
 		if ( (stat.valid & RequiredFields) != RequiredFields )
 		{
-			std::cerr << ClassId << " : The entry " << entryName << " has no size information, refused !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The entry " << entryName << " has no size information, refused !").str());
 
 			return false;
 		}
@@ -176,7 +182,7 @@ namespace EmEn::Base::IO
 		 * declare a terabyte (std::bad_alloc -> abort under -fno-exceptions). Divided, never multiplied (overflow). */
 		if ( stat.size / MaxCompressionRatio > stat.comp_size || stat.size > buffer.max_size() )
 		{
-			std::cerr << ClassId << " : The entry " << entryName << " declares " << stat.size << " bytes for " << stat.comp_size << " compressed, refused !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The entry " << entryName << " declares " << stat.size << " bytes for " << stat.comp_size << " compressed, refused !").str());
 
 			return false;
 		}
@@ -185,7 +191,7 @@ namespace EmEn::Base::IO
 
 		if ( file == nullptr )
 		{
-			std::cerr << ClassId << " : Unable to open the entry " << entryName << " (" << zip_strerror(m_zip.get()) << ") !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to open the entry " << entryName << " (" << zip_strerror(m_zip.get()) << ") !").str());
 
 			return false;
 		}
@@ -199,7 +205,7 @@ namespace EmEn::Base::IO
 
 		if ( std::cmp_not_equal(bytesRead, stat.size) || zip_fread(file.get(), beyond.data(), beyond.size()) != 0 )
 		{
-			std::cerr << ClassId << " : Unable to read the entry " << entryName << " whole (" << zip_file_strerror(file.get()) << ") !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to read the entry " << entryName << " whole (" << zip_file_strerror(file.get()) << ") !").str());
 
 			buffer.clear();
 
@@ -214,7 +220,7 @@ namespace EmEn::Base::IO
 	{
 		if ( std::ranges::find(m_entryNames, entryName) == m_entryNames.cend() )
 		{
-			std::cerr << ClassId << " : The entry " << entryName << " doesn't exists !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The entry " << entryName << " doesn't exists !").str());
 
 			return false;
 		}
@@ -225,7 +231,7 @@ namespace EmEn::Base::IO
 
 		if ( !confined )
 		{
-			std::cerr << ClassId << " : The entry " << entryName << " would be extracted outside " << toU8String(destinationPath) << ", refused !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The entry " << entryName << " would be extracted outside " << toU8String(destinationPath) << ", refused !").str());
 
 			return false;
 		}
@@ -242,7 +248,7 @@ namespace EmEn::Base::IO
 
 			if ( !IO::createDirectory(filepath) )
 			{
-				std::cerr << ClassId << " : Unable to create the directory " << toU8String(filepath) << " !" "\n";
+				Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to create the directory " << toU8String(filepath) << " !").str());
 
 				return false;
 			}
@@ -255,7 +261,7 @@ namespace EmEn::Base::IO
 
 		if ( !this->extract(entryName, buffer) )
 		{
-			std::cerr << ClassId << " : Unable to extract the content buffer !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to extract the content buffer !").str());
 
 			return false;
 		}
@@ -267,14 +273,14 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::directoryExists(finalDirectory) )
 			{
-				std::cerr << ClassId << " : Unable to use the destination directory " << toU8String(finalDirectory) << " !" "\n";
+				Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to use the destination directory " << toU8String(finalDirectory) << " !").str());
 
 				return false;
 			}
 
 			if ( IO::exists(filepath) && !overwrite )
 			{
-				std::cerr << ClassId << " : The destination file " << toU8String(filepath) << " already exists !" "\n";
+				Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : The destination file " << toU8String(filepath) << " already exists !").str());
 
 				return false;
 			}
@@ -283,7 +289,7 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::createDirectory(finalDirectory) )
 			{
-				std::cerr << ClassId << " : Unable to create the destination directory " << toU8String(finalDirectory) << " !" "\n";
+				Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to create the destination directory " << toU8String(finalDirectory) << " !").str());
 
 				return false;
 			}
@@ -294,7 +300,7 @@ namespace EmEn::Base::IO
 
 		if ( !IO::openOutputFile(filepath, file) )
 		{
-			std::cerr << ClassId << " : Unable to open the file " << toU8String(filepath) << " for writing !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to open the file " << toU8String(filepath) << " for writing !").str());
 
 			return false;
 		}
@@ -304,7 +310,7 @@ namespace EmEn::Base::IO
 
 		if ( file.fail() )
 		{
-			std::cerr << ClassId << " : Unable to write the file " << toU8String(filepath) << " !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to write the file " << toU8String(filepath) << " !").str());
 
 			return false;
 		}
@@ -322,7 +328,7 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::directoryExists(destinationPath) )
 			{
-				std::cerr << ClassId << " : Unable to use the destination directory " << toU8String(destinationPath) << " !" "\n";
+				Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to use the destination directory " << toU8String(destinationPath) << " !").str());
 
 				return false;
 			}
@@ -331,7 +337,7 @@ namespace EmEn::Base::IO
 		{
 			if ( !IO::createDirectory(destinationPath) )
 			{
-				std::cerr << ClassId << " : Unable to create the destination directory " << toU8String(destinationPath) << " !" "\n";
+				Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to create the destination directory " << toU8String(destinationPath) << " !").str());
 
 				return false;
 			}
@@ -365,7 +371,7 @@ namespace EmEn::Base::IO
 
 		if ( source == nullptr )
 		{
-			std::cerr << ClassId << " : Unable to create LibZip source. Error : " << zip_error_strerror(&zipError) << " !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to create LibZip source. Error : " << zip_error_strerror(&zipError) << " !").str());
 
 			zip_error_fini(&zipError);
 
@@ -376,7 +382,7 @@ namespace EmEn::Base::IO
 
 		if ( !m_zip )
 		{
-			std::cerr << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&zipError) << " !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&zipError) << " !").str());
 
 			zip_source_free(source);
 			zip_error_fini(&zipError);
@@ -395,7 +401,7 @@ namespace EmEn::Base::IO
 			zip_error_t error;
 			zip_error_init_with_code(&error, errorCode);
 
-			std::cerr << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&error) << " !" "\n";
+			Logging::error("IO::ZipReader", (std::stringstream{} << ClassId << " : Unable to init LibZip. Error : " << zip_error_strerror(&error) << " !").str());
 
 			zip_error_fini(&error);
 

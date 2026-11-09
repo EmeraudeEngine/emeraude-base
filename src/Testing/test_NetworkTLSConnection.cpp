@@ -35,6 +35,7 @@
 #include <string>
 #include <thread>
 #include <utility>
+#include <vector>
 
 /* Third-party inclusions. */
 #include "asio.hpp"
@@ -42,6 +43,8 @@
 #include <openssl/tls1.h>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Network/TLSConnection.hpp"
 #include "TLSTestHelpers.hpp"
 
@@ -250,6 +253,8 @@ TEST(NetworkTLSConnection, handshakeAndEchoWithTrustedServer)
 
 TEST(NetworkTLSConnection, handshakeFailsWithUntrustedServer)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost,IP:127.0.0.1");
 	ASSERT_TRUE(credentials.valid);
 
@@ -263,10 +268,18 @@ TEST(NetworkTLSConnection, handshakeFailsWithUntrustedServer)
 
 	EXPECT_FALSE(connection.connect("localhost", server.port()));
 	EXPECT_FALSE(connection.isConnected());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTLSConnection, aServerBelowTLS12IsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* RFC 8996: TLS 1.0 and 1.1 are deprecated. The floor is the connection's own, so even a caller's permissive
 	 * context (security level 0, which re-enables them in the TLS library) cannot reach an outdated server. */
 	const auto credentials = generateServerCredentials("DNS:localhost,IP:127.0.0.1");
@@ -295,10 +308,18 @@ TEST(NetworkTLSConnection, aServerBelowTLS12IsRefused)
 		EXPECT_FALSE(connection.connect("localhost", server.port()));
 		EXPECT_FALSE(connection.isConnected());
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTLSConnection, hostnameVerificationRejectsWrongHost)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The certificate only names 'localhost': reaching the very same server
 	 * through '127.0.0.1' must fail the hostname verification. */
 	const auto credentials = generateServerCredentials("DNS:localhost");
@@ -313,10 +334,18 @@ TEST(NetworkTLSConnection, hostnameVerificationRejectsWrongHost)
 
 	EXPECT_FALSE(connection.connect("127.0.0.1", server.port()));
 	EXPECT_FALSE(connection.isConnected());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTLSConnection, connectionRefusedFails)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	asio::ssl::context clientContext{asio::ssl::context::tls_client};
 
 	/* Reserve an ephemeral port then release it: nothing listens on it. */
@@ -341,10 +370,18 @@ TEST(NetworkTLSConnection, connectionRefusedFails)
 
 	EXPECT_FALSE(connection.connect("127.0.0.1", freePort));
 	EXPECT_FALSE(connection.isConnected());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTLSConnection, readTimesOutOnMuteServer)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost,IP:127.0.0.1");
 	ASSERT_TRUE(credentials.valid);
 
@@ -371,10 +408,18 @@ TEST(NetworkTLSConnection, readTimesOutOnMuteServer)
 	EXPECT_FALSE(connection.isConnected());
 	EXPECT_GE(elapsed, std::chrono::milliseconds{200});
 	EXPECT_LT(elapsed, std::chrono::seconds{10});
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTLSConnection, operationsFailWhenNotConnected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	asio::ssl::context clientContext{asio::ssl::context::tls_client};
 
 	Network::TLSConnection connection{clientContext};
@@ -385,4 +430,10 @@ TEST(NetworkTLSConnection, operationsFailWhenNotConnected)
 	std::array< char, 16 > buffer{};
 
 	EXPECT_FALSE(connection.read(buffer.data(), buffer.size()).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

@@ -33,6 +33,7 @@
 /* STL inclusions. */
 #include <cstdlib>
 #include <iostream>
+#include <sstream>
 
 /* ASIO configuration - Must be defined before including any ASIO headers. */
 
@@ -52,6 +53,9 @@
 /* Include ASIO config to get ASIO_SOURCE_LOCATION_DEFAULTED_PARAM macro. */
 #include "asio/detail/config.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace asio::detail
 {
 	/**
@@ -66,7 +70,7 @@ namespace asio::detail
 	void
 	throw_exception (const exception_t & exception ASIO_SOURCE_LOCATION_DEFAULTED_PARAM)
 	{
-		std::cerr << "[ASIO] Fatal error: " << exception.what() << '\n';
+		EmEn::Base::Logging::fatal("Network::ASIO", (std::stringstream{} << "Fatal error: " << exception.what()).str());
 
 		std::abort();
 	}

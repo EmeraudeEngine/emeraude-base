@@ -29,21 +29,24 @@
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
+#include <json/value.h>
 
 /* STL inclusions. */
 #include <array>
 #include <chrono>
+#include <compare>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <ios>
 #include <limits>
+#include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
-#include <stop_token>
 #include <system_error>
 #include <thread>
+#include <utility>
 #include <vector>
 
 /* Third-party inclusions. */
@@ -54,8 +57,9 @@
 #endif
 
 /* Local inclusions. */
-#include "TemporaryPath.hpp"
+#include "Animation/AnimationClip.hpp"
 #include "Animation/MD5AnimParser.hpp"
+#include "DiagnosticsCapture.hpp"
 #include "FastJSON.hpp"
 #include "INIParser.hpp"
 #include "IO/FileStream.hpp"
@@ -66,10 +70,14 @@
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
 #include "PixelFactory/FileIO.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 #include "String.hpp"
+#include "TemporaryPath.hpp"
 #include "VertexFactory/FileIO.hpp"
 #include "VertexFactory/ShapeGenerator.hpp"
 #include "WaveFactory/FileIO.hpp"
+#include "WaveFactory/Wave.hpp"
 
 namespace EmEn::Base::IO
 {
@@ -333,6 +341,8 @@ namespace EmEn::Base::IO
 
 	TEST(IOFileUtils, getRangeRefusesEveryRangeOutOfTheFile)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto path = tempFile("emeraude_base_io_range_bad.bin");
 		removeQuietly(path);
 
@@ -351,16 +361,30 @@ namespace EmEn::Base::IO
 		EXPECT_FALSE(fileGetRange({}, 0, 1, range));
 
 		removeQuietly(path);
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 4U);
+		EXPECT_EQ(captured.messages.size(), 4U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(IOFileUtils, getContentsMissingFileFails)
 	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 		const auto path = tempFile("emeraude_base_io_missing.bin");
 		removeQuietly(path);
 		EXPECT_FALSE(fileExists(path));
 
 		std::vector< uint8_t > content;
 		EXPECT_FALSE(fileGetContents(path, content));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
+		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
 	TEST(IOFileUtils, getContentsRoundsUpPartialElements)
@@ -387,7 +411,7 @@ namespace EmEn::Base::IO
 		std::string capturedMessage;
 		int calls{0};
 
-		Logging::setSink([&] (Severity severity, const char * tag, std::string_view message) {
+		auto previousSink = Logging::setSink([&] (Severity severity, const char * tag, std::string_view message) {
 			captured = severity;
 			capturedTag = tag != nullptr ? tag : "";
 			capturedMessage = std::string{message};
@@ -400,7 +424,7 @@ namespace EmEn::Base::IO
 		std::vector< uint8_t > content;
 		EXPECT_FALSE(fileGetContents(path, content));
 
-		Logging::setSink(nullptr); /* reset before asserting (the lambda captures locals) */
+		static_cast< void >(Logging::setSink(std::move(previousSink))); /* the suite's guard back, before asserting (the lambda captures locals) */
 
 		EXPECT_GE(calls, 1);
 		EXPECT_EQ(captured, Severity::Error);
@@ -442,6 +466,8 @@ TEST(IOFileUtils, permissionsOnRealFile)
 
 TEST(IOForEachDirectoryEntry, walksFlatAndRecursiveStopsEarlyAndNeverThrows)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::error_code errorCode;
 
 	const auto root = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_forEachDirectoryEntry");
@@ -482,6 +508,12 @@ TEST(IOForEachDirectoryEntry, walksFlatAndRecursiveStopsEarlyAndNeverThrows)
 	EXPECT_TRUE(EmEn::Base::IO::directoryEntries(root / "does-not-exist").empty());
 
 	std::filesystem::remove_all(root, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(IOConfinedPath, refusesEveryPathThatLeavesTheBase)
@@ -598,12 +630,20 @@ TEST(IOSystemPath, shortPathsAreUnchangedAndLongOnesStayUsable)
 
 TEST(IORenameFile, refusesEmptyAndMissingPaths)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EXPECT_FALSE(EmEn::Base::IO::renameFile({}, "x"));
 	EXPECT_FALSE(EmEn::Base::IO::renameFile("x", {}));
 	std::error_code errorCode;
 	const auto directory = std::filesystem::temp_directory_path(errorCode);
 
 	EXPECT_FALSE(EmEn::Base::IO::renameFile(directory / "emeraude-io-no-such-file", directory / "emeraude-io-target"));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* IO::systemErrorText() (2026-11-04): MSVC's message() of the system category is in the ANSI code page ("Le chemin
@@ -649,11 +689,19 @@ TEST(IOSystemErrorText, everyOtherCategoryAnswersMessage)
  * directoryExists() and fileGetContents(), and the readers refusing what is not a regular file. */
 TEST(IOFileUtils, filesizeIsZeroOnAnError)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* file_size() answers static_cast< uintmax_t >(-1) on an error: a missing file was 18446744073709551615 bytes. */
 	const auto missing = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_no_such_file.bin");
 
 	EXPECT_EQ(EmEn::Base::IO::filesize(missing), 0U);
 	EXPECT_EQ(EmEn::Base::IO::filesize(missing.parent_path()), 0U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(IOFileUtils, aBareFileNameNeedsNoDirectoryCreated)
@@ -709,14 +757,14 @@ TEST(IOFileUtils, aPathThroughAFileIsSimplyNoDirectory)
 	ASSERT_TRUE(EmEn::Base::IO::filePutContents(file, std::string_view{"x"}));
 
 	int calls{0};
-	EmEn::Base::Logging::setSink([&calls] (EmEn::Base::Severity /*severity*/, const char * /*tag*/, std::string_view /*message*/) {
+	auto previousSink = EmEn::Base::Logging::setSink([&calls] (EmEn::Base::Severity /*severity*/, const char * /*tag*/, std::string_view /*message*/) {
 		++calls;
 	});
 
 	const bool throughFile = EmEn::Base::IO::directoryExists(file / "child");
 	const bool missingParents = EmEn::Base::IO::directoryExists(file.parent_path() / "emeraude_io_no_such_parent" / "a" / "b");
 
-	EmEn::Base::Logging::setSink(nullptr);
+	static_cast< void >(EmEn::Base::Logging::setSink(std::move(previousSink)));
 
 	EXPECT_FALSE(throughFile);
 	EXPECT_FALSE(missingParents);
@@ -727,6 +775,8 @@ TEST(IOFileUtils, aPathThroughAFileIsSimplyNoDirectory)
 
 TEST(IOFileUtils, readersRefuseADirectory)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::error_code errorCode;
 	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_dir_as_file");
 	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
@@ -747,6 +797,12 @@ TEST(IOFileUtils, readersRefuseADirectory)
 	EXPECT_FALSE(EmEn::Base::IO::ZipReader::isArchiveFile(directory));
 
 	std::filesystem::remove_all(directory, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 12U);
+	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 namespace
@@ -773,6 +829,8 @@ namespace
 
 TEST(IOFileUtils, aWriteAsideReplacesWholeOrNotAtAll)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::error_code errorCode;
 	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_aside");
 	ASSERT_TRUE(std::filesystem::create_directories(directory, errorCode)) << errorCode.message();
@@ -805,10 +863,18 @@ TEST(IOFileUtils, aWriteAsideReplacesWholeOrNotAtAll)
 	EXPECT_EQ(countWritingLeftovers(directory), 0U);
 
 	std::filesystem::remove_all(directory, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(IOFileUtils, aRefusedWriteKeepsTheExistingFile)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The three FileIO writers opened — truncated — the target before refusing an extension or failing to encode: an
 	 * existing file was emptied, a new one left empty. They encode in memory and write aside now (owner decision). */
 	using namespace EmEn::Base;
@@ -863,10 +929,22 @@ TEST(IOFileUtils, aRefusedWriteKeepsTheExistingFile)
 	EXPECT_EQ(countWritingLeftovers(directory), 0U);
 
 	std::filesystem::remove_all(directory, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileIO"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileIO"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 1U);
+	EXPECT_EQ(captured.messages.size(), 7U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(IOFileUtils, theRefusalsDataCanReach)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The coverage pass (2026-10-18): the refusals a path or a range from data can trigger. */
 	using namespace EmEn::Base;
 
@@ -914,10 +992,20 @@ TEST(IOFileUtils, theRefusalsDataCanReach)
 	EXPECT_FALSE(IO::exists(directory / "sound.json"));
 
 	std::filesystem::remove_all(directory, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 8U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileIO"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileIO"), 3U);
+	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(IOFileUtils, filesizeOfADirectoryIsZero)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* MSVC's file_size() answers a directory's size with no error (Windows peer, 2026-10-18: 524288 for %TEMP%). */
 	std::error_code errorCode;
 	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_io_filesize_dir");
@@ -926,16 +1014,30 @@ TEST(IOFileUtils, filesizeOfADirectoryIsZero)
 	EXPECT_EQ(EmEn::Base::IO::filesize(directory), 0U);
 
 	std::filesystem::remove_all(directory, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 #if IS_LINUX
 TEST(IOFileUtils, aPseudoFileIsRefusedNotReadEmpty)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* /proc claims 0 bytes or cannot seek to its end: refused explicitly (owner decision), never read as empty. */
 	std::string text{"untouched"};
 
 	EXPECT_FALSE(EmEn::Base::IO::fileGetContents("/proc/self/status", text));
 	EXPECT_EQ(text, "untouched");
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 #endif
 
@@ -1064,6 +1166,8 @@ namespace
 
 TEST(IOFileUtils, readersRefuseAFifoWithoutBlocking)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* A FIFO without a writer blocked std::ifstream::open() FOREVER: a path from data could freeze a loading thread. */
 	expectRefusedAtOnce("emeraude_io_fifo_string", [] (const std::filesystem::path & path) {
 		std::string content;
@@ -1096,9 +1200,19 @@ TEST(IOFileUtils, readersRefuseAFifoWithoutBlocking)
 		EmEn::Base::IO::ZipReader reader{path};
 		return reader.open();
 	});
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 12U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 1U);
+	EXPECT_EQ(captured.messages.size(), 14U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 TEST(IOFileUtils, writersRefuseAFifoWithoutBlocking)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Opening a FIFO for WRITING without a reader blocked std::ofstream::open() forever too (2026-10-18). */
 	expectRefusedAtOnce("emeraude_io_wfifo_create", [] (const std::filesystem::path & path) {
 		return EmEn::Base::IO::createFile(path);
@@ -1141,5 +1255,12 @@ TEST(IOFileUtils, writersRefuseAFifoWithoutBlocking)
 
 		return accepted;
 	}, BlockedEnd::Writer);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 8U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 1U);
+	EXPECT_EQ(captured.messages.size(), 9U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 #endif

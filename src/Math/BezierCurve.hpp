@@ -38,6 +38,9 @@
 /* Local inclusions for usages. */
 #include "Vector.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::Math
 {
 	/**
@@ -92,14 +95,14 @@ namespace EmEn::Base::Math
 			{
 				if ( m_points.size() < 3 )
 				{
-					std::cerr << "BezierCurve::synthesize(), the curve needs at least 3 points !" "\n";
+					Logging::error("Math::BezierCurve", "BezierCurve::synthesize(), the curve needs at least 3 points !");
 
 					return false;
 				}
 
 				if ( segments < 2 )
 				{
-					std::cerr << "BezierCurve::synthesize(), the segment parameter must be at least 2 !" "\n";
+					Logging::error("Math::BezierCurve", "BezierCurve::synthesize(), the segment parameter must be at least 2 !");
 
 					return false;
 				}

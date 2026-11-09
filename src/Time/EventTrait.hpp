@@ -43,6 +43,9 @@
 #include "TimedEvent.hpp"
 #include "Types.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::Time
 {
 	/**
@@ -226,7 +229,7 @@ namespace EmEn::Base::Time
 
 				if ( !result.second )
 				{
-					std::cerr << "EventTrait::createTimer(), unable to create a timer !" "\n";
+					Logging::error("Time::EventTrait", "EventTrait::createTimer(), unable to create a timer !");
 
 					return {};
 				}

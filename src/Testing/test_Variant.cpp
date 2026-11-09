@@ -37,9 +37,13 @@
 #include <utility>
 
 /* Local inclusions. */
-#include "Variant.hpp"
 #include "Logging/Logging.hpp"
 #include "Logging/Severity.hpp"
+#include "Math/CartesianFrame.hpp"
+#include "Math/Matrix.hpp"
+#include "Math/Vector.hpp"
+#include "PixelFactory/Color.hpp"
+#include "Variant.hpp"
 
 namespace EmEn::Base
 {
@@ -170,7 +174,7 @@ namespace EmEn::Base
 
 		Capture capture;
 
-		Logging::setSink([&capture](Severity severity, const char * tag, std::string_view message) noexcept {
+		auto previousSink = Logging::setSink([&capture](Severity severity, const char * tag, std::string_view message) noexcept {
 			++capture.count;
 			capture.severity = severity;
 			capture.tag = tag != nullptr ? tag : "";
@@ -196,7 +200,7 @@ namespace EmEn::Base
 		EXPECT_FLOAT_EQ(v.asVector3Float().x(), 0.0F);
 		EXPECT_EQ(capture.count, 1);
 
-		Logging::setSink({});   /* restore the default sink */
+		static_cast< void >(Logging::setSink(std::move(previousSink)));   /* the suite's guard comes back */
 	}
 
 	/* ===== Every alternative (the coverage pass, 2026-10-18) ===== */

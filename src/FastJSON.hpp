@@ -38,6 +38,7 @@
 #include <iostream>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -50,6 +51,7 @@
 #include "json/json.h"
 
 /* Local inclusions. */
+#include "Logging/Logging.hpp"
 #include "Math/Matrix.hpp"
 #include "PixelFactory/Color.hpp"
 
@@ -113,7 +115,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -125,7 +127,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not an array !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not an array !").str());
 			}
 
 			return std::nullopt;
@@ -149,7 +151,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -161,7 +163,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not an object !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not an object !").str());
 			}
 
 			return std::nullopt;
@@ -311,7 +313,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -323,7 +325,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if ( !value.has_value() )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not convertible to the requested type (wrong type, out of range or non-finite) !" "\n";
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not convertible to the requested type (wrong type, out of range or non-finite) !").str());
 			}
 		}
 
@@ -346,7 +348,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -358,7 +360,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if ( !value.has_value() )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not a string !" "\n";
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not a string !").str());
 			}
 		}
 
@@ -414,7 +416,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -426,7 +428,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not an array of " << Traits::dim << " items !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not an array of " << Traits::dim << " items !").str());
 			}
 
 			return std::nullopt;
@@ -455,7 +457,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -467,7 +469,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not an array of " << element_count << " items !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not an array of " << element_count << " items !").str());
 			}
 
 			return std::nullopt;
@@ -494,7 +496,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is missing !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is missing !").str());
 			}
 
 			return std::nullopt;
@@ -506,7 +508,7 @@ namespace EmEn::Base::FastJSON
 		{
 			if constexpr ( IsDebug )
 			{
-				std::cerr << "[FastJSON-DEBUG] Key '" << key << "' is not an array !" << std::endl;
+				Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' is not an array !").str());
 			}
 
 			return std::nullopt;
@@ -523,7 +525,7 @@ namespace EmEn::Base::FastJSON
 			default:
 				if constexpr ( IsDebug )
 				{
-					std::cerr << "[FastJSON-DEBUG] Key '" << key << "' cannot be converted to a color !" << std::endl;
+					Logging::error("FastJSON", (std::stringstream{} << "Key '" << key << "' cannot be converted to a color !").str());
 				}
 
 				return std::nullopt;

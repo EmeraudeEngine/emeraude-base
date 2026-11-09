@@ -55,6 +55,9 @@
 #include "PixelFactory/Pixmap.hpp"
 #include "Types.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::VertexFactory
 {
 	template< typename vertex_data_t = float >
@@ -241,21 +244,21 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( cellCount == 0 )
 				{
-					std::cerr << "Grid::initializeByCellSize(), the cell count parameter must be at least 1 !" "\n";
+					Logging::error("VertexFactory::Grid", "Grid::initializeByCellSize(), the cell count parameter must be at least 1 !");
 
 					return false;
 				}
 
 				if ( cellCount > MaxCellCount )
 				{
-					std::cerr << "Grid::initializeByCellSize(), the cell count " << static_cast< uint64_t >(cellCount) << " exceeds " << static_cast< uint64_t >(MaxCellCount) << " (the point count would overflow the index type) !" "\n";
+					Logging::error("VertexFactory::Grid", (std::stringstream{} << "Grid::initializeByCellSize(), the cell count " << static_cast< uint64_t >(cellCount) << " exceeds " << static_cast< uint64_t >(MaxCellCount) << " (the point count would overflow the index type) !").str());
 
 					return false;
 				}
 
 				if ( !std::isfinite(cellSize) || cellSize < 0 )
 				{
-					std::cerr << "Grid::initializeByCellSize(), the cell size parameter must be finite and positive !" "\n";
+					Logging::error("VertexFactory::Grid", "Grid::initializeByCellSize(), the cell size parameter must be finite and positive !");
 
 					return false;
 				}
@@ -273,7 +276,7 @@ namespace EmEn::Base::VertexFactory
 					/* Shows memory usage */
 					const auto memoryAllocated = m_pointHeights.size() * sizeof(vertex_data_t);
 
-					std::cout << "[DEBUG:VERTEX_FACTORY] " << ( static_cast< vertex_data_t >(memoryAllocated) / 1048576 ) << " Mib allocated." "\n";
+					Logging::debug("VertexFactory::Grid", (std::stringstream{} << ( static_cast< vertex_data_t >(memoryAllocated) / 1048576 ) << " Mib allocated.").str());
 				}
 
 				constexpr auto Half = static_cast< vertex_data_t >(0.5);
@@ -318,21 +321,21 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( !std::isfinite(gridSize) || gridSize < 0 )
 				{
-					std::cerr << "Grid::initializeByGridSize(), the grid size parameter must be finite and positive !" "\n";
+					Logging::error("VertexFactory::Grid", "Grid::initializeByGridSize(), the grid size parameter must be finite and positive !");
 
 					return false;
 				}
 
 				if ( gridDivision == 0 )
 				{
-					std::cerr << "Grid::initializeByGridSize(), the grid division parameter must be at least 1 !" "\n";
+					Logging::error("VertexFactory::Grid", "Grid::initializeByGridSize(), the grid division parameter must be at least 1 !");
 
 					return false;
 				}
 
 				if ( gridDivision > MaxCellCount )
 				{
-					std::cerr << "Grid::initializeByGridSize(), the grid division " << static_cast< uint64_t >(gridDivision) << " exceeds " << static_cast< uint64_t >(MaxCellCount) << " (the point count would overflow the index type) !" "\n";
+					Logging::error("VertexFactory::Grid", (std::stringstream{} << "Grid::initializeByGridSize(), the grid division " << static_cast< uint64_t >(gridDivision) << " exceeds " << static_cast< uint64_t >(MaxCellCount) << " (the point count would overflow the index type) !").str());
 
 					return false;
 				}
@@ -350,7 +353,7 @@ namespace EmEn::Base::VertexFactory
 					/* Shows memory usage */
 					const auto memoryAllocated = m_pointHeights.size() * sizeof(vertex_data_t);
 
-					std::cout << "[DEBUG:VERTEX_FACTORY] " << ( static_cast< vertex_data_t >(memoryAllocated) / 1048576 ) << " Mib allocated." "\n";
+					Logging::debug("VertexFactory::Grid", (std::stringstream{} << ( static_cast< vertex_data_t >(memoryAllocated) / 1048576 ) << " Mib allocated.").str());
 				}
 
 				constexpr auto Half = static_cast< vertex_data_t >(0.5);
@@ -398,7 +401,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( !map.isValid() || m_squaredQuadCount == 0 )
 				{
-					std::cerr << "Grid::applyDisplacementMapping(), Pixmap is not usable !" "\n";
+					Logging::error("VertexFactory::Grid", "Grid::applyDisplacementMapping(), Pixmap is not usable !");
 
 					return;
 				}
@@ -1453,7 +1456,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( indexOnX >= m_squaredQuadCount || indexOnY >= m_squaredQuadCount )
 				{
-					std::cerr << "Grid::quad(), quad indexes X:" << indexOnX << ", Y:" << indexOnY << " overflows " << m_squaredQuadCount << " !" "\n";
+					Logging::error("VertexFactory::Grid", (std::stringstream{} << "Grid::quad(), quad indexes X:" << indexOnX << ", Y:" << indexOnY << " overflows " << m_squaredQuadCount << " !").str());
 
 					return {};
 				}
@@ -2153,7 +2156,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( step == 0 || m_squaredQuadCount == 0 || m_squaredQuadCount % step != 0 )
 				{
-					std::cerr << "Grid::coarsened(), the step (" << step << ") must divide the cell count (" << m_squaredQuadCount << ") !" "\n";
+					Logging::error("VertexFactory::Grid", (std::stringstream{} << "Grid::coarsened(), the step (" << step << ") must divide the cell count (" << m_squaredQuadCount << ") !").str());
 
 					return result;
 				}
@@ -2215,7 +2218,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( m_squaredQuadCount < 2 || m_squaredQuadCount % 2 != 0 )
 				{
-					std::cerr << "Grid::halvedTent(), the cell count (" << m_squaredQuadCount << ") must be even and at least 2 !" "\n";
+					Logging::error("VertexFactory::Grid", (std::stringstream{} << "Grid::halvedTent(), the cell count (" << m_squaredQuadCount << ") must be even and at least 2 !").str());
 
 					return result;
 				}

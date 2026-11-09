@@ -30,11 +30,15 @@
 #include <cstdint>
 #include <ctime>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <utility>
 
 /* Local inclusions for usages. */
 #include "Time/Types.hpp"
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
 
 namespace EmEn::Base::Time::Elapsed
 {
@@ -101,22 +105,22 @@ namespace EmEn::Base::Time::Elapsed
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Seconds) )
 				{
-					std::cout << m_label << " (CPU) : " << static_cast< double >(nanoseconds) / 1000000000.0 << " s" "\n";
+					Logging::info("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << static_cast< double >(nanoseconds) / 1000000000.0 << " s").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Milliseconds) )
 				{
-					std::cout << m_label << " (CPU) : " << static_cast< double >(nanoseconds) / 1000000.0 << " ms" "\n";
+					Logging::info("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << static_cast< double >(nanoseconds) / 1000000.0 << " ms").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Microseconds) )
 				{
-					std::cout << m_label << " (CPU) : " << static_cast< double >(nanoseconds) / 1000.0 << " μs" "\n";
+					Logging::info("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << static_cast< double >(nanoseconds) / 1000.0 << " μs").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Nanoseconds) )
 				{
-					std::cout << m_label << " (CPU) : " << nanoseconds << " ns" "\n";
+					Logging::info("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << nanoseconds << " ns").str());
 				}
 			}
 
@@ -204,7 +208,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " (CPU) : " << interval << " s" "\n";
+					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << interval << " s").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Milliseconds) )
@@ -216,7 +220,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " (CPU) : " << interval << " ms" "\n";
+					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << interval << " ms").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Microseconds) )
@@ -228,7 +232,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " : " << interval << " μs" "\n";
+					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " : " << interval << " μs").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Nanoseconds) )
@@ -238,7 +242,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					std::cerr << m_label << " (CPU) : " << nanoseconds << " ns" "\n";
+					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << nanoseconds << " ns").str());
 				}
 			}
 

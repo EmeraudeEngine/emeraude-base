@@ -42,6 +42,7 @@
 #include "AnimationChannel.hpp"
 #include "AnimationClip.hpp"
 #include "IO/IO.hpp"
+#include "Logging/Logging.hpp"
 #include "Math/Matrix.hpp"
 #include "Math/Quaternion.hpp"
 #include "Math/Vector.hpp"
@@ -75,7 +76,7 @@ namespace EmEn::Base::Animation
 
 				if ( !IO::openInputFile(filepath, file, std::ios::in) )
 				{
-					std::cerr << "[MD5AnimParser] Failed to open '" << IO::toU8String(filepath) << "' !\n";
+					Logging::error("Animation::MD5AnimParser", (std::stringstream{} << "Failed to open '" << IO::toU8String(filepath) << "' !").str());
 
 					return {};
 				}
@@ -246,7 +247,7 @@ namespace EmEn::Base::Animation
 
 				if ( hierarchy.empty() || frames.empty() || frameRate <= 0 )
 				{
-					std::cerr << "[MD5AnimParser] Invalid .md5anim data !\n";
+					Logging::error("Animation::MD5AnimParser", "Invalid .md5anim data !");
 
 					return {};
 				}
@@ -258,7 +259,7 @@ namespace EmEn::Base::Animation
 					baseframe.size() != hierarchy.size() ||
 					frames.size() < static_cast< size_t >(numFrames) )
 				{
-					std::cerr << "[MD5AnimParser] The declared joint or frame count does not match the .md5anim data !\n";
+					Logging::error("Animation::MD5AnimParser", "The declared joint or frame count does not match the .md5anim data !");
 
 					return {};
 				}
@@ -310,7 +311,7 @@ namespace EmEn::Base::Animation
 
 						if ( h.firstComponent < 0 || static_cast< size_t >(h.firstComponent) + animatedCount > frameData.size() )
 						{
-							std::cerr << "[MD5AnimParser] A joint's animated components fall outside frame " << f << " !\n";
+							Logging::error("Animation::MD5AnimParser", (std::stringstream{} << "A joint's animated components fall outside frame " << f << " !").str());
 
 							return {};
 						}

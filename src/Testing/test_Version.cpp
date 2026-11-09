@@ -30,6 +30,13 @@
 /* Local inclusions. */
 #include "Version.hpp"
 
+/* STL inclusions. */
+#include <compare>
+#include <cstdint>
+#include <optional>
+#include <sstream>
+#include <string>
+
 namespace EmEn::Base
 {
 	TEST(Version, initDefault)
@@ -40,7 +47,7 @@ namespace EmEn::Base
 		ASSERT_EQ(version.minor(), 0);
 		ASSERT_EQ(version.revision(), 0);
 
-		std::cout << version << std::endl;
+		EXPECT_EQ((std::stringstream{} << version).str(), "0.0.0");
 	}
 
 	TEST(Version, initFromArgs)
@@ -51,7 +58,7 @@ namespace EmEn::Base
 		ASSERT_EQ(version.minor(), 9);
 		ASSERT_EQ(version.revision(), 46);
 
-		std::cout << version << std::endl;
+		EXPECT_EQ((std::stringstream{} << version).str(), "2.9.46");
 	}
 
 	TEST(Version, initFromRaw)
@@ -64,7 +71,7 @@ namespace EmEn::Base
 			ASSERT_EQ(version.minor(), 2);
 			ASSERT_EQ(version.revision(), 295);
 
-			std::cout << version << std::endl;
+			EXPECT_EQ((std::stringstream{} << version).str(), "1.2.295");
 		}
 
 		{
@@ -76,7 +83,7 @@ namespace EmEn::Base
 			ASSERT_EQ(version.value().minor(), 8);
 			ASSERT_EQ(version.value().revision(), 64);
 
-			std::cout << version.value() << std::endl;
+			EXPECT_EQ((std::stringstream{} << version.value_or(Version{})).str(), "1.8.64");
 		}
 	}
 

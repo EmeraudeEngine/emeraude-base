@@ -27,14 +27,19 @@
 #include "FileFormatWebP.hpp"
 
 /* STL inclusions. */
-#include <cstddef>
-#include <iostream>
 #include <span>
 #include <vector>
 
 /* Third-party inclusions. */
 #include <webp/decode.h>
 #include <webp/encode.h>
+#include <webp/types.h>
+
+/* Local inclusions. */
+#include "IO/ByteStream.hpp"
+#include "Logging/Logging.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 
 namespace EmEn::Base::PixelFactory
 {
@@ -54,7 +59,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( size == 0 )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP, the stream is empty !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP, the stream is empty !");
 
 			return false;
 		}
@@ -81,7 +86,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( WebPGetInfo(encoded.data(), encoded.size(), &width, &height) == 0 )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::readStream(), not a valid WebP bitstream !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::readStream(), not a valid WebP bitstream !");
 
 			return false;
 		}
@@ -94,7 +99,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( WebPGetFeatures(encoded.data(), encoded.size(), &features) != VP8_STATUS_OK )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::readStream(), unable to read the bitstream features !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::readStream(), unable to read the bitstream features !");
 
 			return false;
 		}
@@ -107,7 +112,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( decoded == nullptr )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::readStream(), the WebP decoder rejected the bitstream !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::readStream(), the WebP decoder rejected the bitstream !");
 
 			return false;
 		}
@@ -130,7 +135,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( !success )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::readStream(), unable to allocate the pixmap !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::readStream(), unable to allocate the pixmap !");
 
 			return false;
 		}
@@ -145,7 +150,7 @@ namespace EmEn::Base::PixelFactory
 	{
 		if ( !pixmap.isValid() )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::writeStream(), the pixmap is invalid !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::writeStream(), the pixmap is invalid !");
 
 			return false;
 		}
@@ -156,7 +161,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( channelMode != ChannelMode::RGB && channelMode != ChannelMode::RGBA )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::writeStream(), WebP handles RGB and RGBA only, this pixmap is grayscale !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::writeStream(), WebP handles RGB and RGBA only, this pixmap is grayscale !");
 
 			return false;
 		}
@@ -175,7 +180,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( encodedSize == 0 || encoded == nullptr )
 		{
-			std::cerr << "PixelFactory::FileFormatWebP::writeStream(), the WebP encoder failed !" "\n";
+			Logging::error("PixelFactory::FileFormatWebP", "PixelFactory::FileFormatWebP::writeStream(), the WebP encoder failed !");
 
 			return false;
 		}

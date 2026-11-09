@@ -591,7 +591,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::whiteNoise(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::whiteNoise(), wave is not initialized !");
 
 					return false;
 				}
@@ -637,7 +637,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::pinkNoise(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::pinkNoise(), wave is not initialized !");
 
 					return false;
 				}
@@ -697,7 +697,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::brownNoise(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::brownNoise(), wave is not initialized !");
 
 					return false;
 				}
@@ -739,7 +739,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::blueNoise(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::blueNoise(), wave is not initialized !");
 
 					return false;
 				}
@@ -786,7 +786,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() ) [[unlikely]]
 				{
-					std::cerr << "Synthesizer::sineWave(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::sineWave(), wave is not initialized !");
 
 					return false;
 				}
@@ -833,7 +833,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() ) [[unlikely]]
 				{
-					std::cerr << "Synthesizer::squareWave(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::squareWave(), wave is not initialized !");
 
 					return false;
 				}
@@ -880,7 +880,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() ) [[unlikely]]
 				{
-					std::cerr << "Synthesizer::triangleWave(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::triangleWave(), wave is not initialized !");
 
 					return false;
 				}
@@ -933,7 +933,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() ) [[unlikely]]
 				{
-					std::cerr << "Synthesizer::sawtoothWave(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::sawtoothWave(), wave is not initialized !");
 
 					return false;
 				}
@@ -982,7 +982,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyADSR(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyADSR(), wave is not initialized !");
 
 					return false;
 				}
@@ -1060,7 +1060,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::pitchSweep(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::pitchSweep(), wave is not initialized !");
 
 					return false;
 				}
@@ -1111,7 +1111,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::noiseBurst(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::noiseBurst(), wave is not initialized !");
 
 					return false;
 				}
@@ -1170,7 +1170,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyVibrato(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyVibrato(), wave is not initialized !");
 
 					return false;
 				}
@@ -1229,7 +1229,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyTremolo(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyTremolo(), wave is not initialized !");
 
 					return false;
 				}
@@ -1270,7 +1270,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyFadeIn(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyFadeIn(), wave is not initialized !");
 
 					return false;
 				}
@@ -1310,7 +1310,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyFadeOut(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyFadeOut(), wave is not initialized !");
 
 					return false;
 				}
@@ -1352,7 +1352,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyLowPass(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyLowPass(), wave is not initialized !");
 
 					return false;
 				}
@@ -1399,7 +1399,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyHighPass(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyHighPass(), wave is not initialized !");
 
 					return false;
 				}
@@ -1448,7 +1448,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() || !other.isValid() )
 				{
-					std::cerr << "Synthesizer::mix(), wave(s) not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::mix(), wave(s) not initialized !");
 
 					return false;
 				}
@@ -1492,7 +1492,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyRingModulation(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyRingModulation(), wave is not initialized !");
 
 					return false;
 				}
@@ -1532,7 +1532,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyBitCrush(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyBitCrush(), wave is not initialized !");
 
 					return false;
 				}
@@ -1574,7 +1574,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyDistortion(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyDistortion(), wave is not initialized !");
 
 					return false;
 				}
@@ -1632,7 +1632,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyOverdrive(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyOverdrive(), wave is not initialized !");
 
 					return false;
 				}
@@ -1696,7 +1696,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyFuzz(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyFuzz(), wave is not initialized !");
 
 					return false;
 				}
@@ -1759,7 +1759,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyChorus(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyChorus(), wave is not initialized !");
 
 					return false;
 				}
@@ -1837,7 +1837,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyFlanger(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyFlanger(), wave is not initialized !");
 
 					return false;
 				}
@@ -1918,7 +1918,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyPhaser(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyPhaser(), wave is not initialized !");
 
 					return false;
 				}
@@ -2015,7 +2015,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyDelay(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyDelay(), wave is not initialized !");
 
 					return false;
 				}
@@ -2075,7 +2075,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyReverb(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyReverb(), wave is not initialized !");
 
 					return false;
 				}
@@ -2187,7 +2187,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyWahWah(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyWahWah(), wave is not initialized !");
 
 					return false;
 				}
@@ -2266,7 +2266,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyAutoWah(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyAutoWah(), wave is not initialized !");
 
 					return false;
 				}
@@ -2357,7 +2357,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyCompressor(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyCompressor(), wave is not initialized !");
 
 					return false;
 				}
@@ -2453,7 +2453,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyNoiseGate(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyNoiseGate(), wave is not initialized !");
 
 					return false;
 				}
@@ -2533,7 +2533,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applyPitchShift(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applyPitchShift(), wave is not initialized !");
 
 					return false;
 				}
@@ -2604,7 +2604,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::applySampleRateReduce(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::applySampleRateReduce(), wave is not initialized !");
 
 					return false;
 				}
@@ -2656,7 +2656,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::reverse(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::reverse(), wave is not initialized !");
 
 					return false;
 				}
@@ -2684,7 +2684,7 @@ namespace EmEn::Base::WaveFactory
 			{
 				if ( !m_wave.isValid() )
 				{
-					std::cerr << "Synthesizer::normalize(), wave is not initialized !" "\n";
+					Logging::error("WaveFactory::Synthesizer", "Synthesizer::normalize(), wave is not initialized !");
 
 					return false;
 				}

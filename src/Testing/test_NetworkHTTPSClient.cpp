@@ -47,6 +47,8 @@
 #include "asio.hpp"
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Network/Hostname.hpp"
 #include "Network/HTTPRequest.hpp"
 #include "Network/HTTPResponse.hpp"
@@ -315,6 +317,8 @@ TEST(NetworkHTTPSClient, followsRedirectChain)
 
 TEST(NetworkHTTPSClient, redirectLoopIsCapped)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -334,10 +338,18 @@ TEST(NetworkHTTPSClient, redirectLoopIsCapped)
 
 	/* Initial request + 3 followed redirects. */
 	EXPECT_EQ(server.requestCount(), 4U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, refusesDowngradeRedirect)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -352,6 +364,12 @@ TEST(NetworkHTTPSClient, refusesDowngradeRedirect)
 
 	EXPECT_FALSE(client.get(serverURI(server, "/secure")).has_value());
 	EXPECT_EQ(server.requestCount(), 1U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, downloadStreamsToFile)
@@ -504,6 +522,8 @@ TEST(NetworkHTTPSClient, downloadWithoutHookStillWorks)
 
 TEST(NetworkHTTPSClient, downloadFailsOnErrorStatus)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -526,10 +546,18 @@ TEST(NetworkHTTPSClient, downloadFailsOnErrorStatus)
 
 	EXPECT_FALSE(client.download(serverURI(server, "/missing.bin"), filepath));
 	EXPECT_FALSE(std::filesystem::exists(filepath));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, refusesHostWithInjectedCRLF)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The host reaches a CONNECT request line, a Host: header and SNI. Percent-decoding used to
 	 * let CR/LF through, i.e. request smuggling. URIDomain must refuse the host outright. */
 	const Network::URI uri{"https://exam%0d%0aX-Smuggled:%20yes%0d%0aple.com/asset.bin"};
@@ -541,20 +569,37 @@ TEST(NetworkHTTPSClient, refusesHostWithInjectedCRLF)
 	Network::HTTPSClient client{tlsContext};
 
 	EXPECT_FALSE(client.get(uri).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, refusesHostWithControlCharacters)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	for ( const auto * raw : {"https://ex%00ample.com/", "https://ex%20ample.com/", "https://ex%09ample.com/"} )
 	{
 		const Network::URI uri{raw};
 
 		EXPECT_TRUE(uri.uriDomain().hostname().name().empty()) << raw;
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, refusesOutOfRangePortInsteadOfFallingBackTo443)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* "https://host:99999/" used to connect to 443 — a typo or a hostile input silently reaching
 	 * a different service. A declared-but-invalid port must refuse the URI. */
 	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
@@ -563,10 +608,19 @@ TEST(NetworkHTTPSClient, refusesOutOfRangePortInsteadOfFallingBackTo443)
 
 	EXPECT_FALSE(client.get(Network::URI{"https://localhost:99999/x"}).has_value());
 	EXPECT_FALSE(client.get(Network::URI{"https://localhost:abc/x"}).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 2U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, ipv6LiteralIsResolvedWithoutItsBrackets)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The authority keeps the brackets ("[::1]"), getaddrinfo() must not see them. Port 1 is
 	 * closed, so a stripped literal fails at CONNECT — never at resolution. */
 	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
@@ -577,10 +631,18 @@ TEST(NetworkHTTPSClient, ipv6LiteralIsResolvedWithoutItsBrackets)
 	Network::HTTPSClient client{tlsContext, options};
 
 	EXPECT_FALSE(client.get(Network::URI{"https://[::1]:1/x"}).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, truncatedUntilCloseBodyIsRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -607,10 +669,18 @@ TEST(NetworkHTTPSClient, truncatedUntilCloseBodyIsRejected)
 
 	EXPECT_FALSE(client.download(serverURI(server, "/asset.bin"), filepath));
 	EXPECT_FALSE(std::filesystem::exists(filepath));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, inMemoryBodyIsCapped)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -630,10 +700,18 @@ TEST(NetworkHTTPSClient, inMemoryBodyIsCapped)
 
 	/* Over the ceiling: refused rather than buffered whole. */
 	EXPECT_FALSE(client.get(serverURI(server, "/big.txt")).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, downloadIsCappedByMaxDownloadSize)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -655,6 +733,12 @@ TEST(NetworkHTTPSClient, downloadIsCappedByMaxDownloadSize)
 
 	EXPECT_FALSE(client.download(serverURI(server, "/big.bin"), filepath));
 	EXPECT_FALSE(std::filesystem::exists(filepath));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, headStaysHeadAcrossA303)
@@ -757,6 +841,8 @@ TEST(NetworkHTTPSClient, downloadOfAnEmptyBodyStillReportsProgressOnce)
 
 TEST(NetworkHTTPSClient, downloadReportsWhyItFailed)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -814,10 +900,19 @@ TEST(NetworkHTTPSClient, downloadReportsWhyItFailed)
 	EXPECT_EQ(okReport.contentType, "text/plain");
 
 	std::filesystem::remove(filepath);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, downloadReportsTLSFailureWhenTheCertificateIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Regression test for a value that existed, was documented, and was NEVER produced: until
 	 * 2026-08-28 a refused certificate came back as DownloadOutcome::Unreachable, because
 	 * TLSConnection::connect() returns one bool for "never reached the peer" and "peer refused the
@@ -848,15 +943,29 @@ TEST(NetworkHTTPSClient, downloadReportsTLSFailureWhenTheCertificateIsRefused)
 	EXPECT_FALSE(std::filesystem::exists(filepath));
 
 	std::filesystem::remove(filepath);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, refusesPlainHTTPScheme)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	asio::ssl::context tlsContext{asio::ssl::context::tls_client};
 
 	Network::HTTPSClient client{tlsContext};
 
 	EXPECT_FALSE(client.get(Network::URI{"http://localhost/clear.txt"}).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkHTTPSClient, getThroughProxyTunnel)
@@ -955,6 +1064,8 @@ TEST(NetworkHTTPSClient, environmentProxyIsUsed)
 
 TEST(NetworkHTTPSClient, truncatedBodyFails)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto credentials = generateServerCredentials("DNS:localhost");
 	ASSERT_TRUE(credentials.valid);
 
@@ -975,6 +1086,12 @@ TEST(NetworkHTTPSClient, truncatedBodyFails)
 	Network::HTTPSClient client{tlsContext};
 
 	EXPECT_FALSE(client.get(serverURI(server, "/broken.bin")).has_value());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 namespace
@@ -1199,6 +1316,8 @@ TEST(NetworkHTTPSClient, closingAnIdleConnectionDoesNotWaitForASilentPeer)
 
 TEST(NetworkHTTPSClient, theTotalTimeoutIsOneBudgetNotASumOfOperationTimeouts)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Every transport step allows 10 s, the whole request 400 ms, and the server answers after 2 s: the request must
 	 * end at the total budget, not when the (allowed) read completes. */
 	const auto credentials = generateServerCredentials("DNS:localhost");
@@ -1230,4 +1349,11 @@ TEST(NetworkHTTPSClient, theTotalTimeoutIsOneBudgetNotASumOfOperationTimeouts)
 	EXPECT_FALSE(result.has_value());
 	EXPECT_EQ(report.outcome, Network::DownloadOutcome::Timeout);
 	EXPECT_LT(elapsed, std::chrono::milliseconds{1500});
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

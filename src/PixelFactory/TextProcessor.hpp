@@ -32,6 +32,7 @@
 
 /* Local inclusions. */
 #include "Font.hpp"
+#include "Logging/Logging.hpp"
 #include "Pixmap.hpp"
 #include "Types.hpp"
 
@@ -187,14 +188,14 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( m_pixmap == nullptr || !m_rectangle.isValid() )
 				{
-					std::cerr << "TextProcessor::write(), the area is not valid !" "\n";
+					Logging::error("PixelFactory::TextProcessor", "TextProcessor::write(), the area is not valid !");
 
 					return false;
 				}
 
 				if ( m_selectedFont == nullptr )
 				{
-					std::cerr << "TextProcessor::write(), there is no font selected !" "\n";
+					Logging::error("PixelFactory::TextProcessor", "TextProcessor::write(), there is no font selected !");
 
 					return false;
 				}

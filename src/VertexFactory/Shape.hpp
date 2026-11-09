@@ -59,6 +59,9 @@
 #include "TextureCoordinates.hpp"
 #include "Types.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::VertexFactory
 {
 	/**
@@ -148,7 +151,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( triangleCount == 0 )
 				{
-					std::cerr << "Shape::reserveData(), reserving data with triangle count equals to zero !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::reserveData(), reserving data with triangle count equals to zero !");
 
 					return;
 				}
@@ -201,7 +204,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !somethingReserved )
 				{
-					std::cerr << "Shape::reserveData(), trying to reserve data with all parameters set to zero !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::reserveData(), trying to reserve data with all parameters set to zero !");
 				}
 			}
 
@@ -764,7 +767,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::generateTextureCoordinates(), geometry data is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::generateTextureCoordinates(), geometry data is empty !");
 
 					return false;
 				}
@@ -801,7 +804,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeTriangleNormal(), geometry data is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeTriangleNormal(), geometry data is empty !");
 
 					return false;
 				}
@@ -840,7 +843,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeTriangleTangent(), geometry data is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeTriangleTangent(), geometry data is empty !");
 
 					return false;
 				}
@@ -852,7 +855,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !this->isTextureCoordinatesAvailable() )
 				{
-					std::cerr << "Shape::computeTriangleTangent(), there is no texture coordinates !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeTriangleTangent(), there is no texture coordinates !");
 
 					return false;
 				}
@@ -886,7 +889,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeTriangleTangentFromEdge(), geometry data is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeTriangleTangentFromEdge(), geometry data is empty !");
 
 					return false;
 				}
@@ -942,7 +945,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeTriangleTBNSpace(), geometry data is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeTriangleTBNSpace(), geometry data is empty !");
 
 					return false;
 				}
@@ -954,7 +957,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( !this->isTextureCoordinatesAvailable() )
 				{
-					std::cerr << "Shape::computeTriangleTBNSpace(), there is no texture coordinates !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeTriangleTBNSpace(), there is no texture coordinates !");
 
 					return false;
 				}
@@ -995,7 +998,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeVertexNormal(), geometry is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeVertexNormal(), geometry is empty !");
 
 					return false;
 				}
@@ -1036,7 +1039,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeVertexTangent(), geometry is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeVertexTangent(), geometry is empty !");
 
 					return false;
 				}
@@ -1082,7 +1085,7 @@ namespace EmEn::Base::VertexFactory
 			{
 				if ( m_triangles.empty() || m_vertices.empty() )
 				{
-					std::cerr << "Shape::computeVertexTBNSpace(), geometry is empty !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::computeVertexTBNSpace(), geometry is empty !");
 
 					return false;
 				}
@@ -1578,7 +1581,7 @@ namespace EmEn::Base::VertexFactory
 				 * empty buffers. It used to abort (.at()) or read out of bounds (the vertex colors). */
 				if ( !this->indicesInRange(vertexColorType != VertexColorType::None) )
 				{
-					std::cerr << "Shape::createIndexedVertexBuffer(), a triangle refers to a vertex (or a vertex color) that does not exist !" "\n";
+					Logging::error("VertexFactory::Shape", "Shape::createIndexedVertexBuffer(), a triangle refers to a vertex (or a vertex color) that does not exist !");
 
 					vertexBuffer.clear();
 					indexBuffer.clear();
@@ -2216,13 +2219,9 @@ namespace EmEn::Base::VertexFactory
 
 				if constexpr ( VertexFactoryDebugEnabled )
 				{
-					std::cout <<
-						"[DEBUG:VERTEX_FACTORY] Updating shape infos" "\n" <<
-						m_boundingBox <<
-						m_boundingSphere <<
-						"Farthest distance : " << m_farthestDistance << "\n"
+					Logging::debug("VertexFactory::Shape", (std::stringstream{} << "Updating shape infos" "\n" << m_boundingBox << m_boundingSphere << "Farthest distance : " << m_farthestDistance << "\n"
 						"Centroid : " << centroid << "\n"
-						"Centroid distance : " << centroid.length() << "\n";
+						"Centroid distance : " << centroid.length()).str());
 				}
 			}
 
@@ -2326,7 +2325,7 @@ namespace EmEn::Base::VertexFactory
 					return true;
 				}
 
-				std::cerr << "Shape::" << caller << "(), a triangle refers to a vertex that does not exist, nothing computed !" "\n";
+				Logging::error("VertexFactory::Shape", (std::stringstream{} << "Shape::" << caller << "(), a triangle refers to a vertex that does not exist, nothing computed !").str());
 
 				return false;
 			}

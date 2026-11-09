@@ -25,15 +25,28 @@
  */
 
 /* STL inclusions. */
-#include <iostream>
+#include <string_view>
 
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
+
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+#include "Logging/Severity.hpp"
 
 int
 main (int argc, char * * argv)
 {
 	::testing::InitGoogleTest(&argc, argv);
+
+	/* NOTE: The guard (owner, 2026-11-09: no direct std::cout / std::cerr, and no diagnostic left on the terminal). A
+	 * message that reaches the Logging sink outside Testing::captureDiagnostics() fails the running test: a test that
+	 * provokes a refusal captures it and asserts its tag and severity (docs/error-handling.md § 7). The capture puts
+	 * this guard back when it returns. */
+	static_cast< void >(EmEn::Base::Logging::setSink([] (EmEn::Base::Severity severity, const char * tag, std::string_view message) {
+		ADD_FAILURE() << "Uncaptured diagnostic [" << (tag != nullptr ? tag : "") << "] (" << EmEn::Base::to_cstring(severity) << ") " << message <<
+			"\nWrap the call in EmEn::Base::Testing::captureDiagnostics() and assert it.";
+	}));
 
 	return RUN_ALL_TESTS();
 }

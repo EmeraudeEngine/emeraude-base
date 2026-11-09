@@ -193,8 +193,20 @@ Logging::log(Severity::Warning, "WaveFactory", message);
   → `std::cerr`; when the **engine Tracer** is running it registers itself
   as the sink, so base diagnostics flow into the Tracer (files, colour, tag filtering)
   automatically — base stays engine-agnostic.
-- **No new raw `std::cerr`/`std::cout`** in base. The legacy raw-`cerr` sites migrate to the
-  hook **progressively, per module**, during phases A.2/A.3 (not in one diff).
+- **Rule (owner, 2026-11-09): no direct access to `std::cout`, `std::cerr`, `std::clog`, `printf`/`fprintf`/`puts`
+  or `stdout`/`stderr` anywhere in base** — the engine uses its Tracer, base uses this sink. The 333 legacy sites
+  were migrated in one lot (2026-11-09); the cascade gate enforces it (projet-alpha `tools/gate/gate.py`, step
+  `direct-io`, with its allow-list). The only places allowed to touch the streams:
+  - the default sink itself (`src/Logging/Logging.cpp`);
+  - the test infrastructure: `src/Testing/DiagnosticsCapture.hpp` (redirects them to capture), `test_Logging.cpp`
+    (tests the default sink), the fuzz harnesses (`src/Fuzzing/`).
+- **A third-party library's own messages are routed too**: libjpeg's `output_message` (warnings such as
+  "Premature end of JPEG file"), libtiff's error and warning handlers (per handle, `TIFFOpenOptions`, libtiff >= 4.5),
+  libpng's warning callback. A library default that writes to `stderr` is a violation like a raw write.
+- A composed message is built with `(std::stringstream{} << a << b).str()` (C++20, LWG 1203), or `+` on strings.
+- Severity of a migrated site: a former `cerr` is `Error` (`Warning` when the text says so), a former `cout` is
+  `Info`, an output behind a `…DebugEnabled` switch is `Debug` (compiled out of a Release build), a report followed
+  by `std::abort()` is `Fatal`.
 - `Severity` is `EmEn::Base::Severity` ([`/src/Logging/Severity.hpp`](../src/Logging/Severity.hpp)).
 
 ## 7. Testing the contract (no fix without a test)
@@ -213,6 +225,15 @@ the A.1 sanitizers.
   returns the messages (`count(severity, tag)`) and the raw stream text. Assert the expected severity and tag AND an
   empty `standardError`: a raw `std::cerr` write bypasses the sink, so neither an application nor a fuzz target can
   filter it (the URI refusals flooded `fuzz_uri`, 2026-11-06).
+- **The suite's guard (2026-11-09)**: `src/Testing/main.cpp` installs a sink that FAILS the running test on any
+  diagnostic, every severity, reaching it outside `captureDiagnostics()` ("Uncaptured diagnostic [tag] (severity)
+  ..."). A test that provokes a message captures it and asserts it; `captureDiagnostics()` puts the guard back
+  (`Logging::setSink()` returns the sink it replaces). A test with its own temporary sink restores the previous one
+  the same way, never `setSink(nullptr)`. A death test whose `EXPECT_DEATH` matches the message calls
+  `Testing::useDefaultSinkInDeathTest()` first in its block: the child's message must reach its `stderr`.
+- **A test never prints**: a measurement (latency, speed-up, a golden fingerprint to refresh) goes to
+  `RecordProperty()` (the `--gtest_output=xml` report); a value worth printing is worth an assertion
+  (`test_Version.cpp` asserts the text form). The suite's terminal output is gtest's alone.
 
 ## Cross-references
 

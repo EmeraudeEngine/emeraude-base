@@ -33,7 +33,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <iostream>
 #include <iterator>
 #include <map>
 #include <sstream>
@@ -45,6 +44,7 @@
 #include "FileIO.hpp"
 #include "FlatHashMap.hpp"
 #include "IO/IO.hpp"
+#include "Logging/Logging.hpp"
 #include "Math/Space2D/AARectangle.hpp"
 #include "PixelFactory/Types.hpp"
 #include "Pixmap.hpp"
@@ -112,7 +112,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( !glyph.isValid() || glyph.height() > m_height )
 					{
-						std::cerr << "ASCIIGlyphArray::writeGlyphData(), unable to read glyph #" << index << "\n";
+						Logging::error("PixelFactory::Font", (std::stringstream{} << "ASCIIGlyphArray::writeGlyphData(), unable to read glyph #" << index).str());
 
 						return false;
 					}
@@ -300,7 +300,7 @@ namespace EmEn::Base::PixelFactory
 
 						if ( !FileIO::read(filepath, charsMap) )
 						{
-							std::cerr << "[ERROR] Font::readFile(), can't load pixel data from " << IO::toU8String(filepath) << " file !" "\n";
+							Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readFile(), can't load pixel data from " << IO::toU8String(filepath) << " file !").str());
 
 							return false;
 						}
@@ -312,7 +312,7 @@ namespace EmEn::Base::PixelFactory
 						return this->readTrueTypeFile(filepath, fontSize, fixedWidth);
 
 					case FontType::None :
-						std::cerr << "[ERROR] Font::readFile(), the font file " << IO::toU8String(filepath) << " is not handled !" "\n";
+						Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readFile(), the font file " << IO::toU8String(filepath) << " is not handled !").str());
 
 					return false;
 				}
@@ -333,21 +333,21 @@ namespace EmEn::Base::PixelFactory
 			{
 				if ( !charsMap.isValid() )
 				{
-					std::cerr << "[ERROR] Font::parsePixmap(), the chars map is empty !" "\n";
+					Logging::error("PixelFactory::Font", "Font::parsePixmap(), the chars map is empty !");
 
 					return false;
 				}
 
 				if ( charsMap.channelMode() != ChannelMode::Grayscale )
 				{
-					std::cerr << "[ERROR] Font::parsePixmap(), the chars map must be a grayscale !" "\n";
+					Logging::error("PixelFactory::Font", "Font::parsePixmap(), the chars map must be a grayscale !");
 
 					return false;
 				}
 
 				if ( charsMap.width() % FontMapDivisor > 0 || charsMap.height() % FontMapDivisor > 0 )
 				{
-					std::cerr << "[ERROR] Font::parsePixmap(), invalid chars map dimensions !" "\n";
+					Logging::error("PixelFactory::Font", "Font::parsePixmap(), invalid chars map dimensions !");
 
 					return false;
 				}
@@ -408,7 +408,7 @@ namespace EmEn::Base::PixelFactory
 
 					if ( closestSize == 0UL )
 					{
-						std::cerr << "[ERROR] Font::glyphs(), the font size " << size << " is not loaded (no size is) !" "\n";
+						Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::glyphs(), the font size " << size << " is not loaded (no size is) !").str());
 
 						return nullptr;
 					}

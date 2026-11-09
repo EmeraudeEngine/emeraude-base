@@ -56,6 +56,9 @@
 #include "ThreadPool.hpp" // IWYU pragma: keep (a template body calls it: a forward declaration is not enough)
 #include "VertexFactory/ShapeTriangle.hpp"
 
+/* Local inclusions. */
+#include "Logging/Logging.hpp"
+
 namespace EmEn::Base::VertexFactory
 {
 	/**
@@ -147,7 +150,7 @@ namespace EmEn::Base::VertexFactory
 				 * vertices through the triangles. */
 				if ( !m_source.indicesInRange() )
 				{
-					std::cerr << "ShapeDecimator::decimate(), a source triangle refers to a vertex that does not exist !" "\n";
+					Logging::error("VertexFactory::ShapeDecimator", "ShapeDecimator::decimate(), a source triangle refers to a vertex that does not exist !");
 
 					return {};
 				}

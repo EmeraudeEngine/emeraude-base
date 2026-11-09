@@ -36,7 +36,6 @@
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
-#include <iostream>
 #include <iterator>
 #include <span>
 #include <string>
@@ -47,8 +46,10 @@
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "DiagnosticsCapture.hpp"
 #include "IO/IO.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Severity.hpp"
 #include "PixelFactory/FileFormatHDR.hpp"
 #include "PixelFactory/FileFormatJpeg.hpp"
 #include "PixelFactory/FileFormatPNG.hpp"
@@ -145,6 +146,8 @@ namespace
 
 TEST(PixelFactoryFileFormats, targaHugeDimensionsDoNotOOM)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* 65535x65535 RGB declared in an 18-byte file -> ~12 GB pixmap if unguarded (fuzz_targa OOM). */
 	const auto buffer = makeTargaHeader(2, 0xFFFF, 0xFFFF, 24);
 
@@ -153,10 +156,18 @@ TEST(PixelFactoryFileFormats, targaHugeDimensionsDoNotOOM)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, targaZeroDimensionsRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto buffer = makeTargaHeader(2, 0, 0, 24);
 
 	IO::MemoryStream stream{buffer};
@@ -164,10 +175,18 @@ TEST(PixelFactoryFileFormats, targaZeroDimensionsRejected)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, targaTruncatedHeaderRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const std::vector< std::byte > buffer(4, std::byte{0});  // shorter than the 18-byte header
 
 	IO::MemoryStream stream{buffer};
@@ -175,10 +194,18 @@ TEST(PixelFactoryFileFormats, targaTruncatedHeaderRejected)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, pngValidSignatureGarbageChunkDoesNotAbort)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* A valid 8-byte PNG signature (so png_check_sig passes) followed by a bogus chunk: libPNG
 	 * raises a fatal error inside png_read_info. With a returning error handler this aborted the
 	 * process (fuzz_png); the load must now be cancelled (returns false) via setjmp/longjmp. */
@@ -194,10 +221,18 @@ TEST(PixelFactoryFileFormats, pngValidSignatureGarbageChunkDoesNotAbort)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, targaUnsupportedPixelDepthRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* imagePixelSize = 64 -> bytesPerPixel = 8, which overflowed the 4-byte stack pixel buffer in
 	 * the decode loop (fuzz_targa stack-buffer-overflow). Small dimensions + a little payload pass
 	 * the dimension guard so we reach (and exercise) the pixel-depth guard. */
@@ -211,10 +246,18 @@ TEST(PixelFactoryFileFormats, targaUnsupportedPixelDepthRejected)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, jpegGarbageDoesNotExitProcess)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* libjpeg's default error_exit calls exit() on a bad marker (fuzz_jpeg killed the process on a
 	 * single byte). The custom error manager longjmps instead, so the load is cancelled cleanly. */
 	const std::vector< std::byte > buffer(8, std::byte{0xFF});  // no valid JPEG SOI / markers
@@ -224,6 +267,12 @@ TEST(PixelFactoryFileFormats, jpegGarbageDoesNotExitProcess)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 /*
  * Radiance HDR (RGBE) codec tests — round-trip precision, the three scanline encodings
@@ -368,6 +417,8 @@ TEST(PixelFactoryFileFormats, hdrLegacyRLEScanlineDecoded)
 
 TEST(PixelFactoryFileFormats, hdrLegacyRLEShiftPastTheCountWidthIsRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* Found by fuzz_hdr (2026-10-07, 26 million executions): each consecutive legacy repeat record shifts its count 8
 	 * bits further, and the fifth shifted a 32-bit count by 32 — undefined behaviour. x86 masks the shift to 0, so this
 	 * stream read as a valid 2-pixel scanline. A real file never needs a count past 2^32: refused. */
@@ -385,10 +436,18 @@ TEST(PixelFactoryFileFormats, hdrLegacyRLEShiftPastTheCountWidthIsRejected)
 	PixelFactory::Pixmap< float, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, hdrGarbageRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const std::vector< std::byte > buffer(16, std::byte{0xAB});
 
 	IO::MemoryStream stream{buffer};
@@ -396,10 +455,18 @@ TEST(PixelFactoryFileFormats, hdrGarbageRejected)
 	PixelFactory::Pixmap< float, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, hdrTruncatedPixelDataRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* A valid header claiming 64x64 with no pixel data at all. */
 	const auto buffer = makeHDRHeader(64, 64);
 
@@ -408,10 +475,18 @@ TEST(PixelFactoryFileFormats, hdrTruncatedPixelDataRejected)
 	PixelFactory::Pixmap< float, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* 4 billion pixels declared in a tiny stream must be cancelled, not allocated.
 	 * The truncated-read guard fires before the pixmap grows out of control. */
 	const auto buffer = makeHDRHeader(65535, 65535);
@@ -421,6 +496,12 @@ TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
 	PixelFactory::Pixmap< float, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* Ave Robustus II P0 (2026-10-08): Font::readTrueTypeFile() returned on a failed FT_New_Face() without releasing the
@@ -429,6 +510,8 @@ TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
  * suite (the previous code reports a leaked FT_Library there). */
 TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::error_code error;
 	const auto directory = EmEn::Base::Testing::uniqueTemporaryPath("emeraude_font_test");
 
@@ -453,6 +536,12 @@ TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
 	EXPECT_FALSE(font.readFile(filepath, 16, false));
 
 	std::filesystem::remove_all(directory, error);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::Font"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 namespace
@@ -581,6 +670,8 @@ TEST(PixelFactoryFont, trueTypeFixedWidthCellsAreEqual)
 /* Hostile input at the trust boundary: a size out of [1, 256], an empty file, a truncated font, a missing file. */
 TEST(PixelFactoryFont, trueTypeHostileInputsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PixelFactory::Font< uint8_t > font;
 
 	EXPECT_FALSE(font.readFile(TrueTypeFont, 0, false));
@@ -607,6 +698,13 @@ TEST(PixelFactoryFont, trueTypeHostileInputsRefused)
 
 	std::error_code error;
 	std::filesystem::remove_all(emptyFile.parent_path(), error);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::Font"), 5U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
+	EXPECT_EQ(captured.messages.size(), 6U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 namespace
@@ -635,6 +733,8 @@ namespace
  * (optional blanks, trailing text ignored), digits only, and a value past uint64_t refused. */
 TEST(PixelFactoryFileFormats, hdrResolutionLineGrammar)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	for ( const auto * const accepted : {"-Y 1 +X 1", "-Y1 +X1", "-Y   1  +X  1  ", "-Y 1 +X 1 trailing", "-Y 01 +X 1\r"} )
 	{
 		const auto buffer = makeHDRWithResolutionLine(accepted);
@@ -659,6 +759,12 @@ TEST(PixelFactoryFileFormats, hdrResolutionLineGrammar)
 
 		EXPECT_FALSE(format.readStream(stream, pixmap)) << "line '" << refused << "'";
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 10U);
+	EXPECT_EQ(captured.messages.size(), 10U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The TIFF reader (libtiff through a ByteStream): 0 % covered until 2026-10-17. */
@@ -685,6 +791,8 @@ TEST(PixelFactoryFileFormats, tiffSmallRGBDecodesTopLeftInRGBA)
 
 TEST(PixelFactoryFileFormats, tiffGarbageRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	std::vector< std::byte > garbage(256);
 
 	for ( size_t index = 0; index < garbage.size(); ++index )
@@ -697,10 +805,18 @@ TEST(PixelFactoryFileFormats, tiffGarbageRejected)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, tiffTruncatedPixelDataRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* 2x2 RGB declares 12 bytes of strip, the file holds 3. */
 	const auto file = makeTIFF(2, 2, {255, 0, 0}, 12);
 
@@ -709,10 +825,19 @@ TEST(PixelFactoryFileFormats, tiffTruncatedPixelDataRejected)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatTIFF"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 2U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, tiffHugeDimensionsDoNotOOM)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* 100000x100000 declared in a few bytes: a 40 GB RGBA raster if unguarded. */
 	const auto file = makeTIFF(100000, 100000, {0, 0, 0}, 3);
 
@@ -721,10 +846,19 @@ TEST(PixelFactoryFileFormats, tiffHugeDimensionsDoNotOOM)
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_FALSE(format.readStream(stream, pixmap));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatTIFF"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 1U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, tiffWriteRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PixelFactory::Pixmap< uint8_t, uint32_t > pixmap;
 
 	ASSERT_TRUE(pixmap.initialize(2, 2, PixelFactory::ChannelMode::RGBA));
@@ -734,6 +868,12 @@ TEST(PixelFactoryFileFormats, tiffWriteRefused)
 	const PixelFactory::FileFormatTIFF< uint8_t, uint32_t > format;
 
 	ASSERT_FALSE(format.writeStream(stream, pixmap, {}));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The WebP reader / writer (libwebp, lossless writing): 0 % covered until 2026-10-17. */
@@ -806,6 +946,8 @@ TEST(PixelFactoryFileFormats, webpLosslessRoundTripKeepsAlpha)
 
 TEST(PixelFactoryFileFormats, webpGarbageEmptyAndTruncatedRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
 	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
 
@@ -851,10 +993,18 @@ TEST(PixelFactoryFileFormats, webpGarbageEmptyAndTruncatedRejected)
 
 		EXPECT_FALSE(format.readStream(input, decoded));
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatWebP"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, webpWriteRefusesGrayscaleAndInvalidPixmaps)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const PixelFactory::FileFormatWebP< uint8_t, uint32_t > format;
 
 	{
@@ -875,6 +1025,12 @@ TEST(PixelFactoryFileFormats, webpWriteRefusesGrayscaleAndInvalidPixmaps)
 
 		EXPECT_FALSE(format.writeStream(stream, invalid, {}));
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatWebP"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The JPEG reader / writer (libjpeg-turbo): 31 % covered until 2026-10-17. */
@@ -991,22 +1147,40 @@ TEST(PixelFactoryFileFormats, jpegRoundTripGrayscaleAndProgressive)
 
 TEST(PixelFactoryFileFormats, jpegWriteRefusesAlphaAndInvalidPixmaps)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	EXPECT_TRUE(encodeJpeg(makeGradient(8, PixelFactory::ChannelMode::RGBA)).empty());
 	EXPECT_TRUE(encodeJpeg(PixelFactory::Pixmap< uint8_t, uint32_t >{}).empty());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, jpegEmptyStreamRejected)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const std::vector< std::byte > empty;
 	IO::MemoryStream input{empty};
 	PixelFactory::FileFormatJpeg< uint8_t, uint32_t > format;
 	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
 
 	EXPECT_FALSE(format.readStream(input, decoded));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, jpegTruncatedDoesNotAbort)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	auto encoded = encodeJpeg(makeGradient(32, PixelFactory::ChannelMode::RGB));
 
 	ASSERT_GT(encoded.size(), 64U);
@@ -1019,11 +1193,20 @@ TEST(PixelFactoryFileFormats, jpegTruncatedDoesNotAbort)
 
 	const auto loaded = format.readStream(input, decoded);
 
-	std::cout << "[          ] truncated JPEG: readStream() returned " << (loaded ? "true" : "false") << "\n";
+	RecordProperty("truncatedJpegLoaded", loaded ? "true" : "false");
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatJpeg"), 1U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, jpegHugeDimensionsDoNotOOM)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* A valid 8x8 JPEG whose SOF header is rewritten to declare 65000x65000: a 12.7 GB RGB pixmap if unguarded. */
 	auto encoded = encodeJpeg(makeGradient(8, PixelFactory::ChannelMode::RGB));
 
@@ -1055,6 +1238,12 @@ TEST(PixelFactoryFileFormats, jpegHugeDimensionsDoNotOOM)
 	PixelFactory::Pixmap< uint8_t, uint32_t > decoded;
 
 	ASSERT_FALSE(format.readStream(input, decoded));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The Targa reader, every variant of TGA 2.0 (owner decision 2026-10-17: implement the colour-mapped, 15 / 16-bit and
@@ -1230,6 +1419,8 @@ TEST(PixelFactoryFileFormats, targaColorMappedImages)
 
 TEST(PixelFactoryFileFormats, targaColorMappedRefusals)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const std::vector< uint8_t > palette{0, 0, 255,  0, 255, 0};
 
 	/* An index outside the map (the map holds indices 0 and 1). */
@@ -1246,6 +1437,12 @@ TEST(PixelFactoryFileFormats, targaColorMappedRefusals)
 	/* A colour map entry size the format does not define. */
 	EXPECT_FALSE(readTarga(makeTarga({.type = 1, .width = 1, .height = 1, .depth = 8,
 		.colorMapType = 1, .colorMapLength = 1, .colorMapEntrySize = 12}, {0}, {0, 0})).isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, targaGrayscaleImages)
@@ -1279,17 +1476,33 @@ TEST(PixelFactoryFileFormats, targaSkipsTheIdentificationAndAnAttachedColorMap)
 
 TEST(PixelFactoryFileFormats, targaRefusesUndefinedVariants)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* A true-colour depth of 8 bits, a grayscale one of 24, an unknown type, an unknown colour map type. */
 	EXPECT_FALSE(readTarga(makeTarga({.type = 2, .width = 1, .height = 1, .depth = 8}, {0})).isValid());
 	EXPECT_FALSE(readTarga(makeTarga({.type = 3, .width = 1, .height = 1, .depth = 24}, {0, 0, 0})).isValid());
 	EXPECT_FALSE(readTarga(makeTarga({.type = 7, .width = 1, .height = 1, .depth = 24}, {0, 0, 0})).isValid());
 	EXPECT_FALSE(readTarga(makeTarga({.width = 1, .height = 1, .depth = 24, .colorMapType = 2}, {0, 0, 0})).isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, targaUncompressedDataLargerThanTheStreamRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* 100 x 100 x 3 bytes declared, 300 bytes given: within the RLE bound (x128), refused before the allocation. */
 	EXPECT_FALSE(readTarga(makeTarga({.width = 100, .height = 100, .depth = 24}, std::vector< uint8_t >(300, 0))).isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, targaWriterRoundTrips)
@@ -1387,6 +1600,8 @@ TEST(PixelFactoryFileFormats, pngEveryColorTypeAndDepthDecodes)
 
 TEST(PixelFactoryFileFormats, pngTruncatedFilesAreRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The read callback ignored a short read: libpng went on with a buffer the stream never filled. */
 	for ( const auto & pngCase : PngCases )
 	{
@@ -1397,17 +1612,33 @@ TEST(PixelFactoryFileFormats, pngTruncatedFilesAreRefused)
 			EXPECT_FALSE(readPNG(truncated).isValid()) << pngCase.name << " cut at " << cut;
 		}
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 33U);
+	EXPECT_EQ(captured.messages.size(), 33U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, pngDeclaredSizeThePayloadCannotBackIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* 66 bytes declaring 30000 x 30000 RGBA (3.6 GB decoded): refused before the allocation (a result-only check: the
 	 * allocation itself is proven by the peak RSS, unit-testing.md). */
 	EXPECT_FALSE(readPNG(PngHuge).isValid());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileFormats, pngWriterFiltersAndInterlacingRoundTrip)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	PixelFactory::Pixmap< uint8_t, uint32_t > source;
 	ASSERT_TRUE(source.initialize(17U, 9U, PixelFactory::ChannelMode::RGBA));
 
@@ -1440,10 +1671,18 @@ TEST(PixelFactoryFileFormats, pngWriterFiltersAndInterlacingRoundTrip)
 			EXPECT_TRUE(std::ranges::equal(decoded.data(), source.data())) << static_cast< int >(filter) << " " << static_cast< int >(interlace);
 		}
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatPNG"), 6U);
+	EXPECT_EQ(captured.messages.size(), 6U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(PixelFactoryFileIO, readRefusesWhatItCannotDecode)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The coverage pass (2026-10-18): the refusals of FileIO::read() were never run. */
 	using namespace EmEn::Base;
 	using namespace EmEn::Base::PixelFactory;
@@ -1493,5 +1732,11 @@ TEST(PixelFactoryFileIO, readRefusesWhatItCannotDecode)
 	}
 
 	std::filesystem::remove_all(directory, errorCode);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileIO"), 8U);
+	EXPECT_EQ(captured.messages.size(), 8U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

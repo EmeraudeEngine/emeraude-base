@@ -35,9 +35,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
-#include <iostream>
 #include <limits>
 #include <optional>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <thread>
@@ -270,7 +270,8 @@ TEST(VertexFactoryShapeDecimator, DISABLED_StopLatencyOnALargeMesh)
 	/* ~2.2 M triangles, the order of the IvySim_Leaves mesh that stalled the Windows shutdown for 10-20 s. */
 	const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 1400, 800);
 
-	std::cout << "[latency] source triangles: " << sphere.triangles().size() << "\n";
+	/* NOTE: A measurement goes to the test report (--gtest_output=xml), never to the terminal (2026-11-09). */
+	RecordProperty("sourceTriangles", static_cast< int >(sphere.triangles().size()));
 
 	const auto decimateWithStopAfter = [&sphere] (std::chrono::milliseconds delay) {
 		std::stop_source stopSource;
@@ -303,7 +304,7 @@ TEST(VertexFactoryShapeDecimator, DISABLED_StopLatencyOnALargeMesh)
 	{
 		const auto [finishedBefore, latency] = decimateWithStopAfter(std::chrono::milliseconds{delayMs});
 
-		std::cout << "[latency] stop at " << delayMs << " ms: " << (finishedBefore ? "finished before the stop" : std::to_string(latency) + " us") << "\n";
+		RecordProperty("stopAt" + std::to_string(delayMs) + "Ms", finishedBefore ? "finished before the stop" : std::to_string(latency) + " us");
 
 		if ( !finishedBefore )
 		{
@@ -315,7 +316,7 @@ TEST(VertexFactoryShapeDecimator, DISABLED_StopLatencyOnALargeMesh)
 		}
 	}
 
-	std::cout << "[latency] worst: " << worstMicroseconds << " us\n";
+	RecordProperty("worstStopLatencyUs", std::to_string(worstMicroseconds));
 
 	EXPECT_LT(worstMicroseconds, 50000);
 }
@@ -538,7 +539,8 @@ TEST(VertexFactoryShapeDecimator, DISABLED_PrintGoldenFingerprints)
 			normalMapHash = fingerprintBytes(UINT64_C(1469598103934665603), normalMap.data().data(), normalMap.data().size());
 		}
 
-		std::cout << "[golden] " << golden.name << " " << output.triangles().size() << " tris " << output.vertices().size() << " verts " << std::hex << fingerprintShape(output) << " nm " << normalMapHash << std::dec << "\n";
+		/* NOTE: The fingerprints go to the test report (--gtest_output=xml) to refresh a golden value, never to the terminal. */
+		RecordProperty(std::string{"golden"} + golden.name, (std::stringstream{} << output.triangles().size() << " tris " << output.vertices().size() << " verts " << std::hex << fingerprintShape(output) << " nm " << normalMapHash).str());
 
 		EXPECT_FALSE(output.triangles().empty()) << golden.name;
 	}

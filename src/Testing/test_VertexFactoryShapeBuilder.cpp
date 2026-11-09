@@ -36,6 +36,8 @@
 #include <vector>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
+#include "Logging/Severity.hpp"
 #include "Math/CartesianFrame.hpp"
 #include "Math/Vector.hpp"
 #include "VertexFactory/Shape.hpp"
@@ -330,6 +332,8 @@ TEST(VertexFactoryShapeBuilder, anEditAfterTheReleaseRebuildsTheConstructionInde
  * refuse it now; indicesInRange() tells it. */
 TEST(VertexFactoryShape, anInconsistentShapeIsRefusedNotAborted)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8, 4);
 
 	ASSERT_TRUE(shape.indicesInRange());
@@ -353,6 +357,13 @@ TEST(VertexFactoryShape, anInconsistentShapeIsRefusedNotAborted)
 	EXPECT_EQ(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal), 0U);
 	EXPECT_TRUE(vertexBuffer.empty());
 	EXPECT_TRUE(indexBuffer.empty());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::ShapeProcessor"), 2U);
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Shape"), 1U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* Ave robustus! (2026-10-18, found by the engine's fuzz_gltf): a glTF index past its primitive's vertices built a shape
@@ -361,6 +372,8 @@ TEST(VertexFactoryShape, anInconsistentShapeIsRefusedNotAborted)
  * Each of them refuses an inconsistent shape now (false, nothing computed) and still computes a consistent one. */
 TEST(VertexFactoryShape, normalsAndTangentsRefuseAnInconsistentShape)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	auto consistent = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8, 4);
 
 	ASSERT_TRUE(consistent.indicesInRange());
@@ -388,11 +401,19 @@ TEST(VertexFactoryShape, normalsAndTangentsRefuseAnInconsistentShape)
 	EXPECT_TRUE(consistent.computeVertexNormal());
 	EXPECT_TRUE(consistent.computeVertexTangent());
 	EXPECT_TRUE(consistent.computeVertexTBNSpace());
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Shape"), 7U);
+	EXPECT_EQ(captured.messages.size(), 7U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* A vertex color index past the color array is refused when the colors are requested (it was read out of bounds). */
 TEST(VertexFactoryShape, aVertexColorIndexOutOfRangeIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	auto shape = ShapeGenerator::generateCuboid< float, uint32_t >(1.0F, 1.0F, 1.0F);
 
 	ASSERT_FALSE(shape.vertexColors().empty());
@@ -408,6 +429,12 @@ TEST(VertexFactoryShape, aVertexColorIndexOutOfRangeIsRefused)
 
 	EXPECT_EQ(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal, TextureCoordinatesType::None, VertexColorType::RGBA), 0U);
 	EXPECT_GT(shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::Normal), 0U);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Shape"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* Ave robustus! (2026-10-16, base item shape-merge-quantization-overflow): the merge grid converted a coordinate

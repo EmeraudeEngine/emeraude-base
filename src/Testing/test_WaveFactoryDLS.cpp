@@ -46,7 +46,9 @@
 
 /* Local inclusions. */
 #include "Constants.hpp"
+#include "DiagnosticsCapture.hpp"
 #include "IO/MemoryStream.hpp"
+#include "Logging/Severity.hpp"
 #include "WaveFactory/DLSSoundBank.hpp"
 #include "WaveFactory/FileFormatMIDI.hpp"
 #include "WaveFactory/Types.hpp"
@@ -483,6 +485,8 @@ TEST(WaveFactoryDLS, theArticulationAttackShapesTheVolumeEnvelope)
 
 TEST(WaveFactoryDLS, malformedOrUnplayableBanksAreRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto good = makeBank({{.regions = {plainRegion(0)}}}, {sinePeriod()});
 
 	/* Not a DLS, truncated, empty. */
@@ -511,10 +515,18 @@ TEST(WaveFactoryDLS, malformedOrUnplayableBanksAreRefused)
 
 		static_cast< void >(DLS::convertToSoundFont(corrupt));
 	}
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "WaveFactory::DLS"), 47U);
+	EXPECT_EQ(captured.messages.size(), 47U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(WaveFactoryDLS, anRMIDPlaysWithItsEmbeddedBankFirst)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* A SILENT bank (its one wave all zeros): the RMID renders silence with it — even with a global SoundFont given —
 	 * and sound without it (the additive synthesizer), which proves the embedded bank is the one played. */
 	TestWave silence;
@@ -544,4 +556,10 @@ TEST(WaveFactoryDLS, anRMIDPlaysWithItsEmbeddedBankFirst)
 	Wave< int16_t > withBrokenBank;
 	ASSERT_TRUE(decodeRMID(makeRMID(broken), withBrokenBank));
 	EXPECT_FALSE(isSilent(withBrokenBank));
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatMIDI"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

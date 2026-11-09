@@ -25,19 +25,22 @@
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
-#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ranges>
 #include <string>
 #include <system_error>
 #include <vector>
 
 /* Third-party inclusions. */
+#include <zconf.h>
 #include <zlib.h>
 
 /* Local inclusions. */
+#include "DiagnosticsCapture.hpp"
 #include "IO/IO.hpp"
+#include "Logging/Severity.hpp"
 #include "TemporaryPath.hpp"
 #include "IO/ZipReader.hpp"
 #include "IO/ZipWriter.hpp"
@@ -214,6 +217,8 @@ TEST(ZipArchive, writerAbandonedAfterAddDoesNotLeak)
 }
 TEST(ZipArchive, sourcesRefuseTheWrongKindOfPath)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto dir = freshTempDir("emeraude_zip_kinds");
 	writeFile(dir / "file.txt", "payload");
 
@@ -229,10 +234,18 @@ TEST(ZipArchive, sourcesRefuseTheWrongKindOfPath)
 	}
 
 	expectTempDirRemoved(dir);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipWriter"), 4U);
+	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto dir = freshTempDir("emeraude_zip_slip");
 	writeFile(dir / "payload.txt", "evil");
 
@@ -260,6 +273,12 @@ TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
 	EXPECT_FALSE(std::filesystem::exists(dir / "escaped.txt", errorCode));
 
 	expectTempDirRemoved(dir);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 2U);
+	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 /* The coverage pass (2026-10-17): archives built byte by byte, for the cases a ZipWriter never produces — an empty entry
@@ -408,6 +427,8 @@ TEST(ZipArchive, emptyEntriesAndDirectoryEntriesExtract)
 
 TEST(ZipArchive, entriesThatCannotBeReadAreRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	const auto dir = freshTempDir("emeraude_zip_unreadable");
 	const auto archive = dir / "unreadable.zip";
 
@@ -437,10 +458,18 @@ TEST(ZipArchive, entriesThatCannotBeReadAreRefused)
 	}
 
 	expectTempDirRemoved(dir);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 5U);
+	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(ZipArchive, declaredSizeThePayloadCannotBackIsRefused)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The central directory declares 1 TiB for 7 stored bytes: the buffer used to be resized to the declared size
 	 * (std::bad_alloc -> abort under -fno-exceptions). */
 	const auto dir = freshTempDir("emeraude_zip_declared_size");
@@ -457,6 +486,12 @@ TEST(ZipArchive, declaredSizeThePayloadCannotBackIsRefused)
 	}
 
 	expectTempDirRemoved(dir);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 1U);
+	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(ZipArchive, reopeningListsEachEntryOnceAndAnEmptyArchiveOpens)
@@ -489,6 +524,8 @@ TEST(ZipArchive, reopeningListsEachEntryOnceAndAnEmptyArchiveOpens)
 
 TEST(ZipArchive, aFailedCreationLeavesNoArchiveAndNamesAreUnique)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* zip_close() — the deleter — WROTE the archive: a source that vanished left a partial archive while create()
 	 * answered false, and a commit that failed answered true. Two sources under one entry name kept the last one
 	 * silently (owner decision: refused). */
@@ -536,6 +573,12 @@ TEST(ZipArchive, aFailedCreationLeavesNoArchiveAndNamesAreUnique)
 	}
 
 	expectTempDirRemoved(dir);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipWriter"), 3U);
+	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(ZipArchive, aNonASCIIPathAndEntryNameRoundTrip)
@@ -574,6 +617,8 @@ TEST(ZipArchive, aNonASCIIPathAndEntryNameRoundTrip)
 
 TEST(ZipArchive, extractionRefusalsLeaveTheDestinationAlone)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	/* The coverage pass (2026-10-18): the extraction refusals an archive or a destination can trigger. */
 	const auto dir = freshTempDir("emeraude_zip_extraction_refusals");
 
@@ -616,5 +661,11 @@ TEST(ZipArchive, extractionRefusalsLeaveTheDestinationAlone)
 	}
 
 	expectTempDirRemoved(dir);
+
+	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 5U);
+	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

@@ -43,12 +43,15 @@ namespace EmEn::Base::Logging
 	using Sink = std::function< void (Severity severity, const char * tag, std::string_view message) >;
 
 	/**
-	 * @brief Installs the diagnostic sink, replacing the default one.
+	 * @brief Installs the diagnostic sink, replacing the current one.
 	 * @note Thread-safe. Pass an empty sink (e.g. nullptr) to restore the default cerr sink.
 	 * The engine registers a sink here that forwards into its Tracer.
+	 * @note The previous sink is returned so a temporary sink can put it back (Testing::captureDiagnostics() restores
+	 * the test suite's guard this way, 2026-11-09).
 	 * @param sink The sink receiving every base diagnostic, or empty to reset.
+	 * @return Sink The sink it replaces (empty when the default one was active).
 	 */
-	void setSink (Sink sink) noexcept;
+	Sink setSink (Sink sink) noexcept;
 
 	/**
 	 * @brief Emits a diagnostic message through the current sink.

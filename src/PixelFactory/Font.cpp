@@ -31,9 +31,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <iostream>
 #include <limits>
 #include <memory>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -43,6 +43,7 @@
 
 /* Local inclusions. */
 #include "IO/IO.hpp"
+#include "Logging/Logging.hpp"
 #include "PixelFactory/Pixmap.hpp"
 
 namespace EmEn::Base::PixelFactory
@@ -220,7 +221,7 @@ namespace EmEn::Base::PixelFactory
 		/* NOTE: A trust boundary (a file, a size from data): checked in every build. */
 		if ( fontSize == 0 || fontSize > MaxTrueTypeFontSize )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), the font size " << fontSize << " is out of [1, " << MaxTrueTypeFontSize << "] !" "\n";
+			Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), the font size " << fontSize << " is out of [1, " << MaxTrueTypeFontSize << "] !").str());
 
 			return false;
 		}
@@ -231,7 +232,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( !IO::fileGetContents(filepath, fontData) || fontData.empty() || fontData.size() > static_cast< size_t >(std::numeric_limits< FT_Long >::max()) )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " cannot be read !" "\n";
+			Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " cannot be read !").str());
 
 			return false;
 		}
@@ -245,7 +246,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( FT_Init_FreeType(&rawLibrary) != 0 )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), FreeType 2 init failed !" "\n";
+				Logging::error("PixelFactory::Font", "Font::readTrueTypeFile(), FreeType 2 init failed !");
 
 				return false;
 			}
@@ -259,7 +260,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( FT_New_Memory_Face(library.get(), fontData.data(), static_cast< FT_Long >(fontData.size()), 0, &rawFace) != 0 )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " is not a usable font !" "\n";
+				Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " is not a usable font !").str());
 
 				return false;
 			}
@@ -269,7 +270,7 @@ namespace EmEn::Base::PixelFactory
 
 		if ( FT_IS_SFNT(face.get()) && !sfntTablesInsideFile(fontData) )
 		{
-			std::cerr << "[ERROR] Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " is truncated (a table ends past the end of the file) !" "\n";
+			Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), font file " << IO::toU8String(filepath) << " is truncated (a table ends past the end of the file) !").str());
 
 			return false;
 		}
@@ -286,7 +287,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( FT_Request_Size(face.get(), &request) != 0 )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), the size " << fontSize << " is not available with this font !" "\n";
+				Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), the size " << fontSize << " is not available with this font !").str());
 
 				return false;
 			}
@@ -327,7 +328,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( FT_Load_Glyph(face.get(), glyphIndex, FT_LOAD_RENDER) != 0 )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), glyph " << glyphIndex << " (code " << code << ") failed to render !" "\n";
+				Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), glyph " << glyphIndex << " (code " << code << ") failed to render !").str());
 
 				return false;
 			}
@@ -337,7 +338,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( bitmap.width > 0 && bitmap.rows > 0 && bitmap.pixel_mode != FT_PIXEL_MODE_GRAY && bitmap.pixel_mode != FT_PIXEL_MODE_MONO )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), glyph " << glyphIndex << " has an unhandled pixel mode (" << static_cast< int >(bitmap.pixel_mode) << ") !" "\n";
+				Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), glyph " << glyphIndex << " has an unhandled pixel mode (" << static_cast< int >(bitmap.pixel_mode) << ") !").str());
 
 				return false;
 			}
@@ -351,7 +352,7 @@ namespace EmEn::Base::PixelFactory
 
 			if ( std::cmp_greater(cellWidth, maxCellWidth) )
 			{
-				std::cerr << "[ERROR] Font::readTrueTypeFile(), glyph " << glyphIndex << " is " << cellWidth << " pixels wide (more than " << maxCellWidth << ") !" "\n";
+				Logging::error("PixelFactory::Font", (std::stringstream{} << "Font::readTrueTypeFile(), glyph " << glyphIndex << " is " << cellWidth << " pixels wide (more than " << maxCellWidth << ") !").str());
 
 				return false;
 			}
