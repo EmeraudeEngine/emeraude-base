@@ -264,7 +264,8 @@ namespace EmEn::Base::Network
 			}
 
 			/**
-			 * @brief Parses the first line of HTTP Headers.
+			 * @brief Parses the start line of the message head (RFC 9112 § 2.1): the request line or the status line.
+			 * @note An override logs the reason of every refusal: parse() only adds that the start line was refused.
 			 * @param line A reference to the string.
 			 * @return bool
 			 */

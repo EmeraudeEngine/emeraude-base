@@ -396,3 +396,33 @@ TEST(NetworkHTTPRequest, aReasonPhraseWithAControlCharacterIsRefused)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
+
+/* The head parse reported a refused start line as "unable to identify the HTTP header !" (2026-11-09): a status line
+ * refused for its reason phrase read as a header problem. It now names the start line, for a request line and a status
+ * line alike, and a head made of separators only as an empty head (String::explode() turns "" into one empty line, which
+ * the request-line check refuses: that case stays a refused start line). */
+TEST(NetworkHTTPRequest, aRefusedStartLineIsReportedAsSuch)
+{
+	const auto captured = EmEn::Base::Testing::captureDiagnostics([] () {
+		static_cast< void >(HTTPRequest{"FETCH /a HTTP/1.1\r\n"});
+		static_cast< void >(HTTPResponse{"HTTP/1.1 200 O\x01K\r\n"});
+		static_cast< void >(HTTPRequest{"\r\n"});
+	});
+
+	std::vector< std::string > headMessages;
+
+	for ( const auto & logged : captured.messages )
+	{
+		if ( logged.tag == "Network::HTTPHeaders" )
+		{
+			headMessages.push_back(logged.message);
+		}
+	}
+
+	EXPECT_EQ(headMessages, (std::vector< std::string >{
+		"parse(), the start line (request line or status line) was refused, message rejected.",
+		"parse(), the start line (request line or status line) was refused, message rejected.",
+		"parse(), the message head is empty, message rejected."
+	}));
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}

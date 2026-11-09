@@ -141,7 +141,7 @@ namespace EmEn::Base::Network
 
 		if ( empty(lines) )
 		{
-			Logging::error(Tag, "parse(), empty HTTP header !");
+			Logging::error(Tag, "parse(), the message head is empty, message rejected.");
 
 			return false;
 		}
@@ -153,7 +153,9 @@ namespace EmEn::Base::Network
 		}
 		else
 		{
-			Logging::error(Tag, "parse(), unable to identify the HTTP header !");
+			/* NOTE: The FIRST line is the start line (RFC 9112 § 2.1: the request line or the status line), not a
+			 * header field: parseFirstLine() has already logged why it refused it. */
+			Logging::error(Tag, "parse(), the start line (request line or status line) was refused, message rejected.");
 
 			return false;
 		}
