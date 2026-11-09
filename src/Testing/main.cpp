@@ -40,10 +40,16 @@ main (int argc, char * * argv)
 	::testing::InitGoogleTest(&argc, argv);
 
 	/* NOTE: The guard (owner, 2026-11-09: no direct std::cout / std::cerr, and no diagnostic left on the terminal). A
-	 * message that reaches the Logging sink outside Testing::captureDiagnostics() fails the running test: a test that
+	 * message that reaches the Logging sink outside a Testing::DiagnosticsCapture fails the running test: a test that
 	 * provokes a refusal captures it and asserts its tag and severity (docs/error-handling.md § 7). The capture puts
-	 * this guard back when it returns. */
+	 * this guard back when it ends. A Debug message is swallowed (owner, 2026-11-09): it only exists in a DEBUG build
+	 * (the sanitizer suites), so the tests stay identical in Release and Debug. */
 	static_cast< void >(EmEn::Base::Logging::setSink([] (EmEn::Base::Severity severity, const char * tag, std::string_view message) {
+		if ( severity == EmEn::Base::Severity::Debug )
+		{
+			return;
+		}
+
 		ADD_FAILURE() << "Uncaptured diagnostic [" << (tag != nullptr ? tag : "") << "] (" << EmEn::Base::to_cstring(severity) << ") " << message <<
 			"\nWrap the call in EmEn::Base::Testing::captureDiagnostics() and assert it.";
 	}));

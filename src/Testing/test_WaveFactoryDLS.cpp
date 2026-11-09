@@ -519,7 +519,7 @@ TEST(WaveFactoryDLS, malformedOrUnplayableBanksAreRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "WaveFactory::DLS"), 47U);
-	EXPECT_EQ(captured.messages.size(), 47U);
+	EXPECT_EQ(captured.countWithoutDebug(), 47U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -560,6 +560,6 @@ TEST(WaveFactoryDLS, anRMIDPlaysWithItsEmbeddedBankFirst)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatMIDI"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

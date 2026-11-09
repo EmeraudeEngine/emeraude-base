@@ -220,7 +220,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -242,7 +242,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -261,7 +261,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -297,7 +297,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -511,7 +511,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "WaveFactory::FileFormatMIDI"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -541,7 +541,7 @@ namespace EmEn::Base::WaveFactory
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatMIDI"), 2U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 2U);
-		EXPECT_EQ(captured.messages.size(), 4U);
+		EXPECT_EQ(captured.countWithoutDebug(), 4U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -647,7 +647,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 8U);
-		EXPECT_EQ(captured.messages.size(), 8U);
+		EXPECT_EQ(captured.countWithoutDebug(), 8U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -686,7 +686,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -859,7 +859,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -891,7 +891,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Processor"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -927,7 +927,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -946,7 +946,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -987,7 +987,7 @@ namespace EmEn::Base::WaveFactory
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1009,7 +1009,7 @@ namespace EmEn::Base::WaveFactory
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1030,7 +1030,7 @@ namespace EmEn::Base::WaveFactory
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "FastJSON"), 1U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
-		EXPECT_EQ(captured.messages.size(), 3U);
+		EXPECT_EQ(captured.countWithoutDebug(), 3U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1065,7 +1065,7 @@ namespace EmEn::Base::WaveFactory
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "FastJSON"), 1U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 1U);
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 1U);
-		EXPECT_EQ(captured.messages.size(), 3U);
+		EXPECT_EQ(captured.countWithoutDebug(), 3U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1151,7 +1151,7 @@ namespace EmEn::Base::WaveFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatSNDFile"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 }

@@ -364,7 +364,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !this->initAlphaChannel() )
 					{
-						Logging::error("PixelFactory::Pixmap", "Unable to check alpha channel initialization !");
+						Logging::debug("PixelFactory::Pixmap", "Unable to check alpha channel initialization !");
 					}
 				}
 				else
@@ -398,7 +398,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						Logging::error("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap construction from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".").str());
+						Logging::debug("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap construction from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".").str());
 					}
 
 					this->clear();
@@ -436,7 +436,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if ( !this->fill(color) )
 					{
-						Logging::error("PixelFactory::Pixmap", "Unable to initialize color !");
+						Logging::debug("PixelFactory::Pixmap", "Unable to initialize color !");
 					}
 				}
 				else
@@ -459,7 +459,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						Logging::error("PixelFactory::Pixmap", "Invalid pixmap dimensions !");
+						Logging::debug("PixelFactory::Pixmap", "Invalid pixmap dimensions !");
 					}
 
 					return false;
@@ -495,7 +495,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						Logging::error("PixelFactory::Pixmap", "Invalid pixmap dimensions for span initialization!");
+						Logging::debug("PixelFactory::Pixmap", "Invalid pixmap dimensions for span initialization!");
 					}
 
 					return false;
@@ -518,7 +518,7 @@ namespace EmEn::Base::PixelFactory
 				{
 					if constexpr ( IsDebug )
 					{
-						Logging::error("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap initialization from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".").str());
+						Logging::debug("PixelFactory::Pixmap", (std::stringstream{} << "Pixmap initialization from span failed: data size mismatch. Expected " << expectedSize << ", got " << data.size() << ".").str());
 					}
 
 					this->clear();

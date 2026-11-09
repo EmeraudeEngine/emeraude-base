@@ -76,7 +76,7 @@ TEST(VertexFactoryGrid, ACellCountWhosePointCountOverflowsTheIndexTypeIsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 5U);
-	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_EQ(captured.countWithoutDebug(), 5U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -98,7 +98,7 @@ TEST(VertexFactoryGrid, ANonFiniteSizeIsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -214,7 +214,7 @@ TEST(VertexFactoryGrid, ACoarsenedGridCoincidesWithItsParentAtTheSharedPoints)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -284,7 +284,7 @@ TEST(VertexFactoryGrid, AHalvedTentGridIsTheTentMeanOfItsParent)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::Grid"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

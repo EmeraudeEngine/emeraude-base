@@ -205,8 +205,9 @@ Logging::log(Severity::Warning, "WaveFactory", message);
   libpng's warning callback. A library default that writes to `stderr` is a violation like a raw write.
 - A composed message is built with `(std::stringstream{} << a << b).str()` (C++20, LWG 1203), or `+` on strings.
 - Severity of a migrated site: a former `cerr` is `Error` (`Warning` when the text says so), a former `cout` is
-  `Info`, an output behind a `…DebugEnabled` switch is `Debug` (compiled out of a Release build), a report followed
-  by `std::abort()` is `Fatal`.
+  `Info`, any output behind `if constexpr ( IsDebug )`, a `…DebugEnabled` switch or `#ifdef DEBUG` is `Debug` (compiled
+  out of a Release build), a report followed by `std::abort()` is `Fatal`, a timer over its budget
+  (`PrintScope*Threshold`) is `Warning`.
 - `Severity` is `EmEn::Base::Severity` ([`/src/Logging/Severity.hpp`](../src/Logging/Severity.hpp)).
 
 ## 7. Testing the contract (no fix without a test)
@@ -226,9 +227,14 @@ the A.1 sanitizers.
   empty `standardError`: a raw `std::cerr` write bypasses the sink, so neither an application nor a fuzz target can
   filter it (the URI refusals flooded `fuzz_uri`, 2026-11-06).
 - **The suite's guard (2026-11-09)**: `src/Testing/main.cpp` installs a sink that FAILS the running test on any
-  diagnostic, every severity, reaching it outside `captureDiagnostics()` ("Uncaptured diagnostic [tag] (severity)
-  ..."). A test that provokes a message captures it and asserts it; `captureDiagnostics()` puts the guard back
-  (`Logging::setSink()` returns the sink it replaces). A test with its own temporary sink restores the previous one
+  diagnostic reaching it outside a capture ("Uncaptured diagnostic [tag] (severity) ..."), every severity but `Debug`:
+  a Debug message only exists in a DEBUG build (the sanitizer suites) and is swallowed, so a test is identical in
+  Release and Debug (owner, 2026-11-09; the ASan suite failed 15 tests on DEBUG-only lines before). A test that
+  provokes a message captures it — a `Testing::DiagnosticsCapture` declared FIRST in the body (RAII: it gives
+  everything back even after an early `ASSERT_*`; messages from other threads are recorded under a mutex), its
+  `snapshot()` asserted at the end, or `captureDiagnostics(action)` — and asserts its tag / severity counts. The
+  capture puts the guard back (`Logging::setSink()` returns the sink it replaces). A count that differs by platform
+  says so (`IS_WINDOWS ? 4U : 3U`, with the reason). A test with its own temporary sink restores the previous one
   the same way, never `setSink(nullptr)`. A death test whose `EXPECT_DEATH` matches the message calls
   `Testing::useDefaultSinkInDeathTest()` first in its block: the child's message must reach its `stderr`.
 - **A test never prints**: a measurement (latency, speed-up, a golden fingerprint to refresh) goes to

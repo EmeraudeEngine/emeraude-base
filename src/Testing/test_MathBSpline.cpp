@@ -169,6 +169,6 @@ TEST(MathBSpline, zeroSegmentsAreClampedToOne)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Math::BSpline"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

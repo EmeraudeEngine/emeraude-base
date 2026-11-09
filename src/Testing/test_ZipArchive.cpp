@@ -22,6 +22,10 @@
  * https://github.com/EmeraudeEngine/emeraude-base
  */
 
+/* Project configuration. */
+#include "emeraude_platform.hpp"
+
+/* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
@@ -238,7 +242,7 @@ TEST(ZipArchive, sourcesRefuseTheWrongKindOfPath)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipWriter"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -277,7 +281,7 @@ TEST(ZipArchive, extractionRefusesEntriesThatLeaveTheDestination)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -462,7 +466,7 @@ TEST(ZipArchive, entriesThatCannotBeReadAreRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 5U);
-	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_EQ(captured.countWithoutDebug(), 5U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -490,7 +494,7 @@ TEST(ZipArchive, declaredSizeThePayloadCannotBackIsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -576,8 +580,12 @@ TEST(ZipArchive, aFailedCreationLeavesNoArchiveAndNamesAreUnique)
 
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
-	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipWriter"), 3U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	/* NOTE: The archive in a missing directory: POSIX zip_open(ZIP_CREATE) succeeds and only the commit fails (one
+	 * message); the Windows source (zip_source_win32w_create) refuses at once and create() reports it too (two). The
+	 * Windows count was observed by Windows-PA (2026-11-09), the reason read in the code. */
+	constexpr auto ExpectedErrors{IS_WINDOWS ? 4U : 3U};
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipWriter"), ExpectedErrors);
+	EXPECT_EQ(captured.countWithoutDebug(), ExpectedErrors);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -665,7 +673,7 @@ TEST(ZipArchive, extractionRefusalsLeaveTheDestinationAlone)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 5U);
-	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_EQ(captured.countWithoutDebug(), 5U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

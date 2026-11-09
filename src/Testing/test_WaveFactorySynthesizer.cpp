@@ -191,7 +191,7 @@ TEST(WaveFactorySynthesizer, outOfDomainParametersAreRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Synthesizer"), 30U);
-	EXPECT_EQ(captured.messages.size(), 30U);
+	EXPECT_EQ(captured.countWithoutDebug(), 30U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -296,7 +296,7 @@ TEST(WaveFactorySynthesizer, everyEffectAtItsDefaultsKeepsTheSignalInRange)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Synthesizer"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -324,7 +324,7 @@ TEST(WaveFactorySynthesizer, anSFXScriptWithAnOutOfDomainParameterIsRefused)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::Synthesizer"), 2U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 2U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 2U);
-	EXPECT_EQ(captured.messages.size(), 6U);
+	EXPECT_EQ(captured.countWithoutDebug(), 6U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -442,7 +442,7 @@ TEST(WaveFactorySFXScript, structuralRefusals)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 14U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 10U);
-	EXPECT_EQ(captured.messages.size(), 24U);
+	EXPECT_EQ(captured.countWithoutDebug(), 24U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -469,7 +469,7 @@ TEST(WaveFactorySFXScript, aParameterOfTheWrongTypeIsRefused)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "SFXScript"), 10U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatJSON"), 6U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "SFXScript"), 1U);
-	EXPECT_EQ(captured.messages.size(), 17U);
+	EXPECT_EQ(captured.countWithoutDebug(), 17U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

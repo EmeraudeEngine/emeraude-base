@@ -365,7 +365,7 @@ namespace EmEn::Base::IO
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 4U);
-		EXPECT_EQ(captured.messages.size(), 4U);
+		EXPECT_EQ(captured.countWithoutDebug(), 4U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -383,7 +383,7 @@ namespace EmEn::Base::IO
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -512,7 +512,7 @@ TEST(IOForEachDirectoryEntry, walksFlatAndRecursiveStopsEarlyAndNeverThrows)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -642,7 +642,7 @@ TEST(IORenameFile, refusesEmptyAndMissingPaths)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -700,7 +700,7 @@ TEST(IOFileUtils, filesizeIsZeroOnAnError)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -801,7 +801,7 @@ TEST(IOFileUtils, readersRefuseADirectory)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 12U);
-	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_EQ(captured.countWithoutDebug(), 12U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -867,7 +867,7 @@ TEST(IOFileUtils, aWriteAsideReplacesWholeOrNotAtAll)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -937,7 +937,7 @@ TEST(IOFileUtils, aRefusedWriteKeepsTheExistingFile)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileIO"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatSNDFile"), 1U);
-	EXPECT_EQ(captured.messages.size(), 7U);
+	EXPECT_EQ(captured.countWithoutDebug(), 7U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -998,7 +998,7 @@ TEST(IOFileUtils, theRefusalsDataCanReach)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 8U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileIO"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileIO"), 3U);
-	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_EQ(captured.countWithoutDebug(), 12U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1018,7 +1018,7 @@ TEST(IOFileUtils, filesizeOfADirectoryIsZero)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1036,7 +1036,7 @@ TEST(IOFileUtils, aPseudoFileIsRefusedNotReadEmpty)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 #endif
@@ -1206,7 +1206,7 @@ TEST(IOFileUtils, readersRefuseAFifoWithoutBlocking)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 12U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 1U);
-	EXPECT_EQ(captured.messages.size(), 14U);
+	EXPECT_EQ(captured.countWithoutDebug(), 14U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 TEST(IOFileUtils, writersRefuseAFifoWithoutBlocking)
@@ -1260,7 +1260,7 @@ TEST(IOFileUtils, writersRefuseAFifoWithoutBlocking)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 8U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO::ZipReader"), 1U);
-	EXPECT_EQ(captured.messages.size(), 9U);
+	EXPECT_EQ(captured.countWithoutDebug(), 9U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 #endif

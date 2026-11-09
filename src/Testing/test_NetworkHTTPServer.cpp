@@ -375,7 +375,7 @@ TEST(NetworkHTTPServer, NonLoopbackNeedsAToken)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "HTTPServer"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -852,7 +852,7 @@ TEST(NetworkHTTPServer, CleartextDownloadFromAPrivatePeer)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 2U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

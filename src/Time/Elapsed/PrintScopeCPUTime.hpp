@@ -208,7 +208,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << interval << " s").str());
+					Logging::warning("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << interval << " s").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Milliseconds) )
@@ -220,7 +220,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << interval << " ms").str());
+					Logging::warning("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << interval << " ms").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Microseconds) )
@@ -232,7 +232,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " : " << interval << " μs").str());
+					Logging::warning("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " : " << interval << " μs").str());
 				}
 
 				if constexpr ( precision_t == static_cast< std::uint8_t >(Precision::Nanoseconds) )
@@ -242,7 +242,7 @@ namespace EmEn::Base::Time::Elapsed
 						return;
 					}
 
-					Logging::error("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << nanoseconds << " ns").str());
+					Logging::warning("Time::Elapsed::PrintScopeCPUTime", (std::stringstream{} << m_label << " (CPU) : " << nanoseconds << " ns").str());
 				}
 			}
 

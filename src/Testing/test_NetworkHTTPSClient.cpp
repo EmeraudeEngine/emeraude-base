@@ -342,7 +342,7 @@ TEST(NetworkHTTPSClient, redirectLoopIsCapped)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -368,7 +368,7 @@ TEST(NetworkHTTPSClient, refusesDowngradeRedirect)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -550,7 +550,7 @@ TEST(NetworkHTTPSClient, downloadFailsOnErrorStatus)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -574,7 +574,7 @@ TEST(NetworkHTTPSClient, refusesHostWithInjectedCRLF)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -592,7 +592,7 @@ TEST(NetworkHTTPSClient, refusesHostWithControlCharacters)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 3U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -613,7 +613,7 @@ TEST(NetworkHTTPSClient, refusesOutOfRangePortInsteadOfFallingBackTo443)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::URIDomain"), 2U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 2U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -635,7 +635,7 @@ TEST(NetworkHTTPSClient, ipv6LiteralIsResolvedWithoutItsBrackets)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -673,7 +673,7 @@ TEST(NetworkHTTPSClient, truncatedUntilCloseBodyIsRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -704,7 +704,7 @@ TEST(NetworkHTTPSClient, inMemoryBodyIsCapped)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -737,7 +737,7 @@ TEST(NetworkHTTPSClient, downloadIsCappedByMaxDownloadSize)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -905,7 +905,7 @@ TEST(NetworkHTTPSClient, downloadReportsWhyItFailed)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 2U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -947,7 +947,7 @@ TEST(NetworkHTTPSClient, downloadReportsTLSFailureWhenTheCertificateIsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -964,7 +964,7 @@ TEST(NetworkHTTPSClient, refusesPlainHTTPScheme)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1090,7 +1090,7 @@ TEST(NetworkHTTPSClient, truncatedBodyFails)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1354,6 +1354,6 @@ TEST(NetworkHTTPSClient, theTotalTimeoutIsOneBudgetNotASumOfOperationTimeouts)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }

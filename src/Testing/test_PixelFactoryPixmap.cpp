@@ -71,7 +71,7 @@ TEST(PixelFactoryPixmap, constructor)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -94,7 +94,7 @@ TEST(PixelFactoryPixmap, readPNG_Palette)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -117,7 +117,7 @@ TEST(PixelFactoryPixmap, readPNG_Grayscale)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -140,7 +140,7 @@ TEST(PixelFactoryPixmap, readPNG_GrayscaleAlpha)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -163,7 +163,7 @@ TEST(PixelFactoryPixmap, readPNG_RGB)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -186,7 +186,7 @@ TEST(PixelFactoryPixmap, readPNG_RGBA)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -209,7 +209,7 @@ TEST(PixelFactoryPixmap, fillValue)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -234,7 +234,7 @@ TEST(PixelFactoryPixmap, fillSequence)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -259,7 +259,7 @@ TEST(PixelFactoryPixmap, fillColor)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -287,7 +287,7 @@ TEST(PixelFactoryPixmap, fillPattern)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -321,7 +321,7 @@ TEST(PixelFactoryPixmap, fillHorizontalGradient)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -355,7 +355,7 @@ TEST(PixelFactoryPixmap, fillVerticalGradient)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -404,7 +404,7 @@ TEST(PixelFactoryPixmap, fillChannelValue)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -492,7 +492,7 @@ TEST(PixelFactoryPixmap, fillChannelSequence)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -541,7 +541,7 @@ TEST(PixelFactoryPixmap, fillChannelPattern)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -586,7 +586,7 @@ TEST(PixelFactoryPixmap, fillChannelGradient)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -623,7 +623,7 @@ TEST(PixelFactoryPixmap, noiseGeneration)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -687,7 +687,7 @@ TEST(Pixmap, elementCountBeyondUint32IsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::Pixmap"), 3U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

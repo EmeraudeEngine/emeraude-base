@@ -33,7 +33,6 @@
 #include <initializer_list>
 #include <limits>
 #include <string>
-#include <vector>
 
 /* Local inclusions. */
 #include "DiagnosticsCapture.hpp"
@@ -251,7 +250,7 @@ TEST(NetworkHTTPResponseParser, rejectsOversizedHeaderSection)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -278,7 +277,7 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedStatusLines)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 4U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 4U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 4U);
-	EXPECT_EQ(captured.messages.size(), 12U);
+	EXPECT_EQ(captured.countWithoutDebug(), 12U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -295,7 +294,7 @@ TEST(NetworkHTTPResponseParser, rejectsUpgradeResponse)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -320,7 +319,7 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedContentLength)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -339,7 +338,7 @@ TEST(NetworkHTTPResponseParser, rejectsDuplicateContentLength)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -383,7 +382,7 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedChunkSizes)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -400,7 +399,7 @@ TEST(NetworkHTTPResponseParser, rejectsMalformedChunkTerminator)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -432,7 +431,7 @@ TEST(NetworkHTTPResponseParser, enforcesBodySizeCap)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -473,7 +472,7 @@ TEST(NetworkHTTPResponseParser, rejectsTruncatedResponses)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponseParser"), 3U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

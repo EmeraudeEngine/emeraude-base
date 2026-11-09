@@ -24,6 +24,10 @@
  * --- THIS IS AUTOMATICALLY GENERATED, DO NOT CHANGE ---
  */
 
+/* Project configuration. */
+#include "emeraude_platform.hpp"
+
+/* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
@@ -33,7 +37,6 @@
 #include <limits>
 #include <string>
 #include <system_error>
-#include <vector>
 
 /* Third-party inclusions. */
 #include "asio.hpp"
@@ -129,12 +132,24 @@ namespace
 
 TEST(NetworkTrustStore, systemTrustStoreLoads)
 {
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
 	asio::ssl::context context{asio::ssl::context::tls_client};
 
 	ASSERT_TRUE(Network::TrustStore::applySystemTrustStore(context));
 
 	/* A real system store holds anchors: prove certificates actually landed. */
 	EXPECT_GT(Network::TrustStore::certificateCount(context), 0U);
+
+	/* NOTE: The outcome is logged per platform (Windows-PA, 2026-11-09): the Windows import reports its count (Info); a
+	 * bundle file (macOS, Linux) is silent in Release (its 'loaded' line is DEBUG only); a Linux host without a bundle
+	 * file warns that it uses the hashed directory. A refusal is never expected here. */
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TrustStore"), 0U);
+#if IS_WINDOWS
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "Network::TrustStore"), 1U);
+#endif
+	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
 TEST(NetworkTrustStore, caBundleFileLoadsFixture)
@@ -194,7 +209,7 @@ TEST(NetworkTrustStore, missingBundleFileFails)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TrustStore"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -219,7 +234,7 @@ TEST(NetworkTrustStore, malformedBundleFileFails)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TrustStore"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

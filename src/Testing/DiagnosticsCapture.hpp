@@ -73,6 +73,21 @@ namespace EmEn::Base::Testing
 				return logged.severity == severity && logged.tag == tag;
 			}));
 		}
+
+		/**
+		 * @brief Returns how many messages were logged, Debug ones excepted.
+		 * @note A Debug message only exists in a DEBUG build (the sanitizer suites): a total asserted on this count is the
+		 * same in Release and Debug (the suite's guard swallows Debug too, 2026-11-09).
+		 * @return std::size_t
+		 */
+		[[nodiscard]]
+		std::size_t
+		countWithoutDebug () const noexcept
+		{
+			return static_cast< std::size_t >(std::count_if(messages.cbegin(), messages.cend(), [] (const LoggedMessage & logged) {
+				return logged.severity != Severity::Debug;
+			}));
+		}
 	};
 
 	/**

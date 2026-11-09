@@ -193,7 +193,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -216,7 +216,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -242,7 +242,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -261,7 +261,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -310,7 +310,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -362,7 +362,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 3160U);
-		EXPECT_EQ(captured.messages.size(), 3160U);
+		EXPECT_EQ(captured.countWithoutDebug(), 3160U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -381,7 +381,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -400,7 +400,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -418,7 +418,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -472,7 +472,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -524,7 +524,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -543,7 +543,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -617,7 +617,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 7U);
-		EXPECT_EQ(captured.messages.size(), 7U);
+		EXPECT_EQ(captured.countWithoutDebug(), 7U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -634,7 +634,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 4U);
-		EXPECT_EQ(captured.messages.size(), 4U);
+		EXPECT_EQ(captured.countWithoutDebug(), 4U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -651,7 +651,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 3U);
-		EXPECT_EQ(captured.messages.size(), 3U);
+		EXPECT_EQ(captured.countWithoutDebug(), 3U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -746,7 +746,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -764,7 +764,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -782,7 +782,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -807,7 +807,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -827,7 +827,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -846,7 +846,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -878,7 +878,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -937,7 +937,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -981,7 +981,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1021,7 +1021,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1128,7 +1128,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1146,7 +1146,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1330,7 +1330,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1436,7 +1436,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1459,7 +1459,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1731,7 +1731,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1798,7 +1798,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 9U);
-		EXPECT_EQ(captured.messages.size(), 9U);
+		EXPECT_EQ(captured.countWithoutDebug(), 9U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1845,7 +1845,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -1884,7 +1884,7 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatMDx"), 2U);
-		EXPECT_EQ(captured.messages.size(), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 

@@ -160,7 +160,7 @@ TEST(PixelFactoryFileFormats, targaHugeDimensionsDoNotOOM)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -179,7 +179,7 @@ TEST(PixelFactoryFileFormats, targaZeroDimensionsRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -198,7 +198,7 @@ TEST(PixelFactoryFileFormats, targaTruncatedHeaderRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -225,7 +225,7 @@ TEST(PixelFactoryFileFormats, pngValidSignatureGarbageChunkDoesNotAbort)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -250,7 +250,7 @@ TEST(PixelFactoryFileFormats, targaUnsupportedPixelDepthRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -271,7 +271,7 @@ TEST(PixelFactoryFileFormats, jpegGarbageDoesNotExitProcess)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 /*
@@ -440,7 +440,7 @@ TEST(PixelFactoryFileFormats, hdrLegacyRLEShiftPastTheCountWidthIsRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -459,7 +459,7 @@ TEST(PixelFactoryFileFormats, hdrGarbageRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -479,7 +479,7 @@ TEST(PixelFactoryFileFormats, hdrTruncatedPixelDataRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -500,7 +500,7 @@ TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -540,7 +540,7 @@ TEST(PixelFactoryFont, corruptTrueTypeFileRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::Font"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -703,7 +703,7 @@ TEST(PixelFactoryFont, trueTypeHostileInputsRefused)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::Font"), 5U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "IO"), 1U);
-	EXPECT_EQ(captured.messages.size(), 6U);
+	EXPECT_EQ(captured.countWithoutDebug(), 6U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -763,7 +763,7 @@ TEST(PixelFactoryFileFormats, hdrResolutionLineGrammar)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 10U);
-	EXPECT_EQ(captured.messages.size(), 10U);
+	EXPECT_EQ(captured.countWithoutDebug(), 10U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -809,7 +809,7 @@ TEST(PixelFactoryFileFormats, tiffGarbageRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -830,7 +830,7 @@ TEST(PixelFactoryFileFormats, tiffTruncatedPixelDataRejected)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatTIFF"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 2U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -851,7 +851,7 @@ TEST(PixelFactoryFileFormats, tiffHugeDimensionsDoNotOOM)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatTIFF"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -872,7 +872,7 @@ TEST(PixelFactoryFileFormats, tiffWriteRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTIFF"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -997,7 +997,7 @@ TEST(PixelFactoryFileFormats, webpGarbageEmptyAndTruncatedRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatWebP"), 3U);
-	EXPECT_EQ(captured.messages.size(), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1029,7 +1029,7 @@ TEST(PixelFactoryFileFormats, webpWriteRefusesGrayscaleAndInvalidPixmaps)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatWebP"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1155,7 +1155,7 @@ TEST(PixelFactoryFileFormats, jpegWriteRefusesAlphaAndInvalidPixmaps)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1173,7 +1173,7 @@ TEST(PixelFactoryFileFormats, jpegEmptyStreamRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1199,7 +1199,7 @@ TEST(PixelFactoryFileFormats, jpegTruncatedDoesNotAbort)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatJpeg"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1242,7 +1242,7 @@ TEST(PixelFactoryFileFormats, jpegHugeDimensionsDoNotOOM)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatJpeg"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1441,7 +1441,7 @@ TEST(PixelFactoryFileFormats, targaColorMappedRefusals)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1487,7 +1487,7 @@ TEST(PixelFactoryFileFormats, targaRefusesUndefinedVariants)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 4U);
-	EXPECT_EQ(captured.messages.size(), 4U);
+	EXPECT_EQ(captured.countWithoutDebug(), 4U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1501,7 +1501,7 @@ TEST(PixelFactoryFileFormats, targaUncompressedDataLargerThanTheStreamRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatTarga"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1616,7 +1616,7 @@ TEST(PixelFactoryFileFormats, pngTruncatedFilesAreRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 33U);
-	EXPECT_EQ(captured.messages.size(), 33U);
+	EXPECT_EQ(captured.countWithoutDebug(), 33U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1631,7 +1631,7 @@ TEST(PixelFactoryFileFormats, pngDeclaredSizeThePayloadCannotBackIsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPNG"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1675,7 +1675,7 @@ TEST(PixelFactoryFileFormats, pngWriterFiltersAndInterlacingRoundTrip)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Warning, "PixelFactory::FileFormatPNG"), 6U);
-	EXPECT_EQ(captured.messages.size(), 6U);
+	EXPECT_EQ(captured.countWithoutDebug(), 6U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1736,7 +1736,7 @@ TEST(PixelFactoryFileIO, readRefusesWhatItCannotDecode)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileIO"), 8U);
-	EXPECT_EQ(captured.messages.size(), 8U);
+	EXPECT_EQ(captured.countWithoutDebug(), 8U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

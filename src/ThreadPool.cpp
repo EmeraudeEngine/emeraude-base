@@ -463,7 +463,7 @@ namespace EmEn::Base
 			{
 				if constexpr ( ThreadPoolDebugEnabled )
 				{
-					Logging::error("ThreadPool", "Enqueue on a stopped thread pool!");
+					Logging::debug("ThreadPool", "Enqueue on a stopped thread pool!");
 				}
 
 				return false;

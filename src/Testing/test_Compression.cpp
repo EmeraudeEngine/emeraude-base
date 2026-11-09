@@ -98,7 +98,7 @@ TEST(Compression, ZLIBString)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -129,7 +129,7 @@ TEST(Compression, LZMAStringBasic)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -184,7 +184,7 @@ TEST(Compression, ZLIBDecompressImplausibleSizeRejected)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::ZLIB"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -217,7 +217,7 @@ TEST(Compression, LZMAStringMT)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -252,7 +252,7 @@ TEST(Compression, LZMAStringMTDisabled)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	/* NOTE: A PrintScopeRealTime timer logs when it is destroyed, before or after this snapshot: it is captured, not counted. */
-	EXPECT_EQ(captured.messages.size() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
+	EXPECT_EQ(captured.countWithoutDebug() - captured.count(EmEn::Base::Severity::Info, "Time::Elapsed::PrintScopeRealTime"), 0U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -292,7 +292,7 @@ TEST(Compression, ZLIBStreamZeroChunkSizeRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::ZLIB"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -311,7 +311,7 @@ TEST(Compression, LZMAStringLevelOutOfRangeRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::LZMA"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -331,7 +331,7 @@ TEST(Compression, ZLIBChunkHeaderWithoutItsPayloadIsRefused)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::ZLIB"), 1U);
-	EXPECT_EQ(captured.messages.size(), 1U);
+	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -356,7 +356,7 @@ TEST(Compression, LZMABombBeyondTheRatioIsRefused)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::LZMA"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::LZMA::Decompressor"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -381,7 +381,7 @@ TEST(Compression, LZMAHeaderDeclaringALargeDictionaryIsRefused)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::LZMA"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::LZMA::Decompressor"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -423,7 +423,7 @@ TEST(Compression, LZMAStreamClassesAreReusable)
 	/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Compression::LZMA::Decompressor"), 2U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

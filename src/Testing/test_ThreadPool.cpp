@@ -1620,7 +1620,7 @@ TEST(ThreadPool, runsOnTheCallingThreadWhenNoWorkerCouldStart)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 4U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "ThreadPool"), 1U);
-	EXPECT_EQ(captured.messages.size(), 5U);
+	EXPECT_EQ(captured.countWithoutDebug(), 5U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -1651,7 +1651,7 @@ TEST(ThreadPool, keepsTheWorkersThatStarted)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Thread"), 1U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "ThreadPool"), 1U);
-	EXPECT_EQ(captured.messages.size(), 2U);
+	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

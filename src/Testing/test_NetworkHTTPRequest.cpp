@@ -250,7 +250,7 @@ TEST(NetworkHTTPResponse, statusLines)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 4U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 4U);
-	EXPECT_EQ(captured.messages.size(), 8U);
+	EXPECT_EQ(captured.countWithoutDebug(), 8U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 
@@ -278,7 +278,7 @@ TEST(NetworkHTTPResponse, statusLineIsStrict)
 	const auto captured = diagnosticsCapture.snapshot();
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPResponse"), 9U);
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPHeaders"), 9U);
-	EXPECT_EQ(captured.messages.size(), 18U);
+	EXPECT_EQ(captured.countWithoutDebug(), 18U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 

@@ -67,7 +67,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -96,7 +96,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -124,7 +124,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 	/* ⚠️⚠️ REGRESSION PIN (Aug 2026) — the MD5 -> engine conversion must be a ROTATION (det +1),
@@ -230,7 +230,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -257,7 +257,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -284,7 +284,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -313,7 +313,7 @@ namespace EmEn::Base::Animation
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Animation::MD5AnimParser"), 1U);
-		EXPECT_EQ(captured.messages.size(), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 }
