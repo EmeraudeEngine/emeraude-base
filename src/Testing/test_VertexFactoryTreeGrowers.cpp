@@ -412,8 +412,10 @@ TEST(VertexFactoryTreeGrowthCurve, theHeightFactorIsOneAtTheReferenceAgeRisesAnd
 
 	float previous = 0.0F;
 
-	for ( float years = 5.0F; years <= 300.0F; years += 5.0F )
+	/* NOTE: An integer counter (a float one accumulates its rounding): 5, 10, ... 300 years. */
+	for ( int step = 1; step <= 60; ++step )
 	{
+		const auto years = 5.0F * static_cast< float >(step);
 		const auto factor = curve.heightFactor(years);
 
 		EXPECT_GT(factor, previous) << "the height fell at " << years << " years";

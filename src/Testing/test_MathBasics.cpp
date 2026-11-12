@@ -296,8 +296,11 @@ TEST(Math, fastCotan45Degrees)
 TEST(Math, fastCotanVsCotan)
 {
 	// Verify fastCotan gives similar results to cotan
-	for (double angle = 10.0; angle < 80.0; angle += 10.0)
+	/* NOTE: An integer counter (a floating-point one accumulates its rounding): 10, 20, ... 70 degrees. */
+	for ( int step = 1; step <= 7; ++step )
 	{
+		const double angle = 10.0 * static_cast< double >(step);
+
 		EXPECT_NEAR(fastCotan(angle), cotan(angle), 1e-5);
 	}
 }

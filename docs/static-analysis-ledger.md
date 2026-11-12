@@ -143,6 +143,12 @@ cppcheck --project=<build>/compile_commands.json --file-filter='*/emeraude-base/
 	--template='{file}:{line}:{column}: {severity}: {message} [{id}]' > cppcheck.out 2> cppcheck.txt
 ```
 
+**The release sweep (2026-11-12, base 1.6.0)**: 1 finding, 0 after — `containerOutOfBounds` in
+`DLSSoundBank.cpp`'s `isTag()`, a false positive (the guard `offset > size || size - offset < 4` was exact):
+rewritten `size < 4 || offset > size - 4`, which cppcheck follows. CodeChecker (cross-TU, the engine's ledger § The
+release sweep): 12 `cplusplus.Move` in tests ON PURPOSE (moved-from state asserted), 2 `FloatLoopCounter` and 1
+`DeadStores` fixed in tests.
+
 ⚠️ **A zero from a dropped configuration is not a zero** (Windows peer, 2026-10-19): cppcheck predefines no compiler
 macro, and a configuration that reaches an `#error` (`emeraude_platform.hpp`: "Unsupported architecture / compiler")
 is dropped SILENTLY — no finding, no message, exit 0. Run `--check-config` on one TU first: it must print no

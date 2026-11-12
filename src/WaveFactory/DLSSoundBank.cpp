@@ -33,7 +33,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <iterator>
 #include <limits>
 #include <optional>
 #include <span>
@@ -100,7 +99,8 @@ namespace EmEn::Base::WaveFactory::DLS
 		bool
 		isTag (std::span< const std::byte > data, size_t offset, std::string_view tag) noexcept
 		{
-			if ( offset > data.size() || data.size() - offset < 4 )
+			/* NOTE: Four bytes from the offset, without an overflowing sum. */
+			if ( data.size() < 4 || offset > data.size() - 4 )
 			{
 				return false;
 			}

@@ -22,13 +22,16 @@
  * https://github.com/EmeraudeEngine/emeraude-base
  */
 
-
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <initializer_list>
 #include <span>
+#include <string>
 #include <vector>
 
 /* Local inclusions. */
@@ -450,7 +453,6 @@ TEST(MathCurveTessellation, rotationMinimizingNormalsFollowTheTorsion)
 
 	const double start = frenetAngle(1);
 	double previous = start;
-	double unwrapped = start;
 
 	/* The end points' tangents are one-sided: compare the interior. */
 	for ( size_t index = 2; index + 1 < helix.size(); ++index )
@@ -461,10 +463,10 @@ TEST(MathCurveTessellation, rotationMinimizingNormalsFollowTheTorsion)
 		while ( angle - previous < -3.14159265358979 ) { angle += 6.28318530717959; }
 
 		previous = angle;
-		unwrapped = angle;
 
 		const double arcLength = static_cast< double >(index - 1) * Step * speed;
 
-		EXPECT_NEAR(unwrapped - start, -torsion * arcLength, 3.0E-6) << "at point " << index;
+		/* The unwrapped angle. */
+		EXPECT_NEAR(angle - start, -torsion * arcLength, 3.0E-6) << "at point " << index;
 	}
 }
