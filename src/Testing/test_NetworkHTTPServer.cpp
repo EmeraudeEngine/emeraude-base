@@ -32,6 +32,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <atomic>
 #include <chrono>
 #include <compare>
@@ -370,15 +371,13 @@ namespace
 				continue;
 			}
 
-			int accepting = 0;
-			socklen_t optionLength = sizeof(accepting);
+			/* NOTE: A listening socket has no peer (ENOTCONN); an accepted one has. Not SO_ACCEPTCONN: XNU does not answer
+			 * it through getsockopt() (ENOPROTOOPT on every socket, macOS-PA 2026-11-12). */
+			sockaddr_in peer{};
+			socklen_t peerLength = sizeof(peer);
+			const bool listening = ::getpeername(descriptor, reinterpret_cast< sockaddr * >(&peer), &peerLength) != 0 && errno == ENOTCONN;
 
-			if ( ::getsockopt(descriptor, SOL_SOCKET, SO_ACCEPTCONN, &accepting, &optionLength) != 0 )
-			{
-				continue;
-			}
-
-			found.push_back({.listening = accepting != 0, .closeOnExec = (flags & FD_CLOEXEC) != 0});
+			found.push_back({.listening = listening, .closeOnExec = (flags & FD_CLOEXEC) != 0});
 		}
 
 		return found;
