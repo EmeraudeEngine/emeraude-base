@@ -194,6 +194,7 @@
 #include "Network/Hostname.hpp"
 #include "Network/PercentEncoding.hpp"
 #include "Network/Query.hpp"
+#include "Network/SocketInheritance.hpp"
 #include "Network/TLSConnection.hpp"
 #include "Network/TrustStore.hpp"
 #include "Network/URI.hpp"

@@ -26,7 +26,11 @@
 
 #include <gtest/gtest.h>
 
+/* Project configuration. */
+#include "emeraude_platform.hpp"
+
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -49,6 +53,12 @@
 
 /* Third-party inclusions. */
 #include "asio.hpp"
+#if !IS_WINDOWS
+	#include <arpa/inet.h>
+	#include <fcntl.h>
+	#include <netinet/in.h>
+	#include <sys/socket.h>
+#endif
 
 /* Local inclusions. */
 #include "DiagnosticsCapture.hpp"
@@ -322,6 +332,116 @@ TEST(NetworkHTTPServer, AnswersOnLoopback)
 	EXPECT_FALSE(server.isRunning());
 	EXPECT_EQ(server.port(), 0);
 }
+
+#if !IS_WINDOWS
+namespace
+{
+	/** @brief What a descriptor of this process is, for the close-on-exec test. */
+	struct LocalSocket
+	{
+		bool listening{false};
+		bool closeOnExec{false};
+	};
+
+	/**
+	 * @brief Finds the IPv4 TCP sockets of this process whose LOCAL port is the given one.
+	 * @param port The local port.
+	 * @return std::vector< LocalSocket >
+	 */
+	std::vector< LocalSocket >
+	socketsOnLocalPort (uint16_t port)
+	{
+		std::vector< LocalSocket > found;
+
+		for ( int descriptor = 3; descriptor < 4096; ++descriptor )
+		{
+			const int flags = ::fcntl(descriptor, F_GETFD);
+
+			if ( flags < 0 )
+			{
+				continue;
+			}
+
+			sockaddr_in address{};
+			socklen_t length = sizeof(address);
+
+			if ( ::getsockname(descriptor, reinterpret_cast< sockaddr * >(&address), &length) != 0 || address.sin_family != AF_INET || ntohs(address.sin_port) != port )
+			{
+				continue;
+			}
+
+			int accepting = 0;
+			socklen_t optionLength = sizeof(accepting);
+
+			if ( ::getsockopt(descriptor, SOL_SOCKET, SO_ACCEPTCONN, &accepting, &optionLength) != 0 )
+			{
+				continue;
+			}
+
+			found.push_back({.listening = accepting != 0, .closeOnExec = (flags & FD_CLOEXEC) != 0});
+		}
+
+		return found;
+	}
+
+	/**
+	 * @brief Waits (2 s at most) until the server's side of a client connection shows on the port, then lists the
+	 * sockets on it.
+	 * @param port The server's port.
+	 * @return std::vector< LocalSocket >
+	 */
+	std::vector< LocalSocket >
+	socketsOnceAccepted (uint16_t port)
+	{
+		std::vector< LocalSocket > sockets;
+
+		for ( int attempt = 0; attempt < 200; ++attempt )
+		{
+			sockets = socketsOnLocalPort(port);
+
+			if ( std::ranges::any_of(sockets, [] (const auto & socket) { return !socket.listening; }) )
+			{
+				break;
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds{10});
+		}
+
+		return sockets;
+	}
+}
+
+/* A process the engine starts (a dialog, a desktop command) must never inherit a server socket: it would keep the port
+ * after the engine stops (measured 2026-11-11: a zenity dialog held the console and MCP ports). */
+TEST(NetworkHTTPServer, SocketsAreNotInheritedByChildProcesses)
+{
+	HTTPServer server{testOptions()};
+
+	ASSERT_TRUE(server.start(helloHandler));
+
+	const auto port = server.port();
+
+	/* A client connection held open: the server side of it is an accepted socket. */
+	asio::io_context ioContext;
+	asio::ip::tcp::socket client{ioContext};
+	asio::error_code error;
+	client.connect({asio::ip::make_address("127.0.0.1"), port}, error);
+
+	ASSERT_FALSE(error) << error.message();
+
+	const auto sockets = socketsOnceAccepted(port);
+	const auto listening = std::ranges::count_if(sockets, &LocalSocket::listening);
+	const auto inherited = std::ranges::count_if(sockets, [] (const LocalSocket & socket) { return !socket.closeOnExec; });
+
+	ASSERT_EQ(listening, 1);
+	ASSERT_GE(std::ssize(sockets) - listening, 1);
+
+	EXPECT_EQ(inherited, 0) << inherited << " of the " << sockets.size() << " server sockets (the listening one and the accepted ones) are inherited by child processes";
+
+	client.close(error);
+	server.stop();
+}
+#endif
 
 TEST(NetworkHTTPServer, RefusesForeignHostAndOrigin)
 {

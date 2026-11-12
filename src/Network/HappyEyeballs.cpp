@@ -27,8 +27,14 @@
 #include "HappyEyeballs.hpp"
 
 /* STL inclusions. */
+#include <compare>
 #include <cstddef>
+#include <new>
 #include <optional>
+#include <utility>
+
+/* Local inclusions. */
+#include "Network/SocketInheritance.hpp"
 
 namespace EmEn::Base::Network
 {
@@ -140,6 +146,9 @@ namespace EmEn::Base::Network
 
 							continue;
 						}
+
+						/* NOTE: A process started from here must not inherit the connection (best effort: it still connects). */
+						static_cast< void >(preventSocketInheritance(socket));
 
 						socket.async_connect(m_endpoints[index], [this, index] (const asio::error_code & error) {
 							this->onAttemptCompleted(index, error);

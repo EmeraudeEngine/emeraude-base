@@ -44,6 +44,23 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
 - `parseByteRange()` is public and tested on its own (RFC 9110 § 14.1.2: several ranges, another unit or a
   malformed value are IGNORED — the whole representation is served).
 
+## Sockets private to this process (`Network/SocketInheritance.hpp`, 2026-11-12)
+
+asio opens its sockets WITHOUT close-on-exec, and `accept()` does not set it either: every process the application
+starts (a dialog, a desktop command) inherited the server's listening socket and its connections, and kept the port
+after the application ended (measured 2026-11-11: a dialog held a console port and the MCP port of a killed engine; the
+next launch could not bind them).
+
+- `Network::preventSocketInheritance(socket)` (any open asio socket or acceptor) and
+  `Network::preventHandleInheritance(nativeHandle)` (a descriptor or a SOCKET, widened to `std::uintptr_t`): POSIX
+  `FD_CLOEXEC` (`fcntl`, `SocketInheritance.cpp`), Windows `SetHandleInformation(…, HANDLE_FLAG_INHERIT, 0)`.
+- Applied by `HTTPServer` (the acceptor after `open()`, every accepted connection) and `HappyEyeballs` (every attempt's
+  socket after `open()`, so every client connection of the HTTPS client and of the engine's `TCPClient`). A refusal is a
+  warning (the socket still works); the engine applies the same to its own servers.
+- Test: `NetworkHTTPServer.SocketsAreNotInheritedByChildProcesses` (POSIX) finds the listening socket and an accepted
+  one among this process's descriptors by their local port and checks `FD_CLOEXEC`: it FAILED before the fix (both
+  inherited), passes after.
+
 ## Cleartext HTTP in the client (`HTTPSClientOptions::allowPrivateCleartext`)
 
 `HTTPSClient` refuses `http://`. For an engine peer on the LAN, where no trusted certificate exists, the owner chose
@@ -66,7 +83,7 @@ two. Users: the engine's `Console::MCP::Server` and `Resources::SharingServer`.
   transport read, `DownloadOutcome::Cancelled`, a partial file removed. And a `download()` overload with
   `HTTPRequestOptions` (headers, cancel; a body is refused: `BadRequest`).
 
-## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 19)
+## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 20)
 
 Ranges, loopback answer, foreign Host / Origin, bearer, non-loopback without token, smuggling and framing, oversized
 head, pipelined keep-alive, files with ranges / HEAD / 404, an answer posted from another thread, stream last words

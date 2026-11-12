@@ -41,6 +41,7 @@
 #include "IO/IO.hpp"
 #include "Logging/Logging.hpp"
 #include "Mutex.hpp"
+#include "Network/SocketInheritance.hpp"
 #include "String.hpp"
 #include "ThreadSafety.hpp"
 
@@ -911,6 +912,13 @@ namespace EmEn::Base::Network
 		m_acceptor = std::make_unique< asio::ip::tcp::acceptor >(m_ioContext);
 		m_acceptor->open(endpoint.protocol(), ec);
 
+		/* NOTE: A process started by the application (a dialog, a tool) must not inherit the listening socket: it would
+		 * keep the port after this process ended (2026-11-11). */
+		if ( !ec && !preventSocketInheritance(*m_acceptor) )
+		{
+			Logging::warning("HTTPServer", name + ": unable to make the listening socket private to this process: a started process may inherit it.");
+		}
+
 		if ( !ec )
 		{
 			/* NOTE: a failure here only costs the fast restart on the same port: a warning, then bind. */
@@ -1180,6 +1188,12 @@ namespace EmEn::Base::Network
 				this->accept();
 
 				return;
+			}
+
+			/* NOTE: An accepted connection is private to this process as well (accept() does not set close-on-exec). */
+			if ( !preventSocketInheritance(socket) )
+			{
+				Logging::warning("HTTPServer", m_options.name + ": unable to make a client connection private to this process.");
 			}
 
 			asio::error_code optionError;
