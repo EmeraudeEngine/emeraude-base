@@ -756,6 +756,7 @@ namespace EmEn::Base::Network
 
 		/* The request's budget ends with the request: an idle connection, and its eventual close, have their own. */
 		connection->clearDeadline();
+		connection->clearStopToken();
 
 		/* Closed after the lock is released: a connection over the cap, and every expired one. */
 		std::vector< std::unique_ptr< TLSConnection > > closing;
@@ -907,6 +908,29 @@ namespace EmEn::Base::Network
 		 * fail it after it may have been acted upon. Idempotent methods (RFC 9110 § 9.2.2) are retried once. */
 		const bool idempotent = method != HTTPRequest::Method::POST && method != HTTPRequest::Method::PATCH && method != HTTPRequest::Method::CONNECT;
 
+		/* The caller's stop ends the transport step in flight at once (TLSConnection::setStopToken()): a step that
+		 * fails once the stop is requested is a cancellation, whatever the step — said once, as information. */
+		const auto cancelled = [&options, &outcome] () noexcept {
+			if ( !options.stopToken.stop_requested() )
+			{
+				return false;
+			}
+
+			outcome = DownloadOutcome::Cancelled;
+
+			Logging::info(Tag, "performHop(), cancelled by the caller.");
+
+			return true;
+		};
+
+		/* Nothing STARTS once the caller stopped: no connection is opened, none is taken from the idle ones, no request
+		 * leaves. On an idle connection a request needs no wait to be sent — the server would receive, and could act
+		 * upon, a call cancelled before it was made. */
+		if ( cancelled() )
+		{
+			return std::nullopt;
+		}
+
 		std::unique_ptr< TLSConnection > connection;
 		bool reused = false;
 
@@ -918,6 +942,7 @@ namespace EmEn::Base::Network
 			if ( reused )
 			{
 				connection->setDeadline(deadline);
+				connection->setStopToken(options.stopToken);
 			}
 		}
 
@@ -936,6 +961,7 @@ namespace EmEn::Base::Network
 			{
 				connection = std::make_unique< TLSConnection >(m_tlsContext, m_options.transportTimeouts);
 				connection->setDeadline(deadline);
+				connection->setStopToken(options.stopToken);
 				reused = false;
 
 				bool connected = false;
@@ -955,6 +981,11 @@ namespace EmEn::Base::Network
 
 				if ( !connected )
 				{
+					if ( cancelled() )
+					{
+						return std::nullopt;
+					}
+
 					/* Tell the two apart instead of calling both Unreachable. DownloadOutcome::TLSFailure
 					 * documents itself as "handshake or certificate verification refused the peer", and
 					 * until 2026-08-28 nothing in this file ever produced it - an expired certificate came
@@ -989,6 +1020,12 @@ namespace EmEn::Base::Network
 			 * idle check and the server's close crossed): the request never reached it — retried on a new one. */
 			if ( reused && (!written || !firstRead.has_value() || firstRead.value() == 0) )
 			{
+				/* Not when the caller stopped the exchange: that is why it failed. */
+				if ( cancelled() )
+				{
+					return std::nullopt;
+				}
+
 				connection = nullptr;
 
 				continue;
@@ -996,6 +1033,11 @@ namespace EmEn::Base::Network
 
 			if ( !written )
 			{
+				if ( cancelled() )
+				{
+					return std::nullopt;
+				}
+
 				if ( expired() )
 				{
 					outcome = DownloadOutcome::Timeout;
@@ -1065,12 +1107,8 @@ namespace EmEn::Base::Network
 
 		while ( result == HTTPResponseParser::Result::NeedMoreData )
 		{
-			if ( options.stopToken.stop_requested() )
+			if ( cancelled() )
 			{
-				outcome = DownloadOutcome::Cancelled;
-
-				Logging::info(Tag, "performHop(), cancelled by the caller.");
-
 				discardPartialFile();
 
 				return std::nullopt;
@@ -1094,7 +1132,8 @@ namespace EmEn::Base::Network
 
 			if ( !bytesRead.has_value() )
 			{
-				if ( expired() )
+				/* A read the caller's stop ended is a cancellation, not a protocol failure. */
+				if ( !cancelled() && expired() )
 				{
 					outcome = DownloadOutcome::Timeout;
 

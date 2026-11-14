@@ -1707,6 +1707,47 @@ by 0 — a forged stream then read as a valid scanline (found by the new `fuzz_h
 shift of 24 (`LegacyRLEMaximumShift`), and the count and `x + count` computed in 64 bits. **Rule:** a shift amount
 that comes from data is bounded below the operand's width BEFORE the shift.
 
+### ⚠️ A stop token that is only POLLED does not stop a wait — the HTTP client and its parked read (2026-11-14, FIXED)
+
+`HTTPRequestOptions::stopToken` was looked at by `HTTPSClient::performHop()` before each transport read, and by
+nothing else. A read already parked on a silent peer did not see the stop: it returned at its read timeout (30 s by
+default) or at the total budget, and only then was the exchange `Cancelled`; the connect and the handshake never
+looked. Measured through the engine's resource sharing with a peer made silent (a relay which stops forwarding): a
+cancel effective after 28.66 s, the shutdown of the engine waiting as long — 0.05 to 0.18 s and 0.54 s after the fix;
+hermetic test: `Cancelled` after 2046 ms, when a server silent for 2 s answered.
+
+**Fix (owner decision: an immediate wake by the token):** every transport step waits in ONE function,
+`TLSConnection::runWithTimeout()`. A `std::stop_callback` built there on the connection's token calls
+`asio::io_context::stop()` — thread-safe, and the only thing the stopping thread does to the connection; the function
+then serves what is ready without waiting, and closes the socket — as it does on a timeout — only when the operation
+is still pending. Five traps met:
+- an `io_context` stopped from outside reads `stopped()` exactly like one which ran out of work — the existing code
+  used that to detect a timeout. After a stop, `restart()` + `poll()` make it tell the truth again: out of work = the
+  operation completed;
+- **a stop ends a WAIT, never an operation which had none.** The first version closed the socket whenever the token
+  was stopped. A stop arriving as an operation completes then closed a connection whose exchange had SUCCEEDED: the
+  write answered `true`, `isConnected()` still said yes, and a complete HTTP response would have put that closed
+  connection back in the idle pool. Found on re-reading the diff as an adversary (no test had failed), pinned by
+  `NetworkTLSConnection.aStopNeverSpoilsAnOperationWhichDoesNotWait` — failing on the first version;
+- the consequence of the previous point: under a stopped token a request on a kept-alive connection needs no wait,
+  so it LEAVES — and the client looked at its token before the first read only. The server received a call cancelled
+  before it was made (older than this fix: the look was already after the write). `performHop()` now looks before
+  it takes or opens a connection: nothing starts once the token is stopped
+  (`NetworkHTTPSClient.aRequestUnderAStoppedTokenSendsNothing`, failing before: 2 requests seen for 1);
+- the `std::stop_callback` lives for the wait alone: its destructor waits for a callback in flight, so nothing
+  touches the context from another thread once the scope is left;
+- a step which fails because it was stopped must not log an error (the suite's guard would fail the test, and a
+  cancellation is not a failure): `reportTransportFailure()` keeps quiet once the stop is requested.
+
+**Rule:** a cancellation token is given to whatever WAITS, not only to the loop around it — "checked with a bounded
+latency in every stage" includes the stage that blocks. And "closed" must never be a state the object does not know
+about: whatever closes a socket either fails the operation in flight or is not done. The one stage left out is the
+name resolution (asio's resolver thread; owner decision 2026-11-06, `docs/plans/network-tls/README.md` § The total
+budget). Tests: `NetworkTLSConnection.aStopRequested…ParkedRead` / `…ParkedHandshake`,
+`…aStopNeverSpoilsAnOperationWhichDoesNotWait`,
+`NetworkHTTPSClient.aStopRequestedWhileThePeerIsSilentCancelsTheRequestAtOnce`; the network suite under
+ThreadSanitizer.
+
 ### ⚠️ A float is checked BEFORE it becomes a byte — the HDR writer and the values RGBE cannot hold (2026-11-14, FIXED)
 
 `FileFormatHDR::writeStream()` encoded each pixel without looking at it. A NaN or an infinity reached `std::frexp()`

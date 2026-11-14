@@ -29,9 +29,11 @@
 /* STL inclusions. */
 #include <array>
 #include <chrono>
+#include <compare>
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <utility>
@@ -413,6 +415,294 @@ TEST(NetworkTLSConnection, readTimesOutOnMuteServer)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::TLSConnection"), 1U);
 	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}
+
+/* 2026-11-14: a stop requested on the connection's token ends the operation in flight at once (setStopToken()). The
+ * token was only looked at by the HTTP client between two reads: an operation parked on a silent peer waited its own
+ * timeout. Each helper parks one operation for up to 20 s and requests the stop from another thread 200 ms later. */
+namespace
+{
+	/** @brief What an operation parked on a silent peer did once a stop was requested. */
+	struct InterruptedOperation
+	{
+		std::chrono::milliseconds elapsed{0};
+		size_t loggedLines{0};
+		/** The server, the certificate and (for a read) the connection were set up. */
+		bool setUp{false};
+		bool succeeded{false};
+		bool stillConnected{false};
+
+		/** @brief Tells whether the operation ended because of the stop: not before it, and long before its timeout. */
+		[[nodiscard]]
+		bool
+		endedByTheStop () const noexcept
+		{
+			return elapsed >= std::chrono::milliseconds{150} && elapsed < std::chrono::seconds{2};
+		}
+	};
+
+	/** @brief Runs an operation while another thread requests a stop 200 ms after its start, and times it. */
+	template< typename operation_t >
+	[[nodiscard]]
+	std::chrono::milliseconds
+	timeUntilStopped (std::stop_source & stopSource, operation_t && operation)
+	{
+		std::thread stopper{[&stopSource] () {
+			std::this_thread::sleep_for(std::chrono::milliseconds{200});
+
+			stopSource.request_stop();
+		}};
+
+		const auto begin = std::chrono::steady_clock::now();
+
+		std::forward< operation_t >(operation)();
+
+		const auto elapsed = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::steady_clock::now() - begin);
+
+		stopper.join();
+
+		return elapsed;
+	}
+
+	/** @brief A listener which never accepts: the kernel completes the TCP handshake and takes what is written, nothing
+	 * ever answers. */
+	class SilentListener final
+	{
+		public:
+
+			SilentListener () noexcept
+			{
+				asio::error_code error;
+
+				m_listener.open(asio::ip::tcp::v4(), error);
+
+				if ( !error )
+				{
+					m_listener.bind(asio::ip::tcp::endpoint{asio::ip::address_v4::loopback(), 0}, error);
+				}
+
+				if ( !error )
+				{
+					m_listener.listen(1, error);
+				}
+
+				if ( !error )
+				{
+					m_port = m_listener.local_endpoint(error).port();
+				}
+
+				if ( error )
+				{
+					m_port = 0;
+				}
+			}
+
+			/** @brief Returns the port, 0 when the listener could not be set up. */
+			[[nodiscard]]
+			uint16_t
+			port () const noexcept
+			{
+				return m_port;
+			}
+
+		private:
+
+			asio::io_context m_context;
+			asio::ip::tcp::acceptor m_listener{m_context};
+			uint16_t m_port{0};
+	};
+
+	/** @brief Requests the stop.
+	 * @note Through a reference to a non-const source: libstdc++ declares request_stop() const, the standard does not —
+	 * a const source would not compile elsewhere. */
+	void
+	requestStop (std::stop_source & stopSource) noexcept
+	{
+		stopSource.request_stop();
+	}
+
+	/** @brief A read parked on a server which performed the handshake and never answers. */
+	[[nodiscard]]
+	InterruptedOperation
+	readFromAMuteServerThenStop ()
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+		InterruptedOperation outcome;
+
+		const auto credentials = generateServerCredentials("DNS:localhost,IP:127.0.0.1");
+		const TLSTestServer server{credentials, TLSTestServer::Behavior::Mute};
+
+		if ( !credentials.valid || !server.isListening() )
+		{
+			return outcome;
+		}
+
+		auto clientContext = makeTrustingClientContext(credentials.certificatePEM);
+
+		Network::TLSConnectionOptions options;
+		options.readTimeout = std::chrono::seconds{20};
+
+		Network::TLSConnection connection{clientContext, options};
+
+		if ( !connection.connect("localhost", server.port()) )
+		{
+			return outcome;
+		}
+
+		outcome.setUp = true;
+
+		std::stop_source stopSource;
+		connection.setStopToken(stopSource.get_token());
+
+		std::array< char, 16 > buffer{};
+
+		outcome.elapsed = timeUntilStopped(stopSource, [&] () {
+			outcome.succeeded = connection.read(buffer.data(), buffer.size()).has_value();
+		});
+		outcome.stillConnected = connection.isConnected();
+		outcome.loggedLines = diagnosticsCapture.snapshot().countWithoutDebug();
+
+		return outcome;
+	}
+
+	/** @brief A TLS handshake parked on a listener which accepts the TCP connection and never speaks. */
+	[[nodiscard]]
+	InterruptedOperation
+	handshakeWithASilentListenerThenStop ()
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+		InterruptedOperation outcome;
+
+		/* Nothing answers the ClientHello. */
+		const SilentListener listener;
+		const auto port = listener.port();
+
+		if ( port == 0 )
+		{
+			return outcome;
+		}
+
+		outcome.setUp = true;
+
+		asio::ssl::context clientContext{asio::ssl::context::tls_client};
+
+		Network::TLSConnectionOptions options;
+		options.handshakeTimeout = std::chrono::seconds{20};
+
+		Network::TLSConnection connection{clientContext, options};
+
+		std::stop_source stopSource;
+		connection.setStopToken(stopSource.get_token());
+
+		outcome.elapsed = timeUntilStopped(stopSource, [&] () {
+			outcome.succeeded = connection.connect("127.0.0.1", port);
+		});
+		outcome.stillConnected = connection.isConnected();
+		outcome.loggedLines = diagnosticsCapture.snapshot().countWithoutDebug();
+
+		return outcome;
+	}
+
+	/** @brief What a stop requested BEFORE two operations did to them: a write which needs no wait, then a read which
+	 * would wait for ever. */
+	struct StoppedBeforehand
+	{
+		std::chrono::milliseconds readElapsed{0};
+		size_t loggedLines{0};
+		bool setUp{false};
+		bool writeSucceeded{false};
+		bool openAfterTheWrite{false};
+		bool readSucceeded{false};
+		bool connectedAfterTheRead{false};
+	};
+
+	/** @brief A cleartext connection to a silent listener, its token stopped, then a small write and a read. */
+	[[nodiscard]]
+	StoppedBeforehand
+	writeThenReadUnderAStoppedToken ()
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+		StoppedBeforehand outcome;
+
+		const SilentListener listener;
+		asio::ssl::context clientContext{asio::ssl::context::tls_client};
+
+		Network::TLSConnectionOptions options;
+		options.readTimeout = std::chrono::seconds{20};
+
+		Network::TLSConnection connection{clientContext, options};
+
+		if ( listener.port() == 0 || !connection.connectCleartextPrivate("127.0.0.1", listener.port()) )
+		{
+			return outcome;
+		}
+
+		outcome.setUp = true;
+
+		std::stop_source stopSource;
+		connection.setStopToken(stopSource.get_token());
+		requestStop(stopSource);
+
+		/* Four bytes the kernel takes at once: nothing to wait for. */
+		const std::array< char, 4 > request{'p', 'i', 'n', 'g'};
+
+		outcome.writeSucceeded = connection.write(request.data(), request.size());
+		outcome.openAfterTheWrite = connection.isOpenAndIdle();
+
+		/* Nothing will ever come: this one would wait. */
+		std::array< char, 16 > buffer{};
+		const auto begin = std::chrono::steady_clock::now();
+
+		outcome.readSucceeded = connection.read(buffer.data(), buffer.size()).has_value();
+		outcome.readElapsed = std::chrono::duration_cast< std::chrono::milliseconds >(std::chrono::steady_clock::now() - begin);
+		outcome.connectedAfterTheRead = connection.isConnected();
+		outcome.loggedLines = diagnosticsCapture.snapshot().countWithoutDebug();
+
+		return outcome;
+	}
+}
+
+TEST(NetworkTLSConnection, aStopRequestedFromAnotherThreadReturnsAParkedRead)
+{
+	const auto read = readFromAMuteServerThenStop();
+
+	ASSERT_TRUE(read.setUp);
+	EXPECT_FALSE(read.succeeded);
+	EXPECT_FALSE(read.stillConnected);
+	EXPECT_TRUE(read.endedByTheStop()) << read.elapsed.count() << " ms";
+	/* A stop is not a failure of the transport: nothing is logged. */
+	EXPECT_EQ(read.loggedLines, 0U);
+}
+
+TEST(NetworkTLSConnection, aStopRequestedFromAnotherThreadReturnsAParkedHandshake)
+{
+	const auto handshake = handshakeWithASilentListenerThenStop();
+
+	ASSERT_TRUE(handshake.setUp);
+	EXPECT_FALSE(handshake.succeeded);
+	EXPECT_FALSE(handshake.stillConnected);
+	EXPECT_TRUE(handshake.endedByTheStop()) << handshake.elapsed.count() << " ms";
+	EXPECT_EQ(handshake.loggedLines, 0U);
+}
+
+/* 2026-11-15: a stop ends a WAIT, it never spoils an operation which had none. The first version closed the socket
+ * whenever the token was stopped — also after a write the kernel had already taken: the write answered true on a
+ * connection closed and still said connected (and, in the HTTP client, a complete response would have put that
+ * connection back in the idle pool). */
+TEST(NetworkTLSConnection, aStopNeverSpoilsAnOperationWhichDoesNotWait)
+{
+	const auto outcome = writeThenReadUnderAStoppedToken();
+
+	ASSERT_TRUE(outcome.setUp);
+	/* The kernel took the bytes: the write holds, and the connection is what it says it is — open. */
+	EXPECT_TRUE(outcome.writeSucceeded);
+	EXPECT_TRUE(outcome.openAfterTheWrite);
+	/* The read would wait: it is refused at once, under a 20 s timeout, and the connection is spent. */
+	EXPECT_FALSE(outcome.readSucceeded);
+	EXPECT_FALSE(outcome.connectedAfterTheRead);
+	EXPECT_LT(outcome.readElapsed, std::chrono::seconds{2}) << outcome.readElapsed.count() << " ms";
+	/* A stop is not a failure of the transport: nothing is logged. */
+	EXPECT_EQ(outcome.loggedLines, 0U);
 }
 
 TEST(NetworkTLSConnection, operationsFailWhenNotConnected)

@@ -250,10 +250,12 @@ namespace EmEn::Base::Network
 
 		/**
 		 * @brief Optional: the caller's cancellation. Once its source has requested a stop — from any thread — the
-		 * exchange ends at the next transport read (DownloadOutcome::Cancelled, a partial file removed).
+		 * exchange ends AT ONCE, whatever transport step is in flight, a read parked on a silent peer included
+		 * (DownloadOutcome::Cancelled, a partial file removed). A request made under a token already stopped opens no
+		 * connection and sends nothing.
 		 * @note A default token never stops. The token shares the stop state with its source: nothing has to outlive
-		 * the call (it was a pointer to an atomic flag until 2026-11-14). The latency is ONE transport read: a read
-		 * parked on a silent peer returns at its read timeout or at the total budget, whichever comes first.
+		 * the call (it was a pointer to an atomic flag until 2026-11-14).
+		 * @note ⚠️ A name resolution in flight is the one step a stop does not end at once (TLSConnection::setDeadline()).
 		 */
 		std::stop_token stopToken;
 	};

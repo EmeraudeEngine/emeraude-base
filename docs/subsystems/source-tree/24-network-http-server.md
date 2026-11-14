@@ -82,8 +82,35 @@ next launch could not bind them).
 - **`HTTPRequestOptions::stopToken`** — the caller's cancellation, a `std::stop_token` (2026-11-14; it was
   `cancel`, a pointer to an `std::atomic< bool >` the caller had to keep alive — **API change**). Once its source has
   requested a stop, from any thread, the exchange ends at the next transport read: `DownloadOutcome::Cancelled`, a
-  partial file removed. A default token never stops. ⚠️ The latency is ONE transport read: a read parked on a silent
-  peer returns at its read timeout or at the total budget, not at the stop. Tests:
+  partial file removed. A default token never stops. **The stop ends the transport step in flight AT ONCE**
+  (2026-11-14, second step): `TLSConnection::setStopToken()` — a `std::stop_callback` in `runWithTimeout()`, the one
+  place where every step waits, calls `asio::io_context::stop()` on the connection's own loop (thread-safe: the only
+  thing the stopping thread does to the connection). The connection's thread then serves what is ready WITHOUT
+  waiting (`restart()` + `poll()`) and closes the socket only when the operation is STILL pending, which completes it
+  aborted. A connect, a handshake, a write and a read are covered alike; a step that fails once the stop is requested
+  is `Cancelled` whatever the step, said once as information, and the connection logs nothing (a stop is not a
+  failure of the transport). Before it, the token was only looked at between two reads: a read parked on a silent
+  peer waited its timeout, 30 s by default.
+  **A stop ends a WAIT, never an operation which had none**: bytes already received, or a small write the system's
+  buffers take, still complete under a stopped token and the connection stays open — a stop arriving as an exchange
+  completes spoils neither the exchange nor the connection. (The first version closed the socket whenever the token
+  was stopped: a write the kernel had taken answered `true` on a connection closed and still said connected, which a
+  complete response would have put back in the idle pool. Found on re-reading the diff, before any commit.)
+  **Nothing STARTS once the token is stopped**: `performHop()` looks at the token before it takes an idle connection
+  or opens one. It used to look before the first read only — after the request had left: on a kept-alive connection,
+  where a request needs no wait to be sent, the server received (and could act upon) a call cancelled before it was
+  made. Test `NetworkHTTPSClient.aRequestUnderAStoppedTokenSendsNothing` (failing before: the server saw 2 requests
+  for 1).
+  ⚠️ A context stopped from outside reads `stopped()` like one which ran out of work: `restart()` + `poll()` make it
+  tell the truth again (out of work = the operation completed). ⚠️ A name resolution in flight is not interruptible,
+  by a stop no more than by the deadline (the note of `setDeadline()`; owner decision 2026-11-06, no c-ares:
+  `docs/plans/network-tls/README.md` § The total budget). Tests:
+  `NetworkTLSConnection.aStopRequestedFromAnotherThreadReturnsAParkedRead` (returns 202 ms after a stop requested at
+  200 ms, under a 20 s read timeout), `…ReturnsAParkedHandshake` (200 ms),
+  `NetworkTLSConnection.aStopNeverSpoilsAnOperationWhichDoesNotWait` (failing on the first version: the connection
+  closed after a write which had succeeded),
+  `NetworkHTTPSClient.aStopRequestedWhileThePeerIsSilentCancelsTheRequestAtOnce` (failing before: `Cancelled` after
+  2046 ms, when the server answered),
   `NetworkHTTPSClient.aStopRequestedFromAnotherThreadCancelsTheRequest` (the server's handler requests it),
   `NetworkHTTPSClient.aStopRequestedDuringADownloadEndsItAndRemovesThePartialFile` (none existed for the flag).
   And a `download()` overload with `HTTPRequestOptions` (headers, stop token; a body is refused: `BadRequest`).

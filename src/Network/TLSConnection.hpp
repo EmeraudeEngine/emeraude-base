@@ -31,7 +31,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <stop_token>
 #include <string>
+#include <utility>
 
 /* Third-party inclusions.
  * NOTE: the no-exceptions hook MUST be included before any asio header. */
@@ -238,6 +240,34 @@ namespace EmEn::Base::Network
 				m_deadline = std::chrono::steady_clock::time_point::max();
 			}
 
+			/**
+			 * @brief Sets the token whose stop ends the WAIT of the operation in flight at once, and lets no following one
+			 * wait: a connect, a handshake, a write or a read parked on a silent peer returns as failed, the socket
+			 * closed (2026-11-14; a parked read used to wait its timeout, 30 s by default).
+			 * @note A stop ends a wait, never an operation which has none: what the system can serve at once (bytes
+			 * already received, a small write its buffers take) still completes under a stopped token, and the connection
+			 * stays open — a stop arriving as an exchange completes spoils neither the exchange nor the connection.
+			 * @note The stop may be requested from any thread: it wakes this connection's own event loop
+			 * (asio::io_context::stop(), which is thread-safe). A connection whose wait was ended is spent.
+			 * @note ⚠️ Like the deadline, it cannot interrupt a name resolution in flight (setDeadline()).
+			 * @note A stop is not a failure of the transport: nothing is logged here, the caller reports it.
+			 * @param stopToken The token; a default one never stops.
+			 */
+			void
+			setStopToken (std::stop_token stopToken) noexcept
+			{
+				m_stopToken = std::move(stopToken);
+			}
+
+			/**
+			 * @brief Removes the stop token (a connection put back in an idle pool outlives its request's token).
+			 */
+			void
+			clearStopToken () noexcept
+			{
+				m_stopToken = std::stop_token{};
+			}
+
 		private:
 
 			/**
@@ -249,12 +279,20 @@ namespace EmEn::Base::Network
 			std::chrono::milliseconds capped (std::chrono::milliseconds timeout) const noexcept;
 
 			/**
-			 * @brief Runs the private io_context until the pending operation completes or a timeout expires.
-			 * @note On timeout the socket is closed, which completes the pending
-			 * operation with asio::error::operation_aborted.
+			 * @brief Runs the private io_context until the pending operation completes, a timeout expires or a stop
+			 * is requested (setStopToken()).
+			 * @note On a timeout, or on a stop which finds the operation still pending, the socket is closed, which
+			 * completes that operation with asio::error::operation_aborted.
 			 * @param timeout The time budget for the pending operation, capped by the deadline (capped()).
 			 */
 			void runWithTimeout (std::chrono::milliseconds timeout) noexcept;
+
+			/**
+			 * @brief Logs the failure of a transport step, unless a stop was requested: the step then failed because
+			 * it was asked to, and the caller which asked reports it.
+			 * @param message A reference to the message.
+			 */
+			void reportTransportFailure (const std::string & message) const noexcept;
 
 			/**
 			 * @brief Resolves and establishes the raw TCP connection (async, under the connect timeout).
@@ -287,6 +325,7 @@ namespace EmEn::Base::Network
 			asio::ssl::stream< asio::ip::tcp::socket > m_stream;
 			TLSConnectionOptions m_options;
 			std::chrono::steady_clock::time_point m_deadline{std::chrono::steady_clock::time_point::max()};
+			std::stop_token m_stopToken;
 			bool m_connected{false};
 			bool m_handshakeRefused{false};
 			bool m_cleartext{false};

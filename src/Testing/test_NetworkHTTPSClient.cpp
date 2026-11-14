@@ -1413,6 +1413,96 @@ namespace
 	}
 }
 
+/* 2026-11-15: a request made under a token ALREADY stopped sends nothing. The token was looked at before the first
+ * read only — after the request had left: on a kept-alive connection, where a request needs no wait to be sent, the
+ * server received (and could act upon) a call its caller had cancelled before making it. */
+namespace
+{
+	/** @brief Requests the stop.
+	 * @note Through a reference to a non-const source: libstdc++ declares request_stop() const, the standard does not —
+	 * a const source would not compile elsewhere. */
+	void
+	requestStop (std::stop_source & stopSource) noexcept
+	{
+		stopSource.request_stop();
+	}
+
+	/** @brief What a request made under a stopped token did, on a client holding an idle connection to the server. */
+	struct RequestUnderAStoppedToken
+	{
+		Network::DownloadOutcome outcome{Network::DownloadOutcome::Success};
+		size_t requestsSeenByTheServer{0};
+		size_t connectionsSeenByTheServer{0};
+		bool setUp{false};
+		bool answered{false};
+	};
+
+	[[nodiscard]]
+	RequestUnderAStoppedToken
+	requestUnderAStoppedToken ()
+	{
+		RequestUnderAStoppedToken outcome;
+
+		const auto credentials = generateServerCredentials("DNS:localhost");
+
+		HTTPSTestServer server{credentials, [] (const std::string & /*request*/) {
+			return keepAliveResponse("kept");
+		}};
+		server.setKeepAlive(true);
+
+		if ( !credentials.valid || !server.isListening() )
+		{
+			return outcome;
+		}
+
+		auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+		const Network::HTTPSClient client{tlsContext};
+
+		/* One exchange first: the client now holds an idle connection, on which a request needs no wait to leave. */
+		if ( !client.get(serverURI(server, "/first")).has_value() )
+		{
+			return outcome;
+		}
+
+		outcome.setUp = true;
+
+		std::stop_source stopSource;
+		requestStop(stopSource);
+
+		Network::HTTPRequestOptions options;
+		options.stopToken = stopSource.get_token();
+
+		Network::DownloadReport report;
+
+		outcome.answered = client.request(Network::HTTPRequest::Method::GET, serverURI(server, "/stopped"), options, &report).has_value();
+		outcome.outcome = report.outcome;
+
+		/* The time for a request which had left to reach the server's handler. */
+		std::this_thread::sleep_for(std::chrono::milliseconds{300});
+
+		outcome.requestsSeenByTheServer = server.requestCount();
+		outcome.connectionsSeenByTheServer = server.connectionCount();
+
+		return outcome;
+	}
+}
+
+TEST(NetworkHTTPSClient, aRequestUnderAStoppedTokenSendsNothing)
+{
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+	const auto request = requestUnderAStoppedToken();
+
+	ASSERT_TRUE(request.setUp);
+	EXPECT_FALSE(request.answered);
+	EXPECT_EQ(request.outcome, Network::DownloadOutcome::Cancelled);
+	/* The first exchange alone reached the server, on the one connection it opened. */
+	EXPECT_EQ(request.requestsSeenByTheServer, 1U);
+	EXPECT_EQ(request.connectionsSeenByTheServer, 1U);
+
+	expectTheLogOfACancelledExchange(diagnosticsCapture);
+}
+
 /* A stop requested from ANOTHER thread while the exchange is in flight — here by the server's handler, before it
  * answers — ends the exchange at the client's next look at its token: the response is never parsed. */
 TEST(NetworkHTTPSClient, aStopRequestedFromAnotherThreadCancelsTheRequest)
@@ -1444,6 +1534,47 @@ TEST(NetworkHTTPSClient, aStopRequestedFromAnotherThreadCancelsTheRequest)
 
 	EXPECT_FALSE(result.has_value());
 	EXPECT_EQ(report.outcome, Network::DownloadOutcome::Cancelled);
+
+	expectTheLogOfACancelledExchange(diagnosticsCapture);
+}
+
+/* 2026-11-14: a stop requested while the client waits for a SILENT peer ends the exchange at once. The token was only
+ * looked at between two transport reads: a read parked on a peer which does not answer waited for that answer, or
+ * for its timeout (30 s by default). Here the server's handler requests the stop, then takes 2 s to answer. */
+TEST(NetworkHTTPSClient, aStopRequestedWhileThePeerIsSilentCancelsTheRequestAtOnce)
+{
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	std::stop_source stopSource;
+
+	const HTTPSTestServer server{credentials, [&stopSource] (const std::string & /*request*/) {
+		stopSource.request_stop();
+
+		std::this_thread::sleep_for(std::chrono::seconds{2});
+
+		return plainResponse("too late");
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	const Network::HTTPSClient client{tlsContext};
+
+	Network::HTTPRequestOptions options;
+	options.stopToken = stopSource.get_token();
+
+	Network::DownloadReport report;
+
+	const auto begin = std::chrono::steady_clock::now();
+	const auto result = client.request(Network::HTTPRequest::Method::GET, serverURI(server, "/silent"), options, &report);
+	const auto elapsed = std::chrono::steady_clock::now() - begin;
+
+	EXPECT_FALSE(result.has_value());
+	EXPECT_EQ(report.outcome, Network::DownloadOutcome::Cancelled);
+	EXPECT_LT(elapsed, std::chrono::seconds{1}) << std::chrono::duration_cast< std::chrono::milliseconds >(elapsed).count() << " ms";
 
 	expectTheLogOfACancelledExchange(diagnosticsCapture);
 }

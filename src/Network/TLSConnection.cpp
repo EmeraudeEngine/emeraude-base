@@ -168,11 +168,32 @@ namespace EmEn::Base::Network
 	TLSConnection::runWithTimeout (std::chrono::milliseconds timeout) noexcept
 	{
 		m_ioContext.restart();
-		m_ioContext.run_for(this->capped(timeout));
+
+		{
+			/* A stop requested from ANOTHER thread ends the wait at once: asio::io_context::stop() is thread-safe, and it
+			 * is the only thing that thread does to this connection. Requested already, the callback runs here and the
+			 * loop below returns without waiting. The destructor of the callback waits for one in flight: past this
+			 * scope nothing touches the context from elsewhere. */
+			const std::stop_callback wake{m_stopToken, [this] () {
+				m_ioContext.stop();
+			}};
+
+			m_ioContext.run_for(this->capped(timeout));
+		}
+
+		if ( m_stopToken.stop_requested() )
+		{
+			/* A context stopped from outside reads "stopped" like one which ran out of work. What is ready is served
+			 * WITHOUT waiting, and the context then tells the truth: out of work — the operation completed, it keeps
+			 * its result and its connection (a stop ends a wait, it never spoils an operation which had none) — or
+			 * not, and the operation still pending is ended below, like on a timeout. */
+			m_ioContext.restart();
+			m_ioContext.poll();
+		}
 
 		if ( !m_ioContext.stopped() )
 		{
-			/* Timeout: closing the socket completes the pending operation
+			/* A timeout, or a stop: closing the socket completes the pending operation
 			 * with asio::error::operation_aborted, then the context drains. */
 			asio::error_code closeError;
 
@@ -180,6 +201,17 @@ namespace EmEn::Base::Network
 
 			m_ioContext.run();
 		}
+	}
+
+	void
+	TLSConnection::reportTransportFailure (const std::string & message) const noexcept
+	{
+		if ( m_stopToken.stop_requested() )
+		{
+			return;
+		}
+
+		Logging::error(Tag, message);
 	}
 
 	bool
@@ -202,7 +234,7 @@ namespace EmEn::Base::Network
 
 		if ( resolveError || endpoints.empty() )
 		{
-			Logging::error(Tag, "establishTcp(), unable to resolve '" + host + "' : " + IO::systemErrorText(resolveError));
+			this->reportTransportFailure("establishTcp(), unable to resolve '" + host + "' : " + IO::systemErrorText(resolveError));
 
 			return false;
 		}
@@ -231,7 +263,7 @@ namespace EmEn::Base::Network
 
 		if ( connectError )
 		{
-			Logging::error(Tag, "establishTcp(), unable to reach '" + host + ':' + std::to_string(port) + "' : " + IO::systemErrorText(connectError));
+			this->reportTransportFailure("establishTcp(), unable to reach '" + host + ':' + std::to_string(port) + "' : " + IO::systemErrorText(connectError));
 
 			return false;
 		}
@@ -259,7 +291,7 @@ namespace EmEn::Base::Network
 
 		if ( writeError )
 		{
-			Logging::error(Tag, "tunnelThroughProxy(), unable to send the CONNECT request : " + IO::systemErrorText(writeError));
+			this->reportTransportFailure("tunnelThroughProxy(), unable to send the CONNECT request : " + IO::systemErrorText(writeError));
 
 			return false;
 		}
@@ -290,7 +322,7 @@ namespace EmEn::Base::Network
 
 			if ( readError )
 			{
-				Logging::error(Tag, "tunnelThroughProxy(), unable to read the proxy response : " + IO::systemErrorText(readError));
+				this->reportTransportFailure("tunnelThroughProxy(), unable to read the proxy response : " + IO::systemErrorText(readError));
 
 				return false;
 			}
@@ -408,7 +440,7 @@ namespace EmEn::Base::Network
 
 		if ( handshakeError )
 		{
-			Logging::error(Tag, "performHandshake(), the TLS handshake with '" + targetHost + "' failed : " + IO::systemErrorText(handshakeError));
+			this->reportTransportFailure("performHandshake(), the TLS handshake with '" + targetHost + "' failed : " + IO::systemErrorText(handshakeError));
 
 			return false;
 		}
@@ -526,7 +558,7 @@ namespace EmEn::Base::Network
 
 		if ( writeError || bytesWritten != size )
 		{
-			Logging::error(Tag, "write(), unable to send " + std::to_string(size) + " bytes : " + IO::systemErrorText(writeError));
+			this->reportTransportFailure("write(), unable to send " + std::to_string(size) + " bytes : " + IO::systemErrorText(writeError));
 
 			m_connected = false;
 
@@ -590,7 +622,7 @@ namespace EmEn::Base::Network
 			return std::nullopt;
 		}
 
-		Logging::error(Tag, "read(), unable to read from the peer : " + IO::systemErrorText(readError));
+		this->reportTransportFailure("read(), unable to read from the peer : " + IO::systemErrorText(readError));
 
 		m_connected = false;
 

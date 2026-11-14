@@ -451,6 +451,8 @@ handler, but the pending operation is drained (`io_context::run()`) before the s
 destruction joins that thread (`resolver_thread_pool.ipp`). A stalled system resolver therefore holds the request until
 it gives up itself (glibc: `timeout` × `attempts` of `resolv.conf`, 5 s × 2 by default). This was already true of the
 former `connectTimeout`. Owner decision 2026-11-06: no new dependency (c-ares) for it; documented.
+The same stage is the one a STOP does not end at once (`TLSConnection::setStopToken()`, 2026-11-14): the connect, the
+handshake, each read and write return immediately, a resolution in flight when the system resolver gives up.
 
 ### The URI keeps its encoded bytes
 
