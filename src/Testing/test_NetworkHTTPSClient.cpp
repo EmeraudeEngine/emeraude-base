@@ -38,7 +38,9 @@
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <stop_token>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -1356,4 +1358,144 @@ TEST(NetworkHTTPSClient, theTotalTimeoutIsOneBudgetNotASumOfOperationTimeouts)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 1U);
 	EXPECT_EQ(captured.countWithoutDebug(), 2U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}
+
+/* 2026-11-14: the caller's cancellation is a std::stop_token (HTTPRequestOptions::stopToken). It was a pointer to an
+ * atomic flag the caller had to keep alive, and no test raised it. */
+namespace
+{
+	/** @brief The log of a cancelled exchange: one information line of the client, no error, nothing on stderr. */
+	void
+	expectTheLogOfACancelledExchange (EmEn::Base::Testing::DiagnosticsCapture & diagnosticsCapture)
+	{
+		const auto captured = diagnosticsCapture.snapshot();
+
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "Network::HTTPSClient"), 1U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "Network::HTTPSClient"), 0U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	}
+
+	/** @brief A body of at least a given size, large enough to cross many transport reads. */
+	[[nodiscard]]
+	std::string
+	repeatedPayload (size_t minimumSize)
+	{
+		std::string payload;
+
+		while ( payload.size() < minimumSize )
+		{
+			payload += "0123456789abcdef";
+		}
+
+		return payload;
+	}
+
+	/** @brief What a download stopped from its own progress hook did. */
+	struct StoppedDownload
+	{
+		Network::DownloadOutcome outcome{Network::DownloadOutcome::Success};
+		uint64_t receivedWhenStopped{0};
+		uint32_t hookCallsAfterTheStop{0};
+		bool downloaded{false};
+		bool partialFileLeft{false};
+	};
+
+	void
+	expectAStoppedDownload (const StoppedDownload & download, size_t payloadSize)
+	{
+		EXPECT_FALSE(download.downloaded);
+		EXPECT_EQ(download.outcome, Network::DownloadOutcome::Cancelled);
+		/* Stopped midway: some bytes were received, not all, and the hook was not called again. */
+		EXPECT_GT(download.receivedWhenStopped, 0U);
+		EXPECT_LT(download.receivedWhenStopped, payloadSize);
+		EXPECT_EQ(download.hookCallsAfterTheStop, 0U);
+		EXPECT_FALSE(download.partialFileLeft);
+	}
+}
+
+/* A stop requested from ANOTHER thread while the exchange is in flight — here by the server's handler, before it
+ * answers — ends the exchange at the client's next look at its token: the response is never parsed. */
+TEST(NetworkHTTPSClient, aStopRequestedFromAnotherThreadCancelsTheRequest)
+{
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	std::stop_source stopSource;
+
+	const HTTPSTestServer server{credentials, [&stopSource] (const std::string & /*request*/) {
+		stopSource.request_stop();
+
+		return plainResponse("never parsed");
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	const Network::HTTPSClient client{tlsContext};
+
+	Network::HTTPRequestOptions options;
+	options.stopToken = stopSource.get_token();
+
+	Network::DownloadReport report;
+
+	const auto result = client.request(Network::HTTPRequest::Method::GET, serverURI(server, "/cancelled"), options, &report);
+
+	EXPECT_FALSE(result.has_value());
+	EXPECT_EQ(report.outcome, Network::DownloadOutcome::Cancelled);
+
+	expectTheLogOfACancelledExchange(diagnosticsCapture);
+}
+
+/* A stop requested DURING a download — here from its own progress hook, after the first block — ends it at the next
+ * transport read and removes the partial file. */
+TEST(NetworkHTTPSClient, aStopRequestedDuringADownloadEndsItAndRemovesThePartialFile)
+{
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+	const auto credentials = generateServerCredentials("DNS:localhost");
+	ASSERT_TRUE(credentials.valid);
+
+	const auto payload = repeatedPayload(4000000);
+
+	const HTTPSTestServer server{credentials, [&payload] (const std::string & /*request*/) {
+		return plainResponse(payload);
+	}};
+	ASSERT_TRUE(server.isListening());
+
+	auto tlsContext = makeTrustingClientContext(credentials.certificatePEM);
+
+	const Network::HTTPSClient client{tlsContext};
+
+	std::stop_source stopSource;
+
+	Network::HTTPRequestOptions options;
+	options.stopToken = stopSource.get_token();
+
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-download-cancel-test.bin");
+
+	Network::DownloadReport report;
+	StoppedDownload download;
+
+	download.downloaded = client.download(serverURI(server, "/big.bin"), filepath, options, [&] (uint64_t bytesReceived, std::optional< uint64_t > /*bytesTotal*/) {
+		if ( stopSource.stop_requested() )
+		{
+			++download.hookCallsAfterTheStop;
+
+			return;
+		}
+
+		download.receivedWhenStopped = bytesReceived;
+
+		stopSource.request_stop();
+	}, &report);
+
+	std::error_code errorCode;
+
+	download.outcome = report.outcome;
+	download.partialFileLeft = std::filesystem::exists(filepath, errorCode);
+
+	expectAStoppedDownload(download, payload.size());
+	expectTheLogOfACancelledExchange(diagnosticsCapture);
 }

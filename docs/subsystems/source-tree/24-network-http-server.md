@@ -79,9 +79,14 @@ next launch could not bind them).
 
 - **`Host` carries a non-default port** (RFC 9110 § 7.2). It was the bare host: a loopback server checking its own
   name (this one) refused `127.0.0.1` for `127.0.0.1:<port>`. Proof: `NetworkHTTPServer.CleartextDownloadFromAPrivatePeer`.
-- **`HTTPRequestOptions::cancel`** — an `std::atomic< bool >` another thread raises: the exchange stops at the next
-  transport read, `DownloadOutcome::Cancelled`, a partial file removed. And a `download()` overload with
-  `HTTPRequestOptions` (headers, cancel; a body is refused: `BadRequest`).
+- **`HTTPRequestOptions::stopToken`** — the caller's cancellation, a `std::stop_token` (2026-11-14; it was
+  `cancel`, a pointer to an `std::atomic< bool >` the caller had to keep alive — **API change**). Once its source has
+  requested a stop, from any thread, the exchange ends at the next transport read: `DownloadOutcome::Cancelled`, a
+  partial file removed. A default token never stops. ⚠️ The latency is ONE transport read: a read parked on a silent
+  peer returns at its read timeout or at the total budget, not at the stop. Tests:
+  `NetworkHTTPSClient.aStopRequestedFromAnotherThreadCancelsTheRequest` (the server's handler requests it),
+  `NetworkHTTPSClient.aStopRequestedDuringADownloadEndsItAndRemovesThePartialFile` (none existed for the flag).
+  And a `download()` overload with `HTTPRequestOptions` (headers, stop token; a body is refused: `BadRequest`).
 
 ## Tests (`src/Testing/test_NetworkHTTPServer.cpp`, 20)
 

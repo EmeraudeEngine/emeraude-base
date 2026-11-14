@@ -1065,7 +1065,7 @@ namespace EmEn::Base::Network
 
 		while ( result == HTTPResponseParser::Result::NeedMoreData )
 		{
-			if ( options.cancel != nullptr && options.cancel->load() )
+			if ( options.stopToken.stop_requested() )
 			{
 				outcome = DownloadOutcome::Cancelled;
 

@@ -420,7 +420,7 @@ passed or failed by timing. It now reads out what `Content-Length` announced
 
 For engine resource sharing (owner decisions 2026-10-04): `Network::HTTPServer` (the engine MCP server's HTTP code,
 extracted), `HTTPSClientOptions::allowPrivateCleartext` (http:// only to a host that resolves ONLY to private
-addresses, never through a proxy), `HTTPRequestOptions::cancel` (`DownloadOutcome::Cancelled`), a `download()`
+addresses, never through a proxy), `HTTPRequestOptions::stopToken` (`DownloadOutcome::Cancelled`; named `cancel`, an atomic flag, until 2026-11-14), a `download()`
 overload with headers, and the `Host` field now carries a non-default port (RFC 9110 § 7.2). Detail and tests:
 `docs/subsystems/source-tree/24-network-http-server.md`. TLS for the LAN case stays open (engine item
 `resource-sharing-tls`).

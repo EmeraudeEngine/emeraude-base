@@ -1,6 +1,8 @@
 # Development History Log
 
 ## Unreleased
+ - **`HTTPRequestOptions::stopToken` replaces `cancel` (API change).** The caller's cancellation of an HTTP exchange is a `std::stop_token`; it was a pointer to an `std::atomic< bool >` that had to outlive the call. A caller that set `cancel` holds a `std::stop_source` and passes its token; a caller that never set it changes nothing.
+ - **The Radiance writer refuses what RGBE cannot hold.** `FileFormatHDR::writeStream()` returns false, writes nothing and logs the count of such pixels and the position of the first, when a component is a NaN, an infinity, or 2^127 and above. It converted them to a byte: undefined behaviour, or an exponent byte that wrapped to 0.
  - `Math::halfToFloat()`: an IEEE 754 binary16 bit pattern decoded into a float, exact for each of the 65 536 patterns (signed zero, subnormals, infinities, NaN payload), `constexpr`.
 
 ## Version 1.6.0 (2026-11-12)

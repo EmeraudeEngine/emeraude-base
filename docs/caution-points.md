@@ -1707,6 +1707,28 @@ by 0 — a forged stream then read as a valid scanline (found by the new `fuzz_h
 shift of 24 (`LegacyRLEMaximumShift`), and the count and `x + count` computed in 64 bits. **Rule:** a shift amount
 that comes from data is bounded below the operand's width BEFORE the shift.
 
+### ⚠️ A float is checked BEFORE it becomes a byte — the HDR writer and the values RGBE cannot hold (2026-11-14, FIXED)
+
+`FileFormatHDR::writeStream()` encoded each pixel without looking at it. A NaN or an infinity reached `std::frexp()`
+(unspecified exponent) and `static_cast< uint8_t >(component * scale)`: a float-to-integer conversion whose value is
+not representable is undefined behaviour — UBSan, on a pixmap holding one NaN:
+`FileFormatHDR.hpp: runtime error: 256 is outside the range of representable values of type 'unsigned char'`. A finite
+component at or above 2^127 got `exponent + 128 = 256`, which wrapped to 0 in the exponent byte: a pixel written, and
+read back near zero. A Release build wrote a 69-byte file for a 3×2 pixmap in every case and returned true.
+
+**Fix (owner decision: refuse, never alter):** `everyComponentIsEncodable()` scans the pixmap before the header is
+written; one unencodable component (NaN, ±infinity, ≥ 2^127) and `writeStream()` returns false, writes nothing, and
+logs the count of such pixels with the position of the first. `FileIO::write()` encodes in memory first, so no file
+appears. A caller that wants a file filters its values itself (the engine's render-target dump zeroes and counts
+them). A negative component is unchanged: written with a zero mantissa. An integer pixmap is normalized to [0, 1] and
+always encodable.
+
+**Rule:** a writer is a boundary too — a float pixmap comes from anywhere (an image read back from a GPU can hold a
+NaN); test `std::isfinite()` and the format's range before any conversion to an integer. Tests:
+`PixelFactoryFileFormats.hdrWriteRefusesAComponentWithoutAnRGBEValue` (failing before the fix: the five cases
+written, 69 bytes each),
+`hdrWriteAcceptsTheLargestEncodableComponent` (the boundary: the largest float below 2^127 round-trips).
+
 ### An OOM-guard test proves nothing on a big-RAM host — the HDR reader allocated 51 GB from a 40-byte file (Aug 2026, FIXED)
 
 > [!WARNING]

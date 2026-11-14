@@ -27,9 +27,8 @@
 #pragma once
 
 /* STL inclusions. */
-#include <atomic>
 #include <chrono>
-#include <compare>
+#include <compare> // IWYU pragma: keep (the defaulted operator<=> of ConnectionKey: a base unit asks to remove it, an engine unit asks for it)
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -37,6 +36,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -92,7 +92,7 @@ namespace EmEn::Base::Network
 		HTTPStatus,     /* The exchange completed, the status was not 2xx (see downloadStatusCode). */
 		LocalIO,        /* The destination file could not be opened, written or flushed. */
 		BadRequest,     /* The CALLER's request was refused before a byte was sent (bad header, bad body). */
-		Cancelled       /* The caller's cancel flag was raised (HTTPRequestOptions::cancel). */
+		Cancelled       /* The caller requested a stop (HTTPRequestOptions::stopToken). */
 	};
 
 	/**
@@ -249,10 +249,13 @@ namespace EmEn::Base::Network
 		std::string contentType;
 
 		/**
-		 * @brief Optional: raised by another thread, it stops the exchange at the next transport read
-		 * (DownloadOutcome::Cancelled, a partial file removed). Must outlive the call.
+		 * @brief Optional: the caller's cancellation. Once its source has requested a stop — from any thread — the
+		 * exchange ends at the next transport read (DownloadOutcome::Cancelled, a partial file removed).
+		 * @note A default token never stops. The token shares the stop state with its source: nothing has to outlive
+		 * the call (it was a pointer to an atomic flag until 2026-11-14). The latency is ONE transport read: a read
+		 * parked on a silent peer returns at its read timeout or at the total budget, whichever comes first.
 		 */
-		const std::atomic< bool > * cancel{nullptr};
+		std::stop_token stopToken;
 	};
 
 	/**

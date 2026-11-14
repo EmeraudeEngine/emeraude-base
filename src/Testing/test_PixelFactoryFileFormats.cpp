@@ -37,6 +37,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -502,6 +503,132 @@ TEST(PixelFactoryFileFormats, hdrHugeDimensionsDoNotOOM)
 	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR"), 1U);
 	EXPECT_EQ(captured.countWithoutDebug(), 1U);
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+}
+
+/* 2026-11-14: the writer turned each component into a byte without looking at it. A NaN or an infinity reached
+ * std::frexp() and a float-to-byte conversion with no representable value (undefined behaviour); a component at or above
+ * 2^127 got an exponent byte of 256, which wrapped to 0. The RGBE encoding has no value for any of them: the pixmap is
+ * REFUSED (owner decision), nothing is written, and one error line counts the pixels and places the first. */
+namespace
+{
+	/** @brief What the Radiance writer did with a pixmap. */
+	struct HDRWriteAttempt
+	{
+		size_t bytesWritten{0};
+		size_t errorLines{0};
+		size_t loggedLines{0};
+		bool accepted{false};
+
+		[[nodiscard]]
+		bool operator== (const HDRWriteAttempt &) const noexcept = default;
+	};
+
+	/** @brief Writes a 3x2 RGB pixmap of 0.25 whose last pixel holds one given green component. */
+	[[nodiscard]]
+	HDRWriteAttempt
+	writeHDRHoldingTheComponent (float component)
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+		PixelFactory::Pixmap< float, uint32_t > source;
+
+		if ( !source.initialize(3, 2, PixelFactory::ChannelMode::RGB) )
+		{
+			return {};
+		}
+
+		std::ranges::fill(source.data(), 0.25F);
+		*std::prev(source.data().end(), 2) = component;
+
+		std::vector< std::byte > buffer;
+		IO::MemoryStream output{buffer};
+		const PixelFactory::FileFormatHDR< float, uint32_t > format;
+
+		HDRWriteAttempt attempt;
+		attempt.accepted = format.writeStream(output, source);
+		attempt.bytesWritten = buffer.size();
+
+		const auto captured = diagnosticsCapture.snapshot();
+		attempt.errorLines = captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatHDR");
+		attempt.loggedLines = captured.countWithoutDebug();
+
+		return attempt;
+	}
+}
+
+TEST(PixelFactoryFileFormats, hdrWriteRefusesAComponentWithoutAnRGBEValue)
+{
+	struct Unencodable
+	{
+		float component;
+		const char * label;
+	};
+
+	const std::array< Unencodable, 5 > cases{{
+		{.component = std::numeric_limits< float >::quiet_NaN(), .label = "a NaN"},
+		{.component = std::numeric_limits< float >::infinity(), .label = "+infinity"},
+		{.component = -std::numeric_limits< float >::infinity(), .label = "-infinity"},
+		{.component = 0x1p127F, .label = "2^127"},
+		{.component = std::numeric_limits< float >::max(), .label = "the largest float"}
+	}};
+
+	/* Refused, nothing written, one error line and no other. */
+	const HDRWriteAttempt refused{.bytesWritten = 0, .errorLines = 1, .loggedLines = 1, .accepted = false};
+
+	for ( const auto & unencodable : cases )
+	{
+		const auto attempt = writeHDRHoldingTheComponent(unencodable.component);
+
+		EXPECT_EQ(attempt, refused) << unencodable.label << ": accepted " << attempt.accepted << ", " << attempt.bytesWritten << " byte(s) written, " << attempt.errorLines << " error line(s), " << attempt.loggedLines << " line(s) logged";
+	}
+
+	/* The control: the same pixmap with an ordinary component is written, in silence. */
+	const auto control = writeHDRHoldingTheComponent(0.5F);
+
+	EXPECT_TRUE(control.accepted);
+	EXPECT_GT(control.bytesWritten, 0U);
+	EXPECT_EQ(control.loggedLines, 0U);
+}
+
+/* The boundary of the refusal: the largest float below 2^127 is written, and read back within the RGBE precision. A
+ * negative component is still written with a zero mantissa: it reads back as half a step of the pixel's exponent (the
+ * decoder's bias, Ward's original decoding), never as a negative nor as a large value. */
+TEST(PixelFactoryFileFormats, hdrWriteAcceptsTheLargestEncodableComponent)
+{
+	const auto largest = std::nextafter(0x1p127F, 0.0F);
+
+	PixelFactory::Pixmap< float, uint32_t > source;
+	ASSERT_TRUE(source.initialize(1, 1, PixelFactory::ChannelMode::RGB));
+
+	const std::array< float, 3 > pixel{largest, -4.0F, largest * 0.5F};
+	std::ranges::copy(pixel, source.data().begin());
+
+	std::vector< std::byte > buffer;
+
+	{
+		IO::MemoryStream output{buffer};
+		const PixelFactory::FileFormatHDR< float, uint32_t > format;
+
+		ASSERT_TRUE(format.writeStream(output, source));
+	}
+
+	PixelFactory::Pixmap< float, uint32_t > decoded;
+
+	{
+		IO::MemoryStream input{std::as_const(buffer)};
+		PixelFactory::FileFormatHDR< float, uint32_t > format;
+
+		ASSERT_TRUE(format.readStream(input, decoded));
+	}
+
+	ASSERT_EQ(decoded.data().size(), 3U);
+
+	const std::span< const float > values{decoded.data()};
+
+	EXPECT_NEAR(values.front() / largest, 1.0F, 0.01F);
+	EXPECT_GE(values.subspan(1, 1).front(), 0.0F);
+	EXPECT_LE(values.subspan(1, 1).front(), largest / 256.0F);
+	EXPECT_NEAR(values.back() / largest, 0.5F, 0.01F);
 }
 
 /* Ave Robustus II P0 (2026-10-08): Font::readTrueTypeFile() returned on a failed FT_New_Face() without releasing the

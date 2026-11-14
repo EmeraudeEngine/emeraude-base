@@ -31,19 +31,25 @@
 #include <array>
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <limits>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 /* Local inclusions. */
 #include "FileFormatInterface.hpp"
+#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
+#include "PixelFactory/Pixmap.hpp"
+#include "PixelFactory/Types.hpp"
 
 namespace EmEn::Base::PixelFactory
 {
@@ -263,6 +269,12 @@ namespace EmEn::Base::PixelFactory
 					return false;
 				}
 
+				/* NOTE: Before anything is written: the encoding has no value for some floats (owner decision 2026-11-14). */
+				if ( !FileFormatHDR::everyComponentIsEncodable(pixmap) )
+				{
+					return false;
+				}
+
 				const auto width = pixmap.width();
 				const auto height = pixmap.height();
 
@@ -342,6 +354,65 @@ namespace EmEn::Base::PixelFactory
 			}
 
 		private:
+
+			/**
+			 * @brief Tells whether every colour component of a pixmap has an RGBE value, and says why when one has none.
+			 * @note The RGBE encoding has no value for a NaN, an infinity, or a component at or above 2^127 (its exponent
+			 * byte would be 256). Such a pixmap used to reach std::frexp() and a float-to-byte conversion without a
+			 * representable value — undefined behaviour — or to wrap the exponent byte to 0. It is refused, never
+			 * altered: a caller that wants a file filters its values first. A negative component is not concerned: it
+			 * is written with a zero mantissa, as before. An integer pixmap is normalized to [0, 1] and always encodable.
+			 * @param pixmap A reference to an RGB or RGBA pixmap.
+			 * @return bool False, with one error line (the count of such pixels, the position of the first), when a
+			 * component cannot be encoded.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			everyComponentIsEncodable (const Pixmap< pixel_data_t, dimension_t > & pixmap) noexcept
+			{
+				if constexpr ( std::is_floating_point_v< pixel_data_t > )
+				{
+					/* 2^127: the first value whose RGBE exponent byte does not fit. */
+					static constexpr auto Limit = static_cast< pixel_data_t >(0x1p127);
+
+					const std::span< const pixel_data_t > values{pixmap.data()};
+					const auto colorCount = static_cast< size_t >(pixmap.colorCount());
+
+					size_t refusedPixels = 0;
+					size_t firstRefusedPixel = 0;
+
+					for ( size_t offset = 0, pixelIndex = 0; offset + colorCount <= values.size(); offset += colorCount, ++pixelIndex )
+					{
+						const auto encodable = std::ranges::all_of(values.subspan(offset, 3), [] (pixel_data_t component) {
+							return std::isfinite(component) && component < Limit;
+						});
+
+						if ( encodable )
+						{
+							continue;
+						}
+
+						if ( refusedPixels == 0 )
+						{
+							firstRefusedPixel = pixelIndex;
+						}
+
+						++refusedPixels;
+					}
+
+					if ( refusedPixels > 0 )
+					{
+						const auto width = static_cast< size_t >(pixmap.width());
+
+						Logging::error("PixelFactory::FileFormatHDR", (std::stringstream{} << "FileFormatHDR::writeStream(), " << refusedPixels << " pixel(s) hold a component the RGBE encoding has no value for (a NaN, an infinity, or 2^127 and above), the first at (" << firstRefusedPixel % width << ", " << firstRefusedPixel / width << ") : nothing is written !").str());
+
+						return false;
+					}
+				}
+
+				return true;
+			}
 
 			/** @brief The largest shift of a legacy RLE repeat count (three consecutive repeat records: a count < 2^32). */
 			static constexpr size_t LegacyRLEMaximumShift{24};
