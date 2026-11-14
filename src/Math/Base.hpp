@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <array>
 #include <bit>
 #include <cmath>
 #include <concepts>
@@ -818,5 +819,48 @@ namespace EmEn::Base::Math
 		requires (std::is_unsigned_v< integral_t >)
 	{
 		return value <= 1 ? integral_t{1} : std::bit_ceil(value);
+	}
+
+	/**
+	 * @brief Decodes an IEEE 754 binary16 (half-float) bit pattern into a float.
+	 * @note Exact for each of the 65 536 patterns: binary16 is a subset of binary32. A signed zero keeps its sign, a
+	 * subnormal half becomes a normal float, an infinity stays one, and a NaN keeps its sign and its payload (in the
+	 * upper mantissa bits). No loop, no table: usable in a constant expression and per pixel (the read-back of an
+	 * R16G16B16A16_SFLOAT image).
+	 * @param bits The 16 bits of the half-float.
+	 * @return float
+	 */
+	[[nodiscard]]
+	constexpr
+	float
+	halfToFloat (uint16_t bits) noexcept
+	{
+		const uint32_t sign = static_cast< uint32_t >(bits & 0x8000U) << 16U;
+		const uint32_t exponent = (static_cast< uint32_t >(bits) >> 10U) & 0x1FU;
+		const uint32_t mantissa = bits & 0x03FFU;
+
+		if ( exponent == 0x1FU )
+		{
+			/* An infinity (no mantissa) or a NaN (the payload is kept). */
+			return std::bit_cast< float >(sign | 0x7F800000U | (mantissa << 13U));
+		}
+
+		if ( exponent != 0U )
+		{
+			/* A normal number: the exponent changes its bias (127 - 15), the mantissa is widened from 10 to 23 bits. */
+			return std::bit_cast< float >(sign | ((exponent + 112U) << 23U) | (mantissa << 13U));
+		}
+
+		if ( mantissa == 0U )
+		{
+			/* A signed zero. */
+			return std::bit_cast< float >(sign);
+		}
+
+		/* A subnormal half (mantissa x 2^-24) is a NORMAL float: its leading bit, at the position p, is brought to the
+		 * implicit position 10, and the exponent is p - 24. std::countl_zero() of a 32-bit value is 31 - p. */
+		const auto shift = static_cast< uint32_t >(std::countl_zero(mantissa)) - 21U;
+
+		return std::bit_cast< float >(sign | ((113U - shift) << 23U) | (((mantissa << shift) & 0x03FFU) << 13U));
 	}
 }

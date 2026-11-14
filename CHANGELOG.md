@@ -1,5 +1,8 @@
 # Development History Log
 
+## Unreleased
+ - `Math::halfToFloat()`: an IEEE 754 binary16 bit pattern decoded into a float, exact for each of the 65 536 patterns (signed zero, subnormals, infinities, NaN payload), `constexpr`.
+
 ## Version 1.6.0 (2026-11-12)
  - **`WaveFactory::Frequency` is a strong type (API change).** Any rate in [1 kHz, 384 kHz] through `Frequency::fromHz()`, the ten standard rates as named constants, read with `hz()`. A 22255 Hz sound now loads; `Processor::resample()` refuses an invalid rate and a ratio outside libsamplerate's bounds.
  - **`URI` keeps its encoded bytes.** `URI::encodedPath()` and `URI::encodedQuery()` re-emit the parsed path and query unchanged, so a presigned URL keeps its signature; `path()` and `query()` are decoded views. `PercentEncoding::encodePreservingEscapes()` escapes only what is illegal.

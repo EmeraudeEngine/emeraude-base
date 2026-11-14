@@ -33,7 +33,11 @@
 #include "Math/Vector.hpp"
 
 /* STL inclusions. */
+#include <array>
+#include <bit>
 #include <cmath>
+#include <cstdint>
+#include <ios>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -568,4 +572,89 @@ TEST(MathDeterminantAverage, setToleranceClampsANegativeValue)
 
 	average.setTolerance(0.25F);
 	EXPECT_FLOAT_EQ(average.getTolerance(), 0.25F);
+}
+
+/* 2026-11-14: halfToFloat(). The engine carried four hand-written copies of this decoding, two of them approximate (no
+ * sign, no subnormal, no infinity). Bit patterns are compared, never values: a signed zero and a NaN payload count. */
+TEST(Math, halfToFloatKnownValues)
+{
+	struct KnownValue
+	{
+		uint16_t half;
+		uint32_t expectedBits;
+	};
+
+	constexpr std::array< KnownValue, 12 > knownValues{{
+		{.half = 0x0000U, .expectedBits = 0x00000000U}, /* +0 */
+		{.half = 0x8000U, .expectedBits = 0x80000000U}, /* -0 keeps its sign. */
+		{.half = 0x3C00U, .expectedBits = 0x3F800000U}, /* 1 */
+		{.half = 0xC000U, .expectedBits = 0xC0000000U}, /* -2 */
+		{.half = 0x3555U, .expectedBits = 0x3EAAA000U}, /* 0.333251953125, the half nearest to 1/3. */
+		{.half = 0x7BFFU, .expectedBits = 0x477FE000U}, /* 65504, the largest finite half. */
+		{.half = 0x0400U, .expectedBits = 0x38800000U}, /* 2^-14, the smallest normal half. */
+		{.half = 0x03FFU, .expectedBits = 0x387FC000U}, /* 1023 x 2^-24, the largest subnormal half. */
+		{.half = 0x0001U, .expectedBits = 0x33800000U}, /* 2^-24, the smallest subnormal half. */
+		{.half = 0x7C00U, .expectedBits = 0x7F800000U}, /* +infinity */
+		{.half = 0xFC00U, .expectedBits = 0xFF800000U}, /* -infinity */
+		{.half = 0x7E00U, .expectedBits = 0x7FC00000U}  /* A quiet NaN stays one. */
+	}};
+
+	for ( const auto & knownValue : knownValues )
+	{
+		EXPECT_EQ(std::bit_cast< uint32_t >(halfToFloat(knownValue.half)), knownValue.expectedBits) << "for the half 0x" << std::hex << knownValue.half;
+	}
+
+	EXPECT_TRUE(std::isnan(halfToFloat(0xFC01U)));
+}
+
+TEST(Math, halfToFloatIsConstantEvaluated)
+{
+	static_assert(std::bit_cast< uint32_t >(halfToFloat(0x3C00U)) == 0x3F800000U);
+	static_assert(std::bit_cast< uint32_t >(halfToFloat(0x0001U)) == 0x33800000U);
+	static_assert(std::bit_cast< uint32_t >(halfToFloat(0xFC00U)) == 0xFF800000U);
+
+	SUCCEED();
+}
+
+TEST(Math, halfToFloatEveryPattern)
+{
+	uint32_t mismatches = 0;
+	uint32_t firstMismatch = 0;
+
+	for ( uint32_t pattern = 0; pattern <= 0xFFFFU; ++pattern )
+	{
+		const bool negative = (pattern & 0x8000U) != 0U;
+		const auto exponent = static_cast< int >((pattern >> 10U) & 0x1FU);
+		const uint32_t mantissa = pattern & 0x03FFU;
+		const auto decoded = std::bit_cast< uint32_t >(halfToFloat(static_cast< uint16_t >(pattern)));
+
+		uint32_t expected = 0;
+
+		if ( exponent == 31 )
+		{
+			/* An infinity (no mantissa) or a NaN, which keeps its sign and its payload in the upper mantissa bits. */
+			expected = (negative ? 0x80000000U : 0U) | 0x7F800000U | (mantissa << 13U);
+		}
+		else
+		{
+			/* The value built arithmetically, exact in binary32: 11 significant bits, an exponent within [-24, 15]. */
+			const auto magnitude = exponent == 0 ?
+				std::ldexp(static_cast< float >(mantissa), -24) :
+				std::ldexp(static_cast< float >(1024U + mantissa), exponent - 25);
+
+			expected = std::bit_cast< uint32_t >(negative ? -magnitude : magnitude);
+		}
+
+		if ( decoded != expected )
+		{
+			if ( mismatches == 0 )
+			{
+				firstMismatch = pattern;
+			}
+
+			++mismatches;
+		}
+	}
+
+	EXPECT_EQ(mismatches, 0U) << "first mismatch at the pattern 0x" << std::hex << firstMismatch;
 }
