@@ -30,6 +30,7 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -53,6 +54,7 @@
 #include "Logging/Severity.hpp"
 #include "PixelFactory/FileFormatHDR.hpp"
 #include "PixelFactory/FileFormatJpeg.hpp"
+#include "PixelFactory/FileFormatPFM.hpp"
 #include "PixelFactory/FileFormatPNG.hpp"
 #include "PixelFactory/FileFormatTarga.hpp"
 #include "PixelFactory/FileFormatTIFF.hpp"
@@ -629,6 +631,140 @@ TEST(PixelFactoryFileFormats, hdrWriteAcceptsTheLargestEncodableComponent)
 	EXPECT_GE(values.subspan(1, 1).front(), 0.0F);
 	EXPECT_LE(values.subspan(1, 1).front(), largest / 256.0F);
 	EXPECT_NEAR(values.back() / largest, 0.5F, 0.01F);
+}
+
+/* 2026-11-14: the Portable FloatMap writer (FileFormatPFM). 32-bit floats written as they are, for the values a
+ * Radiance file cannot keep: a depth (RGBE holds about 1 % of relative precision), a signed zero, an infinity, a NaN. */
+namespace
+{
+	/** @brief The bytes a PFM file must hold: its header, then the rows from the BOTTOM one, each float little-endian. */
+	[[nodiscard]]
+	std::vector< std::byte >
+	expectedPFM (std::string_view header, std::initializer_list< float > valuesBottomRowFirst)
+	{
+		std::vector< std::byte > bytes;
+
+		for ( const auto character : header )
+		{
+			bytes.push_back(static_cast< std::byte >(character));
+		}
+
+		for ( const auto value : valuesBottomRowFirst )
+		{
+			const auto bits = std::bit_cast< uint32_t >(value);
+
+			for ( uint32_t shift = 0; shift < 32; shift += 8 )
+			{
+				bytes.push_back(static_cast< std::byte >((bits >> shift) & 0xFFU));
+			}
+		}
+
+		return bytes;
+	}
+
+	/** @brief Writes a float pixmap of given values as a PFM; empty when the writer refuses it. */
+	[[nodiscard]]
+	std::vector< std::byte >
+	writePFM (uint32_t width, uint32_t height, PixelFactory::ChannelMode channelMode, std::initializer_list< float > values, bool invertYAxis = false)
+	{
+		PixelFactory::Pixmap< float, uint32_t > source;
+
+		if ( !source.initialize(width, height, channelMode) || source.data().size() != values.size() )
+		{
+			return {};
+		}
+
+		std::ranges::copy(values, source.data().begin());
+
+		std::vector< std::byte > buffer;
+		IO::MemoryStream output{buffer};
+		const PixelFactory::FileFormatPFM< float, uint32_t > format;
+
+		PixelFactory::WriteOptions options;
+		options.invertYAxis = invertYAxis;
+
+		if ( !format.writeStream(output, source, options) )
+		{
+			return {};
+		}
+
+		return buffer;
+	}
+}
+
+TEST(PixelFactoryFileFormats, pfmWritesAGrayscalePixmapExactly)
+{
+	const auto infinity = std::numeric_limits< float >::infinity();
+
+	/* The top row, then the bottom row, in the pixmap; the file holds the bottom row first. A subnormal too. */
+	EXPECT_EQ(writePFM(2, 2, PixelFactory::ChannelMode::Grayscale, {1.0F, -0.0F, infinity, 1e-40F}),
+		expectedPFM("Pf\n2 2\n-1.0\n", {infinity, 1e-40F, 1.0F, -0.0F}));
+}
+
+TEST(PixelFactoryFileFormats, pfmWritesAnRGBPixmapBottomRowFirst)
+{
+	const auto notANumber = std::numeric_limits< float >::quiet_NaN();
+
+	EXPECT_EQ(writePFM(1, 2, PixelFactory::ChannelMode::RGB, {1.0F, 2.0F, 3.0F, 4.0F, 5.0F, notANumber}),
+		expectedPFM("PF\n1 2\n-1.0\n", {4.0F, 5.0F, notANumber, 1.0F, 2.0F, 3.0F}));
+
+	/* The Y axis inverted: the rows in the pixmap's own order. */
+	EXPECT_EQ(writePFM(1, 2, PixelFactory::ChannelMode::RGB, {1.0F, 2.0F, 3.0F, 4.0F, 5.0F, notANumber}, true),
+		expectedPFM("PF\n1 2\n-1.0\n", {1.0F, 2.0F, 3.0F, 4.0F, 5.0F, notANumber}));
+}
+
+/* A PFM has no alpha channel and holds floats: an RGBA pixmap or an 8-bit one is refused (nothing is dropped nor
+ * converted in silence), and the format is not read. */
+TEST(PixelFactoryFileFormats, pfmRefusesWhatItCannotHold)
+{
+	EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+	EXPECT_TRUE(writePFM(1, 1, PixelFactory::ChannelMode::RGBA, {1.0F, 2.0F, 3.0F, 4.0F}).empty());
+
+	PixelFactory::Pixmap< uint8_t, uint32_t > bytes;
+	ASSERT_TRUE(bytes.initialize(1, 1, PixelFactory::ChannelMode::Grayscale));
+
+	std::vector< std::byte > buffer;
+	IO::MemoryStream stream{buffer};
+	PixelFactory::FileFormatPFM< uint8_t, uint32_t > byteFormat;
+
+	EXPECT_FALSE(byteFormat.writeStream(stream, bytes));
+	EXPECT_FALSE(byteFormat.readStream(stream, bytes));
+	EXPECT_TRUE(buffer.empty());
+
+	const auto captured = diagnosticsCapture.snapshot();
+	EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "PixelFactory::FileFormatPFM"), 3U);
+	EXPECT_EQ(captured.countWithoutDebug(), 3U);
+}
+
+/* Through FileIO::write(), by the '.pfm' extension. */
+TEST(PixelFactoryFileFormats, pfmThroughFileIO)
+{
+	PixelFactory::Pixmap< float, uint32_t > source;
+	ASSERT_TRUE(source.initialize(1, 1, PixelFactory::ChannelMode::Grayscale));
+
+	source.data().front() = 0.999755859375F;
+
+	const auto filepath = EmEn::Base::Testing::uniqueTemporaryPath("emeraude-base-pfm-test.pfm");
+
+	ASSERT_TRUE(PixelFactory::FileIO::write(source, filepath, true));
+
+	std::string content;
+
+	{
+		std::ifstream file{filepath, std::ios::binary};
+		content.assign(std::istreambuf_iterator< char >{file}, std::istreambuf_iterator< char >{});
+	}
+
+	std::error_code errorCode;
+	std::filesystem::remove(filepath, errorCode);
+
+	const auto expected = expectedPFM("Pf\n1 1\n-1.0\n", {0.999755859375F});
+
+	EXPECT_EQ(content.size(), expected.size());
+	EXPECT_TRUE(std::ranges::equal(content, expected, [] (char character, std::byte byte) {
+		return static_cast< std::byte >(character) == byte;
+	}));
 }
 
 /* Ave Robustus II P0 (2026-10-08): Font::readTrueTypeFile() returned on a failed FT_New_Face() without releasing the

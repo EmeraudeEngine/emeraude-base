@@ -27,14 +27,17 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <iostream>
 #include <sstream>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 /* Local inclusions. */
 #include "FileFormatHDR.hpp"
+#include "FileFormatPFM.hpp"
 #include "FileFormatJpeg.hpp"
 #include "FileFormatPNG.hpp"
 #include "FileFormatWebP.hpp"
@@ -46,6 +49,13 @@
 #include "IO/MemoryStream.hpp"
 #include "Logging/Logging.hpp"
 #include "Pixmap.hpp"
+
+/* Forward declarations. */
+namespace EmEn::Base::PixelFactory
+{
+	struct ReadOptions;
+	struct WriteOptions;
+}
 
 namespace EmEn::Base::PixelFactory::FileIO
 {
@@ -283,6 +293,14 @@ namespace EmEn::Base::PixelFactory::FileIO
 		if ( extension == "hdr" )
 		{
 			const FileFormatHDR< pixel_data_t, dimension_t > fileFormat;
+
+			return commit(fileFormat.writeStream(stream, pixmap, options));
+		}
+
+		/* NOTE: The codec refuses a pixmap which is not made of floats (with its reason): no dispatch on the type here. */
+		if ( extension == "pfm" )
+		{
+			const FileFormatPFM< pixel_data_t, dimension_t > fileFormat;
 
 			return commit(fileFormat.writeStream(stream, pixmap, options));
 		}

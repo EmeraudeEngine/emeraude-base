@@ -208,6 +208,7 @@
 #include "PixelFactory/FileFormatHDR.hpp"
 #include "PixelFactory/FileFormatInterface.hpp"
 #include "PixelFactory/FileFormatJpeg.hpp"
+#include "PixelFactory/FileFormatPFM.hpp"
 #include "PixelFactory/FileFormatPNG.hpp"
 #include "PixelFactory/FileFormatTIFF.hpp"
 #include "PixelFactory/FileFormatTarga.hpp"
@@ -408,6 +409,8 @@ template class EmEn::Base::PixelFactory::ASCIIGlyphArray<>;
 template class EmEn::Base::PixelFactory::Color<>;
 template class EmEn::Base::PixelFactory::Color< double >;
 template class EmEn::Base::PixelFactory::FileFormatHDR<>;
+template class EmEn::Base::PixelFactory::FileFormatPFM<>;
+template class EmEn::Base::PixelFactory::FileFormatPFM< uint8_t >;
 template class EmEn::Base::PixelFactory::FileFormatInterface<>;
 template class EmEn::Base::PixelFactory::FileFormatTarga<>;
 template class EmEn::Base::PixelFactory::Gradient<>;
