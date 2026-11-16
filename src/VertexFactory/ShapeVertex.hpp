@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstdint>
 #include <type_traits>
 
 /* Local inclusions for usages. */
@@ -196,6 +197,8 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Sets vertex influences.
+			 * @note -1 marks an unused slot, on the CPU side only: a vertex buffer names matrix 0 there
+			 * (Shape::writeInfluenceToVertexBuffer()), so an unused slot must keep a zero weight.
 			 * @param influenceA Index to first influence.
 			 * @param influenceB Index to second influence. Default none.
 			 * @param influenceC Index to third influence. Default none.

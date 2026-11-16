@@ -32,6 +32,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -663,4 +664,121 @@ TEST(VertexFactoryShapeAssembler, mergeAtAFrameAndMergeAList)
 	const auto none = ShapeAssembler< float, uint32_t >::mergeList({});
 
 	EXPECT_TRUE(none.empty());
+}
+
+namespace
+{
+	/* One skeletal layout of a vertex buffer: its influence slots, and whether their weights follow. */
+	struct SkeletalLayout final
+	{
+		SkeletalAnimationType type;
+		size_t slotCount;
+		bool weighted;
+	};
+
+	/* A sphere whose vertices use two of their four influence slots (matrices 3 and 5): the two others keep the -1
+	 * of an unused slot, and its zero weight. */
+	[[nodiscard]]
+	Shape< float, uint32_t >
+	twoInfluencesShape () noexcept
+	{
+		auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8U, 4U);
+
+		for ( auto & vertex : shape.vertices() )
+		{
+			vertex.setInfluences(3, 5);
+			vertex.setWeights(0.75F, 0.25F);
+		}
+
+		return shape;
+	}
+
+	/* Whether one vertex of a buffer made from twoInfluencesShape() (position, the influence slots, their weights)
+	 * holds its two used slots as they are, matrix 0 in every unused slot and a zero weight on it. */
+	[[nodiscard]]
+	bool
+	unusedSlotsNameMatrixZero (std::span< const float > vertex, const SkeletalLayout & layout) noexcept
+	{
+		const auto influences = vertex.subspan(3, layout.slotCount);
+
+		if ( std::lround(influences[0]) != 3 || std::lround(influences[1]) != 5 )
+		{
+			return false;
+		}
+
+		if ( !std::ranges::all_of(influences.subspan(2), [] (float influence) { return std::lround(influence) == 0; }) )
+		{
+			return false;
+		}
+
+		if ( !layout.weighted )
+		{
+			return true;
+		}
+
+		const auto unusedWeights = vertex.subspan(3 + layout.slotCount + 2, layout.slotCount - 2);
+
+		return std::ranges::all_of(unusedWeights, [] (float weight) { return std::fpclassify(weight) == FP_ZERO; });
+	}
+
+	/* The number of vertices of the buffer the shape writes for a layout that break unusedSlotsNameMatrixZero(); every
+	 * vertex is counted when the buffer does not have the layout's size at all. */
+	[[nodiscard]]
+	size_t
+	wrongSkeletalVertexCount (const Shape< float, uint32_t > & shape, const SkeletalLayout & layout, bool indexed) noexcept
+	{
+		std::vector< float > vertexBuffer;
+		std::vector< uint32_t > indexBuffer;
+
+		const size_t elementCount = indexed ?
+			shape.createIndexedVertexBuffer(vertexBuffer, indexBuffer, NormalType::None, TextureCoordinatesType::None, VertexColorType::None, layout.type) :
+			shape.createVertexBuffer(vertexBuffer, NormalType::None, TextureCoordinatesType::None, VertexColorType::None, layout.type);
+
+		/* Position (3), the influence slots, then their weights. */
+		const size_t expectedElementCount = 3U + (layout.slotCount * (layout.weighted ? 2U : 1U));
+
+		if ( elementCount != expectedElementCount || vertexBuffer.empty() || vertexBuffer.size() % elementCount != 0U )
+		{
+			return shape.vertices().size();
+		}
+
+		const std::span< const float > buffer{vertexBuffer};
+		size_t wrong = 0;
+
+		for ( size_t offset = 0; offset < buffer.size(); offset += elementCount )
+		{
+			if ( !unusedSlotsNameMatrixZero(buffer.subspan(offset, elementCount), layout) )
+			{
+				++wrong;
+			}
+		}
+
+		return wrong;
+	}
+}
+
+/* An unused influence slot is -1 in a ShapeVertex (the convention of the CPU side). A vertex buffer is read by shaders,
+ * which index the skinning matrices with EVERY slot, used or not: a negative index there is a read outside the matrices
+ * (reported on a hardware device by the GPU-assisted validation, 2026-11-16). So the buffer names matrix 0 in an unused
+ * slot, and the slot's zero weight keeps that matrix out of the blend. */
+TEST(VertexFactoryShape, anUnusedInfluenceSlotIsWrittenAsMatrixZero)
+{
+	const auto shape = twoInfluencesShape();
+
+	const std::array< SkeletalLayout, 4 > layouts{{
+		{.type = SkeletalAnimationType::Weighted4, .slotCount = 4, .weighted = true},
+		{.type = SkeletalAnimationType::Weighted3, .slotCount = 3, .weighted = true},
+		{.type = SkeletalAnimationType::Average4, .slotCount = 4, .weighted = false},
+		{.type = SkeletalAnimationType::Average3, .slotCount = 3, .weighted = false}
+	}};
+
+	for ( const auto & layout : layouts )
+	{
+		EXPECT_EQ(wrongSkeletalVertexCount(shape, layout, false), 0U) << "vertices with something else than matrix 0 in an unused slot (" << layout.slotCount << " slots, weighted: " << layout.weighted << ')';
+		EXPECT_EQ(wrongSkeletalVertexCount(shape, layout, true), 0U) << "the same, in an indexed vertex buffer (" << layout.slotCount << " slots, weighted: " << layout.weighted << ')';
+	}
+
+	/* The -1 stays the convention of the CPU side: writing a buffer changes nothing in the shape. */
+	EXPECT_EQ(shape.vertices().front().influences()[EmEn::Base::Math::Z], -1);
+	EXPECT_EQ(shape.vertices().front().influences()[EmEn::Base::Math::W], -1);
 }

@@ -33,10 +33,9 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <utility>
 #include <functional>
-#include <iostream>
 #include <limits>
 #include <optional>
 #include <set>
@@ -45,6 +44,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
@@ -2704,6 +2704,14 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Writes the influence attributes to a vertex buffer at a specific offset.
+			 * @note An UNUSED slot — a negative index, the -1 of ShapeVertex — is written as matrix 0. A vertex buffer is
+			 * read by shaders, which index the skinning matrices with EVERY slot, used or not: a negative index there is a
+			 * read outside the matrices. The slot's zero weight keeps matrix 0 out of the blend; the -1 stays the
+			 * convention of the CPU side (the shape is not modified, readVertexBuffer() gives the 0 back).
+			 * @warning The unweighted layouts (SkeletalAnimationType::Average3 / Average4) have no weight to neutralize an
+			 * unused slot: they expect every slot in use.
+			 * @pre A negative influence carries a zero weight (the contract of whoever fills the vertices).
+			 * @pre size <= 4, and the buffer holds 'size' elements from 'offset'. Another size writes nothing.
 			 * @param influence A reference to a vector.
 			 * @param size The element count wanted.
 			 * @param vertexBuffer A reference to the vertex buffer.
@@ -2713,32 +2721,14 @@ namespace EmEn::Base::VertexFactory
 			void
 			writeInfluenceToVertexBuffer (const Math::Vector< 4, int32_t > & influence, uint32_t size, std::vector< vertex_data_t > & vertexBuffer, index_data_t & offset)
 			{
-				switch ( size )
+				if ( size > 4U )
 				{
-					case 1 :
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::X]);
-						break;
+					return;
+				}
 
-					case 2 :
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::X]);
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::Y]);
-						break;
-
-					case 3 :
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::X]);
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::Y]);
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::Z]);
-						break;
-
-					case 4 :
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::X]);
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::Y]);
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::Z]);
-						vertexBuffer[offset++] = static_cast< vertex_data_t >(influence[Math::W]);
-						break;
-
-					default:
-						break;
+				for ( uint32_t slot = 0; slot < size; ++slot )
+				{
+					vertexBuffer[offset++] = static_cast< vertex_data_t >(std::max< int32_t >(influence[slot], 0));
 				}
 			}
 

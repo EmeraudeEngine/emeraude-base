@@ -96,3 +96,13 @@
   is kept). Measured: the temple's black pixels 16.7 % → 7.0 % of its box (the rest is the night through the
   arches). Every OBJ of the data stores with hard edges or seams now loads its own normals and UVs: a look change
   for the better, and slightly more vertices (the seams are duplicated, as the GPU needs them).
+- **An unused influence slot is `-1` in a `ShapeVertex`, and matrix 0 in a vertex buffer** (2026-11-16, owner
+  decision). `Shape::writeInfluenceToVertexBuffer()` writes `max(influence, 0)`. A vertex buffer is read by shaders,
+  which index the skinning matrices with EVERY slot, used or not: the `-1` it used to write made a consumer read
+  before its matrices — a storage buffer read out of bounds, reported on a hardware device by the GPU-assisted
+  validation, and invisible in the picture because the slot's weight is zero. That zero weight is what keeps matrix 0
+  out of the blend: whoever fills the vertices leaves a zero weight on an unused slot. The `-1` stays the convention
+  of the CPU side (the shape is not modified); `readVertexBuffer()` gives back 0 for such a slot, the same skinning.
+  ⚠️ The unweighted layouts (`SkeletalAnimationType::Average3` / `Average4`) have no weight to neutralize an unused
+  slot: they expect every slot in use. Test `VertexFactoryShape.anUnusedInfluenceSlotIsWrittenAsMatrixZero` (the four
+  layouts, indexed or not; it read `-1` before the fix).
