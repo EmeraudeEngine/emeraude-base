@@ -261,6 +261,7 @@
 #include "VertexFactory/FileIO.hpp"
 #include "VertexFactory/Grid.hpp"
 #include "VertexFactory/GridQuad.hpp"
+#include "VertexFactory/NestedLattice.hpp"
 #include "VertexFactory/Normal.hpp"
 #include "VertexFactory/Shape.hpp"
 #include "VertexFactory/ShapeAssembler.hpp"

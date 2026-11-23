@@ -103,8 +103,9 @@ set(EMERAUDE_BASE_PIXEL_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/PixelFactory/TextureName.cpp
 )
 
-# vertex module — VertexFactory (mostly header-only; one compiled generator).
+# vertex module — VertexFactory (mostly header-only; three compiled units).
 set(EMERAUDE_BASE_VERTEX_SOURCES
+	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/NestedLattice.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/ShapeSimplifier.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/VertexFactory/TreeGenerator.cpp
 )
@@ -208,6 +209,7 @@ set(EMERAUDE_BASE_TEST_SOURCES
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsPerlinNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_AlgorithmsWorleyNoise.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryGrid.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_VertexFactoryNestedLattice.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryDLS.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryFileFormats.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/src/Testing/test_WaveFactoryProcessor.cpp

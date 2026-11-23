@@ -6,12 +6,13 @@
 | `ShapeVertex.hpp` / `ShapeTriangle.hpp` / `ShapeEdge.hpp` | Mesh primitives |
 | `ShapeBuilder.hpp` / `ShapeBuilderOptions.hpp` | Primary construction API + options |
 | `ShapeGenerator.hpp` / `Grid.hpp` | Procedural primitives and grids |
+| `NestedLattice.hpp` / `.cpp` | Nested square windows as one watertight triangle list (a level of detail around a point) |
 | `TreeSegment.hpp` / `TreeLeafAttachment.hpp` / `TreeSkeleton.hpp` | Tree botany, no mesh |
 | `TreeParameters.hpp` / `TreeParametricGrower.hpp` | Weber & Penn tree growth |
 | `TreeColonizationGrower.hpp` | Space-colonization tree growth |
 | `TreeSkinningOptions.hpp` / `TreeSkinner.hpp` | Skeleton to mesh, per level of detail |
 | `TreeMesh.hpp` | Skeleton + level chain + imposter card |
-| `TreeGenerator.hpp` / `.cpp` | The façade, and the module's only compiled unit |
+| `TreeGenerator.hpp` / `.cpp` | The façade, a compiled unit (with `ShapeSimplifier.cpp` and `NestedLattice.cpp`) |
 | `ShapeProcessor.hpp` / `ShapeDecimator.hpp` / `ShapeAssembler.hpp` / `ShapeSplitter.hpp` | Processing |
 | `Silhouette.hpp` / `XRayAnalyzer.hpp` | Analysis |
 | `CapUVMapping.hpp` / `Normal.hpp` / `TextureCoordinates.hpp` | UV / coordinate helpers |

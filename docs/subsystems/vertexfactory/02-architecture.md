@@ -221,6 +221,32 @@ imposter, turned into physics capsules or given a wind hierarchy without growing
 **Grid / GridQuad** - 2D grids with height displacement; `Types.hpp` holds the grid transform mode.
 - See: `Grid.hpp`, `GridQuad.hpp`
 
+**NestedLattice** (2026-11-23) - `buildNestedLattice()` / `countNestedLattice()`: square windows nested in one
+another, window k drawn with cells of 2^k finest cells wherever window k - 1 does not cover it, as ONE triangle list.
+A level of detail around a point for a surface that cannot afford its finest cells everywhere (the engine's terrain
+ray-tracing proxy, under a triangle budget).
+- **Pure topology**: the vertices are lattice nodes (level, x, y); the caller gives each one its position. A `Grid`
+  and its `coarsened()` copies do it without a crack: point samples, the same node at the same place at every level.
+- **Watertight by construction**: a level's cell lying along the finer window is cut into a fan of three triangles
+  around the finer lattice's node in the middle of the shared side — never two triangles, which would leave that
+  node ending two finer sides in the middle of a coarse one (a T-junction: a crack once the nodes take a height).
+  Every other cell is cut like a plain grid: along (x, y)-(x + 1, y + 1), turning (x, y) -> (x, y + 1) ->
+  (x + 1, y + 1). A single window IS the plain grid, nodes in row-major order.
+- ⚠️ **A node the windows share is ONE vertex**, the finest level's: never give a level its own copy of a border
+  node — two positions an ulp apart are a crack for a ray.
+- ⚠️ **What the windows must respect** (refused otherwise, one error on `VertexFactory::NestedLattice`, nothing
+  built): corner and side of window k on multiples of 2^(k + 1) (whole cells of the level around it); window k
+  inside window k + 1 and smaller; a side shared with the next window only on the OUTER border (where window k
+  touches a side of window k + 1, window k + 1 touches the same side of window k + 2 — otherwise a level would meet
+  cells four times smaller than its own, which a fan around one node cannot close); at most
+  `MaxNestedLatticeLevels` (16) windows and `MaxNestedLatticeNodes` (2^26) lattice nodes.
+- `countNestedLattice()` gives the vertex and triangle counts without building: what a caller sizes a budget on. The
+  build checks itself against it.
+- Proof: `test_VertexFactoryNestedLattice.cpp` — every side of every triangle met by exactly one other triangle
+  unless it lies on the outer border, whose whole length is covered; one winding; the outer window's area covered
+  once; one vertex per node. The check fails on a triangulation without the fan.
+- See: `NestedLattice.hpp`, `NestedLattice.cpp`
+
 **Cost of building a shape** - ⚠️ read this before writing any dense generator
 - `ShapeBuilder` → `Shape::addTriangle()` → `addEdge()` x3, plus `addVertex()` /
   `addVertexColor()` when `dataEconomy` is on (**the default**).
