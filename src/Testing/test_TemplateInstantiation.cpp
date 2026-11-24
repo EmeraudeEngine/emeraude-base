@@ -276,6 +276,7 @@
 #include "VertexFactory/ShapeSplitter.hpp"
 #include "VertexFactory/ShapeTriangle.hpp"
 #include "VertexFactory/ShapeVertex.hpp"
+#include "VertexFactory/ShelterMap.hpp"
 #include "VertexFactory/Silhouette.hpp"
 #include "VertexFactory/StreamIO.hpp"
 #include "VertexFactory/TextureCoordinates.hpp"

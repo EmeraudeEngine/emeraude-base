@@ -247,6 +247,33 @@ ray-tracing proxy, under a triangle budget).
   once; one vertex per node. The check fails on a triangulation without the fan.
 - See: `NestedLattice.hpp`, `NestedLattice.cpp`
 
+**ShelterMap** (2026-11-24) - `buildShelterMap()`: for each cell of a grid of heights (`HeightCells`), how OPEN the
+water is there — whether the sea around the grid reaches it, or land shelters it. What an ocean calms its waves with
+(a lake inside an island is not as rough as the open sea).
+- A cell whose height is under `ShelterMapOptions::waterLevel` is water; any other is land, a height that is not a
+  number included. The grid lies in the open water: beyond its border is the sea, one cell from the border's water.
+- **The open water spreads from the border**, cell to cell by their sides, through every water cell that stands
+  farther from the land than half `minimumPassage` (in cells): it does not enter a passage narrower than that. What
+  it reached is `OpenWater` (255), and so is the water within that half passage plus two cells of it — the strip
+  along a coast, the mouth of a passage. Farther in, the openness falls to `ShelteredWater` (0) over `fade` cells
+  (smoothstep). A basin the water does not join to the border is sheltered; so is every water of a grid whose
+  border is all land.
+- Distances are chamfer distances (5 a side, 7 a diagonal: within 8 % of the straight line), measured THROUGH the
+  water from the open water (Dial's buckets: small integer distances). ⚠️ Water never passes between two land cells
+  that touch by a corner: a wall drawn in diagonal holds.
+- A LAND cell takes the openness of the water cell nearest to it, so a filtered read along a shore mixes values of
+  that shore alone. A grid without water is open everywhere.
+- Refused with one error on `VertexFactory::ShelterMap`, the map left empty: no cell or more than
+  `MaxShelterMapSide` (4096) a side, a height count that is not the cell count, a water level that is not a number, a
+  passage or a fade outside 0 to `MaxShelterMapReach` (1024 cells).
+- Cost: linear in the cells; 54 ms for 1024 × 1024 cells, the reading of the heights included (measured in the
+  engine, Release, one thread).
+- Proof: `test_VertexFactoryShelterMap.cpp` — a lake inside an island, a grid closed by land, a passage narrower
+  and wider than the threshold, the fade (never rising again), the diagonal wall, a NaN height, the refusals.
+  ⚠️ The fade's test failed first on a real gap: a strip of water along the border too narrow to hold a cell far
+  enough from the land was sheltered — the sea beyond the border is now a source too.
+- See: `ShelterMap.hpp`, `ShelterMap.cpp`
+
 **Cost of building a shape** - ⚠️ read this before writing any dense generator
 - `ShapeBuilder` → `Shape::addTriangle()` → `addEdge()` x3, plus `addVertex()` /
   `addVertexColor()` when `dataEconomy` is on (**the default**).
