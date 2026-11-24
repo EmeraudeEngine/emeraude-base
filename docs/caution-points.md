@@ -6,6 +6,22 @@
 
 ## Build / Compiler
 
+### ⚠️⚠️ `std::pmr` on macOS before 14.0: it compiles, links, and the loader refuses the binary (2026-11-24, FIXED)
+
+Apple's system libc++ exports std::pmr (`memory_resource`, `monotonic_buffer_resource`, `get_default_resource()`, the
+pool resources) from macOS 14.0 only, and — unlike every other late-arriving family (`to_chars` of floats, `<print>`,
+tzdb, the new `<atomic>` waits…), which carry an availability attribute and fail AT COMPILE TIME — std::pmr carries
+NONE: `_LIBCPP_AVAILABILITY_PMR` is defined empty in the SDK ("TODO: Enable std::pmr markup once
+https://llvm.org/PR40340 has been fixed"; read in the Xcode 27.2 SDK, Apple clang 21). A build for macOS 12 or 13 using
+std::pmr compiles and links cleanly, and dyld refuses the library at launch on the older system: "Symbol not found:
+`__ZNSt3__13pmr15memory_resourceD2Ev`". The process never starts: no crash report, no log line. The decimator's arena
+(`fd9dc5c`, 2026-10-09) did exactly this to a downstream application's macOS 12/13 users, Intel and Apple silicon alike.
+
+**Rule:** no `std::pmr` in the base — use `MonotonicArena` (`src/MonotonicArena.hpp`, std::pmr where it loads, the
+library's own block arena below macOS 14.0; source-tree doc 30). **Check** on a macOS build whose deployment target is
+below 14.0: `nm -um <binary> | grep pmr` must print nothing. Item to drop the fallback at a 14.0 floor:
+`docs/todo/drop-the-monotonic-block-arena-at-macos-14.md`.
+
 ### GCC 14 `-Wstringop-overflow` / `-overread` false positives on `std::string`
 
 GCC 14 raises a **`-Werror=stringop-overflow`** (or its sibling `-overread`) inside

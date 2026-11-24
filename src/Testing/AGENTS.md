@@ -57,7 +57,7 @@ Authoritative list: `ls src/Testing/` (or the CMake source list). Grouped view:
 | PixelFactory | `PixelFactoryColor`, `PixelFactoryPixmap`, `PixelFactoryPixmapFormat`, `PixelFactoryProcessor`, `PixelFactoryTextPixmap`, `PixelFactoryFileFormats` |
 | VertexFactory | `VertexFactoryFileFormats`, `VertexFactoryShapeBuilder`, `MD5AnimParser` |
 | WaveFactory | `WaveFactoryFileFormats` |
-| Concurrency / core | `ThreadPool`, `Time`, `ObserverPattern`, `NodeTrait`, `StaticVector`, `Variant`, `String`, `TokenFormatter` |
+| Concurrency / core | `ThreadPool`, `Time`, `ObserverPattern`, `NodeTrait`, `StaticVector`, `Variant`, `String`, `TokenFormatter`, `MonotonicArena` |
 | IO / formats | `IO`, `ZipArchive`, `Compression`, `INIParser`, `FastJSON`, `Hash` |
 | Platform / infra | `Platform`, `Debug`, `Logging`, `Version` |
 
