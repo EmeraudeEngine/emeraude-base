@@ -36,7 +36,6 @@
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <memory_resource>
 #include <queue>
 #include <ranges>
 #include <stop_token>
@@ -48,6 +47,7 @@
 #include "FlatHashMap.hpp"
 #include "Math/Base.hpp"
 #include "Math/Vector.hpp"
+#include "MonotonicArena.hpp"
 #include "PixelFactory/Color.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Types.hpp"
@@ -172,8 +172,10 @@ namespace EmEn::Base::VertexFactory
 				/* Initialize mutable working data.
 				 * NOTE: The per-vertex adjacency lists live in ONE arena, declared before the vertices so it outlives them:
 				 * their growth never frees, and their release is a few large blocks (they were std::unordered_set: ~18 M
-				 * nodes on a 2.24 M-triangle mesh, whose release held a cancelled decimation 0.2 to 1.35 s). */
-				std::pmr::monotonic_buffer_resource adjacencyArena;
+				 * nodes on a 2.24 M-triangle mesh, whose release held a cancelled decimation 0.2 to 1.35 s). The arena is
+				 * std::pmr's monotonic resource, or the library's own on a macOS whose libc++ lacks std::pmr (see
+				 * MonotonicArena.hpp: a std::pmr symbol there stops the binary from loading). */
+				MonotonicArena adjacencyArena;
 				std::vector< VertexData > vertices;
 				std::vector< TriangleData > triangles;
 
@@ -464,7 +466,7 @@ namespace EmEn::Base::VertexFactory
 					 * @param arena The arena (outlives the list).
 					 */
 					explicit
-					ArenaList (std::pmr::memory_resource * arena) noexcept
+					ArenaList (MonotonicArena * arena) noexcept
 						: m_arena{arena}
 					{
 
@@ -550,7 +552,7 @@ namespace EmEn::Base::VertexFactory
 				private:
 
 					value_t * m_data{nullptr};
-					std::pmr::memory_resource * m_arena{nullptr};
+					MonotonicArena * m_arena{nullptr};
 					uint32_t m_size{0};
 					uint32_t m_capacity{0};
 			};
@@ -568,7 +570,7 @@ namespace EmEn::Base::VertexFactory
 				 * @param arena The arena (outlives the vertex).
 				 */
 				explicit
-				VertexData (std::pmr::memory_resource * arena) noexcept
+				VertexData (MonotonicArena * arena) noexcept
 					: adjacentTris{arena},
 					neighbors{arena}
 				{
@@ -681,7 +683,7 @@ namespace EmEn::Base::VertexFactory
 					 * @param owner The decimator, whose stop request interrupts the build (cancelled() then reports it).
 					 * @param arena The decimation's arena, for the per-vertex UV lists (outlives the table).
 					 */
-					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const WorkMesh & work, const ShapeDecimator & owner, std::pmr::memory_resource * arena) noexcept
+					CornerUVTable (const Shape< vertex_data_t, index_data_t > & source, const WorkMesh & work, const ShapeDecimator & owner, MonotonicArena * arena) noexcept
 						: m_source{&source},
 						m_work{&work},
 						m_valid{source.triangles().size() == work.triangleCount()}
@@ -953,7 +955,7 @@ namespace EmEn::Base::VertexFactory
 
 			[[nodiscard]]
 			bool
-			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const WorkMesh & work, std::pmr::memory_resource & adjacencyArena) const noexcept
+			initializeData (std::vector< VertexData > & vertices, std::vector< TriangleData > & triangles, const WorkMesh & work, MonotonicArena & adjacencyArena) const noexcept
 			{
 				size_t iteration = 0;
 
