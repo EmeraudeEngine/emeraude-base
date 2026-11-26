@@ -61,6 +61,12 @@ Fixed by USING it (`static_assert(!ScriptedStatisticsClock::is_steady)` states t
 of its `compile_commands.json` entry, GCC-only `-W…` options removed (`-Wduplicated-cond`, `-Wduplicated-branches`,
 `-Wlogical-op`, `-Wdangling-reference`, `-Wsuggest-attribute=…`), `-Wno-deprecated*` removed, plus `-Wall -Wextra`.
 Checked: it reproduces the macOS error on the faulty file.
+⚠️ **That check misses the Clang-only warnings (2026-11-26)**: a GCC database carries none of the
+`$<$<CXX_COMPILER_ID:Clang,AppleClang>:…>` options of `CMakeLists.txt` (`-Wcovered-switch-default`, `-Wdocumentation`,
+`-Wunused-member-function`, `-Wunused-template`, `-Wmissing-prototypes`, `-Wnewline-eof`). Base `cff7e20` passed it and
+broke on macOS on `-Werror,-Wcovered-switch-default` (a `default:` in a switch listing every enumerator, decision D14).
+Configure a clang test build in a Claude directory instead (`CC=clang CXX=clang++ cmake … -DEMERAUDE_ENABLE_TESTS=ON`):
+it applies them, and the suite runs under clang too.
 
 ### Clang `-Wunused-lambda-capture`: never capture a `constexpr` local — Debug-only breakage
 

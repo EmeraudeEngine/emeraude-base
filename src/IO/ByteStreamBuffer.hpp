@@ -63,7 +63,7 @@ namespace EmEn::Base::IO
 			/**
 			 * @brief Constructs a buffer over a byte stream, from its current position.
 			 * @param stream A reference to the stream to read.
-			 * @param windowSize The bytes read from the stream at once. Default 1 MiB; 0 is read as 1.
+			 * @param windowSize The bytes read from the stream at once, at most the stream's length. Default 1 MiB; 0 is read as 1.
 			 */
 			explicit
 			ByteStreamBuffer (ByteStream & stream, size_t windowSize = DefaultWindowSize) noexcept
@@ -77,7 +77,8 @@ namespace EmEn::Base::IO
 				{
 					m_origin = origin;
 					m_length = size - origin;
-					m_window.resize(std::max< size_t >(windowSize, 1));
+					/* NOTE: Never larger than the stream: a small file does not cost a whole window. */
+					m_window.resize(std::max< size_t >(std::min(windowSize, static_cast< size_t >(m_length)), 1));
 					m_usable = true;
 				}
 			}

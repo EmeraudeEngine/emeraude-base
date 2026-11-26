@@ -450,9 +450,11 @@ namespace EmEn::Base::VertexFactory
 						return this->computeForEveryAttribute(geometry);
 
 					case FaceMode::Undetermined :
-					default:
 						return false;
 				}
+
+				/* NOTE: Every enumerator is listed (decision D14: no default); a cast can still bring another value. */
+				return false;
 			}
 
 			/**
