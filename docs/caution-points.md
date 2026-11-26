@@ -2177,3 +2177,19 @@ reader that needs a stream (binary `read()`, `seekg()`, `tellg()`) builds a `std
 `IO::MemoryStreamBuffer`. Never wrap a large buffer in a `std::istringstream` / `std::stringstream` again.
 [`subsystems/source-tree/13-unified-bytestream-i-o-architecture.md`](subsystems/source-tree/13-unified-bytestream-i-o-architecture.md)
 § Reading a buffer in place.
+
+## IO — a windowed line lives until the next call; the OBJ reader read four inputs wrong without a word (2026-11-26, FIXED)
+
+The format readers now read a stream that seeks through a 1 MiB window (`IO::ByteStreamBuffer` for STL / MDx,
+`IO::StreamLineReader` for OBJ) instead of holding it whole. ⚠️ A `StreamLineReader` line is a view into the window: the
+next `next()` or `rewind()` may refill it or grow it — copy what must outlive the call (`IO::LineReader`, over a text held
+whole, keeps its lines valid as long as the text). A stream that cannot seek (`tell()` / `seek()` answering -1) is read
+whole first; a reader never refuses it. A failed read in the middle of a stream ends the lines early: the OBJ reader
+checks `hasFailed()` and refuses the file, never giving its start as the shape.
+
+The OBJ probes that went with it found four inputs read wrong without an error, all fixed with a test that failed first:
+a negative face index resolved against the FINAL attribute count (vertices declared after a face: the wrong
+triangle); `"+1.5"` read as 0 (`std::from_chars` refuses a leading `+`); a missing or unreadable coordinate read as 0
+(`"v 1 2"`, a decimal comma `"1,5"`); a tab after the keyword making the line nothing (a file written with tabs refused
+as holding no vertex). [`subsystems/vertexfactory/02-architecture.md`](subsystems/vertexfactory/02-architecture.md)
+§ FileFormatOBJ.

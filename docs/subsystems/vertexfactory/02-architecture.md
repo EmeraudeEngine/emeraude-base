@@ -360,7 +360,26 @@ WaveFactory and PixelFactory.
 - See: `FileFormatNative.hpp`
 
 **FileFormatOBJ** - Wavefront OBJ (ASCII), read + write
-- Negative (relative) face indices supported via `resolveIndex()` (1-based, end-relative).
+- Read in two passes (count, then assemble). A stream that seeks is read through a 1 MiB window, line by line
+  (`IO::StreamLineReader`, the second pass after a seek back): the file is never held whole. A stream that cannot seek
+  is read whole first, its lines views into the buffer (`IO::LineReader`). A failed read of the stream refuses the file
+  (it would otherwise be the start of the file). Measured 2026-11-26 on a 312 MB file (3.9 M vertices): peak 1461 →
+  **822 MiB** with the V-mode change below; source-tree doc 13 § Reading a buffer in place.
+- A line is classified by its first word, the blanks being space, tab and '\r' (`lineKind()`, `lineData()`): `v\t1\t2\t3`
+  is a vertex (2026-11-26: only `"v "` was, a file written with tabs was refused as holding no vertex). `g` alone is a
+  group; `v` alone is a vertex without coordinates, refused.
+- Coordinates are read strictly (`readCoordinates()`): a `v` and a `vn` need three numbers, a `vt` its `u` (`v` is 0 when
+  absent); a number ends at a blank or the end of the line; a leading `+` is read. A missing or unreadable coordinate
+  refuses the file with an error (2026-11-26: it was read as 0 without a word — `"v 1 2"`, `"v 1,5 2,5 3,5"` — and
+  `"+1.5"` was 0, `std::from_chars` refusing the sign). The words after the coordinates (`w`, vertex colors) are ignored.
+- Negative (relative) face indices supported via `resolveIndex()` (1-based), relative to the attributes read SO FAR (the
+  format's definition: each pass counts the `v`, `vt` and `vn` lines met). ⚠️ Until 2026-11-26 the list's FINAL size
+  was used: with vertices declared after a face, `f -3 -2 -1` named the last three vertices of the file.
+- Only the tables the face mode reads are allocated. In the V mode (`f 1 2 3`) none: a `v` line writes its shape vertex
+  directly (`parseFaceAssemblyV()`), so an unreferenced vertex keeps its real position, the vertex count is the `v`
+  count, and `vt` / `vn` lines are counted, not read nor declared (before 2026-11-26 a V-mode file with `vn` lines
+  declared all-zero normals available). The three indexed forms (V_VN, V_VT, V_VT_VN) are one function,
+  `parseFaceAssemblyIndexed()`, the face mode saying which of `vt` and `vn` belong to the vertex key.
 - One shape vertex per unique `(v, vt, vn)` triple (`vertexIndexOf()`, a hash map of the triples met), like
   tinyobjloader / Assimp. ⚠️ Until 2026-10-05 a vertex was keyed by ONE index (the most numerous attribute) and
   re-created only when the POSITION differed: a hard edge or a UV seam inherited the first face's normal / UV
@@ -368,6 +387,10 @@ WaveFactory and PixelFactory.
 - See: `FileFormatOBJ.hpp`
 
 **FileFormatSTL** - Stereolithography (binary + ASCII), read + write
+- A stream that seeks is read through a 1 MiB window (`IO::ByteStreamBuffer`, a `std::istream` on it); one that cannot
+  is read whole first (`IO::MemoryStreamBuffer`). MDx reads the same way. A 390 MB binary STL peaked at 3274 MiB (the
+  file twice) before 2026-11-26, **2532 MiB** after; what remains is the shape: the reader does not weld the corners,
+  23.4 M `ShapeVertex` of 92 bytes.
 - See: `FileFormatSTL.hpp`
 
 **FileFormatMDx** - id Tech loader (MDL / MD2 / MD3 / MD5), **read-only by design**

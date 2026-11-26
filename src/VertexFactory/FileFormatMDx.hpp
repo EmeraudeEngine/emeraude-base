@@ -33,7 +33,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <numbers>
-#include <span>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -45,6 +45,7 @@
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
+#include "IO/ByteStreamBuffer.hpp"
 #include "IO/MemoryStreamBuffer.hpp"
 #include "Logging/Logging.hpp"
 #include "Math/Matrix.hpp"
@@ -97,19 +98,30 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				const auto dataSize = stream.size();
-				std::string buffer(dataSize, '\0');
+				/* NOTE: A stream that seeks is read through a window, never held whole (a 390 MB binary STL peaked at 3274
+				 * MiB, the file twice, before 2026-11-26). One that cannot seek is read whole first, then in place (see
+				 * IO::ByteStreamBuffer and IO::MemoryStreamBuffer). */
+				IO::ByteStreamBuffer window{stream};
+				std::string buffer;
+				std::optional< IO::MemoryStreamBuffer > memory;
+				std::streambuf * source = &window;
 
-				if ( !stream.read(buffer.data(), dataSize) )
+				if ( !window.isUsable() )
 				{
-					Logging::error("VertexFactory::FileFormatMDx", "readStream(), failed to read stream data !");
+					const auto dataSize = stream.size();
+					buffer.resize(dataSize);
 
-					return false;
+					if ( !stream.read(buffer.data(), dataSize) )
+					{
+						Logging::error("VertexFactory::FileFormatMDx", "readStream(), failed to read stream data !");
+
+						return false;
+					}
+
+					source = &memory.emplace(buffer);
 				}
 
-				/* NOTE: The stream reads the buffer in place: a std::istringstream would copy it whole (see IO::MemoryStreamBuffer). */
-				IO::MemoryStreamBuffer memory{buffer};
-				std::istream input{&memory};
+				std::istream input{source};
 
 				int ident = 0;
 				input.read(reinterpret_cast< char * >(&ident), sizeof(int));

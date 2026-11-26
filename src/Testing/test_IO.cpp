@@ -32,6 +32,7 @@
 #include <json/value.h>
 
 /* STL inclusions. */
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <compare>
@@ -64,11 +65,13 @@
 #include "DiagnosticsCapture.hpp"
 #include "FastJSON.hpp"
 #include "INIParser.hpp"
+#include "IO/ByteStreamBuffer.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
 #include "IO/LineReader.hpp"
 #include "IO/MemoryStream.hpp"
 #include "IO/MemoryStreamBuffer.hpp"
+#include "IO/StreamLineReader.hpp"
 #include "IO/ZipReader.hpp"
 #include "IO/ZipWriter.hpp"
 #include "Logging/Logging.hpp"
@@ -76,6 +79,7 @@
 #include "PixelFactory/FileIO.hpp"
 #include "PixelFactory/Pixmap.hpp"
 #include "PixelFactory/Types.hpp"
+#include "StreamDoubles.hpp"
 #include "String.hpp"
 #include "TemporaryPath.hpp"
 #include "VertexFactory/FileIO.hpp"
@@ -1502,4 +1506,250 @@ TEST(IOMemoryStreamBuffer, anEmptyBlockReadsNothing)
 	input.seekg(0, std::ios::end);
 	EXPECT_FALSE(input.fail());
 	EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), 0);
+}
+
+/* IO::ByteStreamBuffer and IO::StreamLineReader (2026-11-26): the same readers, through a window of a ByteStream that
+ * seeks, so the file is never held whole. The tests pin that the window, down to one byte, behaves as the buffer read
+ * whole it replaces, and that a stream that cannot seek, or fails a read, is told apart. */
+
+namespace
+{
+	/** @brief The bytes of a text. */
+	std::vector< std::byte >
+	bytesOf (std::string_view text)
+	{
+		std::vector< std::byte > bytes(text.size());
+
+		std::ranges::transform(text, bytes.begin(), [] (char character) {
+			return static_cast< std::byte >(character);
+		});
+
+		return bytes;
+	}
+
+	/** @brief The lines IO::StreamLineReader cuts from a stream, copied (a line lives until the next call). */
+	std::vector< std::string >
+	streamLines (EmEn::Base::IO::StreamLineReader & reader)
+	{
+		std::vector< std::string > lines;
+		std::string_view line;
+
+		while ( reader.next(line) )
+		{
+			lines.emplace_back(line);
+		}
+
+		return lines;
+	}
+}
+
+TEST(IOStreamLineReader, cutsTheLinesStdGetlineCutsAtEveryWindowSize)
+{
+	/* A line across two windows, a line longer than the window (it grows), a window of one byte: always the lines of
+	 * std::getline(). */
+	const std::array< std::string, 9 > texts{
+		"",
+		"a",
+		"a\n",
+		"\n\n",
+		"a\nb",
+		"a\r\nb\r\n",
+		"x\n\n\ny\n\n",
+		"a long first line\nb\nanother long line without end",
+		std::string(100, 'z') + "\n" + std::string(3, 'y')
+	};
+	const std::array< size_t, 5 > windowSizes{1, 2, 3, 7, 1024};
+
+	for ( const auto & text : texts )
+	{
+		const auto bytes = bytesOf(text);
+
+		for ( const auto windowSize : windowSizes )
+		{
+			EmEn::Base::IO::MemoryStream stream{bytes};
+			EmEn::Base::IO::StreamLineReader reader{stream, windowSize};
+
+			EXPECT_EQ(streamLines(reader), getlineLines(text)) << "text of " << text.size() << " bytes, window " << windowSize;
+		}
+	}
+}
+
+TEST(IOStreamLineReader, startsAtTheStreamPositionAndRewindsThere)
+{
+	/* The OBJ reader walks its stream twice; the reader starts where the stream stands, and goes back there. */
+	const auto bytes = bytesOf("skip\nv 0 0 0\nf 1 2 3\n");
+	EmEn::Base::IO::MemoryStream stream{bytes};
+
+	std::array< std::byte, 5 > skipped{};
+	ASSERT_TRUE(stream.read(skipped.data(), skipped.size()));
+
+	EmEn::Base::IO::StreamLineReader reader{stream, 4};
+	ASSERT_TRUE(reader.isUsable());
+
+	const auto firstPass = streamLines(reader);
+
+	ASSERT_TRUE(reader.rewind());
+
+	EXPECT_EQ(firstPass, (std::vector< std::string >{"v 0 0 0", "f 1 2 3"}));
+	EXPECT_EQ(streamLines(reader), firstPass);
+	EXPECT_FALSE(reader.hasFailed());
+}
+
+TEST(IOStreamLineReader, aStreamThatCannotSeekIsNotUsable)
+{
+	const auto bytes = bytesOf("a\nb\n");
+	EmEn::Base::Testing::UnseekableStream stream{bytes};
+	EmEn::Base::IO::StreamLineReader reader{stream};
+	std::string_view line;
+
+	EXPECT_FALSE(reader.isUsable());
+	EXPECT_FALSE(reader.next(line));
+}
+
+TEST(IOStreamLineReader, aFailedReadEndsTheLinesAndSaysSo)
+{
+	/* The reads fail past byte 16 (the window doubles: 4, 4, 8, then 9 more): the lines stop at the first, and
+	 * hasFailed() tells it from the end of the stream. */
+	const auto bytes = bytesOf("line one\nline two\nline three\n");
+	EmEn::Base::Testing::FailingStream stream{bytes, 16};
+	EmEn::Base::IO::StreamLineReader reader{stream, 4};
+
+	EXPECT_EQ(streamLines(reader), (std::vector< std::string >{"line one"}));
+	EXPECT_TRUE(reader.hasFailed());
+}
+
+TEST(IOByteStreamBuffer, readsAsAStringStreamAcrossWindows)
+{
+	/* A window of 3 bytes over 26: every read crosses windows. */
+	const std::string text{"abcdefghijklmnopqrstuvwxyz"};
+	const auto bytes = bytesOf(text);
+	EmEn::Base::IO::MemoryStream stream{bytes};
+	EmEn::Base::IO::ByteStreamBuffer window{stream, 3};
+	std::istream input{&window};
+
+	ASSERT_TRUE(window.isUsable());
+
+	std::array< char, 5 > firstBytes{};
+	input.read(firstBytes.data(), firstBytes.size());
+
+	EXPECT_EQ(std::string_view(firstBytes.data(), firstBytes.size()), "abcde");
+	EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), 5);
+
+	std::string rest;
+	input >> rest;
+
+	EXPECT_EQ(rest, "fghijklmnopqrstuvwxyz");
+}
+
+TEST(IOByteStreamBuffer, seeksAsAStringStream)
+{
+	/* Seeks landing inside the current window and outside it, from every origin. */
+	const std::string text{"abcdefghijklmnopqrstuvwxyz"};
+	const auto bytes = bytesOf(text);
+	EmEn::Base::IO::MemoryStream stream{bytes};
+	EmEn::Base::IO::ByteStreamBuffer window{stream, 3};
+	std::istream input{&window};
+	std::istringstream reference{text, std::ios::binary};
+
+	const std::array< std::pair< std::streamoff, std::ios::seekdir >, 7 > seeks{{
+		{20, std::ios::beg},
+		{-15, std::ios::cur},
+		{1, std::ios::cur},
+		{-1, std::ios::end},
+		{0, std::ios::end},
+		{0, std::ios::beg},
+		{13, std::ios::beg}
+	}};
+
+	for ( const auto & [offset, direction] : seeks )
+	{
+		input.seekg(offset, direction);
+		reference.seekg(offset, direction);
+
+		EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), static_cast< std::streamoff >(reference.tellg())) << "offset " << offset;
+		EXPECT_EQ(input.get(), reference.get()) << "offset " << offset;
+		EXPECT_EQ(input.good(), reference.good()) << "offset " << offset;
+
+		input.clear();
+		reference.clear();
+	}
+}
+
+TEST(IOByteStreamBuffer, refusesASeekOutsideTheStream)
+{
+	const auto bytes = bytesOf("0123456789");
+	EmEn::Base::IO::MemoryStream stream{bytes};
+	EmEn::Base::IO::ByteStreamBuffer window{stream, 3};
+	std::istream input{&window};
+
+	input.seekg(4);
+	ASSERT_EQ(static_cast< std::streamoff >(input.tellg()), 4);
+
+	/* Before the start, past the end, and offsets whose sum with the origin would overflow: each is refused (failbit)
+	 * and the position does not move. */
+	const std::array< std::pair< std::streamoff, std::ios::seekdir >, 6 > refused{{
+		{-1, std::ios::beg},
+		{11, std::ios::beg},
+		{1, std::ios::end},
+		{-11, std::ios::end},
+		{std::numeric_limits< std::streamoff >::max(), std::ios::cur},
+		{std::numeric_limits< std::streamoff >::min(), std::ios::cur}
+	}};
+
+	for ( const auto & [offset, direction] : refused )
+	{
+		input.seekg(offset, direction);
+		EXPECT_TRUE(input.fail()) << "offset " << offset;
+
+		input.clear();
+		EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), 4) << "offset " << offset;
+	}
+}
+
+TEST(IOByteStreamBuffer, readingPastTheEndStopsAsAStringStream)
+{
+	const auto bytes = bytesOf("abcd");
+	EmEn::Base::IO::MemoryStream stream{bytes};
+	EmEn::Base::IO::ByteStreamBuffer window{stream, 3};
+	std::istream input{&window};
+
+	std::array< char, 10 > readBytes{};
+	input.read(readBytes.data(), readBytes.size());
+
+	EXPECT_EQ(input.gcount(), 4);
+	EXPECT_TRUE(input.eof());
+	EXPECT_TRUE(input.fail());
+	EXPECT_EQ(std::string_view(readBytes.data(), 4), "abcd");
+}
+
+TEST(IOByteStreamBuffer, startsAtTheStreamPosition)
+{
+	const auto bytes = bytesOf("xxabc");
+	EmEn::Base::IO::MemoryStream stream{bytes};
+
+	std::array< std::byte, 2 > skipped{};
+	ASSERT_TRUE(stream.read(skipped.data(), skipped.size()));
+
+	EmEn::Base::IO::ByteStreamBuffer window{stream, 2};
+	std::istream input{&window};
+	std::string word;
+	input >> word;
+
+	EXPECT_EQ(word, "abc");
+
+	input.clear();
+	input.seekg(0);
+
+	EXPECT_EQ(input.peek(), 'a');
+}
+
+TEST(IOByteStreamBuffer, aStreamThatCannotSeekIsNotUsable)
+{
+	const auto bytes = bytesOf("abc");
+	EmEn::Base::Testing::UnseekableStream stream{bytes};
+	EmEn::Base::IO::ByteStreamBuffer window{stream};
+	std::istream input{&window};
+
+	EXPECT_FALSE(window.isUsable());
+	EXPECT_EQ(input.peek(), std::char_traits< char >::eof());
 }

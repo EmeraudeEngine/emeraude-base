@@ -33,7 +33,6 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
-#include <cctype>
 #include <charconv>
 #include <concepts>
 #include <cstddef>
@@ -41,7 +40,9 @@
 #include <iomanip>
 #include <limits>
 #include <locale>
+#include <memory>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -58,6 +59,7 @@
 #include "BaseUtility.hpp"
 #include "IO/ByteStream.hpp"
 #include "IO/LineReader.hpp"
+#include "IO/StreamLineReader.hpp"
 #include "Logging/Logging.hpp"
 #include "VertexFactory/ShapeLoadResult.hpp"
 
@@ -160,8 +162,6 @@ namespace EmEn::Base::VertexFactory
 			bool
 			readStream (IO::ByteStream & stream, ShapeLoadResult< vertex_data_t, index_data_t > & result, const ReadOptions & readOptions) noexcept override
 			{
-				auto & geometry = result.shape;
-
 				if ( !stream.isOpen() )
 				{
 					Logging::error("VertexFactory::FileFormatOBJ", "readStream(), stream is not open !");
@@ -170,6 +170,18 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				m_readOptions = readOptions;
+
+				/* NOTE: A stream that seeks is read through a window, line by line: the file is never held whole (a 312 MB
+				 * OBJ held 298 MiB of text for the whole parse, 2026-11-26). One that cannot seek is read whole first, its
+				 * lines views into the buffer. See IO::StreamLineReader and IO::LineReader. */
+				{
+					IO::StreamLineReader input{stream};
+
+					if ( input.isUsable() )
+					{
+						return this->readLines(input, result);
+					}
+				}
 
 				const auto dataSize = stream.size();
 				std::string buffer(dataSize, '\0');
@@ -181,177 +193,9 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				/* NOTE: Lines are views into the buffer: a std::istringstream would copy it whole, and std::getline() copy
-				 * every line once more (see IO::LineReader). */
 				IO::LineReader input{buffer};
 
-				/* Read a first time to calculate the space required for the structure. */
-				{
-					if ( !this->analyseFileContent(input) )
-					{
-						Logging::error("VertexFactory::FileFormatOBJ", "readStream(), step 1 'Reserving space' has failed !");
-
-						return false;
-					}
-
-					input.rewind();
-				}
-
-				/* Read a second time to assemble faces. */
-				const bool buildSuccess = geometry.build([this, &geometry, &input] (std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
-					switch ( m_faceMode )
-					{
-						case FaceMode::V :
-							if ( !this->parseFaceAssemblyV(input, groups, vertices, triangles) )
-							{
-								return false;
-							}
-
-							if ( m_readOptions.requestTangentSpace )
-							{
-								/* An odd number of axis reflections reverses the cross product
-								 * direction without changing the triangle winding used by the GPU.
-								 * We must invert the computed normals to make them point outward. */
-								const bool invertNormals = (m_readOptions.flipXAxis ^ m_readOptions.flipYAxis ^ m_readOptions.flipZAxis);
-
-								if ( !geometry.computeTriangleNormal(invertNormals) )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeTriangleTangentFromEdge() )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexNormal() )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexTangent() )
-								{
-									return false;
-								}
-							}
-							else if ( m_readOptions.requestNormal )
-							{
-								const bool invertNormals = (m_readOptions.flipXAxis ^ m_readOptions.flipYAxis ^ m_readOptions.flipZAxis);
-
-								if ( !geometry.computeTriangleNormal(invertNormals) )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexNormal() )
-								{
-									return false;
-								}
-							}
-							break;
-
-						case FaceMode::V_VN :
-							if ( !this->parseFaceAssemblyV_VN(input, groups, vertices, triangles) )
-							{
-								return false;
-							}
-
-							if ( m_readOptions.requestTangentSpace )
-							{
-								/* Compute triangle surface normals for tangent derivation.
-								 * The per-vertex normals from the file are already correct,
-								 * but computeTriangleTangentFromEdge() needs per-triangle
-								 * surface normals to project the edge onto the face plane. */
-								const bool invertNormals = (m_readOptions.flipXAxis ^ m_readOptions.flipYAxis ^ m_readOptions.flipZAxis);
-
-								if ( !geometry.computeTriangleNormal(invertNormals) )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeTriangleTangentFromEdge() )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexTangent() )
-								{
-									return false;
-								}
-							}
-							break;
-
-						case FaceMode::V_VT :
-							if ( !this->parseFaceAssemblyV_VT(input, groups, vertices, triangles) )
-							{
-								return false;
-							}
-
-							if ( m_readOptions.requestTangentSpace )
-							{
-								if ( !geometry.computeTriangleTBNSpace() )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexTBNSpace() )
-								{
-									return false;
-								}
-							}
-							else if ( m_readOptions.requestNormal )
-							{
-								if ( !geometry.computeTriangleNormal() )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexNormal() )
-								{
-									return false;
-								}
-							}
-							break;
-
-						case FaceMode::V_VT_VN :
-							if ( !this->parseFaceAssemblyV_VT_VN(input, groups, vertices, triangles) )
-							{
-								return false;
-							}
-
-							if ( m_readOptions.requestTangentSpace )
-							{
-								if ( !geometry.computeTriangleTangent() )
-								{
-									return false;
-								}
-
-								if ( !geometry.computeVertexTangent() )
-								{
-									return false;
-								}
-							}
-							break;
-
-						default:
-							return false;
-					}
-
-					return true;
-				}, !m_vt.empty(), false);
-
-				if ( !buildSuccess )
-				{
-					return false;
-				}
-
-				/* Set the normals flag if normals were read from file. */
-				if ( !m_vn.empty() )
-				{
-					geometry.declareNormalsAvailable();
-				}
-
-				return true;
+				return this->readLines(input, result);
 			}
 
 			/** @copydoc EmEn::Base::VertexFactory::FileFormatInterface::writeStream() */
@@ -460,6 +304,249 @@ namespace EmEn::Base::VertexFactory
 			}
 
 		private:
+
+			/**
+			 * @brief Reads the file twice through a line reader: once to size the tables, once to assemble the faces.
+			 * @tparam line_reader_t IO::LineReader (a buffer read whole) or IO::StreamLineReader (a stream read through a
+			 * window).
+			 * @param input A reference to the line reader over the file.
+			 * @param result A reference to the load result.
+			 * @return bool
+			 */
+			template< typename line_reader_t >
+			[[nodiscard]]
+			bool
+			readLines (line_reader_t & input, ShapeLoadResult< vertex_data_t, index_data_t > & result) noexcept
+			{
+				auto & geometry = result.shape;
+
+				/* Read a first time to calculate the space required for the structure. */
+				if ( !this->analyseFileContent(input) || !linesIntact(input) )
+				{
+					Logging::error("VertexFactory::FileFormatOBJ", "readStream(), step 1 'Reserving space' has failed !");
+
+					return false;
+				}
+
+				if ( !rewindLines(input) )
+				{
+					Logging::error("VertexFactory::FileFormatOBJ", "readStream(), the stream did not go back to its start for the second pass !");
+
+					return false;
+				}
+
+				/* Read a second time to assemble faces. */
+				const bool buildSuccess = geometry.build([this, &geometry, &input] (std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
+					if ( m_faceMode == FaceMode::Undetermined )
+					{
+						return false;
+					}
+
+					const bool assembled = m_faceMode == FaceMode::V ?
+						this->parseFaceAssemblyV(input, groups, vertices, triangles) :
+						this->parseFaceAssemblyIndexed(input, groups, vertices, triangles);
+
+					return assembled && this->computeRequestedVectors(geometry);
+				}, !m_vt.empty(), false);
+
+				if ( !buildSuccess )
+				{
+					return false;
+				}
+
+				/* NOTE: A failed read of the stream ends the lines early: the shape would be the start of the file. */
+				if ( !linesIntact(input) )
+				{
+					Logging::error("VertexFactory::FileFormatOBJ", "readStream(), a read of the stream failed before its end !");
+
+					geometry.clear();
+
+					return false;
+				}
+
+				/* Set the normals flag if normals were read from file. */
+				if ( !m_vn.empty() )
+				{
+					geometry.declareNormalsAvailable();
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief Returns whether a buffer's lines were all given: always.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			linesIntact (const IO::LineReader & /*input*/) noexcept
+			{
+				return true;
+			}
+
+			/**
+			 * @brief Returns whether a stream's lines were all given: no read of it failed.
+			 * @param input A reference to the line reader.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			linesIntact (const IO::StreamLineReader & input) noexcept
+			{
+				return !input.hasFailed();
+			}
+
+			/**
+			 * @brief Goes back to the first line of a buffer.
+			 * @param input A reference to the line reader.
+			 * @return bool Always true.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			rewindLines (IO::LineReader & input) noexcept
+			{
+				input.rewind();
+
+				return true;
+			}
+
+			/**
+			 * @brief Goes back to the first line of a stream.
+			 * @param input A reference to the line reader.
+			 * @return bool False when the stream refused the seek.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			rewindLines (IO::StreamLineReader & input) noexcept
+			{
+				return input.rewind();
+			}
+
+			/**
+			 * @brief Computes the normals and tangents the read options request and the file does not give, by face mode.
+			 * @param geometry A reference to the shape being built.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			computeRequestedVectors (Shape< vertex_data_t, index_data_t > & geometry) const noexcept
+			{
+				switch ( m_faceMode )
+				{
+					case FaceMode::V :
+						return this->computeForPositions(geometry);
+
+					case FaceMode::V_VN :
+						return this->computeForNormals(geometry);
+
+					case FaceMode::V_VT :
+						return this->computeForTextureCoordinates(geometry);
+
+					case FaceMode::V_VT_VN :
+						return this->computeForEveryAttribute(geometry);
+
+					case FaceMode::Undetermined :
+					default:
+						return false;
+				}
+			}
+
+			/**
+			 * @brief Returns whether the computed normals are inverted: an odd number of axis reflections reverses the cross
+			 * product direction without changing the triangle winding used by the GPU, so the normals must be inverted to
+			 * point outward.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			invertsNormals () const noexcept
+			{
+				return (m_readOptions.flipXAxis != m_readOptions.flipYAxis) != m_readOptions.flipZAxis;
+			}
+
+			/**
+			 * @brief The requested vectors of a file of positions only (V face mode).
+			 * @param geometry A reference to the shape being built.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			computeForPositions (Shape< vertex_data_t, index_data_t > & geometry) const noexcept
+			{
+				if ( m_readOptions.requestTangentSpace )
+				{
+					return geometry.computeTriangleNormal(this->invertsNormals()) && geometry.computeTriangleTangentFromEdge() && geometry.computeVertexNormal() && geometry.computeVertexTangent();
+				}
+
+				if ( m_readOptions.requestNormal )
+				{
+					return geometry.computeTriangleNormal(this->invertsNormals()) && geometry.computeVertexNormal();
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief The requested vectors of a file giving its normals (V_VN face mode).
+			 * @note The per-vertex normals from the file are already correct, but computeTriangleTangentFromEdge() needs
+			 * per-triangle surface normals to project the edge onto the face plane.
+			 * @param geometry A reference to the shape being built.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			computeForNormals (Shape< vertex_data_t, index_data_t > & geometry) const noexcept
+			{
+				if ( m_readOptions.requestTangentSpace )
+				{
+					return geometry.computeTriangleNormal(this->invertsNormals()) && geometry.computeTriangleTangentFromEdge() && geometry.computeVertexTangent();
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief The requested vectors of a file giving its texture coordinates (V_VT face mode).
+			 * @param geometry A reference to the shape being built.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			computeForTextureCoordinates (Shape< vertex_data_t, index_data_t > & geometry) const noexcept
+			{
+				if ( m_readOptions.requestTangentSpace )
+				{
+					return geometry.computeTriangleTBNSpace() && geometry.computeVertexTBNSpace();
+				}
+
+				if ( m_readOptions.requestNormal )
+				{
+					return geometry.computeTriangleNormal() && geometry.computeVertexNormal();
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief The requested vectors of a file giving its normals and texture coordinates (V_VT_VN face mode).
+			 * @param geometry A reference to the shape being built.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			computeForEveryAttribute (Shape< vertex_data_t, index_data_t > & geometry) const noexcept
+			{
+				if ( m_readOptions.requestTangentSpace )
+				{
+					return geometry.computeTriangleTangent() && geometry.computeVertexTangent();
+				}
+
+				return true;
+			}
 
 			/**
 			 * @brief How the face are declared in the file.
@@ -596,30 +683,149 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
+			 * @brief The blanks between the words of a line.
+			 * @note '\r' is one: a CRLF line keeps it at its end, as std::getline() does.
+			 */
+			static constexpr std::string_view Blanks{" \t\r"};
+
+			/**
+			 * @brief What a line of the file declares, by its first word.
+			 */
+			enum class LineKind : uint8_t
+			{
+				Other,
+				Position,
+				TextureCoordinates,
+				Normal,
+				Face,
+				Group
+			};
+
+			/**
+			 * @brief The attributes a pass has read so far: a negative index of a face is relative to them.
+			 */
+			struct AttributeCounts
+			{
+				index_data_t positions{0};
+				index_data_t textureCoordinates{0};
+				index_data_t normals{0};
+			};
+
+			/**
+			 * @brief Returns what a line declares, by its first word: "v" and "v\t" alike (2026-11-26: a tab after the
+			 * keyword made the line nothing).
+			 * @param line The line.
+			 * @return LineKind
+			 */
+			[[nodiscard]]
+			static
+			LineKind
+			lineKind (std::string_view line) noexcept
+			{
+				const auto keyword = line.substr(0, line.find_first_of(Blanks));
+
+				if ( keyword == "v" )
+				{
+					return LineKind::Position;
+				}
+
+				if ( keyword == "vt" )
+				{
+					return LineKind::TextureCoordinates;
+				}
+
+				if ( keyword == "vn" )
+				{
+					return LineKind::Normal;
+				}
+
+				if ( keyword == "f" )
+				{
+					return LineKind::Face;
+				}
+
+				if ( keyword == "g" )
+				{
+					return LineKind::Group;
+				}
+
+				return LineKind::Other;
+			}
+
+			/**
+			 * @brief Returns the words of a line after its keyword.
+			 * @param line The line.
+			 * @return std::string_view Empty when the keyword stands alone.
+			 */
+			[[nodiscard]]
+			static
+			std::string_view
+			lineData (std::string_view line) noexcept
+			{
+				const auto keywordEnd = line.find_first_of(Blanks);
+
+				if ( keywordEnd == std::string_view::npos )
+				{
+					return {};
+				}
+
+				const auto dataStart = line.find_first_not_of(Blanks, keywordEnd);
+
+				return dataStart == std::string_view::npos ? std::string_view{} : line.substr(dataStart);
+			}
+
+			/**
+			 * @brief Counts the words of a text, separated by blanks.
+			 * @param data The text.
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			static
+			size_t
+			countWords (std::string_view data) noexcept
+			{
+				size_t count = 0;
+				auto position = data.find_first_not_of(Blanks);
+
+				while ( position != std::string_view::npos )
+				{
+					++count;
+
+					position = data.find_first_of(Blanks, position);
+
+					if ( position != std::string_view::npos )
+					{
+						position = data.find_first_not_of(Blanks, position);
+					}
+				}
+
+				return count;
+			}
+
+			/**
 			 * @brief Determines how the OBJ format describe a face.
-			 * @param fline The face line.
+			 * @param data The words of the face line, after its keyword.
 			 * @return FaceMode
 			 */
 			[[nodiscard]]
 			static
 			FaceMode
-			determineFaceDeclarationMode (std::string_view fline) noexcept
+			determineFaceDeclarationMode (std::string_view data) noexcept
 			{
-				if ( fline.find("//") != std::string_view::npos )
+				if ( data.find("//") != std::string_view::npos )
 				{
 					return FaceMode::V_VN;
 				}
 
-				const auto dashCount = std::ranges::count(fline, '/');
+				const auto dashCount = static_cast< size_t >(std::ranges::count(data, '/'));
 
 				if ( dashCount == 0 )
 				{
 					return FaceMode::V;
 				}
 
-				const auto spaceCount = std::ranges::count(fline, ' ');
-
-				if ( dashCount > spaceCount )
+				/* NOTE: Two slashes a corner ("v/vt/vn") outnumber the corners; one ("v/vt") does not. */
+				if ( dashCount > countWords(data) )
 				{
 					return FaceMode::V_VT_VN;
 				}
@@ -629,45 +835,50 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Reads a first time to calculate the space required for the structure.
+			 * @note Only the tables the face mode reads are allocated: none in the V mode, where a "v" line writes its
+			 * shape vertex directly (2026-11-26: the position table cost 12 bytes a vertex, 45 MiB on a 3.9 M vertex file).
+			 * @tparam line_reader_t The line reader type: IO::LineReader or IO::StreamLineReader.
 			 * @param file A reference to the line reader over the file.
 			 * @return bool
 			 */
+			template< typename line_reader_t >
 			bool
-			analyseFileContent (IO::LineReader & file) noexcept
+			analyseFileContent (line_reader_t & file) noexcept
 			{
 				std::string_view line{};
-
-				index_data_t positionCount = 0;
-				index_data_t textureCoordinatesCount = 0;
-				index_data_t normalCount = 0;
+				AttributeCounts counts{};
 
 				while ( file.next(line) )
 				{
-					if ( line.starts_with("v ") )
+					const auto kind = lineKind(line);
+
+					if ( kind == LineKind::Position )
 					{
-						++positionCount;
+						++counts.positions;
 					}
-					else if ( line.starts_with("vt ") )
+					else if ( kind == LineKind::TextureCoordinates )
 					{
-						++textureCoordinatesCount;
+						++counts.textureCoordinates;
 					}
-					else if ( line.starts_with("vn ") )
+					else if ( kind == LineKind::Normal )
 					{
-						++normalCount;
+						++counts.normals;
 					}
-					else if ( line.starts_with("f ") )
+					else if ( kind == LineKind::Face )
 					{
+						const auto data = lineData(line);
+
 						/* NOTE: Detect the most complete face mode present in the file.
 						 * Files may mix formats (e.g., V_VN and V_VT_VN), so we track the "highest" mode seen.
 						 */
-						const auto lineFaceMode = determineFaceDeclarationMode(line);
+						const auto lineFaceMode = determineFaceDeclarationMode(data);
 
 						if ( static_cast< uint8_t >(lineFaceMode) > static_cast< uint8_t >(m_faceMode) )
 						{
 							m_faceMode = lineFaceMode;
 						}
 
-						const auto vertexCount = countFaceVertices(line);
+						const auto vertexCount = countWords(data);
 
 						if ( vertexCount < 3 )
 						{
@@ -683,10 +894,10 @@ namespace EmEn::Base::VertexFactory
 
 				if constexpr ( VertexFactoryDebugEnabled )
 				{
-					Logging::debug("VertexFactory::FileFormatOBJ", std::string{"First pass: "} + std::to_string(positionCount) + " vertices, " + std::to_string(textureCoordinatesCount) + " texture coordinates, " + std::to_string(normalCount) + " normals, " + std::to_string(m_faceCount) + " faces.");
+					Logging::debug("VertexFactory::FileFormatOBJ", std::string{"First pass: "} + std::to_string(counts.positions) + " vertices, " + std::to_string(counts.textureCoordinates) + " texture coordinates, " + std::to_string(counts.normals) + " normals, " + std::to_string(m_faceCount) + " faces.");
 				}
 
-				if ( positionCount == 0 )
+				if ( counts.positions == 0 )
 				{
 					Logging::error("VertexFactory::FileFormatOBJ", "analyseFileContent(), there is no vertex definition in the OBJ file. Aborting.");
 
@@ -700,41 +911,62 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				/* Resize vectors. */
-				m_v.resize(positionCount);
-				m_vt.resize(textureCoordinatesCount);
-				m_vn.resize(normalCount);
+				m_positionCount = counts.positions;
 
-				m_vertexCount = static_cast< index_data_t >(std::max(m_v.size(), std::max(m_vt.size(), m_vn.size())));
+				/* Resize the tables the face mode reads. */
+				const bool withTextureCoordinates = m_faceMode == FaceMode::V_VT || m_faceMode == FaceMode::V_VT_VN;
+				const bool withNormals = m_faceMode == FaceMode::V_VN || m_faceMode == FaceMode::V_VT_VN;
+
+				if ( m_faceMode != FaceMode::V )
+				{
+					m_v.resize(counts.positions);
+				}
+
+				if ( withTextureCoordinates )
+				{
+					m_vt.resize(counts.textureCoordinates);
+				}
+
+				if ( withNormals )
+				{
+					m_vn.resize(counts.normals);
+				}
+
+				m_vertexCount = std::max(m_positionCount, static_cast< index_data_t >(std::max(m_vt.size(), m_vn.size())));
 
 				return true;
 			}
 
 			/**
-			 * @brief Reads a line using OBJ F line format : "f v1 v2 v3"
+			 * @brief Reads the lines of the second pass: the attributes into their tables, the faces into triangles.
+			 * @tparam line_reader_t The line reader type: IO::LineReader or IO::StreamLineReader.
+			 * @tparam vertex_of_t A callable giving the shape vertex of a face corner and the side of its triangle,
+			 * nothing on a refusal.
 			 * @param file A reference to the line reader over the OBJ file.
+			 * @param vertexOf The face mode's way to turn a corner into a shape vertex.
+			 * @param withSides Whether the triangles carry the side of their UV mapping (uvSide()).
 			 * @param groups A reference to an index list.
 			 * @param vertices A reference to the vertex list.
 			 * @param triangles A reference to the triangle list.
 			 * @return bool
 			 */
+			template< typename line_reader_t, typename vertex_of_t >
 			bool
-			parseFaceAssemblyV (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			assembleFaces (line_reader_t & file, const vertex_of_t & vertexOf, bool withSides, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
-				/* NOTE: Resize/reserving memory space to the geometry shape. */
-				vertices.resize(m_vertexCount);
-				triangles.reserve(m_faceCount);
-
 				/* Keep count on attributes and triangles. */
-				index_data_t positionCount = 0;
+				AttributeCounts read{};
 				index_data_t triangleCount = 0;
 
 				std::string_view objLine{};
+				std::vector< OBJVertex< index_data_t > > faceIndices{};
 
 				while ( file.next(objLine) )
 				{
+					const auto kind = lineKind(objLine);
+
 					/* Declaring a group. */
-					if ( objLine.starts_with("g ") )
+					if ( kind == LineKind::Group )
 					{
 						if ( triangleCount > 0 )
 						{
@@ -744,60 +976,19 @@ namespace EmEn::Base::VertexFactory
 						continue;
 					}
 
-					if ( objLine.starts_with("v ") )
+					if ( kind != LineKind::Face )
 					{
-						this->extractPositionAttribute(objLine, positionCount++);
-					}
-					else if ( objLine.starts_with("f ") )
-					{
-						std::vector< OBJVertex< index_data_t > > faceIndices{};
-
-						if ( !this->extractFaceIndices(objLine, faceIndices) )
+						if ( !this->readAttributeLine(kind, objLine, read, vertices) )
 						{
 							return false;
 						}
 
-						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
-						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
-						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
-						{
-							/* NOTES: "f 0 1 2 3"
-							 * Must goes into
-							 * "0 1 2"
-							 * "0 2 3"
-							 */
+						continue;
+					}
 
-							ShapeTriangle< vertex_data_t, index_data_t > triangle;
-
-							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
-							{
-								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-
-								/* NOTE: Convert OBJ index to vector index. */
-								const auto vIndex = faceIndices[realFaceVertexIndex].vIndex() - 1;
-								if ( vIndex >= m_v.size() || vIndex >= vertices.size() )
-								{
-									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
-
-									return false;
-								}
-
-								/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
-								vertices[vIndex].setPosition(m_v[vIndex]);
-
-								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, vIndex);
-							}
-
-							triangles.emplace_back(triangle);
-
-							++triangleCount;
-
-							if ( !groups.empty() )
-							{
-								++groups.back().second;
-							}
-						}
+					if ( !this->extractFaceIndices(lineData(objLine), read, faceIndices) || !this->addFanTriangles(faceIndices, vertexOf, withSides, groups, triangles, triangleCount) )
+					{
+						return false;
 					}
 				}
 
@@ -805,16 +996,112 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Reads a line using OBJ F line format : "f v1//vn1 v2//vn2 v3//vn3".
+			 * @brief Adds the triangles of a face: an f line can express a polygon, split in a fan ("f 0 1 2 3" gives
+			 * "0 1 2" and "0 2 3").
+			 * @tparam vertex_of_t A callable giving the shape vertex of a face corner and the side of its triangle,
+			 * nothing on a refusal.
+			 * @param faceIndices The corners of the face, at least 3 (extractFaceIndices()).
+			 * @param vertexOf The face mode's way to turn a corner into a shape vertex.
+			 * @param withSides Whether the triangles carry the side of their UV mapping (uvSide()).
+			 * @param groups A reference to an index list.
+			 * @param triangles A reference to the triangle list.
+			 * @param triangleCount A reference to the triangle count.
+			 * @return bool
+			 */
+			template< typename vertex_of_t >
+			[[nodiscard]]
+			bool
+			addFanTriangles (const std::vector< OBJVertex< index_data_t > > & faceIndices, const vertex_of_t & vertexOf, bool withSides, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles, index_data_t & triangleCount) const noexcept
+			{
+				/* NOTE: extractFaceIndices() guarantees at least 3 indices, so realFaceVertexIndex = triangleOffset + 2 at
+				 * most stays below faceIndices.size(). */
+				for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
+				{
+					ShapeTriangle< vertex_data_t, index_data_t > triangle;
+
+					/* The side of this triangle's UV mapping: a mirror seam corner is one vertex per side. */
+					const auto side = withSides ? this->uvSide(faceIndices, triangleOffset) : index_data_t{0};
+
+					for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
+					{
+						const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
+						const auto vertexIndex = vertexOf(faceIndices[realFaceVertexIndex], side);
+
+						if ( !vertexIndex.has_value() )
+						{
+							return false;
+						}
+
+						/* Declare the vertex index to one of the three vertices of the triangle. */
+						triangle.setVertexIndex(faceVertexIndex, vertexIndex.value());
+					}
+
+					triangles.emplace_back(triangle);
+
+					++triangleCount;
+
+					if ( !groups.empty() )
+					{
+						++groups.back().second;
+					}
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief Reads a file whose faces give positions only: "f v1 v2 v3".
+			 * @note A shape vertex IS a position here: each "v" line writes its vertex directly, a corner names it.
+			 * @tparam line_reader_t The line reader type: IO::LineReader or IO::StreamLineReader.
 			 * @param file A reference to the line reader over the OBJ file.
 			 * @param groups A reference to an index list.
 			 * @param vertices A reference to the vertex list.
 			 * @param triangles A reference to the triangle list.
 			 * @return bool
 			 */
+			template< typename line_reader_t >
 			bool
-			parseFaceAssemblyV_VN (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			parseFaceAssemblyV (line_reader_t & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
+				vertices.resize(m_positionCount);
+				triangles.reserve(m_faceCount);
+
+				const auto vertexOf = [&vertices] (const OBJVertex< index_data_t > & corner, index_data_t /*side*/) noexcept -> std::optional< index_data_t > {
+					/* NOTE: Convert OBJ index (1-based) to vector index (0-based); 0 wraps past every vertex. */
+					const auto vIndex = corner.vIndex() - 1;
+
+					if ( vIndex >= vertices.size() )
+					{
+						Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
+
+						return std::nullopt;
+					}
+
+					return vIndex;
+				};
+
+				return this->assembleFaces(file, vertexOf, false, groups, vertices, triangles);
+			}
+
+			/**
+			 * @brief Reads a file whose faces give normals, texture coordinates or both: "f v1//vn1 ...", "f v1/vt1 ...",
+			 * "f v1/vt1/vn1 ...".
+			 * @note One shape vertex per (v, vt, vn) triple met (vertexIndexOf()); the face mode says which of vt and vn
+			 * belong to it, as the three former functions of one form each did.
+			 * @tparam line_reader_t The line reader type: IO::LineReader or IO::StreamLineReader.
+			 * @param file A reference to the line reader over the OBJ file.
+			 * @param groups A reference to an index list.
+			 * @param vertices A reference to the vertex list.
+			 * @param triangles A reference to the triangle list.
+			 * @return bool
+			 */
+			template< typename line_reader_t >
+			bool
+			parseFaceAssemblyIndexed (line_reader_t & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			{
+				const bool withTextureCoordinates = m_faceMode == FaceMode::V_VT || m_faceMode == FaceMode::V_VT_VN;
+				const bool withNormals = m_faceMode == FaceMode::V_VN || m_faceMode == FaceMode::V_VT_VN;
+
 				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
 				vertices.reserve(m_vertexCount);
 				triangles.reserve(m_faceCount);
@@ -823,485 +1110,256 @@ namespace EmEn::Base::VertexFactory
 				VertexIndexMap vertexIndexes{};
 				vertexIndexes.reserve(m_vertexCount);
 
-				/* Keep count on attributes and triangles. */
-				index_data_t positionCount = 0;
-				index_data_t normalCount = 0;
-				index_data_t triangleCount = 0;
+				const auto vertexOf = [this, &vertexIndexes, &vertices, withTextureCoordinates, withNormals] (const OBJVertex< index_data_t > & corner, index_data_t side) noexcept -> std::optional< index_data_t > {
+					/* NOTE: Convert OBJ index (1-based) to vector index (0-based). Index 0 means "not defined" in our system. */
+					const auto vIndex = corner.vIndex() - 1;
+					const bool hasTextureCoordinates = withTextureCoordinates && corner.vtIndex() > 0;
+					const bool hasNormal = withNormals && corner.vnIndex() > 0;
+					const auto vtIndex = hasTextureCoordinates ? corner.vtIndex() - 1 : NoAttribute;
+					const auto vnIndex = hasNormal ? corner.vnIndex() - 1 : NoAttribute;
 
-				std::string_view objLine{};
-
-				while ( file.next(objLine) )
-				{
-					/* Declaring a group. */
-					if ( objLine.starts_with("g ") )
+					if ( vIndex >= m_v.size() || ( hasTextureCoordinates && vtIndex >= m_vt.size() ) || ( hasNormal && vnIndex >= m_vn.size() ) )
 					{
-						if ( triangleCount > 0 )
-						{
-							groups.emplace_back(triangleCount, 0);
-						}
+						Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
 
-						continue;
+						return std::nullopt;
 					}
 
-					if ( objLine.starts_with("v ") )
-					{
-						this->extractPositionAttribute(objLine, positionCount++);
-					}
-					else if ( objLine.starts_with("vn ") )
-					{
-						this->extractNormalAttribute(objLine, normalCount++);
-					}
-					else if ( objLine.starts_with("f ") )
-					{
-						std::vector< OBJVertex< index_data_t > > faceIndices;
+					/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or texture
+					 * coordinates (a hard edge, a UV seam) is another shape vertex. */
+					return this->vertexIndexOf({vIndex, vtIndex, vnIndex, side}, vertexIndexes, vertices);
+				};
 
-						if ( !this->extractFaceIndices(objLine, faceIndices) )
-						{
-							return false;
-						}
-
-						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
-						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
-						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
-						{
-							/* NOTES: "f 0 1 2 3"
-							 * Must goes into
-							 * "0 1 2"
-							 * "0 2 3"
-							 */
-
-							ShapeTriangle< vertex_data_t, index_data_t > triangle;
-
-							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
-							{
-								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-								const auto & OBJVertex = faceIndices[realFaceVertexIndex];
-
-								/* NOTE: Convert OBJ index (1-based) to vector index (0-based).
-								 * Index 0 means "not defined" in our system. */
-								const auto vIndex = OBJVertex.vIndex() - 1;
-								const bool hasNormal = OBJVertex.vnIndex() > 0;
-								const auto vnIndex = hasNormal ? OBJVertex.vnIndex() - 1 : 0;
-
-								if ( vIndex >= m_v.size() || ( hasNormal && vnIndex >= m_vn.size() ) )
-								{
-									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
-
-									return false;
-								}
-
-								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
-								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
-								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, NoAttribute, hasNormal ? vnIndex : NoAttribute, 0}, vertexIndexes, vertices);
-
-								if ( !geometryVertexIndex.has_value() )
-								{
-									return false;
-								}
-
-								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex.value());
-							}
-
-							triangles.emplace_back(triangle);
-
-							++triangleCount;
-
-							if ( !groups.empty() )
-							{
-								++groups.back().second;
-							}
-						}
-					}
-				}
-
-				return true;
+				return this->assembleFaces(file, vertexOf, withTextureCoordinates, groups, vertices, triangles);
 			}
 
 			/**
-			 * @brief Reads a line using OBJ F line format : "f v1/vt1 v2/vt2 v3/vt3"
-			 * @param file A reference to the line reader over the OBJ file.
-			 * @param groups A reference to an index list.
-			 * @param vertices A reference to the vertex list.
-			 * @param triangles A reference to the triangle list.
-			 * @return bool
+			 * @brief Reads an attribute line ("v", "vt", "vn") of the second pass and counts it.
+			 * @note A position goes straight to its shape vertex in the V face mode. An attribute whose table the face mode
+			 * does not allocate (a normal of a V_VT file) is counted — a negative index stays right — but not read.
+			 * @param kind What the line declares.
+			 * @param line The line.
+			 * @param read A reference to the attributes read so far.
+			 * @param vertices A reference to the shape vertices (the V face mode writes the positions there).
+			 * @return bool False when the attribute cannot be read.
 			 */
+			[[nodiscard]]
 			bool
-			parseFaceAssemblyV_VT (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			readAttributeLine (LineKind kind, std::string_view line, AttributeCounts & read, std::vector< ShapeVertex< vertex_data_t > > & vertices) noexcept
 			{
-				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
-				vertices.reserve(m_vertexCount);
-				triangles.reserve(m_faceCount);
-
-				/* Keep track of the generated shape vertices. */
-				VertexIndexMap vertexIndexes{};
-				vertexIndexes.reserve(m_vertexCount);
-
-				/* Keep count on attributes and triangles. */
-				index_data_t positionCount = 0;
-				index_data_t textureCoordinatesCount = 0;
-				index_data_t triangleCount = 0;
-
-				std::string_view objLine{};
-
-				while ( file.next(objLine) )
+				if ( kind == LineKind::Position )
 				{
-					/* Declaring a group. */
-					if ( objLine.starts_with("g ") )
-					{
-						if ( triangleCount > 0 )
-						{
-							groups.emplace_back(triangleCount, 0);
-						}
+					Math::Vector< 3, vertex_data_t > position{};
 
-						continue;
+					if ( !this->readPosition(lineData(line), position) )
+					{
+						Logging::error("VertexFactory::FileFormatOBJ", std::string{"a vertex line needs three coordinates, each a number: '"} + std::string{line} + "'");
+
+						return false;
 					}
 
-					if ( objLine.starts_with("v ") )
+					if ( m_faceMode == FaceMode::V )
 					{
-						this->extractPositionAttribute(objLine, positionCount++);
-					}
-					else if ( objLine.starts_with("vt ") )
-					{
-						this->extractTextureCoordinatesAttribute(objLine, textureCoordinatesCount++);
-					}
-					else if ( objLine.starts_with("f ") )
-					{
-						std::vector< OBJVertex< index_data_t > > faceIndices;
-
-						if ( !this->extractFaceIndices(objLine, faceIndices) )
+						if ( read.positions < vertices.size() )
 						{
-							return false;
-						}
-
-						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
-						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
-						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
-						{
-							/* NOTES: "f 0 1 2 3"
-							 * Must goes into
-							 * "0 1 2"
-							 * "0 2 3"
-							 */
-
-							ShapeTriangle< vertex_data_t, index_data_t > triangle;
-
-							/* The side of this triangle's UV mapping: a mirror seam corner is one vertex per side. */
-							const auto side = this->uvSide(faceIndices, triangleOffset);
-
-							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
-							{
-								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-								const auto & OBJVertex = faceIndices[realFaceVertexIndex];
-
-								/* NOTE: Convert OBJ index (1-based) to vector index (0-based).
-								 * Index 0 means "not defined" in our system. */
-								const auto vIndex = OBJVertex.vIndex() - 1;
-								const bool hasTexCoord = OBJVertex.vtIndex() > 0;
-								const auto vtIndex = hasTexCoord ? OBJVertex.vtIndex() - 1 : 0;
-
-								if ( vIndex >= m_v.size() || ( hasTexCoord && vtIndex >= m_vt.size() ) )
-								{
-									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
-
-									return false;
-								}
-
-								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
-								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
-								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, NoAttribute, side}, vertexIndexes, vertices);
-
-								if ( !geometryVertexIndex.has_value() )
-								{
-									return false;
-								}
-
-								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex.value());
-							}
-
-							triangles.emplace_back(triangle);
-
-							++triangleCount;
-
-							if ( !groups.empty() )
-							{
-								++groups.back().second;
-							}
+							vertices[read.positions].setPosition(position);
 						}
 					}
+					else if ( read.positions < m_v.size() )
+					{
+						m_v[read.positions] = position;
+					}
+
+					++read.positions;
+
+					return true;
+				}
+
+				if ( kind == LineKind::TextureCoordinates )
+				{
+					if ( read.textureCoordinates < m_vt.size() && !this->readTextureCoordinates(lineData(line), m_vt[read.textureCoordinates]) )
+					{
+						Logging::error("VertexFactory::FileFormatOBJ", std::string{"a texture coordinates line needs a first coordinate, each one a number: '"} + std::string{line} + "'");
+
+						return false;
+					}
+
+					++read.textureCoordinates;
+
+					return true;
+				}
+
+				if ( kind == LineKind::Normal )
+				{
+					if ( read.normals < m_vn.size() && !this->readNormal(lineData(line), m_vn[read.normals]) )
+					{
+						Logging::error("VertexFactory::FileFormatOBJ", std::string{"a normal line needs three coordinates, each a number: '"} + std::string{line} + "'");
+
+						return false;
+					}
+
+					++read.normals;
+
+					return true;
 				}
 
 				return true;
 			}
 
 			/**
-			 * @brief Reads a line using OBJ F line format : "f v1/vt1/vn1 v2/vt2/vn2 v3/vt3/vn3"
-			 * @param file A reference to the line reader over the OBJ file.
-			 * @param groups A reference to an index list.
-			 * @param vertices A reference to the vertex list.
-			 * @param triangles A reference to the triangle list.
-			 * @return bool
-			 */
-			bool
-			parseFaceAssemblyV_VT_VN (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
-			{
-				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
-				vertices.reserve(m_vertexCount);
-				triangles.reserve(m_faceCount);
-
-				/* Keep track of the generated shape vertices. */
-				VertexIndexMap vertexIndexes{};
-				vertexIndexes.reserve(m_vertexCount);
-
-				/* Keep count on attributes and triangles. */
-				index_data_t positionCount = 0;
-				index_data_t textureCoordinatesCount = 0;
-				index_data_t normalCount = 0;
-				index_data_t triangleCount = 0;
-
-				std::string_view objLine{};
-
-				while ( file.next(objLine) )
-				{
-					/* Declaring a group. */
-					if ( objLine.starts_with("g ") )
-					{
-						if ( triangleCount > 0 )
-						{
-							groups.emplace_back(triangleCount, 0);
-						}
-
-						continue;
-					}
-
-					if ( objLine.starts_with("v ") )
-					{
-						this->extractPositionAttribute(objLine, positionCount++);
-					}
-					else if ( objLine.starts_with("vt ") )
-					{
-						this->extractTextureCoordinatesAttribute(objLine, textureCoordinatesCount++);
-					}
-					else if ( objLine.starts_with("vn ") )
-					{
-						this->extractNormalAttribute(objLine, normalCount++);
-					}
-					else if ( objLine.starts_with("f ") )
-					{
-						std::vector< OBJVertex< index_data_t > > faceIndices;
-
-						if ( !this->extractFaceIndices(objLine, faceIndices) )
-						{
-							return false;
-						}
-
-						/* NOTE: f line can express a triangle or a polygon ! extractFaceIndices() guarantees at least 3
-						 * indices, so realFaceVertexIndex = triangleOffset + 2 at most stays below faceIndices.size(). */
-						for ( index_data_t triangleOffset = 0; triangleOffset < faceIndices.size() - 2; ++triangleOffset )
-						{
-							/* NOTES: "f 0 1 2 3"
-							 * Must goes into
-							 * "0 1 2"
-							 * "0 2 3"
-							 */
-
-							ShapeTriangle< vertex_data_t, index_data_t > triangle;
-
-							/* The side of this triangle's UV mapping: a mirror seam corner is one vertex per side. */
-							const auto side = this->uvSide(faceIndices, triangleOffset);
-
-							for ( index_data_t faceVertexIndex = 0; faceVertexIndex < 3; ++faceVertexIndex )
-							{
-								const auto realFaceVertexIndex = faceVertexIndex == 0 ? faceVertexIndex : faceVertexIndex + triangleOffset;
-								const auto & OBJVertex = faceIndices[realFaceVertexIndex];
-
-								/* NOTE: Convert OBJ index (1-based) to vector index (0-based).
-								 * Index 0 means "not defined" in our system. */
-								const auto vIndex = OBJVertex.vIndex() - 1;
-								const bool hasNormal = OBJVertex.vnIndex() > 0;
-								const bool hasTexCoord = OBJVertex.vtIndex() > 0;
-								const auto vnIndex = hasNormal ? OBJVertex.vnIndex() - 1 : 0;
-								const auto vtIndex = hasTexCoord ? OBJVertex.vtIndex() - 1 : 0;
-
-								if ( vIndex >= m_v.size() || ( hasNormal && vnIndex >= m_vn.size() ) || ( hasTexCoord && vtIndex >= m_vt.size() ) )
-								{
-									Logging::error("VertexFactory::FileFormatOBJ", "face references an out-of-range index !");
-
-									return false;
-								}
-
-								/* NOTE: An OBJ vertex is the whole (v, vt, vn) triple: a position shared with another normal or
-								 * texture coordinates (a hard edge, a UV seam) is another shape vertex. */
-								const auto geometryVertexIndex = this->vertexIndexOf({vIndex, hasTexCoord ? vtIndex : NoAttribute, hasNormal ? vnIndex : NoAttribute, side}, vertexIndexes, vertices);
-
-								if ( !geometryVertexIndex.has_value() )
-								{
-									return false;
-								}
-
-								/* Declare the vertex index to one of the three vertices of the triangle. */
-								triangle.setVertexIndex(faceVertexIndex, geometryVertexIndex.value());
-							}
-
-							triangles.emplace_back(triangle);
-
-							++triangleCount;
-
-							if ( !groups.empty() )
-							{
-								++groups.back().second;
-							}
-						}
-					}
-				}
-
-				return true;
-			}
-
-			/**
-			 * @brief Parses a floating-point value from a string view.
-			 * @note Uses strtof on macOS (libc++ lacks std::from_chars for floats), std::from_chars elsewhere.
+			 * @brief Parses a floating-point number at the start of a text.
+			 * @note A leading '+' is read: the format allows it, std::from_chars does not (2026-11-26: "+1.5" was read as 0).
+			 * @note Uses strtof on macOS (libc++ lacks std::from_chars for floats), std::from_chars elsewhere. strtof() needs
+			 * a terminated string and the text is a view into a larger buffer: the number is copied first.
 			 * @note Must use preprocessor "#if" instead of "if constexpr" because Clang checks availability
 			 * attributes at lexical level, before constexpr evaluation.
-			 * @param str The string view to parse.
-			 * @param value Output for the parsed value.
-			 * @return const char* Pointer past the parsed value, or nullptr on failure.
-			 */
-			static
-			const char *
-			parseFloat (std::string_view str, float & value) noexcept
-			{
-#if IS_MACOS
-				char * end = nullptr;
-				value = std::strtof(str.data(), &end);
-
-				return end;
-#else
-				const auto result = std::from_chars(str.data(), str.data() + str.size(), value);
-
-				return (result.ec == std::errc{}) ? result.ptr : nullptr;
-#endif
-			}
-
-			/**
-			 * @brief Skips whitespace in a string view.
-			 * @param str The string view.
-			 * @param pos Current position.
-			 * @return size_t New position after whitespace.
+			 * @param text The text, starting at the number.
+			 * @param value A reference to the parsed value.
+			 * @return size_t The characters of the number, 0 when the text does not start with one.
 			 */
 			[[nodiscard]]
 			static
 			size_t
-			skipWhitespace (std::string_view str, size_t pos) noexcept
+			parseFloat (std::string_view text, float & value) noexcept
 			{
-				while ( pos < str.size() && (str[pos] == ' ' || str[pos] == '\t') )
-				{
-					++pos;
-				}
+				const size_t sign = text.size() > 1 && text.front() == '+' && text[1] != '+' && text[1] != '-' ? 1 : 0;
+				const auto number = text.substr(sign);
 
-				return pos;
+#if IS_MACOS
+				std::array< char, 64 > terminated{};
+				number.copy(terminated.data(), std::min(number.find_first_of(Blanks), terminated.size() - 1));
+
+				char * end = nullptr;
+				value = std::strtof(terminated.data(), &end);
+
+				const auto consumed = static_cast< size_t >(end - terminated.data());
+
+				return consumed == 0 ? 0 : sign + consumed;
+#else
+				const auto * const first = std::to_address(number.begin());
+				const auto result = std::from_chars(first, std::to_address(number.end()), value);
+
+				return result.ec == std::errc{} ? sign + static_cast< size_t >(result.ptr - first) : 0;
+#endif
 			}
 
 			/**
-			 * @brief Parses a "v" line to extract the position.
-			 * @param vLine The vertex line.
-			 * @param offset The vertex offset.
+			 * @brief Reads the coordinates of an attribute line, after its keyword.
+			 * @note A number ends at a blank or at the end of the line: "1,5" is not the number 1 (2026-11-26: a missing
+			 * or unreadable coordinate was read as 0 without a word).
+			 * @param data The words after the keyword.
+			 * @param required The coordinates the line must give.
+			 * @param coordinates The coordinates to read, at most; the words after them (a 'w', vertex colors) are ignored.
+			 * @return bool False when a required coordinate is missing, or a word read is not a number.
 			 */
-			void
-			extractPositionAttribute (std::string_view vLine, index_data_t offset) noexcept
+			[[nodiscard]]
+			static
+			bool
+			readCoordinates (std::string_view data, size_t required, std::span< float > coordinates) noexcept
 			{
-				const std::string_view line{vLine};
+				size_t position = 0;
+				size_t count = 0;
 
-				/* Skip "v " prefix. */
-				size_t pos = skipWhitespace(line, 2);
-
-				float x = 0.0F, y = 0.0F, z = 0.0F;
-
-				if ( const auto * end = parseFloat(line.substr(pos), x); end != nullptr )
+				for ( auto & coordinate : coordinates )
 				{
-					pos = skipWhitespace(line, static_cast< size_t >(end - line.data()));
+					position = data.find_first_not_of(Blanks, position);
 
-					if ( const auto * end2 = parseFloat(line.substr(pos), y); end2 != nullptr )
+					if ( position == std::string_view::npos )
 					{
-						pos = skipWhitespace(line, static_cast< size_t >(end2 - line.data()));
-
-						parseFloat(line.substr(pos), z);
+						break;
 					}
+
+					const auto length = parseFloat(data.substr(position), coordinate);
+
+					if ( length == 0 || ( position + length < data.size() && Blanks.find(data[position + length]) == std::string_view::npos ) )
+					{
+						return false;
+					}
+
+					position += length;
+					++count;
 				}
 
-				auto & vector = m_v[offset];
-				vector[Math::X] = m_readOptions.flipXAxis ? -x : x;
-				vector[Math::Y] = m_readOptions.flipYAxis ? -y : y;
-				vector[Math::Z] = m_readOptions.flipZAxis ? -z : z;
+				return count >= required;
+			}
+
+			/**
+			 * @brief Reads a position: three coordinates, flipped and scaled by the read options.
+			 * @param data The words after the keyword.
+			 * @param position A reference to the position.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			readPosition (std::string_view data, Math::Vector< 3, vertex_data_t > & position) const noexcept
+			{
+				std::array< float, 3 > coordinates{};
+
+				if ( !readCoordinates(data, 3, coordinates) )
+				{
+					return false;
+				}
+
+				position[Math::X] = static_cast< vertex_data_t >(m_readOptions.flipXAxis ? -coordinates[0] : coordinates[0]);
+				position[Math::Y] = static_cast< vertex_data_t >(m_readOptions.flipYAxis ? -coordinates[1] : coordinates[1]);
+				position[Math::Z] = static_cast< vertex_data_t >(m_readOptions.flipZAxis ? -coordinates[2] : coordinates[2]);
 
 				if ( Utility::different(m_readOptions.scaleFactor, 1.0F) )
 				{
-					vector.scale(m_readOptions.scaleFactor);
+					position.scale(m_readOptions.scaleFactor);
 				}
+
+				return true;
 			}
 
 			/**
-			 * @brief Parses a "vt" line to extract the texture coordinates.
-			 * @param vtLine The texture coordinates line.
-			 * @param offset The vertex offset.
+			 * @brief Reads texture coordinates: u, and v when given (0 otherwise).
+			 * @param data The words after the keyword.
+			 * @param textureCoordinates A reference to the texture coordinates.
+			 * @return bool
 			 */
-			void
-			extractTextureCoordinatesAttribute (std::string_view vtLine, index_data_t offset) noexcept
+			[[nodiscard]]
+			bool
+			readTextureCoordinates (std::string_view data, Math::Vector< 3, vertex_data_t > & textureCoordinates) const noexcept
 			{
-				const std::string_view line{vtLine};
+				std::array< float, 2 > coordinates{};
 
-				/* Skip "vt " prefix. */
-				size_t pos = skipWhitespace(line, 3);
-
-				float u = 0.0F, v = 0.0F;
-
-				if ( const auto * end = parseFloat(line.substr(pos), u); end != nullptr )
+				if ( !readCoordinates(data, 1, coordinates) )
 				{
-					pos = skipWhitespace(line, static_cast< size_t >(end - line.data()));
-
-					parseFloat(line.substr(pos), v);
+					return false;
 				}
 
-				auto & vector = m_vt[offset];
 				/* NOTE: flipU/flipV, not flipXAxis/flipYAxis: a texture coordinate is not a
 				 * geometric axis, and reading the geometry flags here made one flag mean two
 				 * unrelated things. */
-				vector[Math::X] = m_readOptions.flipU ? -u : u;
-				vector[Math::Y] = m_readOptions.flipV ? -v : v;
+				textureCoordinates[Math::X] = static_cast< vertex_data_t >(m_readOptions.flipU ? -coordinates[0] : coordinates[0]);
+				textureCoordinates[Math::Y] = static_cast< vertex_data_t >(m_readOptions.flipV ? -coordinates[1] : coordinates[1]);
+
+				return true;
 			}
 
 			/**
-			 * @brief Parses a "vn" line to extract the normal.
-			 * @param vnLine The normal line.
-			 * @param offset The vertex offset.
+			 * @brief Reads a normal: three coordinates, flipped by the read options.
+			 * @param data The words after the keyword.
+			 * @param normal A reference to the normal.
+			 * @return bool
 			 */
-			void
-			extractNormalAttribute (std::string_view vnLine, index_data_t offset) noexcept
+			[[nodiscard]]
+			bool
+			readNormal (std::string_view data, Math::Vector< 3, vertex_data_t > & normal) const noexcept
 			{
-				const std::string_view line{vnLine};
+				std::array< float, 3 > coordinates{};
 
-				/* Skip "vn " prefix. */
-				size_t pos = skipWhitespace(line, 3);
-
-				float x = 0.0F, y = 0.0F, z = 0.0F;
-
-				if ( const auto * end = parseFloat(line.substr(pos), x); end != nullptr )
+				if ( !readCoordinates(data, 3, coordinates) )
 				{
-					pos = skipWhitespace(line, static_cast< size_t >(end - line.data()));
-
-					if ( const auto * end2 = parseFloat(line.substr(pos), y); end2 != nullptr )
-					{
-						pos = skipWhitespace(line, static_cast< size_t >(end2 - line.data()));
-
-						parseFloat(line.substr(pos), z);
-					}
+					return false;
 				}
 
-				auto & vector = m_vn[offset];
-				vector[Math::X] = m_readOptions.flipXAxis ? -x : x;
-				vector[Math::Y] = m_readOptions.flipYAxis ? -y : y;
-				vector[Math::Z] = m_readOptions.flipZAxis ? -z : z;
+				normal[Math::X] = static_cast< vertex_data_t >(m_readOptions.flipXAxis ? -coordinates[0] : coordinates[0]);
+				normal[Math::Y] = static_cast< vertex_data_t >(m_readOptions.flipYAxis ? -coordinates[1] : coordinates[1]);
+				normal[Math::Z] = static_cast< vertex_data_t >(m_readOptions.flipZAxis ? -coordinates[2] : coordinates[2]);
+
+				return true;
 			}
 
 			/**
@@ -1379,70 +1437,44 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Converts a potentially negative OBJ index to a positive index.
-			 * @note OBJ uses 1-based indexing. Negative indices reference from the end.
+			 * @note OBJ uses 1-based indexing. A negative index counts back from the last attribute read SO FAR (the
+			 * format's definition; 2026-11-26: the list's final size was used).
 			 * @param index The index to convert.
-			 * @param listSize The size of the corresponding list.
+			 * @param readSoFar The attributes of that kind read before the face.
 			 * @return index_data_t The converted positive index (still 1-based).
 			 */
 			[[nodiscard]]
 			static
 			index_data_t
-			resolveIndex (int32_t index, size_t listSize) noexcept
+			resolveIndex (int32_t index, size_t readSoFar) noexcept
 			{
 				if ( index < 0 )
 				{
-					return static_cast< index_data_t >(static_cast< int64_t >(listSize) + index + 1);
+					return static_cast< index_data_t >(static_cast< int64_t >(readSoFar) + index + 1);
 				}
 
 				return static_cast< index_data_t >(index);
 			}
 
 			/**
-			 * @brief Returns a list of usable vertices from F line.
-			 * @param fLine Vertices definition from the F line as indexes.
-			 * @param faceIndices A reference to a vector holding the face indices to position, normal or texture coordinates.
+			 * @brief Returns the corners of a face line.
+			 * @param data The words of the face line, after its keyword.
+			 * @param read The attributes read so far, the base of a negative index.
+			 * @param faceIndices A reference to the corners, cleared first (the vector is reused from face to face).
 			 * @return bool
 			 */
 			[[nodiscard]]
 			bool
-			extractFaceIndices (std::string_view fLine, std::vector< OBJVertex< index_data_t > > & faceIndices) const noexcept
+			extractFaceIndices (std::string_view data, const AttributeCounts & read, std::vector< OBJVertex< index_data_t > > & faceIndices) const noexcept
 			{
-				std::string_view line{fLine};
+				faceIndices.clear();
 
-				/* Skip "f " prefix. */
-				if ( line.size() < 3 || line[0] != 'f' || line[1] != ' ' )
+				auto position = data.find_first_not_of(Blanks);
+
+				while ( position != std::string_view::npos )
 				{
-					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), invalid face line format: '"} + std::string{fLine} + "'");
-
-					return false;
-				}
-
-				line.remove_prefix(2);
-
-				/* Pre-count vertices for reservation (count spaces + 1). */
-				const auto vertexCount = std::ranges::count(line, ' ') + 1;
-				faceIndices.reserve(static_cast< size_t >(vertexCount));
-
-				/* Parse each vertex token. */
-				size_t pos = 0;
-
-				while ( pos < line.size() )
-				{
-					/* Skip leading whitespace. */
-					while ( pos < line.size() && line[pos] == ' ' )
-					{
-						++pos;
-					}
-
-					if ( pos >= line.size() )
-					{
-						break;
-					}
-
-					/* Find end of token. */
-					const auto tokenEnd = line.find(' ', pos);
-					const auto tokenLength = (tokenEnd == std::string_view::npos) ? (line.size() - pos) : (tokenEnd - pos);
-					const auto token = line.substr(pos, tokenLength);
+					const auto end = data.find_first_of(Blanks, position);
+					const auto token = data.substr(position, end == std::string_view::npos ? std::string_view::npos : end - position);
 
 					/* Parse the token. */
 					int32_t vIndex = 0;
@@ -1451,24 +1483,24 @@ namespace EmEn::Base::VertexFactory
 
 					if ( !parseFaceToken(token, vIndex, vtIndex, vnIndex) )
 					{
-						Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), failed to parse face token '"} + std::string{token} + "' in line: '" + std::string{fLine} + "'");
+						Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), failed to parse face token '"} + std::string{token} + "' in line: 'f " + std::string{data} + "'");
 
 						return false;
 					}
 
 					/* Resolve negative indices and add to result. */
 					faceIndices.emplace_back(
-						resolveIndex(vIndex, m_v.size()),
-						resolveIndex(vtIndex, m_vt.size()),
-						resolveIndex(vnIndex, m_vn.size())
+						resolveIndex(vIndex, read.positions),
+						resolveIndex(vtIndex, read.textureCoordinates),
+						resolveIndex(vnIndex, read.normals)
 					);
 
-					pos += tokenLength;
+					position = end == std::string_view::npos ? end : data.find_first_not_of(Blanks, end);
 				}
 
 				if ( faceIndices.size() < 3 )
 				{
-					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), face must have at least 3 vertices, got "} + std::to_string(faceIndices.size()) + ": '" + std::string{fLine} + "'");
+					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), face must have at least 3 vertices, got "} + std::to_string(faceIndices.size()) + ": 'f " + std::string{data} + "'");
 
 					return false;
 				}
@@ -1476,29 +1508,10 @@ namespace EmEn::Base::VertexFactory
 				return true;
 			}
 
-			/**
-			 * @brief Counts the number of vertices in an OBJ face line.
-			 * @param line The face line (starting with "f ").
-			 * @return size_t The number of vertices.
-			 */
-			[[nodiscard]]
-			static
-			size_t
-			countFaceVertices (std::string_view line) noexcept
-			{
-				/* Remove trailing whitespace. */
-				while ( !line.empty() && std::isspace(static_cast< unsigned char >(line.back())) )
-				{
-					line.remove_suffix(1);
-				}
-
-				/* Count spaces (vertices = spaces, since "f v1 v2 v3" has 3 spaces for 3 vertices). */
-				return static_cast< size_t >(std::ranges::count(line, ' '));
-			}
-
 			std::vector< Math::Vector< 3, vertex_data_t > > m_v;
 			std::vector< Math::Vector< 3, vertex_data_t > > m_vt;
 			std::vector< Math::Vector< 3, vertex_data_t > > m_vn;
+			index_data_t m_positionCount{0}; /* The "v" lines of the file (the V face mode keeps no table of them). */
 			index_data_t m_vertexCount{0}; /* The largest attribute count: a lower bound of the vertex count, for the reserve. */
 			index_data_t m_faceCount{0};
 			FaceMode m_faceMode{FaceMode::Undetermined};

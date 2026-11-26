@@ -46,6 +46,8 @@ Suite target: **`EmeraudeBaseUnitTests`**, gated by the CMake option
 - `Constants.hpp` — shared fixture paths and dimensions (assets under `resources/`;
   some sizes shrink when heavy-fixture builds are disabled).
 - `TinySoundFontImpl.cpp` — vendored TinySoundFont implementation TU for Wave tests.
+- `StreamDoubles.hpp` — two `IO::ByteStream` doubles over a byte vector: `UnseekableStream` (tells no position, so a
+  windowed reader must fall back to reading it whole) and `FailingStream` (its reads fail past a given byte).
 
 ## Test Inventory (by domain)
 

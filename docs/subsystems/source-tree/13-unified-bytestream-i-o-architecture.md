@@ -38,8 +38,9 @@ Both delegate to `FileFormatInterface::readStream(ByteStream &, ...)` / `writeSt
 |----------|---------|--------------|
 | **Direct ByteStream** | Native (ee3d), STL binary write | Binary read/write directly on the stream |
 | **sf_open_virtual** | libsndfile (WAV/FLAC/OGG) | Virtual I/O callbacks delegate to ByteStream |
-| **In-place line reader** (`IO::LineReader`) | OBJ | Read full stream to memory, walk it line by line as `std::string_view`s into the buffer |
-| **In-place istream** (`IO::MemoryStreamBuffer`) | STL, MDx, MIDI | Read full stream to memory, a `std::istream` on a `MemoryStreamBuffer` reads it in place (seekg / tellg included) |
+| **Windowed line reader** (`IO::StreamLineReader`) | OBJ | A stream that seeks: walked line by line through a 1 MiB window, never held whole; fallback `IO::LineReader` over the stream read whole |
+| **Windowed istream** (`IO::ByteStreamBuffer`) | STL, MDx | A stream that seeks: a `std::istream` on a `ByteStreamBuffer` reads it through a 1 MiB window (seekg / tellg included); fallback `IO::MemoryStreamBuffer` over the stream read whole |
+| **In-place istream** (`IO::MemoryStreamBuffer`) | MIDI | Read full stream to memory (the RMID wrapper and its DLS bank read the bytes directly), a `std::istream` reads it in place |
 | **String** | JSON (WaveFactory) | Read full stream to a string, hand it to `SFXScript::generateFromString()` |
 | **ostringstream adapter** | OBJ write | Build text output in `std::ostringstream`, write string to ByteStream |
 
@@ -65,7 +66,24 @@ Both require the memory to outlive them. Pinned by `IOLineReader.*` (the cut com
 texts, lines as views into the text, rewind) and `IOMemoryStreamBuffer.*` (reads in place, reads and seeks as a
 `std::istringstream`, refuses a seek outside the block, read past the end, empty block).
 
-What still dominates the peak once the copy is gone: the read buffer itself (one × the file), the reader's staging
+**Then the window (2026-11-26, owner decision: a window for every source, a fallback for a stream that cannot seek).**
+`IO::ByteStreamBuffer` (`IO/ByteStreamBuffer.hpp`) is a read-only `std::streambuf` over a `ByteStream`: a window of 1 MiB
+refilled by `ByteStream::read()`, a seek inside the window moving within it and outside it asking `ByteStream::seek()`.
+`IO::StreamLineReader` (`IO/StreamLineReader.hpp`) is `IO::LineReader`'s cut over a `ByteStream` through such a window,
+`rewind()` seeking back for the second pass; ⚠️ its line is valid until the next call only (the window is refilled and
+doubles when a line outgrows it), where `IO::LineReader`'s lives as long as its text — two classes on purpose, so each
+contract stays simple. Both see the stream from its position at construction to its end, and are usable only when the
+stream tells its position and seeks to it (`isUsable()`; `FileStream` and `MemoryStream` do): the readers fall back to
+the stream read whole otherwise. A `MemoryStream` goes through the window too: reading its bytes in place would take a
+`const_cast` (`std::streambuf::setg()` takes `char *`, `ByteStream::data()` gives `const std::byte *`), refused by the
+static-analysis gate. Measured: the 312 MB OBJ **822 MiB** (with the OBJ's V mode writing its vertices directly, no position
+table: −45 MiB) and 897 ms; the 390 MB STL **2532 MiB**. Pinned by `IOByteStreamBuffer.*`, `IOStreamLineReader.*` (window
+sizes down to one byte, a line longer than the window, the stream position, rewind, a stream that cannot seek, a failed
+read), and the readers' fallback tests (`VertexFactoryOBJ.aStreamThatCannotSeekIsReadWhole`,
+`VertexFactorySTL.aStreamThatCannotSeekIsReadWhole`, `VertexFactoryMDx.md3NormalsFollowQuake3`) through
+`Testing/StreamDoubles.hpp`.
+
+What still dominates the peak once the file is no longer held: the read buffer itself (one × the file), the reader's staging
 tables, and the `Shape` (`ShapeVertex` 92 bytes, `ShapeTriangle` 64 bytes — 818 MiB of the 1163 on that OBJ; on the
 STL above, whose reader does not weld the corners, 23.4 M vertices: about 2 GiB of `ShapeVertex`).
 
@@ -86,9 +104,11 @@ external `.bin`, an uncompressed USDZ entry) without reading the model. A range 
 | `IO/MemoryStream.hpp` | Memory-backed implementation |
 | `IO/MemoryStreamBuffer.hpp` | Read-only `std::streambuf` over memory: a `std::istream` reading a buffer in place |
 | `IO/LineReader.hpp` | Line-by-line walk of a text in memory, `std::getline()`'s cut, lines as `std::string_view` |
+| `IO/ByteStreamBuffer.hpp` | Read-only `std::streambuf` over a `ByteStream` through a refilled window (seekable streams) |
+| `IO/StreamLineReader.hpp` | `LineReader`'s cut over a `ByteStream` through a refilled window; a line lives until the next call |
 | `PixelFactory/FileIO.hpp` | Image file dispatcher |
 | `PixelFactory/StreamIO.hpp` | Image memory buffer I/O |
 | `WaveFactory/FileIO.hpp` | Audio file dispatcher |
 | `WaveFactory/StreamIO.hpp` | Audio memory buffer I/O (libsndfile only) |
 | `VertexFactory/FileIO.hpp` | Geometry file dispatcher (Native, OBJ, STL, MDx) |
-| `VertexFactory/StreamIO.hpp` | Geometry memory buffer I/O (Native ee3d only) |
+| `VertexFactory/StreamIO.hpp` | Geometry memory buffer I/O (Native, OBJ, STL, MDx: the format is given, a buffer has no extension) |

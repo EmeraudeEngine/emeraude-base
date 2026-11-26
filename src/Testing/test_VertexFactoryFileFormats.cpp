@@ -46,6 +46,7 @@
 #include "IO/MemoryStream.hpp"
 #include "Logging/Severity.hpp"
 #include "Math/Vector.hpp"
+#include "StreamDoubles.hpp"
 #include "VertexFactory/FileFormatInterface.hpp"
 #include "VertexFactory/FileFormatMDx.hpp"
 #include "VertexFactory/FileFormatNative.hpp"
@@ -454,6 +455,21 @@ namespace EmEn::Base::VertexFactory
 
 		EXPECT_EQ(result.shape.triangles().size(), 1U);
 		EXPECT_EQ(result.shape.vertices().size(), 3U);
+	}
+
+	TEST(VertexFactorySTL, aStreamThatCannotSeekIsReadWhole)
+	{
+		/* A stream without position cannot be read through a window (IO::ByteStreamBuffer): the reader reads it whole
+		 * first, and gets the same shape (2026-11-26). */
+		const auto buffer = makeBinarySTL(2, 2);
+
+		EmEn::Base::Testing::UnseekableStream stream{buffer};
+		STL format;
+		Result result;
+		ASSERT_TRUE(format.readStream(stream, result, {}));
+
+		EXPECT_EQ(result.shape.triangles().size(), 2U);
+		EXPECT_EQ(result.shape.vertices().size(), 6U);
 	}
 
 	TEST(VertexFactorySTL, hugeTriangleCountIsRejectedNotAllocated)
@@ -1386,6 +1402,15 @@ namespace EmEn::Base::VertexFactory
 		ASSERT_TRUE(format.readStream(stream, result, {}));
 		ASSERT_EQ(result.shape.triangles().size(), 1U);
 		EXPECT_TRUE(everyNormalIs(result.shape, 0.0F, 0.0F, 1.0F));
+
+		/* The same file from a stream that cannot seek: read whole first, the same shape (2026-11-26). */
+		EmEn::Base::Testing::UnseekableStream unseekable{buffer};
+		MDx wholeFormat;
+		Result wholeResult;
+
+		ASSERT_TRUE(wholeFormat.readStream(unseekable, wholeResult, {}));
+		ASSERT_EQ(wholeResult.shape.triangles().size(), 1U);
+		EXPECT_TRUE(everyNormalIs(wholeResult.shape, 0.0F, 0.0F, 1.0F));
 	}
 
 	/* ===== Wavefront OBJ (text) — counts are line-derived (no allocation DoS); the crash risk
@@ -1799,6 +1824,158 @@ namespace EmEn::Base::VertexFactory
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 9U);
 		EXPECT_EQ(captured.countWithoutDebug(), 9U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	}
+
+	/* The OBJ probes of 2026-11-26: four inputs the reader got wrong without a word. */
+	namespace
+	{
+		/* The three corner positions of a triangle of a shape. */
+		std::array< Math::Vector< 3, float >, 3 >
+		cornerPositions (const Shape< float, uint32_t > & shape, size_t triangleIndex)
+		{
+			const auto & triangle = shape.triangles()[triangleIndex];
+
+			return {
+				shape.vertices()[triangle.vertexIndex(0)].position(),
+				shape.vertices()[triangle.vertexIndex(1)].position(),
+				shape.vertices()[triangle.vertexIndex(2)].position()
+			};
+		}
+
+		/* The first difference between the vertices of two shapes (position, normal, texture coordinates), empty when
+		 * they are the same. */
+		std::string
+		firstVertexDifference (const Shape< float, uint32_t > & first, const Shape< float, uint32_t > & second)
+		{
+			if ( first.vertices().size() != second.vertices().size() )
+			{
+				return "vertex counts " + std::to_string(first.vertices().size()) + " and " + std::to_string(second.vertices().size());
+			}
+
+			for ( size_t index = 0; index < first.vertices().size(); ++index )
+			{
+				const auto & a = first.vertices()[index];
+				const auto & b = second.vertices()[index];
+
+				if ( !(a.position() == b.position()) || !(a.normal() == b.normal()) || !(a.textureCoordinates() == b.textureCoordinates()) )
+				{
+					return "vertex " + std::to_string(index);
+				}
+			}
+
+			return {};
+		}
+	}
+
+	TEST(VertexFactoryOBJ, relativeIndicesCountTheAttributesReadSoFar)
+	{
+		/* A negative index is relative to the attributes read SO FAR (the format's definition); resolveIndex() was
+		 * handed the list's FINAL size. With vertices declared after a face, the first "f -3 -2 -1" named the last
+		 * three vertices of the FILE: both triangles below came out at (5, 5, 5). */
+		using Vec3 = Math::Vector< 3, float >;
+
+		const auto positionsOnly = readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nf -3 -2 -1\nv 5 5 5\nv 6 5 5\nv 5 6 5\nf -3 -2 -1\n");
+		ASSERT_EQ(positionsOnly.shape.triangles().size(), 2U);
+		EXPECT_EQ(cornerPositions(positionsOnly.shape, 0), (std::array< Vec3, 3 >{Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+		EXPECT_EQ(cornerPositions(positionsOnly.shape, 1), (std::array< Vec3, 3 >{Vec3{5, 5, 5}, Vec3{6, 5, 5}, Vec3{5, 6, 5}}));
+
+		/* The same for the normals, in the V//VN form. */
+		const auto withNormals = readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0 1\nf -3//-1 -2//-1 -1//-1\n"
+			"v 5 5 5\nv 6 5 5\nv 5 6 5\nvn 0 1 0\nf -3//-1 -2//-1 -1//-1\n");
+		ASSERT_EQ(withNormals.shape.triangles().size(), 2U);
+		EXPECT_EQ(cornerPositions(withNormals.shape, 0), (std::array< Vec3, 3 >{Vec3{0, 0, 0}, Vec3{1, 0, 0}, Vec3{0, 1, 0}}));
+		EXPECT_EQ(withNormals.shape.vertices()[withNormals.shape.triangles()[0].vertexIndex(0)].normal(), (Vec3{0, 0, 1}));
+		EXPECT_EQ(withNormals.shape.vertices()[withNormals.shape.triangles()[1].vertexIndex(0)].normal(), (Vec3{0, 1, 0}));
+	}
+
+	TEST(VertexFactoryOBJ, aSignedCoordinateIsRead)
+	{
+		/* "+1.5" was read as 0: std::from_chars refuses a leading '+', and the reader took the refusal for a zero. */
+		using Vec3 = Math::Vector< 3, float >;
+
+		const auto result = readOBJ("v +1.5 +2.5 +3.5\nv 1 0 0\nv 0 1 0\nvn +0 -0 +1\nf 1//1 2//1 3//1\n");
+
+		ASSERT_EQ(result.shape.triangles().size(), 1U);
+		EXPECT_EQ(cornerPositions(result.shape, 0)[0], (Vec3{1.5F, 2.5F, 3.5F}));
+		EXPECT_EQ(result.shape.vertices()[result.shape.triangles()[0].vertexIndex(0)].normal(), (Vec3{0, 0, 1}));
+	}
+
+	TEST(VertexFactoryOBJ, anUnreadableCoordinateRefusesTheFile)
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+		/* A coordinate missing or not a number was read as 0 without a word: a wrong shape instead of a refused file
+		 * (a comma as decimal separator, "1,5", gave x = 1 and y = z = 0). */
+		EXPECT_TRUE(readOBJ("v 1 2\nv 1 0 0\nv 0 1 0\nf 1 2 3\n").shape.triangles().empty()) << "a vertex of two coordinates";
+		EXPECT_TRUE(readOBJ("v 1,5 2,5 3,5\nv 1 0 0\nv 0 1 0\nf 1 2 3\n").shape.triangles().empty()) << "a decimal comma";
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 0 0\nf 1//1 2//1 3//1\n").shape.triangles().empty()) << "a normal of two coordinates";
+		EXPECT_TRUE(readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt x\nf 1/1 2/1 3/1\n").shape.triangles().empty()) << "a texture coordinate that is not a number";
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 4U);
+		EXPECT_EQ(captured.countWithoutDebug(), 4U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	}
+
+	TEST(VertexFactoryOBJ, tabsSeparateLikeSpaces)
+	{
+		/* "v\t0\t0\t0" was no vertex line at all (the reader matched "v "): a file written with tabs was refused as
+		 * holding no vertex, and a face split by tabs did not parse. */
+		const auto spaces = readOBJ("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvt 1 0\nvt 0 1\nvn 0 0 1\nf 1/1/1 2/2/1 3/3/1\ng second\nf 3/3/1 2/2/1 1/1/1\n");
+		const auto tabs = readOBJ("v\t0\t0\t0\nv\t1 0\t0\nv 0\t1\t0\nvt\t0\t0\nvt\t1\t0\nvt\t0\t1\nvn\t0\t0\t1\nf\t1/1/1\t2/2/1 3/3/1\ng\tsecond\nf 3/3/1\t2/2/1\t1/1/1\n");
+
+		ASSERT_EQ(spaces.shape.triangles().size(), 2U);
+		EXPECT_EQ(tabs.shape.triangles().size(), spaces.shape.triangles().size());
+		EXPECT_EQ(tabs.shape.groups(), spaces.shape.groups());
+		EXPECT_EQ(firstVertexDifference(tabs.shape, spaces.shape), "");
+	}
+
+	TEST(VertexFactoryOBJ, aStreamThatCannotSeekIsReadWhole)
+	{
+		/* A stream without position cannot be read through a window (IO::StreamLineReader): the reader reads it whole
+		 * first (IO::LineReader), and gets the same shape (2026-11-26). */
+		const auto buffer = toBytes("v 0 0 0\nv 1 0 0\nv 0 1 0\nvt 0 0\nvn 0 0 1\nf 1/1/1 2/1/1 3/1/1\nf -1/1/1 -2/1/1 -3/1/1\n");
+
+		MemoryStream seekable{buffer};
+		EmEn::Base::Testing::UnseekableStream unseekable{buffer};
+		OBJ windowedFormat;
+		OBJ wholeFormat;
+		Result windowed;
+		Result whole;
+
+		ASSERT_TRUE(windowedFormat.readStream(seekable, windowed, {}));
+		ASSERT_TRUE(wholeFormat.readStream(unseekable, whole, {}));
+		EXPECT_EQ(whole.shape.triangles().size(), 2U);
+		EXPECT_EQ(firstVertexDifference(whole.shape, windowed.shape), "");
+	}
+
+	TEST(VertexFactoryOBJ, aFailedReadRefusesTheFile)
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+		/* A read error in the middle of the file must refuse it, never give the start of the file as the shape: the
+		 * text is longer than the 1 MiB window, and the reads fail past it. */
+		std::string text{"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"};
+
+		while ( text.size() < (size_t{3} << 19U) )
+		{
+			text += "v 0 0 1\nv 1 0 1\nv 0 1 1\nf -3 -2 -1\n";
+		}
+
+		const auto buffer = toBytes(text);
+		EmEn::Base::Testing::FailingStream stream{buffer, int64_t{1} << 20U};
+		OBJ format;
+		Result result;
+
+		EXPECT_FALSE(format.readStream(stream, result, {}));
+		EXPECT_TRUE(result.shape.triangles().empty());
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatOBJ"), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 

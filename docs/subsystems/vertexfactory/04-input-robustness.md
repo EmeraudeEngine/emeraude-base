@@ -30,5 +30,11 @@ nothing fancier.* Hardening landed in the A.2 characterization pass and the A.3 
 - **OBJ**: a face index that references a non-existent vertex is bounds-checked **before** the
   access (was `std::vector::at` → `out_of_range` → terminate). `resolveIndex()` widens to `int64_t`
   so a list larger than `INT_MAX` cannot wrap (the former `int32_t` cast was UB).
+  2026-11-26 (probes of four inputs read wrong without a word): a negative index is resolved against the attributes
+  read SO FAR, not the final count; a coordinate missing or not a number refuses the file instead of reading 0 (a
+  decimal comma included); a leading `+` is read; tabs separate words like spaces. A failed read of the stream in the
+  middle of the file refuses it. Tests `VertexFactoryOBJ.relativeIndicesCountTheAttributesReadSoFar`,
+  `aSignedCoordinateIsRead`, `anUnreadableCoordinateRefusesTheFile`, `tabsSeparateLikeSpaces` (all four failed on the
+  former reader), `aStreamThatCannotSeekIsReadWhole`, `aFailedReadRefusesTheFile`.
 - **Diagnostics**: all `std::cerr` in the parsers, FileIO dispatch and StreamIO migrated to the
   `EmEn::Base::Logging` hook (no raw `cerr` in this module).
