@@ -33,12 +33,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <iostream>
+#include <istream>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <random>
 #include <span>
-#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -54,11 +54,14 @@
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "IO/ByteStream.hpp"
+#include "IO/MemoryStreamBuffer.hpp"
 #include "Logging/Logging.hpp"
 #include "Processor.hpp"
 #include "StaticVector.hpp"
 #include "Synthesizer.hpp"
 #include "Wave.hpp"
+#include "WaveFactory/Types.hpp"
 
 namespace EmEn::Base::WaveFactory
 {
@@ -163,8 +166,10 @@ namespace EmEn::Base::WaveFactory
 				 *   [20..N]  standard SMF starting with "MThd"
 				 * The inner SMF can be parsed by the existing code as-is, we just need to start the
 				 * stream past the 20-byte wrapper. We use seekg() to skip in place rather than
-				 * allocating a substring copy of the (potentially large) buffer. */
-				std::istringstream input(buffer, std::ios::binary);
+				 * allocating a substring copy of the (potentially large) buffer, and the stream reads the buffer in place
+				 * where a std::istringstream would copy it whole (see IO::MemoryStreamBuffer). */
+				IO::MemoryStreamBuffer memory{buffer};
+				std::istream input{&memory};
 
 				/* The RMID's own DLS bank, converted to a SoundFont, owned for this call (owner decision 2026-10-27). */
 				std::unique_ptr< tsf, decltype(&tsf_close) > embeddedBank{nullptr, &tsf_close};

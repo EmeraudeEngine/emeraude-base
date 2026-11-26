@@ -28,23 +28,25 @@
 
 /* Project configuration. */
 #include "emeraude_base_config.hpp"
+#include "emeraude_platform.hpp"
 
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <charconv>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <iomanip>
-#include <istream>
 #include <limits>
 #include <locale>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -53,7 +55,11 @@
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "BaseUtility.hpp"
+#include "IO/ByteStream.hpp"
+#include "IO/LineReader.hpp"
 #include "Logging/Logging.hpp"
+#include "VertexFactory/ShapeLoadResult.hpp"
 
 /* Local inclusions for usages. */
 #include "Math/Vector.hpp"
@@ -175,7 +181,9 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				std::istringstream input(buffer);
+				/* NOTE: Lines are views into the buffer: a std::istringstream would copy it whole, and std::getline() copy
+				 * every line once more (see IO::LineReader). */
+				IO::LineReader input{buffer};
 
 				/* Read a first time to calculate the space required for the structure. */
 				{
@@ -186,8 +194,7 @@ namespace EmEn::Base::VertexFactory
 						return false;
 					}
 
-					input.clear();
-					input.seekg(0);
+					input.rewind();
 				}
 
 				/* Read a second time to assemble faces. */
@@ -590,15 +597,15 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Determines how the OBJ format describe a face.
-			 * @param fline A reference to a string.
+			 * @param fline The face line.
 			 * @return FaceMode
 			 */
 			[[nodiscard]]
 			static
 			FaceMode
-			determineFaceDeclarationMode (const std::string & fline) noexcept
+			determineFaceDeclarationMode (std::string_view fline) noexcept
 			{
-				if ( fline.find("//") != std::string::npos )
+				if ( fline.find("//") != std::string_view::npos )
 				{
 					return FaceMode::V_VN;
 				}
@@ -622,19 +629,19 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Reads a first time to calculate the space required for the structure.
-			 * @param file A reference to an input stream.
+			 * @param file A reference to the line reader over the file.
 			 * @return bool
 			 */
 			bool
-			analyseFileContent (std::istream & file) noexcept
+			analyseFileContent (IO::LineReader & file) noexcept
 			{
-				std::string line{};
+				std::string_view line{};
 
 				index_data_t positionCount = 0;
 				index_data_t textureCoordinatesCount = 0;
 				index_data_t normalCount = 0;
 
-				while ( std::getline(file, line) )
+				while ( file.next(line) )
 				{
 					if ( line.starts_with("v ") )
 					{
@@ -705,14 +712,14 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Reads a line using OBJ F line format : "f v1 v2 v3"
-			 * @param file A reference to the OBJ file.
+			 * @param file A reference to the line reader over the OBJ file.
 			 * @param groups A reference to an index list.
 			 * @param vertices A reference to the vertex list.
 			 * @param triangles A reference to the triangle list.
 			 * @return bool
 			 */
 			bool
-			parseFaceAssemblyV (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			parseFaceAssemblyV (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
 				/* NOTE: Resize/reserving memory space to the geometry shape. */
 				vertices.resize(m_vertexCount);
@@ -722,9 +729,9 @@ namespace EmEn::Base::VertexFactory
 				index_data_t positionCount = 0;
 				index_data_t triangleCount = 0;
 
-				std::string objLine{};
+				std::string_view objLine{};
 
-				while ( std::getline(file, objLine) )
+				while ( file.next(objLine) )
 				{
 					/* Declaring a group. */
 					if ( objLine.starts_with("g ") )
@@ -775,7 +782,6 @@ namespace EmEn::Base::VertexFactory
 									return false;
 								}
 
-
 								/* NOTE: Copy the OBJ extracts values to the final shape vertex. */
 								vertices[vIndex].setPosition(m_v[vIndex]);
 
@@ -800,14 +806,14 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Reads a line using OBJ F line format : "f v1//vn1 v2//vn2 v3//vn3".
-			 * @param file A reference to the OBJ file.
+			 * @param file A reference to the line reader over the OBJ file.
 			 * @param groups A reference to an index list.
 			 * @param vertices A reference to the vertex list.
 			 * @param triangles A reference to the triangle list.
 			 * @return bool
 			 */
 			bool
-			parseFaceAssemblyV_VN (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			parseFaceAssemblyV_VN (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
 				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
 				vertices.reserve(m_vertexCount);
@@ -822,9 +828,9 @@ namespace EmEn::Base::VertexFactory
 				index_data_t normalCount = 0;
 				index_data_t triangleCount = 0;
 
-				std::string objLine{};
+				std::string_view objLine{};
 
-				while ( std::getline(file, objLine) )
+				while ( file.next(objLine) )
 				{
 					/* Declaring a group. */
 					if ( objLine.starts_with("g ") )
@@ -914,14 +920,14 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Reads a line using OBJ F line format : "f v1/vt1 v2/vt2 v3/vt3"
-			 * @param file A reference to the OBJ file.
+			 * @param file A reference to the line reader over the OBJ file.
 			 * @param groups A reference to an index list.
 			 * @param vertices A reference to the vertex list.
 			 * @param triangles A reference to the triangle list.
 			 * @return bool
 			 */
 			bool
-			parseFaceAssemblyV_VT (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			parseFaceAssemblyV_VT (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
 				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
 				vertices.reserve(m_vertexCount);
@@ -936,9 +942,9 @@ namespace EmEn::Base::VertexFactory
 				index_data_t textureCoordinatesCount = 0;
 				index_data_t triangleCount = 0;
 
-				std::string objLine{};
+				std::string_view objLine{};
 
-				while ( std::getline(file, objLine) )
+				while ( file.next(objLine) )
 				{
 					/* Declaring a group. */
 					if ( objLine.starts_with("g ") )
@@ -1031,14 +1037,14 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Reads a line using OBJ F line format : "f v1/vt1/vn1 v2/vt2/vn2 v3/vt3/vn3"
-			 * @param file A reference to the OBJ file.
+			 * @param file A reference to the line reader over the OBJ file.
 			 * @param groups A reference to an index list.
 			 * @param vertices A reference to the vertex list.
 			 * @param triangles A reference to the triangle list.
 			 * @return bool
 			 */
 			bool
-			parseFaceAssemblyV_VT_VN (std::istream & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			parseFaceAssemblyV_VT_VN (IO::LineReader & file, std::vector< std::pair< index_data_t, index_data_t > > & groups, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
 			{
 				/* NOTE: Reserving memory space to the geometry shape: one vertex per (v, vt, vn) triple met. */
 				vertices.reserve(m_vertexCount);
@@ -1054,9 +1060,9 @@ namespace EmEn::Base::VertexFactory
 				index_data_t normalCount = 0;
 				index_data_t triangleCount = 0;
 
-				std::string objLine{};
+				std::string_view objLine{};
 
-				while ( std::getline(file, objLine) )
+				while ( file.next(objLine) )
 				{
 					/* Declaring a group. */
 					if ( objLine.starts_with("g ") )
@@ -1199,11 +1205,11 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Parses a "v" line to extract the position.
-			 * @param vLine A reference to a string.
+			 * @param vLine The vertex line.
 			 * @param offset The vertex offset.
 			 */
 			void
-			extractPositionAttribute (const std::string & vLine, index_data_t offset) noexcept
+			extractPositionAttribute (std::string_view vLine, index_data_t offset) noexcept
 			{
 				const std::string_view line{vLine};
 
@@ -1237,11 +1243,11 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Parses a "vt" line to extract the texture coordinates.
-			 * @param vtLine A reference to a string.
+			 * @param vtLine The texture coordinates line.
 			 * @param offset The vertex offset.
 			 */
 			void
-			extractTextureCoordinatesAttribute (const std::string & vtLine, index_data_t offset) noexcept
+			extractTextureCoordinatesAttribute (std::string_view vtLine, index_data_t offset) noexcept
 			{
 				const std::string_view line{vtLine};
 
@@ -1267,11 +1273,11 @@ namespace EmEn::Base::VertexFactory
 
 			/**
 			 * @brief Parses a "vn" line to extract the normal.
-			 * @param vnLine A reference to a string.
+			 * @param vnLine The normal line.
 			 * @param offset The vertex offset.
 			 */
 			void
-			extractNormalAttribute (const std::string & vnLine, index_data_t offset) noexcept
+			extractNormalAttribute (std::string_view vnLine, index_data_t offset) noexcept
 			{
 				const std::string_view line{vnLine};
 
@@ -1399,14 +1405,14 @@ namespace EmEn::Base::VertexFactory
 			 */
 			[[nodiscard]]
 			bool
-			extractFaceIndices (const std::string & fLine, std::vector< OBJVertex< index_data_t > > & faceIndices) const noexcept
+			extractFaceIndices (std::string_view fLine, std::vector< OBJVertex< index_data_t > > & faceIndices) const noexcept
 			{
 				std::string_view line{fLine};
 
 				/* Skip "f " prefix. */
 				if ( line.size() < 3 || line[0] != 'f' || line[1] != ' ' )
 				{
-					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), invalid face line format: '"} + fLine + "'");
+					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), invalid face line format: '"} + std::string{fLine} + "'");
 
 					return false;
 				}
@@ -1445,7 +1451,7 @@ namespace EmEn::Base::VertexFactory
 
 					if ( !parseFaceToken(token, vIndex, vtIndex, vnIndex) )
 					{
-						Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), failed to parse face token '"} + std::string{token} + "' in line: '" + fLine + "'");
+						Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), failed to parse face token '"} + std::string{token} + "' in line: '" + std::string{fLine} + "'");
 
 						return false;
 					}
@@ -1462,7 +1468,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( faceIndices.size() < 3 )
 				{
-					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), face must have at least 3 vertices, got "} + std::to_string(faceIndices.size()) + ": '" + fLine + "'");
+					Logging::error("VertexFactory::FileFormatOBJ", std::string{"extractFaceIndices(), face must have at least 3 vertices, got "} + std::to_string(faceIndices.size()) + ": '" + std::string{fLine} + "'");
 
 					return false;
 				}

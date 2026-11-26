@@ -35,13 +35,14 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <iterator>
+#include <istream>
 #include <limits>
-#include <sstream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for inheritances. */
@@ -50,6 +51,7 @@
 /* Local inclusions for usages. */
 #include "emeraude_platform.hpp"
 #include "IO/ByteStream.hpp"
+#include "IO/MemoryStreamBuffer.hpp"
 #include "Logging/Logging.hpp"
 #include "VertexFactory/ShapeLoadResult.hpp"
 
@@ -100,7 +102,9 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				std::istringstream input(buffer, std::ios::binary);
+				/* NOTE: The stream reads the buffer in place: a std::istringstream would copy it whole (see IO::MemoryStreamBuffer). */
+				IO::MemoryStreamBuffer memory{buffer};
+				std::istream input{&memory};
 
 				if ( FileFormatSTL::isAscii(input) )
 				{

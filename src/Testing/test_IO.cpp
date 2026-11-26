@@ -41,6 +41,8 @@
 #include <fstream>
 #include <limits>
 #include <optional>
+#include <span>
+#include <sstream>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -64,7 +66,9 @@
 #include "INIParser.hpp"
 #include "IO/FileStream.hpp"
 #include "IO/IO.hpp"
+#include "IO/LineReader.hpp"
 #include "IO/MemoryStream.hpp"
+#include "IO/MemoryStreamBuffer.hpp"
 #include "IO/ZipReader.hpp"
 #include "IO/ZipWriter.hpp"
 #include "Logging/Logging.hpp"
@@ -1264,3 +1268,238 @@ TEST(IOFileUtils, writersRefuseAFifoWithoutBlocking)
 	EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 }
 #endif
+
+/* IO::LineReader and IO::MemoryStreamBuffer (2026-11-26). The OBJ, STL, MDx and MIDI readers wrapped the buffer they had
+ * just read in a std::istringstream, whose constructor COPIES the string: the file was held twice, 2 × 298 MiB for a
+ * 312 MB OBJ (peak 1461 MiB, 1163 MiB without the copy). Both replacements read the buffer in place; the tests pin that
+ * they behave exactly as the std::istringstream / std::getline() they replace, which the readers rely on. */
+
+namespace
+{
+	/** @brief The lines std::getline() cuts from a text, the reference of IO::LineReader. */
+	std::vector< std::string >
+	getlineLines (const std::string & text)
+	{
+		std::vector< std::string > lines;
+		std::istringstream input{text};
+		std::string line;
+
+		while ( std::getline(input, line) )
+		{
+			lines.emplace_back(line);
+		}
+
+		return lines;
+	}
+
+	/** @brief The lines IO::LineReader cuts from a text. */
+	std::vector< std::string >
+	lineReaderLines (std::string_view text)
+	{
+		std::vector< std::string > lines;
+		EmEn::Base::IO::LineReader reader{text};
+		std::string_view line;
+
+		while ( reader.next(line) )
+		{
+			lines.emplace_back(line);
+		}
+
+		return lines;
+	}
+}
+
+TEST(IOLineReader, cutsTheLinesStdGetlineCuts)
+{
+	/* '\n' ends a line and is dropped, a '\r' before it stays, a last line without '\n' counts, nothing follows a
+	 * final '\n': the OBJ reader moved from std::getline() to IO::LineReader and must see the same lines. */
+	const std::array< std::string, 14 > texts{
+		"",
+		"a",
+		"a\n",
+		"\n",
+		"\n\n",
+		"a\nb",
+		"a\nb\n",
+		"a\n\nb\n",
+		"a\r\nb\r\n",
+		"a\r\nb",
+		"\r",
+		"\r\n",
+		"v 1 2 3\nf 1 2 3",
+		"x\n\n\ny\n\n"
+	};
+
+	for ( const auto & text : texts )
+	{
+		EXPECT_EQ(lineReaderLines(text), getlineLines(text)) << "text of " << text.size() << " bytes";
+	}
+}
+
+TEST(IOLineReader, linesAreViewsIntoTheText)
+{
+	const std::string text{"first\nsecond\r\nthird"};
+	EmEn::Base::IO::LineReader reader{text};
+	std::string_view line;
+
+	/* Each line starts at its own byte of the text: nothing was copied. */
+	ASSERT_TRUE(reader.next(line));
+	EXPECT_EQ(line, "first");
+	EXPECT_EQ(line.data(), text.data());
+
+	ASSERT_TRUE(reader.next(line));
+	EXPECT_EQ(line, "second\r");
+	EXPECT_EQ(line.data(), std::string_view{text}.substr(6).data());
+
+	ASSERT_TRUE(reader.next(line));
+	EXPECT_EQ(line, "third");
+	EXPECT_EQ(line.data(), std::string_view{text}.substr(14).data());
+
+	/* Exhausted: false, and the last line is left as it was. */
+	EXPECT_FALSE(reader.next(line));
+	EXPECT_EQ(line, "third");
+}
+
+TEST(IOLineReader, rewindGivesTheSameLinesAgain)
+{
+	/* The OBJ reader walks its text twice: once to count, once to fill. */
+	const std::string text{"v 0 0 0\nv 1 0 0\n\nf 1 2 3\n"};
+	EmEn::Base::IO::LineReader reader{text};
+	std::vector< std::string > firstPass;
+	std::vector< std::string > secondPass;
+	std::string_view line;
+
+	while ( reader.next(line) )
+	{
+		firstPass.emplace_back(line);
+	}
+
+	reader.rewind();
+
+	while ( reader.next(line) )
+	{
+		secondPass.emplace_back(line);
+	}
+
+	EXPECT_EQ(firstPass.size(), 4U);
+	EXPECT_EQ(secondPass, firstPass);
+}
+
+TEST(IOMemoryStreamBuffer, readsTheBytesInPlace)
+{
+	std::string buffer{"abcdef"};
+	EmEn::Base::IO::MemoryStreamBuffer memory{buffer};
+	std::istream input{&memory};
+
+	/* Changed after the stream was built, and read through it as it is now: the stream holds no copy. */
+	buffer[0] = 'Z';
+
+	std::string word;
+	input >> word;
+
+	EXPECT_EQ(word, buffer);
+	EXPECT_EQ(word.front(), 'Z');
+}
+
+TEST(IOMemoryStreamBuffer, readsAsAStringStream)
+{
+	/* The STL, MDx and MIDI readers read and seek through it as they did through a std::istringstream. */
+	std::string buffer{"0123456789"};
+	EmEn::Base::IO::MemoryStreamBuffer memory{buffer};
+	std::istream input{&memory};
+	std::istringstream reference{buffer, std::ios::binary};
+
+	std::array< char, 3 > bytes{};
+	std::array< char, 3 > referenceBytes{};
+	input.read(bytes.data(), bytes.size());
+	reference.read(referenceBytes.data(), referenceBytes.size());
+
+	EXPECT_EQ(bytes, referenceBytes);
+	EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), 3);
+}
+
+TEST(IOMemoryStreamBuffer, seeksAsAStringStream)
+{
+	std::string buffer{"0123456789"};
+	EmEn::Base::IO::MemoryStreamBuffer memory{buffer};
+	std::istream input{&memory};
+	std::istringstream reference{buffer, std::ios::binary};
+
+	/* Every origin, forward and backward, both ends included; the last one goes back to the start. */
+	const std::array< std::pair< std::streamoff, std::ios::seekdir >, 5 > seeks{{
+		{7, std::ios::beg},
+		{-2, std::ios::cur},
+		{-1, std::ios::end},
+		{0, std::ios::end},
+		{0, std::ios::beg}
+	}};
+
+	for ( const auto & [offset, direction] : seeks )
+	{
+		input.seekg(offset, direction);
+		reference.seekg(offset, direction);
+
+		EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), static_cast< std::streamoff >(reference.tellg())) << "offset " << offset;
+		EXPECT_EQ(input.peek(), reference.peek()) << "offset " << offset;
+		EXPECT_EQ(input.good(), reference.good()) << "offset " << offset;
+	}
+}
+
+TEST(IOMemoryStreamBuffer, refusesASeekOutsideTheBlock)
+{
+	std::string buffer{"0123456789"};
+	EmEn::Base::IO::MemoryStreamBuffer memory{buffer};
+	std::istream input{&memory};
+
+	input.seekg(4);
+	ASSERT_EQ(static_cast< std::streamoff >(input.tellg()), 4);
+
+	/* Before the start, past the end, and offsets whose sum with the origin would overflow: each is refused (failbit)
+	 * and the position does not move. */
+	const std::array< std::pair< std::streamoff, std::ios::seekdir >, 6 > refused{{
+		{-1, std::ios::beg},
+		{11, std::ios::beg},
+		{1, std::ios::end},
+		{-11, std::ios::end},
+		{std::numeric_limits< std::streamoff >::max(), std::ios::cur},
+		{std::numeric_limits< std::streamoff >::min(), std::ios::cur}
+	}};
+
+	for ( const auto & [offset, direction] : refused )
+	{
+		input.seekg(offset, direction);
+		EXPECT_TRUE(input.fail()) << "offset " << offset;
+
+		input.clear();
+		EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), 4) << "offset " << offset;
+	}
+}
+
+TEST(IOMemoryStreamBuffer, readingPastTheEndStopsAsAStringStream)
+{
+	std::string buffer{"abcd"};
+	EmEn::Base::IO::MemoryStreamBuffer memory{buffer};
+	std::istream input{&memory};
+
+	std::array< char, 10 > bytes{};
+	input.read(bytes.data(), bytes.size());
+
+	EXPECT_EQ(input.gcount(), 4);
+	EXPECT_TRUE(input.eof());
+	EXPECT_TRUE(input.fail());
+	EXPECT_EQ(std::string_view(bytes.data(), 4), "abcd");
+}
+
+TEST(IOMemoryStreamBuffer, anEmptyBlockReadsNothing)
+{
+	std::string buffer;
+	EmEn::Base::IO::MemoryStreamBuffer memory{buffer};
+	std::istream input{&memory};
+
+	EXPECT_EQ(input.peek(), std::char_traits< char >::eof());
+
+	input.clear();
+	input.seekg(0, std::ios::end);
+	EXPECT_FALSE(input.fail());
+	EXPECT_EQ(static_cast< std::streamoff >(input.tellg()), 0);
+}

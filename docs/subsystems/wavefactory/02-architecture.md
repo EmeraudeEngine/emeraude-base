@@ -90,12 +90,13 @@ All format handlers operate on `IO::ByteStream &` (polymorphic: file or memory).
 - See: `FileFormatJSON.hpp`
 
 **FileFormatMIDI** - MIDI file parser with synthesized audio output
-- Reads ByteStream to memory, creates `std::istringstream`, processes via `processIStream()`
+- Reads ByteStream to memory, reads it in place through a `std::istream` on an `IO::MemoryStreamBuffer` (a
+  `std::istringstream` copied the whole buffer, 2026-11-26), processes via `processIStream()`
 - ReadOptions provides `synthesisFrequency` and optional `soundfont` (tsf*)
 - Write not supported (returns false)
 - **RMID unwrap**: detects the Microsoft RIFF/RMID/data 20-byte container that wraps a standard
   SMF (Tyrian and other mid-1990s game soundtracks). Header signature is `RIFF...RMID...data`;
-  when matched, `istringstream::seekg(20)` skips to the inner SMF without reallocating the buffer.
+  when matched, `seekg(20)` skips to the inner SMF without reallocating the buffer.
   Files without the prefix are parsed as-is.
 - **RMID embedded DLS bank (2026-10-27, owner decision: a converter)**: when the RMID carries a nested RIFF 'DLS '
   chunk, `DLS::convertToSoundFont()` (`DLSSoundBank.hpp/.cpp`) turns it into an in-memory SoundFont 2 that

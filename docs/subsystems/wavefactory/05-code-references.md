@@ -12,4 +12,4 @@
 | `FileFormatInterface.hpp` | Abstract base: `readStream(ByteStream &)` / `writeStream(ByteStream &)` |
 | `FileFormatSNDFile.hpp` | libsndfile via `sf_open_virtual` (ByteStream callbacks) |
 | `FileFormatJSON.hpp` | JSON procedural audio (ByteStream → string → SFXScript) |
-| `FileFormatMIDI.hpp` | MIDI file parser with SF2 support (ByteStream → istringstream) |
+| `FileFormatMIDI.hpp` | MIDI file parser with SF2 support (ByteStream → buffer read in place through `IO::MemoryStreamBuffer`) |

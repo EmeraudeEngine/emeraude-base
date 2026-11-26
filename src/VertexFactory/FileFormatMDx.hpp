@@ -33,6 +33,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <numbers>
+#include <span>
 #include <sstream>
 #include <string>
 #include <type_traits>
@@ -44,6 +45,7 @@
 
 /* Local inclusions for usages. */
 #include "IO/ByteStream.hpp"
+#include "IO/MemoryStreamBuffer.hpp"
 #include "Logging/Logging.hpp"
 #include "Math/Matrix.hpp"
 #include "Math/Vector.hpp"
@@ -105,7 +107,9 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				std::istringstream input(buffer, std::ios::binary);
+				/* NOTE: The stream reads the buffer in place: a std::istringstream would copy it whole (see IO::MemoryStreamBuffer). */
+				IO::MemoryStreamBuffer memory{buffer};
+				std::istream input{&memory};
 
 				int ident = 0;
 				input.read(reinterpret_cast< char * >(&ident), sizeof(int));

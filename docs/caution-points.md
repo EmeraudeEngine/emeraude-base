@@ -2166,3 +2166,14 @@ is every check of every header that TU includes. Debian's 2.17.1 cannot parse a 
 (`Math/Space3D/TriangleMesh.hpp`): 371 findings in base with it, 673 with 2.22.0, which parses both. The tool is pinned
 to 2.22.0 (owner decision); never rewrite correct code to please an older parser. Any `syntaxError` in a sweep is a
 tool gap to report first, not a finding to triage — `docs/static-analysis-ledger.md` § cppcheck.
+
+## IO — `std::istringstream input(buffer)` COPIES the buffer: the format readers read it in place (2026-11-26, FIXED)
+
+The OBJ, STL, MDx and MIDI readers read the `ByteStream` into a `std::string`, then built a `std::istringstream` on it
+to parse — and that constructor copies the string. The file was therefore held TWICE for the whole parse: a 312 MB
+OBJ peaked at 1461 MiB, 2 × 298 MiB of it text. A reader that needs lines walks the buffer with `IO::LineReader`
+(`std::getline()`'s cut, lines as `std::string_view`, no `std::string` per line either: −16 % of the OBJ read time); a
+reader that needs a stream (binary `read()`, `seekg()`, `tellg()`) builds a `std::istream` on an
+`IO::MemoryStreamBuffer`. Never wrap a large buffer in a `std::istringstream` / `std::stringstream` again.
+[`subsystems/source-tree/13-unified-bytestream-i-o-architecture.md`](subsystems/source-tree/13-unified-bytestream-i-o-architecture.md)
+§ Reading a buffer in place.
