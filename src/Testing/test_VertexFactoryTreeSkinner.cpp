@@ -268,11 +268,13 @@ TEST(VertexFactoryTreeSkinner, theWindChannelsAreUsableAsWritten)
 	size_t topCount = 0;
 	size_t bottomCount = 0;
 
-	for ( const auto & triangle : shape.triangles() )
+	for ( uint32_t triangleIndex = 0; triangleIndex < shape.triangles().size(); ++triangleIndex )
 	{
+		const auto & triangle = shape.triangles()[triangleIndex];
+
 		for ( uint32_t corner = 0; corner < 3; ++corner )
 		{
-			const auto & color = shape.vertexColors()[triangle.vertexColorIndex(corner)];
+			const auto & color = shape.vertexColors()[shape.triangleVertexColorIndex(triangleIndex, corner)];
 
 			for ( size_t channel = 0; channel < 4; ++channel )
 			{
@@ -364,11 +366,13 @@ TEST(VertexFactoryTreeSkinner, theBranchSwayIsContinuousAcrossTheJunctions)
 
 	std::vector< Sample > samples;
 
-	for ( const auto & triangle : shape.triangles() )
+	for ( uint32_t triangleIndex = 0; triangleIndex < shape.triangles().size(); ++triangleIndex )
 	{
+		const auto & triangle = shape.triangles()[triangleIndex];
+
 		for ( uint32_t corner = 0; corner < 3; ++corner )
 		{
-			const auto & color = shape.vertexColors()[triangle.vertexColorIndex(corner)];
+			const auto & color = shape.vertexColors()[shape.triangleVertexColorIndex(triangleIndex, corner)];
 			const auto angle = 2.0F * std::numbers::pi_v< float > * color[Math::Z];
 
 			samples.push_back({shape.vertices()[triangle.vertexIndex(corner)].position(), color[Math::Y] * std::cos(angle), color[Math::Y] * std::sin(angle)});

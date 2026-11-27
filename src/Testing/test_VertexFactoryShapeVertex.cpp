@@ -22,6 +22,9 @@
  * https://github.com/EmeraudeEngine/emeraude-base
  */
 
+/* STL inclusions. */
+#include <string>
+
 /* Third-party inclusions. */
 #include <gtest/gtest.h>
 
@@ -127,8 +130,9 @@ TEST(VertexFactoryShapeVertex, handednessIsAppliedAsAPlainFactor)
  * unchanged version number is silent data corruption, not a compatibility question. */
 TEST(VertexFactoryShapeVertex, sizeIsPinnedBecauseTheNativeFormatIsARawBlob)
 {
-	/* 84 until 2026-10-03; the secondary texture coordinates (appended last) made it 92: FileFormatNative version 3. */
-	EXPECT_EQ(sizeof(ShapeVertex< float >), 92U);
+	/* 84 until 2026-10-03; the secondary texture coordinates (appended last) made it 92: FileFormatNative version 3.
+	 * 60 since 2026-11-26: the skinning influences and weights became tables of the Shape, version 4. */
+	EXPECT_EQ(sizeof(ShapeVertex< float >), 60U);
 	static_assert(NormalZ == 2UL, "frame convention");
 }
 

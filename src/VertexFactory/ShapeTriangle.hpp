@@ -29,7 +29,6 @@
 /* STL inclusions. */
 #include <array>
 #include <cstdint>
-#include <limits>
 #include <type_traits>
 
 /* Local inclusions for usages. */
@@ -107,28 +106,6 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Sets vertex index to one vertex of the triangle.
-			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
-			 * @param colorListIndex The color index from the geometry data.
-			 */
-			void
-			setVertexColorIndex (index_data_t triangleVertexIndex, index_data_t colorListIndex) noexcept
-			{
-				m_vertexColorIndexes[triangleVertexIndex] = colorListIndex;
-			}
-
-			/**
-			 * @brief Sets edge index to one vertex of the triangle.
-			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
-			 * @param edgeListIndex The edge index from the geometry data.
-			 */
-			void
-			setEdgeIndex (index_data_t triangleVertexIndex, index_data_t edgeListIndex) noexcept
-			{
-				m_edgeIndexes[triangleVertexIndex] = edgeListIndex;
-			}
-
-			/**
 			 * @brief Returns the surface tangent vector.
 			 * @return const Math::Vector< 3, vertex_data_t > &
 			 */
@@ -185,30 +162,6 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Returns the color index in the geometry data from one vertex of the triangle.
-			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
-			 * @return index_data_t
-			 */
-			[[nodiscard]]
-			index_data_t
-			vertexColorIndex (index_data_t triangleVertexIndex) const noexcept
-			{
-				return m_vertexColorIndexes[triangleVertexIndex];
-			}
-
-			/**
-			 * @brief Returns the edge index in the geometry data from one vertex of the triangle.
-			 * @param triangleVertexIndex The vertex index of the triangle. Must be 0, 1 or 2 !
-			 * @return index_data_t
-			 */
-			[[nodiscard]]
-			index_data_t
-			edgeIndex (index_data_t triangleVertexIndex) const noexcept
-			{
-				return m_edgeIndexes[triangleVertexIndex];
-			}
-
-			/**
 			 * @brief Flips the triangle front-facing.
 			 */
 			void
@@ -218,9 +171,8 @@ namespace EmEn::Base::VertexFactory
 				m_surfaceNormal.inverse();
 				m_surfaceTangent.inverse();
 
-				/* We swap indexes for building the triangle. */
+				/* We swap indexes for building the triangle (Shape swaps the corners' color indexes with them). */
 				std::swap(m_vertexIndexes[0], m_vertexIndexes[1]);
-				std::swap(m_vertexColorIndexes[0], m_vertexColorIndexes[1]);
 			}
 
 			/**
@@ -233,7 +185,6 @@ namespace EmEn::Base::VertexFactory
 			reverseWinding () noexcept
 			{
 				std::swap(m_vertexIndexes[0], m_vertexIndexes[1]);
-				std::swap(m_vertexColorIndexes[0], m_vertexColorIndexes[1]);
 			}
 
 			/**
@@ -254,11 +205,8 @@ namespace EmEn::Base::VertexFactory
 			Math::Vector< 3, vertex_data_t > m_surfaceNormal{};
 			vertex_data_t m_surfaceTangentHandedness{1};
 			std::array< index_data_t, 3 > m_vertexIndexes{0, 0, 0}; /* Position, tangent, normal and texture coordinates indices. */
-			std::array< index_data_t, 3 > m_vertexColorIndexes{0, 0, 0};
-			std::array< index_data_t, 3 > m_edgeIndexes{
-				std::numeric_limits< index_data_t >::max(),
-				std::numeric_limits< index_data_t >::max(),
-				std::numeric_limits< index_data_t >::max()
-			};
+			/* NOTE: The corners' vertex color and edge indexes are tables of the Shape since 2026-11-26
+			 * (Shape::triangleVertexColorIndex(), Shape::triangleEdgeIndex()): a triangle that names no color nor edge
+			 * does not pay for them (64 -> 40 bytes, float / uint32_t). */
 	};
 }

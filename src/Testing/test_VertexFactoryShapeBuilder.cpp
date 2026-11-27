@@ -89,11 +89,13 @@ TEST(VertexFactoryShapeBuilder, triangleEdgeIndexesPointAtTheirOwnEdge)
 
 	ASSERT_FALSE(edges.empty()) << "no edge was built, the check would be vacuous";
 
-	for ( const auto & triangle : shape.triangles() )
+	for ( uint32_t triangleIndex = 0; triangleIndex < shape.triangles().size(); ++triangleIndex )
 	{
+		const auto & triangle = shape.triangles()[triangleIndex];
+
 		for ( uint32_t corner = 0; corner < 3; ++corner )
 		{
-			const auto edgeIndex = triangle.edgeIndex(corner);
+			const auto edgeIndex = shape.triangleEdgeIndex(triangleIndex, corner);
 
 			ASSERT_LT(edgeIndex, edges.size()) << "edge index " << edgeIndex << " is out of the " << edges.size() << " edges built";
 
@@ -178,11 +180,13 @@ TEST(VertexFactoryShapeBuilder, deduplicatingVerticesKeepsTheEdgeListValid)
 	}
 
 	/* And every triangle edge index must still point at its own edge. */
-	for ( const auto & triangle : shape.triangles() )
+	for ( uint32_t triangleIndex = 0; triangleIndex < shape.triangles().size(); ++triangleIndex )
 	{
+		const auto & triangle = shape.triangles()[triangleIndex];
+
 		for ( uint32_t corner = 0; corner < 3; ++corner )
 		{
-			const auto edgeIndex = triangle.edgeIndex(corner);
+			const auto edgeIndex = shape.triangleEdgeIndex(triangleIndex, corner);
 
 			ASSERT_LT(edgeIndex, shape.edges().size()) << "edge index out of the rebuilt list";
 
@@ -420,7 +424,7 @@ TEST(VertexFactoryShape, aVertexColorIndexOutOfRangeIsRefused)
 	ASSERT_FALSE(shape.vertexColors().empty());
 	ASSERT_TRUE(shape.indicesInRange(true));
 
-	shape.triangles().front().setVertexColorIndex(0, static_cast< uint32_t >(shape.vertexColors().size()) + 3U);
+	shape.setTriangleVertexColorIndexes(0, {static_cast< uint32_t >(shape.vertexColors().size()) + 3U, shape.triangleVertexColorIndex(0, 1), shape.triangleVertexColorIndex(0, 2)});
 
 	EXPECT_TRUE(shape.indicesInRange(false));
 	EXPECT_FALSE(shape.indicesInRange(true));
@@ -684,10 +688,9 @@ namespace
 	{
 		auto shape = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 8U, 4U);
 
-		for ( auto & vertex : shape.vertices() )
+		for ( uint32_t vertexIndex = 0; vertexIndex < shape.vertices().size(); ++vertexIndex )
 		{
-			vertex.setInfluences(3, 5);
-			vertex.setWeights(0.75F, 0.25F);
+			shape.setVertexSkinning(vertexIndex, {3, 5, -1, -1}, {0.75F, 0.25F, 0.0F, 0.0F});
 		}
 
 		return shape;
@@ -779,6 +782,6 @@ TEST(VertexFactoryShape, anUnusedInfluenceSlotIsWrittenAsMatrixZero)
 	}
 
 	/* The -1 stays the convention of the CPU side: writing a buffer changes nothing in the shape. */
-	EXPECT_EQ(shape.vertices().front().influences()[EmEn::Base::Math::Z], -1);
-	EXPECT_EQ(shape.vertices().front().influences()[EmEn::Base::Math::W], -1);
+	EXPECT_EQ(shape.vertexInfluences(0)[EmEn::Base::Math::Z], -1);
+	EXPECT_EQ(shape.vertexInfluences(0)[EmEn::Base::Math::W], -1);
 }

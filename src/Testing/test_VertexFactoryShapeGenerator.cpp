@@ -1414,12 +1414,14 @@ TEST(VertexFactoryShapeGenerator, gemVertexColoursAgreeWithGeometry)
 		auto countAbove = 0;
 		auto countBelow = 0;
 
-		for ( const auto & triangle : shape.triangles() )
+		for ( uint32_t triangleIndex = 0; triangleIndex < shape.triangles().size(); ++triangleIndex )
 		{
+			const auto & triangle = shape.triangles()[triangleIndex];
+
 			for ( uint32_t corner = 0; corner < 3; ++corner )
 			{
 				const auto y = shape.vertices()[triangle.vertexIndex(corner)].position()[EmEn::Base::Math::Y];
-				const auto green = shape.vertexColors()[triangle.vertexColorIndex(corner)][EmEn::Base::Math::Y];
+				const auto green = shape.vertexColors()[shape.triangleVertexColorIndex(triangleIndex, corner)][EmEn::Base::Math::Y];
 
 				if ( y > middle ) { greenAbove += static_cast< double >(green); ++countAbove; } else { greenBelow += static_cast< double >(green); ++countBelow; }
 			}
@@ -1514,8 +1516,7 @@ namespace
 		for ( auto & vertex : shape.vertices() )
 		{
 			vertex.setSecondaryTextureCoordinates(EmEn::Base::Math::Vector< 2, float >{0.5F * vertex.textureCoordinates()[0], 0.25F});
-			vertex.setInfluences(static_cast< int32_t >(index % 7), static_cast< int32_t >(index % 5), 2, -1);
-			vertex.setWeights(0.5F, 0.25F, 0.125F, 0.125F);
+			shape.setVertexSkinning(index, {static_cast< int32_t >(index % 7), static_cast< int32_t >(index % 5), 2, -1}, {0.5F, 0.25F, 0.125F, 0.125F});
 
 			if ( index % 3 == 0 )
 			{

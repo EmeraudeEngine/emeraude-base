@@ -1459,7 +1459,11 @@ namespace EmEn::Base::VertexFactory
 							static_cast< vertex_data_t >(vert.uv[1])
 						});
 
-						/* Compute top-4 bone influences sorted by weight (descending). */
+						/* Compute top-4 bone influences sorted by weight (descending); the shape's skinning table
+						 * receives them once the vertex is in (Shape::setVertexSkinning()). */
+						Math::Vector< 4, int32_t > skinInfluences{-1, -1, -1, -1};
+						Math::Vector< 4, vertex_data_t > skinWeights{0, 0, 0, 0};
+
 						if ( weightCount <= 4 )
 						{
 							const auto slotCount = std::min(weightCount, std::size_t{4});
@@ -1473,8 +1477,8 @@ namespace EmEn::Base::VertexFactory
 								boneWeights[w] = static_cast< vertex_data_t >(weight.bias);
 							}
 
-							vertex.setInfluences(boneIndices[0], boneIndices[1], boneIndices[2], boneIndices[3]);
-							vertex.setWeights(boneWeights[0], boneWeights[1], boneWeights[2], boneWeights[3]);
+							skinInfluences = boneIndices;
+							skinWeights = boneWeights;
 						}
 						else
 						{
@@ -1510,17 +1514,18 @@ namespace EmEn::Base::VertexFactory
 
 							if ( totalBias > 0 )
 							{
-								vertex.setInfluences(allWeights[0].jointIndex, allWeights[1].jointIndex, allWeights[2].jointIndex, allWeights[3].jointIndex);
-								vertex.setWeights(
+								skinInfluences = {allWeights[0].jointIndex, allWeights[1].jointIndex, allWeights[2].jointIndex, allWeights[3].jointIndex};
+								skinWeights = {
 									static_cast< vertex_data_t >(allWeights[0].bias / totalBias),
 									static_cast< vertex_data_t >(allWeights[1].bias / totalBias),
 									static_cast< vertex_data_t >(allWeights[2].bias / totalBias),
 									static_cast< vertex_data_t >(allWeights[3].bias / totalBias)
-								);
+								};
 							}
 						}
 
 						vertices.emplace_back(vertex);
+						geometry.setVertexSkinning(static_cast< index_data_t >(vertices.size() - 1), skinInfluences, skinWeights);
 					}
 
 					/* Pass 2: Build triangles referencing the shared vertices.

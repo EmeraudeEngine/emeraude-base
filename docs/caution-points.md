@@ -2199,3 +2199,27 @@ triangle); `"+1.5"` read as 0 (`std::from_chars` refuses a leading `+`); a missi
 (`"v 1 2"`, a decimal comma `"1,5"`); a tab after the keyword making the line nothing (a file written with tabs refused
 as holding no vertex). [`subsystems/vertexfactory/02-architecture.md`](subsystems/vertexfactory/02-architecture.md)
 § FileFormatOBJ.
+
+## VertexFactory — the skinning and the triangles' color and edge indexes are tables of the Shape (2026-11-26)
+
+Owner decision: what most shapes never use left `ShapeVertex` (influences, weights: 92 → 60 bytes) and
+`ShapeTriangle` (color and edge indexes: 64 → 40 bytes) for tables of the `Shape`, allocated by the first value that is
+not the default (`setVertexSkinning()`, `setTriangleVertexColorIndexes()`; setting the defaults allocates nothing) and
+read through accessors that answer the defaults for a shape without them, past their end too. The 312 MB OBJ peaks at
+**524 MiB** (822 before), the 390 MB STL at **1640 MiB** (2532), **557 MiB** welded (`ReadOptions::weldVertices`, opt-in).
+Three traps:
+
+- ⚠️ **A pass that replaces the vertex list must carry the skinning**: the whole-vertex copy used to do it without a
+  word. `Shape::remapVertexAttributes(remapping)` after the replacement (`ShapeProcessor::deduplicateVertices()`), or
+  `setVertexSkinning()` for each vertex it emits (`ShapeSplitter`, `ShapeBuilder`, `removeDoubleVertices()`). A new
+  pass that builds vertices from another shape's must do the same, and `Shape::memoryOccupied()` counts the tables.
+- ⚠️ **A triangle's color indexes are no longer in the triangle**: a pass that emits or reorders triangles sets them
+  with `setTriangleVertexColorIndexes()` after the `emplace_back` (`ShapeSplitter`, `ShapeDecimator`, the caps of
+  `ShapeProcessor`); `flipSurface()` / `reverseWinding()` swap the first two corners of the table with the triangle's.
+- ⚠️ **`.ee3d` version 4**: written since that day; versions 2 and 3 are read through their former records, kept in the
+  reader. Any change of `ShapeVertex` or `ShapeTriangle` bumps the version (the `static_assert`s of
+  `FileFormatNative` and two size tests fail first).
+
+Tests `VertexFactoryShapeTables.*`, `VertexFactoryNative.version4*`, `.version3*`, `.anUnknownOptionalTableIsRefused`,
+`.aDeclaredTableMissingFromTheStreamIsRefused`. [`subsystems/vertexfactory/02-architecture.md`](subsystems/vertexfactory/02-architecture.md)
+§ Shape, § FileFormatNative, § FileFormatSTL.

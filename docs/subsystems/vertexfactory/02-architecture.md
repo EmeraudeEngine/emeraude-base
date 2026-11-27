@@ -5,10 +5,21 @@
 **Shape<vertex_data_t, index_data_t>** - The mesh container (template, float/uint32_t default)
 - Holds vertices, triangles, optional per-vertex colors, sub-geometry layers and an AABB.
 - The canonical in-memory geometry type; every loader/generator produces a `Shape`.
+- **The rare attributes are tables of the Shape, not members of every vertex and triangle** (2026-11-26, owner
+  decision): the skinning (`isSkinningAvailable()`, `vertexInfluences(v)`, `vertexWeights(v)`, `setVertexSkinning()`),
+  the triangles' color indexes (`triangleVertexColorIndex(t, corner)`, `setTriangleVertexColorIndexes(t, {a, b, c})`)
+  and edge indexes (`triangleEdgeIndex(t, corner)`, set by `addTriangle()` / `rebuildEdges()`); the two triangle tables
+  are flat, three `index_data_t` a triangle in corner order (`cornerSlot()`). A table is allocated by the first
+  value that is not the default and then follows the vertex or triangle count; a shape that never had one answers the
+  defaults (`(-1, -1, -1, -1)`, zero weights, color index 0, no edge), past its end too. ⚠️ A pass that replaces the
+  vertex list carries the skinning itself: `remapVertexAttributes(remapping)` after it (the first old vertex of a new
+  index wins, as the whole-vertex copy did; `ShapeProcessor::deduplicateVertices()`). Measured: the 312 MB OBJ
+  (3.9 M vertices, 7.8 M triangles) 818 → **520 MiB** of `Shape`, its peak 822 → **524 MiB**. Tests
+  `VertexFactoryShapeTables.*`.
 - See: `Shape.hpp`
 
-**ShapeVertex<T>** - Position + normal + tangent (+ its handedness) + texture coordinates,
-influences and weights for one vertex.
+**ShapeVertex<T>** - Position + normal + tangent (+ its handedness) + texture coordinates (two sets) for one vertex;
+the skinning is a table of the Shape since 2026-11-26.
 - ⚠️⚠️ **`biNormal()` is DERIVED, not stored**: `cross(normal, tangent) * tangentHandedness`.
   The handedness is a **signed scalar member**, neutral at `+1`, and it is the only thing that
   distinguishes a **mirrored UV island** from a plain one — mirroring flips the authored bitangent
@@ -21,14 +32,16 @@ influences and weights for one vertex.
 - **The secondary texture coordinates** (2026-10-03): `setSecondaryTextureCoordinates()` /
   `secondaryTextureCoordinates()`, a `Vector<2>` (glTF's `TEXCOORD_1`), (0, 0) when the source has
   none. Details and traps: `07-critical-attention-points.md`.
-- ⚠️⚠️ **`sizeof(ShapeVertex<float>)` is 92 bytes (84 before the secondary set) and that is part of a PERSISTED FORMAT**:
+- ⚠️⚠️ **`sizeof(ShapeVertex<float>)` is 60 bytes (84, then 92 with the secondary set, until the skinning left it on
+  2026-11-26) and that is part of a PERSISTED FORMAT**:
   `FileFormatNative` writes vertices as a raw blob of that size. Any change to this structure MUST
   bump the native format version in the same commit — a size change with an unchanged version
   number is silent data corruption, not a compatibility question. The size is pinned by
   `test_VertexFactoryShapeVertex.cpp` so the failure is a red test, not a corrupt file.
 - See: `ShapeVertex.hpp`, `test_VertexFactoryShapeVertex.cpp`
 
-**ShapeTriangle<V,I>** / **ShapeEdge** - Triangle (3 vertex indices + attributes) / edge primitives.
+**ShapeTriangle<V,I>** / **ShapeEdge** - Triangle (3 vertex indices + surface tangent, normal, handedness: 40 bytes in
+float, 64 before the color and edge indexes became tables of the Shape) / edge primitives.
 - See: `ShapeTriangle.hpp`, `ShapeEdge.hpp`
 
 ### Construction & Generation
@@ -350,12 +363,20 @@ WaveFactory and PixelFactory.
 **FileFormatInterface** - Abstract base + the shared option/format vocabulary
 - `readStream(IO::ByteStream &, ShapeLoadResult &, ReadOptions)` / `writeStream(IO::ByteStream &, Shape &, WriteOptions)`.
 - `enum class FileFormatType { Native, OBJ, STL, MDx }` (the StreamIO selector).
-- `ReadOptions`: `scaleFactor`, `flip{X,Y,Z}Axis`, `request{Normal,TangentSpace,TextureCoordinates,VertexColor}`.
+- `ReadOptions`: `scaleFactor`, `flip{X,Y,Z}Axis`, `request{Normal,TangentSpace,TextureCoordinates,VertexColor}`,
+  `weldVertices` (STL only, off by default).
 - `WriteOptions`: currently empty.
 - See: `FileFormatInterface.hpp`
 
 **FileFormatNative** - Emeraude native binary (`EE3D_V1`)
-- 32-byte header + three `uint64` counts (vertices/triangles/colors) + payload blob.
+- 32-byte header (magic, `uint16` version at 8, the two precisions at 10 and 11, the optional tables at 12) + three
+  `uint64` counts (vertices/triangles/colors) + the raw vertex and triangle records + the colors, then the optional
+  tables: the skinning (influences then weights, per vertex; flag bit 0) and the color indexes (three `index_data_t` per
+  triangle; flag bit 1, written when the shape has colors). An unknown flag refuses the file; every table is checked
+  against the stream size before any allocation.
+- **Version 4 is written** (2026-11-26); versions 2 and 3 are still read, through their former records (`LegacyVertex`,
+  `LegacyTriangle`): a record's skinning goes to the table when it is not the default, its color indexes when the file
+  has colors, its edge indexes are dropped (the edges are not stored).
 - Read **and** write. The only format with full StreamIO write fidelity.
 - See: `FileFormatNative.hpp`
 
@@ -389,8 +410,16 @@ WaveFactory and PixelFactory.
 **FileFormatSTL** - Stereolithography (binary + ASCII), read + write
 - A stream that seeks is read through a 1 MiB window (`IO::ByteStreamBuffer`, a `std::istream` on it); one that cannot
   is read whole first (`IO::MemoryStreamBuffer`). MDx reads the same way. A 390 MB binary STL peaked at 3274 MiB (the
-  file twice) before 2026-11-26, **2532 MiB** after; what remains is the shape: the reader does not weld the corners,
-  23.4 M `ShapeVertex` of 92 bytes.
+  file twice) before 2026-11-26, 2532 MiB with the window, **1640 MiB** with the compact vertex (23.4 M of 60 bytes:
+  each corner its own vertex, with its facet's normal).
+- **`ReadOptions::weldVertices`** (2026-11-26, owner: off by default): the corners sharing a position (bit-identical,
+  -0 and +0 being one) become one vertex, through an open-addressing table of indexes at most half full (4 bytes a
+  slot, `PositionWelder`). A welded vertex keeps no normal from the file (its triangles' facet normals differ):
+  `requestNormal` computes smooth ones, otherwise the vertex normal is the default. Same file: 3.9 M vertices,
+  **557 MiB**, but 1.5 s instead of 0.46 s (a hash probe per corner, 23.4 M of them, cache misses). The welded list
+  reserves half the triangle count plus 1/16: a closed mesh holds T/2 + 2 per body positions, and at exactly T/2 the
+  list doubled (+223 MiB). A triangle whose corners weld together is kept (degenerate, as the file wrote it). Tests
+  `VertexFactorySTL.weldingSharesTheCornersOf{ABinary,AnAscii}File`.
 - See: `FileFormatSTL.hpp`
 
 **FileFormatMDx** - id Tech loader (MDL / MD2 / MD3 / MD5), **read-only by design**

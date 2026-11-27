@@ -27,7 +27,6 @@
 #pragma once
 
 /* STL inclusions. */
-#include <cstdint>
 #include <type_traits>
 
 /* Local inclusions for usages. */
@@ -196,40 +195,6 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Sets vertex influences.
-			 * @note -1 marks an unused slot, on the CPU side only: a vertex buffer names matrix 0 there
-			 * (Shape::writeInfluenceToVertexBuffer()), so an unused slot must keep a zero weight.
-			 * @param influenceA Index to first influence.
-			 * @param influenceB Index to second influence. Default none.
-			 * @param influenceC Index to third influence. Default none.
-			 * @param influenceD Index to fourth influence. Default none.
-			 */
-			void
-			setInfluences (int32_t influenceA, int32_t influenceB = -1, int32_t influenceC = -1, int32_t influenceD = -1) noexcept
-			{
-				m_influences[Math::X] = influenceA;
-				m_influences[Math::Y] = influenceB;
-				m_influences[Math::Z] = influenceC;
-				m_influences[Math::W] = influenceD;
-			}
-
-			/**
-			 * @brief Sets vertex influence weights.
-			 * @param weightA Index to first influence weight.
-			 * @param weightB Index to second influence weight. Default none.
-			 * @param weightC Index to third influence weight. Default none.
-			 * @param weightD Index to fourth influence weight. Default none.
-			 */
-			void
-			setWeights (vertex_data_t weightA, vertex_data_t weightB = 0, vertex_data_t weightC = 0, vertex_data_t weightD = 0) noexcept
-			{
-				m_weights[Math::X] = weightA;
-				m_weights[Math::Y] = weightB;
-				m_weights[Math::Z] = weightC;
-				m_weights[Math::W] = weightD;
-			}
-
-			/**
 			 * @brief Returns the vertex position vector.
 			 * @return const Math::Vector< 3, data_t > &
 			 */
@@ -310,28 +275,6 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			/**
-			 * @brief Returns the vertex influences.
-			 * @return const Math::Vector< 4, int32_t > &
-			 */
-			[[nodiscard]]
-			const Math::Vector< 4, int32_t > &
-			influences () const noexcept
-			{
-				return m_influences;
-			}
-
-			/**
-			 * @brief Returns the vertex weights.
-			 * @return const Math::Vector< 3, data_t > &
-			 */
-			[[nodiscard]]
-			const Math::Vector< 4, vertex_data_t > &
-			weights () const noexcept
-			{
-				return m_weights;
-			}
-
-			/**
 			 * @brief Flip the vertex
 			 */
 			void
@@ -372,17 +315,17 @@ namespace EmEn::Base::VertexFactory
 			Math::Vector< 3, vertex_data_t > m_tangent{1, 0, 0};
 			Math::Vector< 3, vertex_data_t > m_normal{0, 0, 1};
 			Math::Vector< 3, vertex_data_t > m_textureCoordinates{0, 0, 0};
-			Math::Vector< 4, int32_t > m_influences{-1, -1, -1, -1};
-			Math::Vector< 4, vertex_data_t > m_weights{0, 0, 0, 0};
+			/* NOTE: The bone influences and weights are tables of the Shape since 2026-11-26 (Shape::vertexInfluences(),
+			 * Shape::vertexWeights()): a vertex without skinning does not pay for them (92 -> 60 bytes, float). */
 			/** @brief Sign applied to cross(normal, tangent) by biNormal(). Neutral is +1.
-			 * ⚠️ Adding this member changed sizeof(ShapeVertex) from 80 to 84 bytes, and
-			 * FileFormatNative writes vertices as a RAW BLOB of that size — hence the format
-			 * version bump to 2 in that file. */
+			 * ⚠️ FileFormatNative writes vertices as a RAW BLOB of sizeof(ShapeVertex): any change to this structure
+			 * bumps the native format version (version 4 for the skinning moving out). */
 			vertex_data_t m_tangentHandedness{1};
 			/** @brief The secondary texture coordinates (2026-10-03, owner: a field, not a side array).
 			 * ⚠️ LAST on purpose: sizeof(ShapeVertex) went from 84 to 92 bytes (float), FileFormatNative's
 			 * version 3; a version-2 record is exactly the first 84 bytes of a version-3 one, so the reader
-			 * still loads it (the secondary set at (0, 0)). */
+			 * still loads it (the secondary set at (0, 0)). 60 bytes since version 4 (the skinning out): the
+			 * reader loads versions 2 and 3 through their former layout. */
 			Math::Vector< 2, vertex_data_t > m_secondaryTextureCoordinates{0, 0};
 	};
 }

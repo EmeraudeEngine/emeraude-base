@@ -30,12 +30,14 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <initializer_list>
 #include <limits>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -83,26 +85,78 @@ namespace EmEn::Base::VertexFactory
 			std::memcpy(buffer.data() + offset, &value, sizeof(value));
 		}
 
-		/* Builds a well-formed native header (float/uint32 precision) followed by `blobBytes`
-		 * of zeroed payload, with the three counts set as requested.
-		 * ⚠️ The magic string stayed "EE3D_V1" while the VERSION FIELD moved to 2, then 3 — the magic is
-		 * only checked for identity, the uint16 at offset 8 is what gates the layout. The payload
-		 * size is taken from sizeof(ShapeVertex) by the callers, so it follows the structure. */
-		std::vector< std::byte >
-		makeNative (uint64_t vertexCount, uint64_t triangleCount, uint64_t colorCount, size_t blobBytes, uint16_t version = 3) noexcept
+		/* Copies bytes into a buffer at an offset (the offset and the size inside the buffer). */
+		void
+		putBytes (std::vector< std::byte > & buffer, size_t offset, const void * source, size_t size) noexcept
 		{
-			std::vector< std::byte > buffer(HeaderBytes + blobBytes, std::byte{0});
+			std::memcpy(&buffer[offset], source, size);
+		}
+
+		/* What a native file declares; the callers name each field (six adjacent numbers before 2026-11-26). */
+		struct NativeLayout
+		{
+			uint64_t vertices{0};
+			uint64_t triangles{0};
+			uint64_t colors{0};
+			size_t payloadBytes{0};
+			uint16_t version{Native::WrittenVersion};
+			uint8_t flags{0};
+		};
+
+		/* Builds a well-formed native header (float/uint32 precision) followed by `payloadBytes`
+		 * of zeroed payload, with the three counts set as requested.
+		 * ⚠️ The magic string stayed "EE3D_V1" while the VERSION FIELD moved to 2, 3, then 4 — the magic is
+		 * only checked for identity, the uint16 at offset 8 is what gates the layout. The payload
+		 * size is taken from sizeof(ShapeVertex) by the callers, so it follows the structure.
+		 * `flags` is header byte 12, the optional tables of a version-4 file. */
+		std::vector< std::byte >
+		makeNative (const NativeLayout & layout) noexcept
+		{
+			std::vector< std::byte > buffer(HeaderBytes + layout.payloadBytes, std::byte{0});
 
 			std::memcpy(buffer.data(), "EE3D_V1", 7);
-			putU16(buffer, 8, version);
+			putU16(buffer, 8, layout.version);
 			buffer[10] = static_cast< std::byte >(sizeof(float));       /* vertex precision */
 			buffer[11] = static_cast< std::byte >(sizeof(uint32_t));    /* index precision */
-			putU64(buffer, 32, vertexCount);
-			putU64(buffer, 40, triangleCount);
-			putU64(buffer, 48, colorCount);
+			buffer[Native::FlagsOffset] = static_cast< std::byte >(layout.flags);
+			putU64(buffer, 32, layout.vertices);
+			putU64(buffer, 40, layout.triangles);
+			putU64(buffer, 48, layout.colors);
 
 			return buffer;
 		}
+
+		/* The vertex record of versions 2 and 3: ShapeVertex before 2026-11-26, the skinning inside (92 bytes; a
+		 * version-2 record is its first 84, before the secondary texture coordinates). Rebuilt here field by field so the
+		 * test does not read the layout from the reader it checks. */
+		struct LegacyVertexRecord
+		{
+			Math::Vector< 3, float > position;
+			Math::Vector< 3, float > tangent{1.0F, 0.0F, 0.0F};
+			Math::Vector< 3, float > normal{0.0F, 0.0F, 1.0F};
+			Math::Vector< 3, float > textureCoordinates;
+			Math::Vector< 4, int32_t > influences{-1, -1, -1, -1};
+			Math::Vector< 4, float > weights;
+			float tangentHandedness{1.0F};
+			Math::Vector< 2, float > secondaryTextureCoordinates;
+		};
+
+		static_assert(sizeof(LegacyVertexRecord) == 92, "the version-3 vertex record");
+
+		/* The triangle record of versions 2 and 3: ShapeTriangle before 2026-11-26, the color and edge indexes inside. */
+		struct LegacyTriangleRecord
+		{
+			Math::Vector< 3, float > surfaceTangent;
+			Math::Vector< 3, float > surfaceNormal;
+			float surfaceTangentHandedness{1.0F};
+			std::array< uint32_t, 3 > vertexIndexes{};
+			std::array< uint32_t, 3 > vertexColorIndexes{};
+			std::array< uint32_t, 3 > edgeIndexes{};
+		};
+
+		static_assert(sizeof(LegacyTriangleRecord) == 64, "the version-2 and version-3 triangle record");
+
+		constexpr size_t VersionTwoVertexBytes = 84;
 	}
 
 	/* ===== Nominal ===== */
@@ -110,7 +164,7 @@ namespace EmEn::Base::VertexFactory
 	TEST(VertexFactoryNative, wellFormedReadsBack)
 	{
 		const size_t blob = (3 * sizeof(ShapeVertex< float >)) + (1 * sizeof(ShapeTriangle< float, uint32_t >));
-		const auto buffer = makeNative(3, 1, 0, blob);
+		const auto buffer = makeNative({.vertices = 3, .triangles = 1, .payloadBytes = blob});
 
 		MemoryStream stream{buffer};
 		Native format;
@@ -122,16 +176,19 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(result.shape.vertexColors().size(), 0U);
 	}
 
-	/* Version 3 (2026-10-03) carries the secondary texture coordinates, last in each vertex record. */
-	TEST(VertexFactoryNative, version3KeepsTheSecondaryTextureCoordinates)
+	/* Version 3 (2026-10-03) carries the secondary texture coordinates, last in each vertex record. Since version 4
+	 * (2026-11-26) it is read through its former layout: the skinning of its records goes to the shape's table. */
+	TEST(VertexFactoryNative, version3KeepsTheSecondaryTextureCoordinatesAndTheSkinning)
 	{
-		ShapeVertex< float > vertex{Math::Vector< 3, float >{1.0F, 2.0F, 3.0F}};
+		LegacyVertexRecord vertex{};
+		vertex.position = Math::Vector< 3, float >{1.0F, 2.0F, 3.0F};
+		vertex.influences = Math::Vector< 4, int32_t >{2, 5, -1, -1};
+		vertex.weights = Math::Vector< 4, float >{0.75F, 0.25F, 0.0F, 0.0F};
+		vertex.secondaryTextureCoordinates = Math::Vector< 2, float >{0.25F, 0.75F};
 
-		vertex.setSecondaryTextureCoordinates(Math::Vector< 2, float >{0.25F, 0.75F});
+		auto buffer = makeNative({.vertices = 1, .payloadBytes = sizeof(LegacyVertexRecord), .version = 3});
 
-		auto buffer = makeNative(1, 0, 0, sizeof(ShapeVertex< float >), 3);
-
-		std::memcpy(buffer.data() + HeaderBytes, &vertex, sizeof(ShapeVertex< float >));
+		putBytes(buffer, HeaderBytes, &vertex, sizeof(LegacyVertexRecord));
 
 		/* ⚠️ A CONST buffer: bound to a non-const vector, MemoryStream opens for WRITING. */
 		MemoryStream stream{std::as_const(buffer)};
@@ -143,21 +200,55 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(result.shape.vertices()[0].position()[Math::Y], 2.0F);
 		EXPECT_EQ(result.shape.vertices()[0].secondaryTextureCoordinates()[Math::X], 0.25F);
 		EXPECT_EQ(result.shape.vertices()[0].secondaryTextureCoordinates()[Math::Y], 0.75F);
+
+		ASSERT_TRUE(result.shape.isSkinningAvailable());
+		EXPECT_EQ(result.shape.vertexInfluences(0)[Math::X], 2);
+		EXPECT_EQ(result.shape.vertexInfluences(0)[Math::Y], 5);
+		EXPECT_EQ(result.shape.vertexWeights(0)[Math::X], 0.75F);
+		EXPECT_EQ(result.shape.vertexWeights(0)[Math::Y], 0.25F);
+	}
+
+	/* A version-3 record without skinning (-1 influences, zero weights) leaves the shape without a skinning table, and
+	 * the triangles' color indexes of a file with colors go to the shape's table. */
+	TEST(VertexFactoryNative, version3TrianglesKeepTheirColorIndexes)
+	{
+		const std::array< LegacyVertexRecord, 3 > vertices{};
+		LegacyTriangleRecord triangle{};
+		triangle.vertexIndexes = {0, 1, 2};
+		triangle.vertexColorIndexes = {1, 0, 1};
+
+		const std::array< Math::Vector< 4, float >, 2 > colors{Math::Vector< 4, float >{1.0F, 0.0F, 0.0F, 1.0F}, Math::Vector< 4, float >{0.0F, 1.0F, 0.0F, 1.0F}};
+
+		auto buffer = makeNative({.vertices = 3, .triangles = 1, .colors = 2, .payloadBytes = sizeof(vertices) + sizeof(triangle) + sizeof(colors), .version = 3});
+
+		putBytes(buffer, HeaderBytes, vertices.data(), sizeof(vertices));
+		putBytes(buffer, HeaderBytes + sizeof(vertices), &triangle, sizeof(triangle));
+		putBytes(buffer, HeaderBytes + sizeof(vertices) + sizeof(triangle), colors.data(), sizeof(colors));
+
+		Result result;
+		ASSERT_TRUE(StreamIO::read(std::as_const(buffer), FileFormatType::Native, result));
+		ASSERT_EQ(result.shape.triangles().size(), 1U);
+
+		EXPECT_FALSE(result.shape.isSkinningAvailable());
+		EXPECT_EQ(result.shape.triangles()[0].vertexIndex(2), 2U);
+		EXPECT_EQ(result.shape.triangleVertexColorIndex(0, 0), 1U);
+		EXPECT_EQ(result.shape.triangleVertexColorIndex(0, 1), 0U);
+		EXPECT_EQ(result.shape.triangleVertexColorIndex(0, 2), 1U);
 	}
 
 	/* A version-2 record (84 bytes) is the exact prefix of a version-3 one: it still reads, its secondary set at
 	 * (0, 0), and its other attributes intact. Read at the version-3 stride it would misparse. */
 	TEST(VertexFactoryNative, version2StillReadsWithoutSecondaryTextureCoordinates)
 	{
-		constexpr size_t VersionTwoVertexBytes = 84;
+		LegacyVertexRecord first{};
+		LegacyVertexRecord second{};
 
-		ShapeVertex< float > first{Math::Vector< 3, float >{1.0F, 2.0F, 3.0F}};
-		ShapeVertex< float > second{Math::Vector< 3, float >{4.0F, 5.0F, 6.0F}};
+		first.position = Math::Vector< 3, float >{1.0F, 2.0F, 3.0F};
+		second.position = Math::Vector< 3, float >{4.0F, 5.0F, 6.0F};
+		first.secondaryTextureCoordinates = Math::Vector< 2, float >{0.5F, 0.5F};
+		second.secondaryTextureCoordinates = Math::Vector< 2, float >{0.5F, 0.5F};
 
-		first.setSecondaryTextureCoordinates(Math::Vector< 2, float >{0.5F, 0.5F});
-		second.setSecondaryTextureCoordinates(Math::Vector< 2, float >{0.5F, 0.5F});
-
-		auto buffer = makeNative(2, 0, 0, 2 * VersionTwoVertexBytes, 2);
+		auto buffer = makeNative({.vertices = 2, .payloadBytes = 2 * VersionTwoVertexBytes, .version = 2});
 
 		std::memcpy(buffer.data() + HeaderBytes, &first, VersionTwoVertexBytes);
 		std::memcpy(buffer.data() + HeaderBytes + VersionTwoVertexBytes, &second, VersionTwoVertexBytes);
@@ -184,7 +275,7 @@ namespace EmEn::Base::VertexFactory
 		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
 
 		const size_t blob = (3 * sizeof(ShapeVertex< float >)) + (1 * sizeof(ShapeTriangle< float, uint32_t >));
-		const auto buffer = makeNative(3, 1, 0, blob, 1);
+		const auto buffer = makeNative({.vertices = 3, .triangles = 1, .payloadBytes = blob, .version = 1});
 
 		MemoryStream stream{buffer};
 		Native format;
@@ -198,6 +289,141 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
+	namespace
+	{
+		/* Counts the vertices whose skinning differs between two shapes of the same vertex count. */
+		size_t
+		skinningMismatches (const Shape< float, uint32_t > & expected, const Shape< float, uint32_t > & actual) noexcept
+		{
+			size_t mismatches = 0;
+
+			for ( uint32_t vertexIndex = 0; vertexIndex < expected.vertices().size(); ++vertexIndex )
+			{
+				if ( actual.vertexInfluences(vertexIndex) != expected.vertexInfluences(vertexIndex) || actual.vertexWeights(vertexIndex) != expected.vertexWeights(vertexIndex) )
+				{
+					++mismatches;
+				}
+			}
+
+			return mismatches;
+		}
+
+		/* Counts the triangle corners whose color index differs between two shapes of the same triangle count. */
+		size_t
+		colorIndexMismatches (const Shape< float, uint32_t > & expected, const Shape< float, uint32_t > & actual) noexcept
+		{
+			size_t mismatches = 0;
+
+			for ( uint32_t triangleIndex = 0; triangleIndex < expected.triangles().size(); ++triangleIndex )
+			{
+				for ( uint32_t corner = 0; corner < 3; ++corner )
+				{
+					if ( actual.triangleVertexColorIndex(triangleIndex, corner) != expected.triangleVertexColorIndex(triangleIndex, corner) )
+					{
+						++mismatches;
+					}
+				}
+			}
+
+			return mismatches;
+		}
+	}
+
+	namespace
+	{
+		/* A cube with colors, every other vertex skinned, one triangle naming the last color. */
+		Shape< float, uint32_t >
+		skinnedColoredCube () noexcept
+		{
+			const ShapeBuilderOptions< float > options{true, true, true, false, false};
+			auto cube = ShapeGenerator::generateCuboid< float >(1.0F, 1.0F, 1.0F, options);
+
+			for ( uint32_t vertexIndex = 0; vertexIndex < cube.vertices().size(); vertexIndex += 2 )
+			{
+				cube.setVertexSkinning(vertexIndex, {static_cast< int32_t >(vertexIndex % 4), 3, -1, -1}, {0.5F, 0.5F, 0.0F, 0.0F});
+			}
+
+			if ( !cube.vertexColors().empty() )
+			{
+				cube.setTriangleVertexColorIndexes(1, {0, 0, static_cast< uint32_t >(cube.vertexColors().size() - 1)});
+			}
+
+			return cube;
+		}
+
+		/* The native file of a shape, empty when the writer refused it. */
+		std::vector< std::byte >
+		nativeBytes (const Shape< float, uint32_t > & shape) noexcept
+		{
+			std::vector< std::byte > written;
+			MemoryStream output{written};
+
+			if ( !Native{}.writeStream(output, shape, {}) )
+			{
+				written.clear();
+			}
+
+			return written;
+		}
+	}
+
+	/* Version 4 (2026-11-26): the skinning and the triangles' color indexes are tables of the Shape, written after the
+	 * colors when the shape has them (header byte 12). */
+	TEST(VertexFactoryNative, version4WritesTheTablesAShapeHas)
+	{
+		const auto cube = skinnedColoredCube();
+		ASSERT_FALSE(cube.vertexColors().empty()) << "no color, the color index table would not be written";
+
+		const auto written = nativeBytes(cube);
+		ASSERT_GT(written.size(), HeaderBytes);
+		EXPECT_EQ(static_cast< uint8_t >(written[Native::FlagsOffset]), Native::SkinningFlag | Native::ColorIndexesFlag);
+	}
+
+	/* A round trip keeps every value of the tables. */
+	TEST(VertexFactoryNative, version4RoundTripsTheSkinningAndTheColorIndexes)
+	{
+		const auto cube = skinnedColoredCube();
+		const auto written = nativeBytes(cube);
+
+		MemoryStream stream{written};
+		Result result;
+		ASSERT_TRUE(Native{}.readStream(stream, result, {}));
+		ASSERT_TRUE(result.shape.vertices().size() == cube.vertices().size() && result.shape.triangles().size() == cube.triangles().size());
+		EXPECT_TRUE(result.shape.isSkinningAvailable());
+		EXPECT_EQ(skinningMismatches(cube, result.shape), 0U);
+		EXPECT_EQ(colorIndexMismatches(cube, result.shape), 0U);
+	}
+
+	/* A shape without skinning nor colors writes no table: its version-4 file is the records alone. */
+	TEST(VertexFactoryNative, version4WritesNoTableAShapeDoesNotHave)
+	{
+		/* Built by hand: the generators always add a vertex color. */
+		Shape< float, uint32_t > shape;
+		shape.vertices().emplace_back(Math::Vector< 3, float >{0.0F, 0.0F, 0.0F});
+		shape.vertices().emplace_back(Math::Vector< 3, float >{1.0F, 0.0F, 0.0F});
+		shape.vertices().emplace_back(Math::Vector< 3, float >{0.0F, 1.0F, 0.0F});
+		shape.triangles().emplace_back(0, 1, 2);
+		ASSERT_TRUE(shape.isValid());
+		ASSERT_FALSE(shape.isSkinningAvailable());
+
+		std::vector< std::byte > written;
+		{
+			MemoryStream output{written};
+			ASSERT_TRUE(Native{}.writeStream(output, shape, {}));
+		}
+
+		EXPECT_EQ(static_cast< uint8_t >(written[Native::FlagsOffset]), 0U);
+		EXPECT_EQ(written.size(), HeaderBytes + (shape.vertices().size() * sizeof(ShapeVertex< float >)) + (shape.triangles().size() * sizeof(ShapeTriangle< float, uint32_t >)));
+	}
+
+	/* The record sizes are part of the format: a change of either needs a version bump (see
+	 * VertexFactoryShapeVertex.sizeIsPinnedBecauseTheNativeFormatIsARawBlob). */
+	TEST(VertexFactoryNative, triangleRecordSizeIsPinned)
+	{
+		/* 64 until 2026-11-26; the color and edge indexes became tables of the Shape: 40, FileFormatNative version 4. */
+		EXPECT_EQ(sizeof(ShapeTriangle< float, uint32_t >), 40U);
+	}
+
 	/* ===== Malformed / hostile (run under ASan/UBSan: must reject, never crash) ===== */
 
 	TEST(VertexFactoryNative, hugeVertexCountIsRejectedNotAllocated)
@@ -207,7 +433,7 @@ namespace EmEn::Base::VertexFactory
 		/* The headline bug: an unvalidated 64-bit count fed straight to resize() would request
 		 * a multi-exabyte allocation -> std::length_error -> std::terminate under -fno-exceptions.
 		 * The reader must reject it from the (tiny) actual stream size instead. */
-		const auto buffer = makeNative(std::numeric_limits< uint64_t >::max(), 0, 0, 0);
+		const auto buffer = makeNative({.vertices = std::numeric_limits< uint64_t >::max()});
 
 		MemoryStream stream{buffer};
 		Native format;
@@ -226,14 +452,14 @@ namespace EmEn::Base::VertexFactory
 		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
 
 		{
-			const auto buffer = makeNative(0, std::numeric_limits< uint64_t >::max(), 0, 0);
+			const auto buffer = makeNative({.triangles = std::numeric_limits< uint64_t >::max()});
 			MemoryStream stream{buffer};
 			Native format;
 			Result result;
 			EXPECT_FALSE(format.readStream(stream, result, {}));
 		}
 		{
-			const auto buffer = makeNative(0, 0, std::numeric_limits< uint64_t >::max(), 0);
+			const auto buffer = makeNative({.colors = std::numeric_limits< uint64_t >::max()});
 			MemoryStream stream{buffer};
 			Native format;
 			Result result;
@@ -252,7 +478,7 @@ namespace EmEn::Base::VertexFactory
 		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
 
 		/* Counts claim 3 vertices but no payload bytes follow. */
-		const auto buffer = makeNative(3, 0, 0, 0);
+		const auto buffer = makeNative({.vertices = 3});
 
 		MemoryStream stream{buffer};
 		Native format;
@@ -272,14 +498,22 @@ namespace EmEn::Base::VertexFactory
 	{
 		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
 
+		/* Since version 4 the color indexes are a table after the colors, written when the file has colors. */
 		const auto build = [] (uint32_t vertexIndex, uint32_t colorIndex, uint64_t colorCount) {
 			const size_t vertexBytes = 3 * sizeof(ShapeVertex< float >);
 			const size_t triangleBytes = sizeof(ShapeTriangle< float, uint32_t >);
-			auto buffer = makeNative(3, 1, colorCount, vertexBytes + triangleBytes + (colorCount * sizeof(Math::Vector< 4, float >)));
+			const size_t colorBytes = colorCount * sizeof(Math::Vector< 4, float >);
+			const size_t colorIndexBytes = colorCount > 0 ? 3 * sizeof(uint32_t) : 0;
+			auto buffer = makeNative({.vertices = 3, .triangles = 1, .colors = colorCount, .payloadBytes = vertexBytes + triangleBytes + colorBytes + colorIndexBytes, .flags = static_cast< uint8_t >(colorCount > 0 ? Native::ColorIndexesFlag : 0)});
 
-			ShapeTriangle< float, uint32_t > triangle{0, 1, vertexIndex};
-			triangle.setVertexColorIndex(0, colorIndex);
+			const ShapeTriangle< float, uint32_t > triangle{0, 1, vertexIndex};
 			std::memcpy(buffer.data() + HeaderBytes + vertexBytes, static_cast< const void * >(&triangle), triangleBytes);
+
+			if ( colorCount > 0 )
+			{
+				const std::array< uint32_t, 3 > colorIndexes{colorIndex, 0, 0};
+				putBytes(buffer, HeaderBytes + vertexBytes + triangleBytes + colorBytes, colorIndexes.data(), colorIndexBytes);
+			}
 
 			return buffer;
 		};
@@ -311,6 +545,49 @@ namespace EmEn::Base::VertexFactory
 		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory"), 2U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	}
+
+	/* A flag this build does not know announces a table it cannot skip: refused, never read past. */
+	TEST(VertexFactoryNative, anUnknownOptionalTableIsRefused)
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+		const auto buffer = makeNative({.flags = 0x80});
+
+		MemoryStream stream{buffer};
+		Result result;
+		EXPECT_FALSE(Native{}.readStream(stream, result, {}));
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 1U);
+		EXPECT_EQ(captured.countWithoutDebug(), 1U);
+		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	}
+
+	/* A declared table the stream does not hold is refused before any allocation, like a record count. */
+	TEST(VertexFactoryNative, aDeclaredTableMissingFromTheStreamIsRefused)
+	{
+		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
+
+		{
+			const auto buffer = makeNative({.vertices = 1, .payloadBytes = sizeof(ShapeVertex< float >), .flags = Native::SkinningFlag});
+			MemoryStream stream{buffer};
+			Result result;
+			EXPECT_FALSE(Native{}.readStream(stream, result, {})) << "the skinning table";
+		}
+		{
+			const auto buffer = makeNative({.triangles = 1, .payloadBytes = sizeof(ShapeTriangle< float, uint32_t >), .flags = Native::ColorIndexesFlag});
+			MemoryStream stream{buffer};
+			Result result;
+			EXPECT_FALSE(Native{}.readStream(stream, result, {})) << "the color index table";
+		}
+
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		const auto captured = diagnosticsCapture.snapshot();
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 2U);
 		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
@@ -360,10 +637,13 @@ namespace EmEn::Base::VertexFactory
 
 		EXPECT_EQ(refused, written.size());
 
-		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09): one error per
+		 * cut, the file's length. 3160 bytes in version 3; 2248 in version 4 (2026-11-26): 24 vertices of 60 bytes,
+		 * 12 triangles of 40, 8 colors and their 12 color index triples. */
 		const auto captured = diagnosticsCapture.snapshot();
-		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 3160U);
-		EXPECT_EQ(captured.countWithoutDebug(), 3160U);
+		EXPECT_EQ(written.size(), 2248U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatNative"), 2248U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2248U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
@@ -371,7 +651,7 @@ namespace EmEn::Base::VertexFactory
 	{
 		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
 
-		auto buffer = makeNative(1, 0, 0, sizeof(ShapeVertex< float >));
+		auto buffer = makeNative({.vertices = 1, .payloadBytes = sizeof(ShapeVertex< float >)});
 		buffer[10] = static_cast< std::byte >(sizeof(double));
 
 		const auto & input = buffer;
@@ -390,7 +670,7 @@ namespace EmEn::Base::VertexFactory
 	{
 		EmEn::Base::Testing::DiagnosticsCapture diagnosticsCapture;
 
-		auto buffer = makeNative(0, 0, 0, 0);
+		auto buffer = makeNative({});
 		buffer[0] = static_cast< std::byte >('X');
 
 		MemoryStream stream{buffer};
@@ -561,6 +841,128 @@ namespace EmEn::Base::VertexFactory
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "VertexFactory::FileFormatSTL"), 1U);
 		EXPECT_EQ(captured.countWithoutDebug(), 1U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
+	}
+
+	namespace
+	{
+		/* The distinct positions of a shape, -0 and +0 being one. */
+		size_t
+		distinctPositions (const Shape< float, uint32_t > & shape) noexcept
+		{
+			std::set< std::array< uint32_t, 3 > > positions;
+
+			for ( const auto & vertex : shape.vertices() )
+			{
+				const auto & position = vertex.position();
+				positions.insert({std::bit_cast< uint32_t >(position[Math::X] + 0.0F), std::bit_cast< uint32_t >(position[Math::Y] + 0.0F), std::bit_cast< uint32_t >(position[Math::Z] + 0.0F)});
+			}
+
+			return positions.size();
+		}
+
+		/* Counts the corners of a welded sphere read back whose position is not the source's, and those whose normal
+		 * does not leave the center through the vertex (smooth normals). */
+		std::pair< size_t, size_t >
+		weldedSphereMismatches (const Shape< float, uint32_t > & sphere, const Shape< float, uint32_t > & welded) noexcept
+		{
+			size_t wrongCorners = 0;
+			size_t wrongNormals = 0;
+
+			for ( size_t triangleIndex = 0; triangleIndex < sphere.triangles().size(); ++triangleIndex )
+			{
+				for ( uint32_t corner = 0; corner < 3; ++corner )
+				{
+					const auto & expected = sphere.vertex(sphere.triangles()[triangleIndex].vertexIndex(corner)).position();
+					const auto & vertex = welded.vertex(welded.triangles()[triangleIndex].vertexIndex(corner));
+
+					wrongCorners += vertex.position() != expected ? 1U : 0U;
+					wrongNormals += Math::Vector< 3, float >::dotProduct(vertex.normal(), expected.normalized()) < 0.95F ? 1U : 0U;
+				}
+			}
+
+			return {wrongCorners, wrongNormals};
+		}
+	}
+
+	/* ReadOptions::weldVertices (2026-11-26, owner: off by default): the corners sharing a position become one vertex,
+	 * -0 and +0 being one; a welded vertex keeps no normal read from the file, requestNormal computes smooth ones. A
+	 * sphere of 2048 triangles also makes the welder's table grow past its first 1024 slots. */
+	TEST(VertexFactorySTL, weldingSharesTheCornersOfABinaryFile)
+	{
+		const auto sphere = ShapeGenerator::generateSphere< float, uint32_t >(1.0F, 64U, 32U);
+
+		std::vector< std::byte > buffer;
+		{
+			MemoryStream output{buffer};
+			ASSERT_TRUE(STL{}.writeStream(output, sphere, {}));
+		}
+
+		ReadOptions options;
+		options.weldVertices = true;
+		options.requestNormal = true;
+
+		MemoryStream input{std::as_const(buffer)};
+		Result result;
+		ASSERT_TRUE(STL{}.readStream(input, result, options));
+
+		ASSERT_EQ(result.shape.triangles().size(), sphere.triangles().size());
+		EXPECT_GT(result.shape.vertices().size(), 512U) << "the table did not have to grow, the check would be partial";
+		EXPECT_EQ(result.shape.vertices().size(), distinctPositions(sphere));
+
+		const auto [wrongCorners, wrongNormals] = weldedSphereMismatches(sphere, result.shape);
+		EXPECT_EQ(wrongCorners, 0U);
+		EXPECT_EQ(wrongNormals, 0U);
+
+		/* Off by default: three vertices a triangle, as before. */
+		MemoryStream again{std::as_const(buffer)};
+		Result unwelded;
+		ASSERT_TRUE(STL{}.readStream(again, unwelded, {}));
+		EXPECT_EQ(unwelded.shape.vertices().size(), sphere.triangles().size() * 3);
+	}
+
+	TEST(VertexFactorySTL, weldingSharesTheCornersOfAnAsciiFile)
+	{
+		/* Two facets sharing the edge (1 0 0) - (0 1 0); the first corner written -0 in one facet and 0 in the other. */
+		const std::string text =
+			"solid quad\n"
+			"  facet normal 0 0 1\n"
+			"    outer loop\n"
+			"      vertex -0 0 0\n"
+			"      vertex 1 0 0\n"
+			"      vertex 0 1 0\n"
+			"    endloop\n"
+			"  endfacet\n"
+			"  facet normal 0 0 1\n"
+			"    outer loop\n"
+			"      vertex 0 1 0\n"
+			"      vertex 1 0 0\n"
+			"      vertex 1 1 0\n"
+			"    endloop\n"
+			"  endfacet\n"
+			"  facet normal 0 0 1\n"
+			"    outer loop\n"
+			"      vertex 0 0 0\n"
+			"      vertex 1 0 0\n"
+			"      vertex 1 1 0\n"
+			"    endloop\n"
+			"  endfacet\n"
+			"endsolid quad\n";
+
+		std::vector< std::byte > buffer(text.size());
+		std::memcpy(buffer.data(), text.data(), text.size());
+
+		ReadOptions options;
+		options.weldVertices = true;
+
+		MemoryStream input{std::as_const(buffer)};
+		Result result;
+		ASSERT_TRUE(STL{}.readStream(input, result, options));
+
+		ASSERT_EQ(result.shape.triangles().size(), 3U);
+		EXPECT_EQ(result.shape.vertices().size(), 4U);
+		EXPECT_EQ(result.shape.triangles()[0].vertexIndex(0), result.shape.triangles()[2].vertexIndex(0)) << "-0 and 0 are one position";
+		EXPECT_EQ(result.shape.triangles()[0].vertexIndex(1), result.shape.triangles()[1].vertexIndex(1));
+		EXPECT_EQ(result.shape.triangles()[0].vertexIndex(2), result.shape.triangles()[1].vertexIndex(0));
 	}
 
 	/* ===== ASCII STL — a malformed or non-finite triplet refuses the file (owner, 2026-10-08) ===== */
@@ -1094,14 +1496,17 @@ namespace EmEn::Base::VertexFactory
 
 		/* The first vertex declares FIVE weights: the four largest biases (0.4, 0.3, 0.15, 0.1) are
 		 * kept, the 0.05 one is dropped, and the survivors are renormalized to sum to 1. */
-		const auto & vertex = result.shape.vertices()[0];
+		ASSERT_TRUE(result.shape.isSkinningAvailable());
 
-		EXPECT_EQ(vertex.influences()[0], 0);
-		EXPECT_EQ(vertex.influences()[1], 1);
+		const auto & influences = result.shape.vertexInfluences(0);
+		const auto & weights = result.shape.vertexWeights(0);
 
-		const auto weightSum = vertex.weights()[0] + vertex.weights()[1] + vertex.weights()[2] + vertex.weights()[3];
+		EXPECT_EQ(influences[0], 0);
+		EXPECT_EQ(influences[1], 1);
+
+		const auto weightSum = weights[0] + weights[1] + weights[2] + weights[3];
 		EXPECT_NEAR(weightSum, 1.0F, 1e-5F);
-		EXPECT_NEAR(vertex.weights()[0], 0.4F / 0.95F, 1e-5F);
+		EXPECT_NEAR(weights[0], 0.4F / 0.95F, 1e-5F);
 	}
 
 	TEST(VertexFactoryMDx, md3HugeTriangleTotalDoesNotOOM)

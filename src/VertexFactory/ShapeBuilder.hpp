@@ -34,7 +34,6 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <iostream>
 #include <numeric>
 #include <type_traits>
 #include <vector>
@@ -658,6 +657,7 @@ namespace EmEn::Base::VertexFactory
 			createTriangle () noexcept
 			{
 				ShapeTriangle< vertex_data_t > triangle{};
+				std::array< index_data_t, 3 > colorIndexes{0, 0, 0};
 
 				const auto & textureCoordinatesMultiplier = m_options.textureCoordinatesMultiplier();
 
@@ -696,24 +696,18 @@ namespace EmEn::Base::VertexFactory
 							attributeIndex = m_destinationShape->saveVertexColor(m_triangleVertexColors[vertexIndex]);
 						}
 
-						triangle.setVertexColorIndex(vertexIndex, attributeIndex);
+						colorIndexes.at(vertexIndex) = attributeIndex;
 					}
 
 					/* Bone influences and weights (skeletal animation). */
 					if ( m_influencesEnabled )
 					{
-						const auto vertexIdx = triangle.vertexIndex(vertexIndex);
-						auto & vertex = m_destinationShape->vertices()[vertexIdx];
-
-						const auto & inf = m_triangleInfluences[vertexIndex];
-						vertex.setInfluences(inf[0], inf[1], inf[2], inf[3]);
-
-						const auto & wgt = m_triangleWeights[vertexIndex];
-						vertex.setWeights(wgt[0], wgt[1], wgt[2], wgt[3]);
+						m_destinationShape->setVertexSkinning(triangle.vertexIndex(vertexIndex), m_triangleInfluences.at(vertexIndex), m_triangleWeights.at(vertexIndex));
 					}
 				}
 
 				m_destinationShape->addTriangle(triangle);
+				m_destinationShape->setTriangleVertexColorIndexes(static_cast< index_data_t >(m_destinationShape->triangles().size() - 1), colorIndexes);
 
 				++m_triangleCount;
 			}

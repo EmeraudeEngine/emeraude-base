@@ -27,17 +27,25 @@
 #pragma once
 
 /* STL inclusions. */
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <string>
-#include <vector>
+#include <string_view>
+#include <type_traits>
 
 /* Local inclusions for inheritances. */
 #include "FileFormatInterface.hpp"
 
 /* Local inclusions for usages. */
+#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
+#include "Math/Vector.hpp"
+#include "VertexFactory/Shape.hpp"
+#include "VertexFactory/ShapeLoadResult.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
+#include "VertexFactory/ShapeVertex.hpp"
 
 namespace EmEn::Base::VertexFactory
 {
@@ -55,13 +63,18 @@ namespace EmEn::Base::VertexFactory
 
 			static constexpr auto Magic{"EE3D_V1"};
 
-			/** @brief The size of a version-2 vertex record: every ShapeVertex member before the secondary texture
-			 * coordinates (version 3 appended them last). */
-			static constexpr uint64_t VersionTwoVertexSize{
-				(4 * sizeof(Math::Vector< 3, vertex_data_t >)) + sizeof(Math::Vector< 4, int32_t >) + sizeof(Math::Vector< 4, vertex_data_t >) + sizeof(vertex_data_t)
-			};
+			/** @brief The version written: 4 since 2026-11-26 (the skinning and the triangles' color and edge indexes left
+			 * ShapeVertex / ShapeTriangle for tables of the Shape). */
+			static constexpr uint16_t WrittenVersion{4};
 
-			static_assert(sizeof(ShapeVertex< vertex_data_t >) == VersionTwoVertexSize + sizeof(Math::Vector< 2, vertex_data_t >), "ShapeVertex's layout no longer matches the native format: a version-2 record must be its exact prefix (no padding, the secondary set last).");
+			/** @brief The header byte holding the optional tables of a version-4 file. */
+			static constexpr size_t FlagsOffset{12};
+
+			/** @brief Flag: the vertices' skinning table follows the colors (influences, then weights). */
+			static constexpr uint8_t SkinningFlag{1U << 0U};
+
+			/** @brief Flag: the triangles' color index table follows. */
+			static constexpr uint8_t ColorIndexesFlag{1U << 1U};
 
 			FileFormatNative () noexcept = default;
 
@@ -81,9 +94,9 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				/* 1. Read Header (32 bytes) */
-				char header[32] = {0};
+				std::array< char, 32 > header{};
 
-				if ( !stream.read(header, 32) )
+				if ( !stream.read(header.data(), header.size()) )
 				{
 					Logging::error("VertexFactory::FileFormatNative", "readStream(), unable to read header !");
 
@@ -91,7 +104,7 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				/* Check Magic "EE3D_V1" (8 bytes including null) */
-				if ( std::string(header, 7) != Magic )
+				if ( std::string_view(header.data(), 7) != Magic )
 				{
 					Logging::error("VertexFactory::FileFormatNative", "readStream(), invalid magic !");
 
@@ -102,19 +115,17 @@ namespace EmEn::Base::VertexFactory
 				uint16_t version = 0;
 				std::memcpy(&version, &header[8], sizeof(uint16_t));
 
-				/* ⚠️⚠️ VERSION 3 (2026-10-03). Vertices are written as a RAW BLOB of
-				 * sizeof(ShapeVertex<vertex_data_t>), so ANY change to that structure changes the
-				 * on-disk layout. Version 1 vertices were 80 bytes, version 2 (the tangent handedness)
-				 * 84, version 3 (the secondary texture coordinates, appended LAST) 92. A version-2
-				 * record is the exact first 84 bytes of a version-3 one, so version 2 is still read
-				 * (the secondary set at (0, 0)). There is deliberately NO version-1 read path: reading
-				 * a v1 blob with a later stride would misparse it SILENTLY — the count validation
-				 * below can pass on a wrong stride. Refusing it loudly is the only safe behaviour.
-				 * ⚠️ If ShapeVertex or ShapeTriangle ever changes again, BUMP THIS. A size change
-				 * with an unchanged version number is silent data corruption. */
-				if ( version != 2 && version != 3 )
+				/* ⚠️⚠️ The payload holds RAW records: ANY change to ShapeVertex or ShapeTriangle changes the on-disk
+				 * layout and bumps the version. Version 1 vertices were 80 bytes, version 2 (the tangent handedness) 84,
+				 * version 3 (the secondary texture coordinates) 92; versions 2 and 3 stored the skinning in the vertex
+				 * and the color and edge indexes in the triangle (64 bytes). Version 4 (2026-11-26) stores the compact
+				 * records (60 and 40 bytes, float / uint32_t) and the skinning and color indexes as optional tables after
+				 * the colors (header byte 12). Versions 2 and 3 are still read, record by record through their former
+				 * layout (LegacyVertex, LegacyTriangle). There is deliberately NO version-1 read path: a v1 blob read with
+				 * a later stride would misparse SILENTLY. */
+				if ( version != 2 && version != 3 && version != WrittenVersion )
 				{
-					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " — this build reads versions 2 and 3; a version-1 file predates the tangent handedness and must be re-exported from its source asset !");
+					Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), unsupported version "} + std::to_string(version) + " — this build reads versions 2 to 4; a version-1 file predates the tangent handedness and must be re-exported from its source asset !");
 
 					return false;
 				}
@@ -130,10 +141,20 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				/* 2. Read Metadata (Counts) - 3 * 8 bytes = 24 bytes */
-				uint64_t counts[3] = {0, 0, 0};
+				const auto flags = version == WrittenVersion ? static_cast< uint8_t >(header[FlagsOffset]) : uint8_t{0};
 
-				if ( !stream.read(counts, 3 * sizeof(uint64_t)) )
+				/* A flag this build does not know announces a table it cannot skip: read on, every count would be wrong. */
+				if ( (flags & static_cast< uint8_t >(~(SkinningFlag | ColorIndexesFlag))) != 0 )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), unknown optional tables (flags " + std::to_string(flags) + ") !");
+
+					return false;
+				}
+
+				/* 2. Read Metadata (Counts) - 3 * 8 bytes = 24 bytes */
+				std::array< uint64_t, 3 > counts{};
+
+				if ( !stream.read(counts.data(), sizeof(counts)) )
 				{
 					Logging::error("VertexFactory::FileFormatNative", "readStream(), unable to read metadata !");
 
@@ -162,104 +183,53 @@ namespace EmEn::Base::VertexFactory
 
 				uint64_t remaining = streamSize - headerBytes;
 
-				const uint64_t vertexSize = version == 3 ? sizeof(ShapeVertex< vertex_data_t >) : VersionTwoVertexSize;
-				constexpr uint64_t triangleSize = sizeof(ShapeTriangle< vertex_data_t, index_data_t >);
+				const uint64_t vertexSize = FileFormatNative::vertexRecordSize(version);
+				const uint64_t triangleSize = version == WrittenVersion ? sizeof(ShapeTriangle< vertex_data_t, index_data_t >) : sizeof(LegacyTriangle);
 				constexpr uint64_t colorSize = sizeof(Math::Vector< 4, vertex_data_t >);
+				constexpr uint64_t skinningSize = sizeof(Math::Vector< 4, int32_t >) + sizeof(Math::Vector< 4, vertex_data_t >);
+				constexpr uint64_t colorIndexesSize = 3 * sizeof(index_data_t);
 
-				if ( vertexCount > remaining / vertexSize )
+				const auto fits = [&remaining] (uint64_t count, uint64_t elementSize, const char * what) noexcept {
+					if ( count > remaining / elementSize )
+					{
+						Logging::error("VertexFactory::FileFormatNative", std::string{"readStream(), "} + what + " count exceeds the stream size !");
+
+						return false;
+					}
+
+					remaining -= count * elementSize;
+
+					return true;
+				};
+
+				if ( !fits(vertexCount, vertexSize, "vertex") || !fits(triangleCount, triangleSize, "triangle") || !fits(colorCount, colorSize, "color") ||
+					((flags & SkinningFlag) != 0 && !fits(vertexCount, skinningSize, "skinning")) ||
+					((flags & ColorIndexesFlag) != 0 && !fits(triangleCount, colorIndexesSize, "color index")) )
 				{
-					Logging::error("VertexFactory::FileFormatNative", "readStream(), vertex count exceeds the stream size !");
-
-					return false;
-				}
-
-				remaining -= vertexCount * vertexSize;
-
-				if ( triangleCount > remaining / triangleSize )
-				{
-					Logging::error("VertexFactory::FileFormatNative", "readStream(), triangle count exceeds the stream size !");
-
-					return false;
-				}
-
-				remaining -= triangleCount * triangleSize;
-
-				if ( colorCount > remaining / colorSize )
-				{
-					Logging::error("VertexFactory::FileFormatNative", "readStream(), color count exceeds the stream size !");
-
 					return false;
 				}
 
 				/* 4. Resize Geometry (counts now proven to fit). */
-				auto & vertices = geometry.vertices();
-				auto & triangles = geometry.triangles();
-				auto & colors = geometry.vertexColors();
-
-				vertices.resize(vertexCount);
-				triangles.resize(triangleCount);
-				colors.resize(colorCount);
+				geometry.vertices().resize(vertexCount);
+				geometry.triangles().resize(triangleCount);
+				geometry.vertexColors().resize(colorCount);
 
 				/* 5. Read Data Blobs */
-				if ( vertexCount > 0 && version == 2 )
+				const bool recordsRead = version == WrittenVersion ? FileFormatNative::readRecords(stream, geometry) : FileFormatNative::readLegacyRecords(stream, geometry, version);
+
+				if ( !recordsRead )
 				{
-					/* A version-2 record is the first VersionTwoVertexSize bytes of a ShapeVertex: each is copied
-					 * over a default vertex, whose secondary texture coordinates stay (0, 0). */
-					std::vector< char > records(vertexCount * VersionTwoVertexSize);
-
-					if ( !stream.read(records.data(), records.size()) )
-					{
-						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertices !");
-
-						return false;
-					}
-
-					for ( uint64_t index = 0; index < vertexCount; ++index )
-					{
-						std::memcpy(static_cast< void * >(&vertices[index]), records.data() + (index * VersionTwoVertexSize), VersionTwoVertexSize);
-					}
-				}
-				else if ( vertexCount > 0 )
-				{
-					if ( !stream.read(vertices.data(), vertexCount * sizeof(ShapeVertex< vertex_data_t >)) )
-					{
-						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertices !");
-
-						return false;
-					}
+					return false;
 				}
 
-				if ( triangleCount > 0 )
+				if ( colorCount > 0 && !stream.read(geometry.vertexColors().data(), colorCount * colorSize) )
 				{
-					if ( !stream.read(triangles.data(), triangleCount * sizeof(ShapeTriangle< vertex_data_t, index_data_t >)) )
-					{
-						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read triangles !");
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertex colors !");
 
-						return false;
-					}
-
-					/* NOTE: The edges are not stored: an edge index in the blob points into a table that does not exist
-					 * any more (Shape::hasConsistentIndices() would refuse it). Reset to "none". */
-					for ( auto & triangle : triangles )
-					{
-						for ( index_data_t corner = 0; corner < 3; ++corner )
-						{
-							triangle.setEdgeIndex(corner, std::numeric_limits< index_data_t >::max());
-						}
-					}
+					return false;
 				}
 
-				if ( colorCount > 0 )
-				{
-					if ( !stream.read(colors.data(), colorCount * sizeof(Math::Vector< 4, vertex_data_t >)) )
-					{
-						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertex colors !");
-
-						return false;
-					}
-				}
-
-				return true;
+				return version != WrittenVersion || FileFormatNative::readTables(stream, geometry, flags);
 			}
 
 			/** @copydoc EmEn::Base::VertexFactory::FileFormatInterface::writeStream() */
@@ -281,57 +251,270 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
+				const bool withColorIndexes = !geometry.vertexColors().empty();
+				const auto flags = static_cast< uint8_t >((geometry.isSkinningAvailable() ? SkinningFlag : 0U) | (withColorIndexes ? ColorIndexesFlag : 0U));
+
 				/* 1. Header (32 bytes) */
-				char header[32] = {0};
+				std::array< char, 32 > header{};
 
-				std::memcpy(header, Magic, 7);
-
-				/* ⚠️ Must match the accepted version in readStream(), and must be bumped whenever
-				 * ShapeVertex or ShapeTriangle changes size — the payload is a raw blob. */
-				uint16_t version = 3;
-				std::memcpy(&header[8], &version, sizeof(uint16_t));
+				std::memcpy(header.data(), Magic, 7);
+				std::memcpy(&header[8], &WrittenVersion, sizeof(uint16_t));
 
 				header[10] = static_cast< char >(sizeof(vertex_data_t));
 				header[11] = static_cast< char >(sizeof(index_data_t));
-
-				if ( !stream.write(header, 32) )
-				{
-					return false;
-				}
+				header[FlagsOffset] = static_cast< char >(flags);
 
 				/* 2. Metadata (Counts) */
-				uint64_t counts[3];
-				counts[0] = static_cast< uint64_t >(geometry.vertices().size());
-				counts[1] = static_cast< uint64_t >(geometry.triangles().size());
-				counts[2] = static_cast< uint64_t >(geometry.vertexColors().size());
+				const std::array< uint64_t, 3 > counts{
+					static_cast< uint64_t >(geometry.vertices().size()),
+					static_cast< uint64_t >(geometry.triangles().size()),
+					static_cast< uint64_t >(geometry.vertexColors().size())
+				};
 
-				if ( !stream.write(counts, 3 * sizeof(uint64_t)) )
+				if ( !stream.write(header.data(), header.size()) || !stream.write(counts.data(), sizeof(counts)) )
 				{
 					return false;
 				}
 
-				/* 3. Data Blobs */
-				if ( counts[0] > 0 )
+				/* 3. Data Blobs, then the optional tables. */
+				if ( (counts[0] > 0 && !stream.write(geometry.vertices().data(), counts[0] * sizeof(ShapeVertex< vertex_data_t >))) ||
+					(counts[1] > 0 && !stream.write(geometry.triangles().data(), counts[1] * sizeof(ShapeTriangle< vertex_data_t, index_data_t >))) ||
+					(counts[2] > 0 && !stream.write(geometry.vertexColors().data(), counts[2] * sizeof(Math::Vector< 4, vertex_data_t >))) )
 				{
-					if ( !stream.write(geometry.vertices().data(), counts[0] * sizeof(ShapeVertex< vertex_data_t >)) )
+					return false;
+				}
+
+				if ( (flags & SkinningFlag) != 0 )
+				{
+					for ( index_data_t vertexIndex = 0; vertexIndex < counts[0]; ++vertexIndex )
 					{
-						return false;
+						if ( !stream.write(geometry.vertexInfluences(vertexIndex).data(), sizeof(Math::Vector< 4, int32_t >)) || !stream.write(geometry.vertexWeights(vertexIndex).data(), sizeof(Math::Vector< 4, vertex_data_t >)) )
+						{
+							return false;
+						}
 					}
 				}
 
-				if ( counts[1] > 0 )
+				if ( withColorIndexes )
 				{
-					if ( !stream.write(geometry.triangles().data(), counts[1] * sizeof(ShapeTriangle< vertex_data_t, index_data_t >)) )
+					for ( index_data_t triangleIndex = 0; triangleIndex < counts[1]; ++triangleIndex )
 					{
-						return false;
+						const std::array< index_data_t, 3 > colorIndexes{geometry.triangleVertexColorIndex(triangleIndex, 0), geometry.triangleVertexColorIndex(triangleIndex, 1), geometry.triangleVertexColorIndex(triangleIndex, 2)};
+
+						if ( !stream.write(colorIndexes.data(), sizeof(colorIndexes)) )
+						{
+							return false;
+						}
 					}
 				}
 
-				if ( counts[2] > 0 )
+				return true;
+			}
+
+		private:
+
+			/**
+			 * @brief The vertex record of versions 2 and 3: ShapeVertex as it was before 2026-11-26, the skinning
+			 * inside. Version 2 is its prefix up to the secondary texture coordinates.
+			 */
+			struct LegacyVertex
+			{
+				Math::Vector< 3, vertex_data_t > position;
+				Math::Vector< 3, vertex_data_t > tangent;
+				Math::Vector< 3, vertex_data_t > normal;
+				Math::Vector< 3, vertex_data_t > textureCoordinates;
+				Math::Vector< 4, int32_t > influences;
+				Math::Vector< 4, vertex_data_t > weights;
+				vertex_data_t tangentHandedness{1};
+				Math::Vector< 2, vertex_data_t > secondaryTextureCoordinates;
+			};
+
+			/**
+			 * @brief The triangle record of versions 2 and 3: ShapeTriangle as it was before 2026-11-26, the color and
+			 * edge indexes inside.
+			 */
+			struct LegacyTriangle
+			{
+				Math::Vector< 3, vertex_data_t > surfaceTangent;
+				Math::Vector< 3, vertex_data_t > surfaceNormal;
+				vertex_data_t surfaceTangentHandedness{1};
+				std::array< index_data_t, 3 > vertexIndexes{};
+				std::array< index_data_t, 3 > vertexColorIndexes{};
+				std::array< index_data_t, 3 > edgeIndexes{};
+			};
+
+			/* A version-2 record is the exact prefix of a version-3 one: no padding, the secondary set last. */
+			static_assert(sizeof(LegacyVertex) == offsetof(LegacyVertex, secondaryTextureCoordinates) + sizeof(Math::Vector< 2, vertex_data_t >), "the version-3 vertex record has padding: a version-2 record would not be its prefix.");
+
+			/* The version-4 records are written raw: 15 components a vertex (position, tangent, normal, texture coordinates
+			 * W included, handedness, secondary set), no padding. A change bumps the version. */
+			static_assert(sizeof(ShapeVertex< vertex_data_t >) == 15 * sizeof(vertex_data_t), "ShapeVertex no longer matches the version-4 record: bump FileFormatNative's version.");
+			/* 7 components and 3 indexes a triangle, rounded to its alignment (a double shape with 32-bit indexes pads 4
+			 * bytes; a float one does not). */
+			static_assert(sizeof(ShapeTriangle< vertex_data_t, index_data_t >) == ((((7 * sizeof(vertex_data_t)) + (3 * sizeof(index_data_t)) + alignof(ShapeTriangle< vertex_data_t, index_data_t >) - 1) / alignof(ShapeTriangle< vertex_data_t, index_data_t >)) * alignof(ShapeTriangle< vertex_data_t, index_data_t >)), "ShapeTriangle no longer matches the version-4 record: bump FileFormatNative's version.");
+
+			/**
+			 * @brief Returns the size of a vertex record of a version.
+			 * @param version The file version (2, 3 or 4).
+			 * @return uint64_t
+			 */
+			[[nodiscard]]
+			static
+			uint64_t
+			vertexRecordSize (uint16_t version) noexcept
+			{
+				if ( version == WrittenVersion )
 				{
-					if ( !stream.write(geometry.vertexColors().data(), counts[2] * sizeof(Math::Vector< 4, vertex_data_t >)) )
+					return sizeof(ShapeVertex< vertex_data_t >);
+				}
+
+				return version == 3 ? sizeof(LegacyVertex) : offsetof(LegacyVertex, secondaryTextureCoordinates);
+			}
+
+			/**
+			 * @brief Reads the vertex and triangle records of a version-4 file, raw.
+			 * @param stream A reference to the stream.
+			 * @param geometry A reference to the shape, its tables sized.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			readRecords (IO::ByteStream & stream, Shape< vertex_data_t, index_data_t > & geometry) noexcept
+			{
+				auto & vertices = geometry.vertices();
+				auto & triangles = geometry.triangles();
+
+				if ( !vertices.empty() && !stream.read(vertices.data(), vertices.size() * sizeof(ShapeVertex< vertex_data_t >)) )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertices !");
+
+					return false;
+				}
+
+				if ( !triangles.empty() && !stream.read(triangles.data(), triangles.size() * sizeof(ShapeTriangle< vertex_data_t, index_data_t >)) )
+				{
+					Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read triangles !");
+
+					return false;
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief Reads the vertex and triangle records of a version-2 or version-3 file through their former layout:
+			 * the skinning goes to the shape's table when a vertex has some, the color indexes when the file has colors;
+			 * the edge indexes are not kept (the edges are not stored).
+			 * @param stream A reference to the stream.
+			 * @param geometry A reference to the shape, its vertices and triangles sized.
+			 * @param version The file version (2 or 3).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			readLegacyRecords (IO::ByteStream & stream, Shape< vertex_data_t, index_data_t > & geometry, uint16_t version) noexcept
+			{
+				const auto vertexSize = FileFormatNative::vertexRecordSize(version);
+
+				for ( index_data_t vertexIndex = 0; vertexIndex < geometry.vertices().size(); ++vertexIndex )
+				{
+					LegacyVertex record{};
+
+					if ( !stream.read(&record, vertexSize) )
 					{
+						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read vertices !");
+
 						return false;
+					}
+
+					auto & vertex = geometry.vertices()[vertexIndex];
+					vertex.setPosition(record.position);
+					vertex.setTangent(record.tangent);
+					vertex.setTangentHandedness(record.tangentHandedness);
+					vertex.setNormal(record.normal);
+					vertex.setTextureCoordinates(record.textureCoordinates);
+					vertex.setSecondaryTextureCoordinates(record.secondaryTextureCoordinates);
+
+					if ( record.influences != Math::Vector< 4, int32_t >{-1, -1, -1, -1} || record.weights != Math::Vector< 4, vertex_data_t >{} )
+					{
+						geometry.setVertexSkinning(vertexIndex, record.influences, record.weights);
+					}
+				}
+
+				const bool withColors = !geometry.vertexColors().empty();
+
+				for ( index_data_t triangleIndex = 0; triangleIndex < geometry.triangles().size(); ++triangleIndex )
+				{
+					LegacyTriangle record{};
+
+					if ( !stream.read(&record, sizeof(LegacyTriangle)) )
+					{
+						Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read triangles !");
+
+						return false;
+					}
+
+					auto & triangle = geometry.triangles()[triangleIndex];
+					triangle = ShapeTriangle< vertex_data_t, index_data_t >{record.vertexIndexes[0], record.vertexIndexes[1], record.vertexIndexes[2]};
+					triangle.setSurfaceTangent(record.surfaceTangent);
+					triangle.setSurfaceNormal(record.surfaceNormal);
+					triangle.setSurfaceTangentHandedness(record.surfaceTangentHandedness);
+
+					if ( withColors )
+					{
+						geometry.setTriangleVertexColorIndexes(triangleIndex, record.vertexColorIndexes);
+					}
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief Reads the optional tables of a version-4 file into the shape.
+			 * @param stream A reference to the stream.
+			 * @param geometry A reference to the shape.
+			 * @param flags The optional tables the header declares.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			readTables (IO::ByteStream & stream, Shape< vertex_data_t, index_data_t > & geometry, uint8_t flags) noexcept
+			{
+				if ( (flags & SkinningFlag) != 0 )
+				{
+					for ( index_data_t vertexIndex = 0; vertexIndex < geometry.vertices().size(); ++vertexIndex )
+					{
+						Math::Vector< 4, int32_t > influences{};
+						Math::Vector< 4, vertex_data_t > weights{};
+
+						if ( !stream.read(influences.data(), sizeof(influences)) || !stream.read(weights.data(), sizeof(weights)) )
+						{
+							Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read the skinning !");
+
+							return false;
+						}
+
+						geometry.setVertexSkinning(vertexIndex, influences, weights);
+					}
+				}
+
+				if ( (flags & ColorIndexesFlag) != 0 )
+				{
+					for ( index_data_t triangleIndex = 0; triangleIndex < geometry.triangles().size(); ++triangleIndex )
+					{
+						std::array< index_data_t, 3 > colorIndexes{};
+
+						if ( !stream.read(colorIndexes.data(), sizeof(colorIndexes)) )
+						{
+							Logging::error("VertexFactory::FileFormatNative", "readStream(), failed to read the color indexes !");
+
+							return false;
+						}
+
+						geometry.setTriangleVertexColorIndexes(triangleIndex, colorIndexes);
 					}
 				}
 

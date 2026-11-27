@@ -28,11 +28,18 @@
 
 /* STL inclusions. */
 #include <cstdint>
+#include <type_traits>
 
 /* Local inclusions for usages. */
-#include "IO/ByteStream.hpp"
 #include "Logging/Logging.hpp"
 #include "ShapeLoadResult.hpp"
+#include "VertexFactory/Shape.hpp"
+
+/* Forward declarations. */
+namespace EmEn::Base::IO
+{
+	class ByteStream;
+}
 
 namespace EmEn::Base::VertexFactory
 {
@@ -69,6 +76,11 @@ namespace EmEn::Base::VertexFactory
 		bool requestTangentSpace = false;
 		bool requestTextureCoordinates = false;
 		bool requestVertexColor = false;
+		/** @brief Welds the corners that share a position into one vertex (2026-11-26, STL only: its corners are
+		 * written once per triangle). Off by default: a welded vertex keeps no normal read from the file (the facet
+		 * normals of its triangles differ), requestNormal computes smooth ones. A 390 MB STL holds 23.4 M corners for
+		 * 3.9 M positions. */
+		bool weldVertices = false;
 	};
 
 	/**

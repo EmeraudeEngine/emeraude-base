@@ -85,7 +85,7 @@ namespace EmEn::Base::VertexFactory
 			/** @copydoc EmEn::Base::VertexFactory::FileFormatInterface::readStream() */
 			[[nodiscard]]
 			bool
-			readStream (IO::ByteStream & stream, ShapeLoadResult< vertex_data_t, index_data_t > & result, const ReadOptions & /*readOptions*/) noexcept override
+			readStream (IO::ByteStream & stream, ShapeLoadResult< vertex_data_t, index_data_t > & result, const ReadOptions & readOptions) noexcept override
 			{
 				auto & geometry = result.shape;
 
@@ -120,12 +120,21 @@ namespace EmEn::Base::VertexFactory
 
 				std::istream input{source};
 
-				if ( FileFormatSTL::isAscii(input) )
+				const bool read = FileFormatSTL::isAscii(input) ? FileFormatSTL::readAscii(input, geometry, readOptions.weldVertices) : FileFormatSTL::readBinary(input, geometry, readOptions.weldVertices);
+
+				if ( !read )
 				{
-					return this->readAscii(input, geometry);
+					return false;
 				}
 
-				return this->readBinary(input, geometry);
+				/* A welded vertex has no normal of its own (the facet normals of its triangles differ): smooth ones on
+				 * request. Unwelded, each corner keeps its facet's normal, as read. */
+				if ( readOptions.weldVertices && readOptions.requestNormal )
+				{
+					return geometry.computeTriangleNormal() && geometry.computeVertexNormal();
+				}
+
+				return true;
 			}
 
 			/** @copydoc EmEn::Base::VertexFactory::FileFormatInterface::writeStream() */
@@ -199,6 +208,146 @@ namespace EmEn::Base::VertexFactory
 			/* NOTE: The binary STL format is little-endian; the floats are copied as the host stores them. Every target
 			 * of the cascade (x86-64, ARM64) is little-endian: a big-endian one must swap the bytes here first. */
 			static_assert(std::endian::native == std::endian::little, "FileFormatSTL reads and writes little-endian floats.");
+
+			/**
+			 * @brief Welds the corners sharing a position into one vertex (ReadOptions::weldVertices).
+			 * @note An open-addressing table of vertex indexes, at most half full, the positions read back from the vertex
+			 * list itself: 4 bytes a slot, about 32 MiB for 3.9 M positions where a std::unordered_map takes several times
+			 * that. Two positions weld when their components are bit-identical, -0 and +0 being one; nothing is welded
+			 * under a tolerance (a file's corners are written from the same floats).
+			 */
+			class PositionWelder final
+			{
+				public:
+
+					/**
+					 * @brief Returns the vertex at a position, added to the list when it is not there yet.
+					 * @param vertices A reference to the vertex list being built (only this welder adds to it).
+					 * @param position A reference to the position.
+					 * @return index_data_t
+					 */
+					[[nodiscard]]
+					index_data_t
+					weld (std::vector< ShapeVertex< vertex_data_t > > & vertices, const Math::Vector< 3, vertex_data_t > & position) noexcept
+					{
+						if ( (vertices.size() + 1) * 2 > m_slots.size() )
+						{
+							this->grow(vertices);
+						}
+
+						const auto mask = m_slots.size() - 1;
+
+						for ( auto slot = PositionWelder::hashOf(position) & mask; ; slot = (slot + 1) & mask )
+						{
+							const auto index = m_slots[slot];
+
+							if ( index == Empty )
+							{
+								const auto added = static_cast< index_data_t >(vertices.size());
+
+								vertices.emplace_back(position);
+								m_slots[slot] = added;
+
+								return added;
+							}
+
+							if ( PositionWelder::same(vertices[index].position(), position) )
+							{
+								return index;
+							}
+						}
+					}
+
+				private:
+
+					/** @brief A free slot. */
+					static constexpr index_data_t Empty{std::numeric_limits< index_data_t >::max()};
+
+					/** @brief The first table size. */
+					static constexpr size_t InitialSlots{1024};
+
+					/** @brief The integer holding the bits of a vertex_data_t. */
+					using bits_t = std::conditional_t< sizeof(vertex_data_t) == sizeof(uint32_t), uint32_t, uint64_t >;
+
+					/**
+					 * @brief Returns the bits of a component, -0 as +0.
+					 * @param value The component.
+					 * @return uint64_t
+					 */
+					[[nodiscard]]
+					static
+					uint64_t
+					bitsOf (vertex_data_t value) noexcept
+					{
+						return std::bit_cast< bits_t >(value + vertex_data_t{0});
+					}
+
+					/**
+					 * @brief Returns whether two positions are bit-identical (-0 and +0 being one).
+					 * @param positionA A reference to a position.
+					 * @param positionB A reference to a position.
+					 * @return bool
+					 */
+					[[nodiscard]]
+					static
+					bool
+					same (const Math::Vector< 3, vertex_data_t > & positionA, const Math::Vector< 3, vertex_data_t > & positionB) noexcept
+					{
+						return bitsOf(positionA[Math::X]) == bitsOf(positionB[Math::X]) && bitsOf(positionA[Math::Y]) == bitsOf(positionB[Math::Y]) && bitsOf(positionA[Math::Z]) == bitsOf(positionB[Math::Z]);
+					}
+
+					/**
+					 * @brief Hashes a position.
+					 * @param position A reference to the position.
+					 * @return size_t
+					 */
+					[[nodiscard]]
+					static
+					size_t
+					hashOf (const Math::Vector< 3, vertex_data_t > & position) noexcept
+					{
+						constexpr uint64_t Multiplier{0x9E3779B97F4A7C15ULL};
+
+						const uint64_t withY = (bitsOf(position[Math::X]) * Multiplier) ^ bitsOf(position[Math::Y]);
+						const uint64_t withZ = (withY * Multiplier) ^ bitsOf(position[Math::Z]);
+						const uint64_t mixed = (withZ ^ (withZ >> 32U)) * 0xD6E8FEB86659FD93ULL;
+
+						return static_cast< size_t >(mixed ^ (mixed >> 32U));
+					}
+
+					/**
+					 * @brief Doubles the table (or creates it) and places every vertex again.
+					 * @param vertices A reference to the vertex list, every position in it unique.
+					 */
+					void
+					grow (const std::vector< ShapeVertex< vertex_data_t > > & vertices) noexcept
+					{
+						auto slotCount = std::max(InitialSlots, m_slots.size() * 2);
+
+						while ( (vertices.size() + 1) * 2 > slotCount )
+						{
+							slotCount *= 2;
+						}
+
+						m_slots.assign(slotCount, Empty);
+
+						const auto mask = slotCount - 1;
+
+						for ( size_t vertexIndex = 0; vertexIndex < vertices.size(); ++vertexIndex )
+						{
+							auto slot = PositionWelder::hashOf(vertices[vertexIndex].position()) & mask;
+
+							while ( m_slots[slot] != Empty )
+							{
+								slot = (slot + 1) & mask;
+							}
+
+							m_slots[slot] = static_cast< index_data_t >(vertexIndex);
+						}
+					}
+
+					std::vector< index_data_t > m_slots;
+			};
 
 			/**
 			 * @brief Returns the n-th float of a binary STL triangle record.
@@ -361,120 +510,169 @@ namespace EmEn::Base::VertexFactory
 			 * @brief Reads an ASCII STL file.
 			 * @param file A reference to the input stream.
 			 * @param geometry A reference to the geometry to fill.
+			 * @param weldVertices Welds the corners sharing a position (ReadOptions::weldVertices).
 			 * @return bool
 			 */
+			[[nodiscard]]
+			static
 			bool
-			readAscii (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry) noexcept
+			readAscii (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry, bool weldVertices) noexcept
 			{
-				/* Keep track of unique vertices to build indexed geometry */
-				/* Simple approach: Linear search or Map. For speed/simplicity in this context,
-				   we will just duplicate vertices for now or use a basic dedup if necessary.
-				   Given ShapeBuilder usually handles some stuff, but here we populate vectors manually.
-				   Let's use a builder approach similar to OBJ reference if possible,
-				   but here we will just push vertices and triangles.
-				*/
-
-				/*
-				   Shape builder helper is usually better.
-				   However, `Shape` class has `build` method.
-				   We will populate vectors and then let the `build` method do the job if we used the lambda approach.
-				   Alternatively, we can manually populate.
-				*/
-
-				return geometry.build([&file] (std::vector< std::pair< index_data_t, index_data_t > > & /*groups*/, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
+				/* NOTE: Each corner its own vertex, or one vertex per position when welded (ReadOptions::weldVertices). */
+				return geometry.build([&file, weldVertices] (std::vector< std::pair< index_data_t, index_data_t > > & /*groups*/, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
+					PositionWelder welder;
+					AsciiFacet facet;
 					std::string currentLine;
-					std::vector< ShapeVertex< vertex_data_t > > faceVertices;
-					Math::Vector< 3, float > normal;
 					size_t lineNumber = 0;
 
 					while ( std::getline(file, currentLine) )
 					{
 						++lineNumber;
 
-						/* Trim leading whitespace */
-						const auto first = currentLine.find_first_not_of(" \t\r");
-
-						if ( first == std::string::npos )
+						if ( !FileFormatSTL::readAsciiLine(currentLine, lineNumber, facet, weldVertices ? &welder : nullptr, vertices, triangles) )
 						{
-							continue;
-						}
-
-						if ( currentLine.compare(first, 5, "solid") == 0 )
-						{
-							continue;
-						}
-
-						if ( currentLine.compare(first, 12, "facet normal") == 0 )
-						{
-							/* "facet normal ni nj nk"
-							 * scan after "facet normal" */
-							std::array< float, 3 > values{};
-
-							if ( !parseThreeFloats(std::string_view{currentLine}.substr(first + 12), values) )
-							{
-								Logging::error("VertexFactory::FileFormatSTL", "readAscii(), line " + std::to_string(lineNumber) + ": a malformed or non-finite facet normal, the file is refused !");
-
-								return false;
-							}
-
-							normal = {values[0], values[1], values[2]};
-							faceVertices.clear();
-						}
-						else if ( currentLine.compare(first, 6, "vertex") == 0 )
-						{
-							std::array< float, 3 > values{};
-
-							if ( !parseThreeFloats(std::string_view{currentLine}.substr(first + 6), values) )
-							{
-								Logging::error("VertexFactory::FileFormatSTL", "readAscii(), line " + std::to_string(lineNumber) + ": a malformed or non-finite vertex, the file is refused !");
-
-								return false;
-							}
-
-							const auto x = values[0];
-							const auto y = values[1];
-							const auto z = values[2];
-
-							ShapeVertex< vertex_data_t > v;
-							v.setPosition(Math::Vector< 3, vertex_data_t >{static_cast< vertex_data_t >(x), static_cast< vertex_data_t >(y), static_cast< vertex_data_t >(z)});
-							v.setNormal(Math::Vector< 3, vertex_data_t >{static_cast< vertex_data_t >(normal.x()), static_cast< vertex_data_t >(normal.y()), static_cast< vertex_data_t >(normal.z())});
-
-							faceVertices.push_back(v);
-						}
-						else if ( currentLine.compare(first, 7, "endloop") == 0 )
-						{
-							/* End of a loop (face) */
-							if ( faceVertices.size() == 3 )
-							{
-								/* Add vertices to global list and create triangle */
-								/* Simple non-indexed assembly (optimizable later) */
-								auto baseIndex = static_cast< index_data_t >(vertices.size());
-
-								vertices.push_back(faceVertices[0]);
-								vertices.push_back(faceVertices[1]);
-								vertices.push_back(faceVertices[2]);
-
-								ShapeTriangle< vertex_data_t, index_data_t > tri;
-								tri.setVertexIndex(0, baseIndex);
-								tri.setVertexIndex(1, baseIndex + 1);
-								tri.setVertexIndex(2, baseIndex + 2);
-
-								triangles.push_back(tri);
-							}
+							return false;
 						}
 					}
+
 					return true;
 				}, false, false);
+			}
+
+			/** @brief The facet an ASCII file is reading: its normal and the corners met so far. */
+			struct AsciiFacet
+			{
+				Math::Vector< 3, float > normal;
+				std::vector< ShapeVertex< vertex_data_t > > corners;
+			};
+
+			/**
+			 * @brief Reads one line of an ASCII file: a facet normal starts a facet, a vertex adds a corner, an endloop adds
+			 * the triangle of a facet of three corners; any other line is skipped.
+			 * @param line A reference to the line.
+			 * @param lineNumber The line number, for the errors.
+			 * @param facet A reference to the facet being read.
+			 * @param welder A pointer to the welder, nullptr when the corners are not welded.
+			 * @param vertices A reference to the vertex list being built.
+			 * @param triangles A reference to the triangle list being built.
+			 * @return bool False when the line refuses the file.
+			 */
+			[[nodiscard]]
+			static
+			bool
+			readAsciiLine (const std::string & line, size_t lineNumber, AsciiFacet & facet, PositionWelder * welder, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			{
+				/* Trim leading whitespace */
+				const auto first = line.find_first_not_of(" \t\r");
+
+				if ( first == std::string::npos || line.compare(first, 5, "solid") == 0 )
+				{
+					return true;
+				}
+
+				std::array< float, 3 > values{};
+
+				if ( line.compare(first, 12, "facet normal") == 0 )
+				{
+					/* "facet normal ni nj nk", scanned after "facet normal". */
+					if ( !FileFormatSTL::readAsciiTriplet(std::string_view{line}.substr(first + 12), lineNumber, "facet normal", values) )
+					{
+						return false;
+					}
+
+					facet.normal = {values[0], values[1], values[2]};
+					facet.corners.clear();
+
+					return true;
+				}
+
+				if ( line.compare(first, 6, "vertex") == 0 )
+				{
+					if ( !FileFormatSTL::readAsciiTriplet(std::string_view{line}.substr(first + 6), lineNumber, "vertex", values) )
+					{
+						return false;
+					}
+
+					ShapeVertex< vertex_data_t > vertex;
+					vertex.setPosition(Math::Vector< 3, vertex_data_t >{static_cast< vertex_data_t >(values[0]), static_cast< vertex_data_t >(values[1]), static_cast< vertex_data_t >(values[2])});
+					vertex.setNormal(Math::Vector< 3, vertex_data_t >{static_cast< vertex_data_t >(facet.normal.x()), static_cast< vertex_data_t >(facet.normal.y()), static_cast< vertex_data_t >(facet.normal.z())});
+
+					facet.corners.push_back(vertex);
+
+					return true;
+				}
+
+				/* End of a loop (face). */
+				if ( line.compare(first, 7, "endloop") == 0 && facet.corners.size() == 3 )
+				{
+					FileFormatSTL::addFacet(facet.corners, welder, vertices, triangles);
+				}
+
+				return true;
+			}
+
+			/**
+			 * @brief Reads the three floats of an ASCII line, the file refused with an error otherwise.
+			 * @param text The text after the keyword.
+			 * @param lineNumber The line number, for the error.
+			 * @param what What the line holds, for the error ("vertex", "facet normal").
+			 * @param values A reference to the three values.
+			 * @return bool
+			 */
+			[[nodiscard]]
+			static
+			bool
+			readAsciiTriplet (std::string_view text, size_t lineNumber, const char * what, std::array< float, 3 > & values) noexcept
+			{
+				if ( parseThreeFloats(text, values) )
+				{
+					return true;
+				}
+
+				Logging::error("VertexFactory::FileFormatSTL", "readAscii(), line " + std::to_string(lineNumber) + ": a malformed or non-finite " + what + ", the file is refused !");
+
+				return false;
+			}
+
+			/**
+			 * @brief Adds the triangle of an ASCII facet.
+			 * @param faceVertices A reference to the facet's three corners, its normal in each.
+			 * @param welder A pointer to the welder, nullptr when the corners are not welded (each its own vertex, with
+			 * its facet's normal).
+			 * @param vertices A reference to the vertex list being built.
+			 * @param triangles A reference to the triangle list being built.
+			 */
+			static
+			void
+			addFacet (const std::vector< ShapeVertex< vertex_data_t > > & faceVertices, PositionWelder * welder, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) noexcept
+			{
+				if ( welder != nullptr )
+				{
+					triangles.emplace_back(welder->weld(vertices, faceVertices[0].position()), welder->weld(vertices, faceVertices[1].position()), welder->weld(vertices, faceVertices[2].position()));
+
+					return;
+				}
+
+				const auto baseIndex = static_cast< index_data_t >(vertices.size());
+
+				vertices.push_back(faceVertices[0]);
+				vertices.push_back(faceVertices[1]);
+				vertices.push_back(faceVertices[2]);
+
+				triangles.emplace_back(baseIndex, baseIndex + 1, baseIndex + 2);
 			}
 
 			/**
 			 * @brief Reads a Binary STL file.
 			 * @param file A reference to the input stream.
 			 * @param geometry A reference to the geometry to fill.
+			 * @param weldVertices Welds the corners sharing a position (ReadOptions::weldVertices).
 			 * @return bool
 			 */
+			[[nodiscard]]
+			static
 			bool
-			readBinary (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry) noexcept
+			readBinary (std::istream & file, Shape< vertex_data_t, index_data_t > & geometry, bool weldVertices) noexcept
 			{
 				/* Skip header */
 				file.seekg(80);
@@ -511,10 +709,15 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-				return geometry.build([&file, triangleCount] (std::vector< std::pair< index_data_t, index_data_t > > & /*groups*/, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
-					/* Optimize allocation */
-					vertices.reserve(static_cast< std::size_t >(triangleCount) * 3);
+				return geometry.build([&file, triangleCount, weldVertices] (std::vector< std::pair< index_data_t, index_data_t > > & /*groups*/, std::vector< ShapeVertex< vertex_data_t > > & vertices, std::vector< ShapeTriangle< vertex_data_t, index_data_t > > & triangles) {
+					/* NOTE: A closed mesh has half as many positions as triangles, plus two per body (measured: 3 896 890 for
+					 * 7 793 740 triangles); 1/16 more covers small boundaries and seams, without which the list doubles
+					 * (+223 MiB on that file). Unwelded, three vertices a triangle. */
+					const auto count = static_cast< std::size_t >(triangleCount);
+					vertices.reserve(weldVertices ? (count / 2) + (count / 16) + 64 : count * 3);
 					triangles.reserve(triangleCount);
+
+					PositionWelder welder;
 
 					/* One record: the normal (3 floats), the 3 vertices (9 floats), the attribute byte count (2 bytes). */
 					std::array< char, 50 > record{};
@@ -528,7 +731,25 @@ namespace EmEn::Base::VertexFactory
 							return false;
 						}
 
-						auto baseIndex = static_cast< index_data_t >(vertices.size());
+						const auto cornerPosition = [&record] (size_t corner) noexcept {
+							const auto first = 3 + (corner * 3);
+
+							return Math::Vector< 3, vertex_data_t >{
+								static_cast< vertex_data_t >(readFloat(record, first)),
+								static_cast< vertex_data_t >(readFloat(record, first + 1)),
+								static_cast< vertex_data_t >(readFloat(record, first + 2))
+							};
+						};
+
+						if ( weldVertices )
+						{
+							triangles.emplace_back(welder.weld(vertices, cornerPosition(0)), welder.weld(vertices, cornerPosition(1)), welder.weld(vertices, cornerPosition(2)));
+
+							continue;
+						}
+
+						/* Every corner its own vertex, with its facet's normal. */
+						const auto baseIndex = static_cast< index_data_t >(vertices.size());
 
 						const Math::Vector< 3, vertex_data_t > normal = {
 							static_cast< vertex_data_t >(readFloat(record, 0)),
@@ -538,23 +759,12 @@ namespace EmEn::Base::VertexFactory
 
 						for ( size_t corner = 0; corner < 3; ++corner )
 						{
-							const auto first = 3 + (corner * 3);
-
-							ShapeVertex< vertex_data_t > sv;
-							sv.setPosition(Math::Vector< 3, vertex_data_t >{
-								static_cast< vertex_data_t >(readFloat(record, first)),
-								static_cast< vertex_data_t >(readFloat(record, first + 1)),
-								static_cast< vertex_data_t >(readFloat(record, first + 2))
-							});
-							sv.setNormal(normal);
-							vertices.push_back(sv);
+							ShapeVertex< vertex_data_t > vertex{cornerPosition(corner)};
+							vertex.setNormal(normal);
+							vertices.push_back(vertex);
 						}
 
-						ShapeTriangle< vertex_data_t, index_data_t > tri;
-						tri.setVertexIndex(0, baseIndex);
-						tri.setVertexIndex(1, baseIndex + 1);
-						tri.setVertexIndex(2, baseIndex + 2);
-						triangles.push_back(tri);
+						triangles.emplace_back(baseIndex, baseIndex + 1, baseIndex + 2);
 					}
 
 					return true;

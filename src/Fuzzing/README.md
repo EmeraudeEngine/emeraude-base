@@ -70,7 +70,7 @@ Targets:
 | `fuzz_targa`      | `PixelFactory::FileFormatTarga` (hand-rolled RLE/raw) |
 | `fuzz_hdr`        | `PixelFactory::FileFormatHDR` (hand-rolled Radiance RGBE: adaptive RLE, flat, legacy RLE) |
 | `fuzz_native`     | `VertexFactory::FileFormatNative` (ee3d binary)     |
-| `fuzz_stl`        | `VertexFactory::FileFormatSTL` (binary + ASCII)     |
+| `fuzz_stl`        | `VertexFactory::FileFormatSTL` (binary + ASCII), read as is then welded (`weldVertices` + `requestNormal`) |
 | `fuzz_mdx`        | `VertexFactory::FileFormatMDx` (MDL/MD2/MD3/MD5)    |
 | `fuzz_compression`| `Compression::LZMA` + `Compression::ZLIB` decompressors |
 | `fuzz_ini`        | `INIParser` (via a per-process temp file)           |

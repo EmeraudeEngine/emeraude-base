@@ -2,7 +2,7 @@
 
 | File | Description |
 |------|-------------|
-| `Shape.hpp` | Mesh container (vertices, triangles, colors, layers, AABB) |
+| `Shape.hpp` | Mesh container (vertices, triangles, colors, layers, AABB; the skinning and the triangles' color and edge indexes as tables) |
 | `ShapeVertex.hpp` / `ShapeTriangle.hpp` / `ShapeEdge.hpp` | Mesh primitives |
 | `ShapeBuilder.hpp` / `ShapeBuilderOptions.hpp` | Primary construction API + options |
 | `ShapeGenerator.hpp` / `Grid.hpp` | Procedural primitives and grids |
@@ -21,7 +21,7 @@
 | `FileIO.hpp` | File-backed format dispatcher by extension (IO::FileStream) |
 | `StreamIO.hpp` | Memory buffer I/O, explicit `FileFormatType` (IO::MemoryStream) |
 | `FileFormatInterface.hpp` | Abstract base + `FileFormatType`, `ReadOptions`, `WriteOptions` |
-| `FileFormatNative.hpp` | Native `EE3D_V1` binary (read/write) |
+| `FileFormatNative.hpp` | Native `EE3D_V1` binary (read/write; version 4 written, 2 and 3 read) |
 | `FileFormatOBJ.hpp` | Wavefront OBJ text (read/write) |
 | `FileFormatSTL.hpp` | Stereolithography binary/ASCII (read/write) |
 | `FileFormatMDx.hpp` | id Tech MDL/MD2/MD3/MD5 (read-only) |

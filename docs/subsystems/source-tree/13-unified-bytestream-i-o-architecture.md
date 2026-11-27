@@ -83,9 +83,11 @@ read), and the readers' fallback tests (`VertexFactoryOBJ.aStreamThatCannotSeekI
 `VertexFactorySTL.aStreamThatCannotSeekIsReadWhole`, `VertexFactoryMDx.md3NormalsFollowQuake3`) through
 `Testing/StreamDoubles.hpp`.
 
-What still dominates the peak once the file is no longer held: the read buffer itself (one × the file), the reader's staging
-tables, and the `Shape` (`ShapeVertex` 92 bytes, `ShapeTriangle` 64 bytes — 818 MiB of the 1163 on that OBJ; on the
-STL above, whose reader does not weld the corners, 23.4 M vertices: about 2 GiB of `ShapeVertex`).
+What still dominates the peak once the file is no longer held is the `Shape`. **Then the compact records (2026-11-26,
+owner decision):** the skinning and the triangles' color and edge indexes became tables of the Shape, allocated only
+when used (`ShapeVertex` 92 → 60 bytes, `ShapeTriangle` 64 → 40): the 312 MB OBJ **524 MiB** (818 → 520 MiB of
+`Shape`), the 390 MB STL **1640 MiB**, and **557 MiB** with `ReadOptions::weldVertices` (3.9 M vertices instead of
+23.4 M; opt-in, 1.5 s instead of 0.46). Details: `docs/subsystems/vertexfactory/02-architecture.md` § Shape, § FileFormatSTL.
 
 ### Whole files and byte ranges (`IO/IO.hpp`)
 

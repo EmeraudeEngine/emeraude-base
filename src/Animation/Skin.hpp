@@ -29,6 +29,8 @@
 /* STL inclusions. */
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 /* Local inclusions. */
@@ -49,7 +51,7 @@ namespace EmEn::Base::Animation
 	 * The vertex attributes JOINTS_0 contain indices into the skin's joint array, NOT the skeleton's global array.
 	 * The Skin provides the indirection.
 	 *
-	 * Vertex weights are already stored in ShapeVertex (m_influences + m_weights, 4 per vertex).
+	 * The vertex influences and weights (4 per vertex) are tables of the Shape (Shape::vertexInfluences(), Shape::vertexWeights()).
 	 *
 	 * @tparam precision_t Floating point type. Default float.
 	 */

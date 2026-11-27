@@ -27,6 +27,7 @@
 #pragma once
 
 /* STL inclusions. */
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <vector>
@@ -127,8 +128,10 @@ namespace EmEn::Base::VertexFactory
 					builder.newGroup();
 				}
 
-				for ( const auto & triangle : sourceShape.triangles() )
+				for ( size_t triangleIndex = 0; triangleIndex < sourceShape.triangles().size(); ++triangleIndex )
 				{
+					const auto & triangle = sourceShape.triangles()[triangleIndex];
+
 					for ( index_data_t vertexIndex = 0; vertexIndex < 3; ++vertexIndex )
 					{
 						const auto & vertex = sourceShape.vertex(triangle.vertexIndex(vertexIndex));
@@ -136,7 +139,7 @@ namespace EmEn::Base::VertexFactory
 						builder.setPosition(vertex.position());
 						builder.setNormal(vertex.normal());
 						builder.setTextureCoordinates(vertex.textureCoordinates());
-						builder.setVertexColor(sourceShape.vertexColor(triangle.vertexColorIndex(vertexIndex)));
+						builder.setVertexColor(sourceShape.vertexColor(sourceShape.triangleVertexColorIndex(static_cast< index_data_t >(triangleIndex), vertexIndex)));
 						builder.newVertex();
 					}
 				}
@@ -172,8 +175,10 @@ namespace EmEn::Base::VertexFactory
 				/* Remove translation from the incoming matrix. */
 				const auto noTranslate = transform.noTranslation();
 
-				for ( const auto & triangle : sourceShape.triangles() )
+				for ( size_t triangleIndex = 0; triangleIndex < sourceShape.triangles().size(); ++triangleIndex )
 				{
+					const auto & triangle = sourceShape.triangles()[triangleIndex];
+
 					for ( index_data_t vertexIndex = 0; vertexIndex < 3; ++vertexIndex )
 					{
 						const auto & vertex = sourceShape.vertex(triangle.vertexIndex(vertexIndex));
@@ -181,7 +186,7 @@ namespace EmEn::Base::VertexFactory
 						builder.setPosition((transform * Math::Vector< 4, vertex_data_t >(vertex.position(), 1)).toVector3());
 						builder.setNormal((noTranslate * Math::Vector< 4, vertex_data_t >(vertex.normal(), 0)).toVector3().normalize());
 						builder.setTextureCoordinates(vertex.textureCoordinates());
-						builder.setVertexColor(sourceShape.vertexColor(triangle.vertexColorIndex(vertexIndex)));
+						builder.setVertexColor(sourceShape.vertexColor(sourceShape.triangleVertexColorIndex(static_cast< index_data_t >(triangleIndex), vertexIndex)));
 						builder.newVertex();
 					}
 				}

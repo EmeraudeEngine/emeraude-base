@@ -33,7 +33,6 @@
 #include <cstdint>
 #include <cstring>
 #include <functional>
-#include <iostream>
 #include <limits>
 #include <memory>
 #include <memory_resource>
@@ -46,7 +45,6 @@
 
 /* Local inclusions for usages. */
 #include "FlatHashMap.hpp"
-#include "Math/Base.hpp"
 #include "Math/Vector.hpp"
 #include "PixelFactory/Color.hpp"
 #include "PixelFactory/Pixmap.hpp"
@@ -1173,7 +1171,6 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
-
 				for ( const auto & tri : triangles )
 				{
 					if ( this->checkpoint(iteration) )
@@ -1848,11 +1845,9 @@ namespace EmEn::Base::VertexFactory
 					const auto c2 = output.saveVertexColor({});
 
 					ShapeTriangle< vertex_data_t, index_data_t > outTri(dv0, dv1, dv2);
-					outTri.setVertexColorIndex(0, c0);
-					outTri.setVertexColorIndex(1, c1);
-					outTri.setVertexColorIndex(2, c2);
 
 					output.triangles().emplace_back(outTri);
+					output.setTriangleVertexColorIndexes(static_cast< index_data_t >(output.triangles().size() - 1), {c0, c1, c2});
 
 					/* Track group transitions. */
 					if ( tri.groupIndex != currentGroup )

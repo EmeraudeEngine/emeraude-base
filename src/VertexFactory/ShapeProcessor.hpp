@@ -34,7 +34,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <iterator>
 #include <limits>
 #include <numbers>
@@ -238,8 +237,9 @@ namespace EmEn::Base::VertexFactory
 					return 0;
 				}
 
-				/* Replace the vertex array. */
+				/* Replace the vertex array; the skinning table follows the renumbering. */
 				m_shape.vertices() = std::move(newVertices);
+				m_shape.remapVertexAttributes(remapping);
 
 				/* Remap all triangle vertex indices. */
 				for ( auto & tri : m_shape.triangles() )
@@ -776,13 +776,11 @@ namespace EmEn::Base::VertexFactory
 					const auto cC = m_shape.saveVertexColor({});
 
 					ShapeTriangle< vertex_data_t, index_data_t > triangle(vA, vB, vC);
-					triangle.setVertexColorIndex(0, cA);
-					triangle.setVertexColorIndex(1, cB);
-					triangle.setVertexColorIndex(2, cC);
 					triangle.setSurfaceNormal(capNormal);
 					triangle.setSurfaceTangent(axisU);
 
 					m_shape.triangles().emplace_back(triangle);
+					m_shape.setTriangleVertexColorIndexes(static_cast< index_data_t >(m_shape.triangles().size() - 1), {cA, cB, cC});
 
 					auto & groups = m_shape.groups();
 

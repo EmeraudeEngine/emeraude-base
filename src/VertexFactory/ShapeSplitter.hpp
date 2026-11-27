@@ -29,18 +29,23 @@
 /* STL inclusions. */
 #include <algorithm>
 #include <cassert>
-#include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <queue>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 /* Local inclusions for usages. */
 #include "Math/Plane.hpp"
+#include "Math/Vector.hpp"
 #include "Shape.hpp"
 #include "ShapeProcessor.hpp"
+#include "VertexFactory/ShapeTriangle.hpp"
 
 namespace EmEn::Base::VertexFactory
 {
@@ -263,6 +268,8 @@ namespace EmEn::Base::VertexFactory
 				Math::Vector< 4, vertex_data_t > color;
 				/* A sign, not a direction: it is taken from the nearer endpoint, like the influences. */
 				vertex_data_t tangentHandedness{1};
+				/* Whether the source carries skinning: the influences and weights above are then set on the new vertex. */
+				bool skinned{false};
 			};
 
 			struct OutputContext
@@ -326,14 +333,11 @@ namespace EmEn::Base::VertexFactory
 
 				ctx.shape->vertices()[dstIdx].setTangent(srcVertex.tangent());
 				ctx.shape->vertices()[dstIdx].setTangentHandedness(srcVertex.tangentHandedness());
-				ctx.shape->vertices()[dstIdx].setInfluences(
-					srcVertex.influences()[Math::X], srcVertex.influences()[Math::Y],
-					srcVertex.influences()[Math::Z], srcVertex.influences()[Math::W]
-				);
-				ctx.shape->vertices()[dstIdx].setWeights(
-					srcVertex.weights()[Math::X], srcVertex.weights()[Math::Y],
-					srcVertex.weights()[Math::Z], srcVertex.weights()[Math::W]
-				);
+
+				if ( source.isSkinningAvailable() )
+				{
+					ctx.shape->setVertexSkinning(dstIdx, source.vertexInfluences(srcVertexIdx), source.vertexWeights(srcVertexIdx));
+				}
 
 				ctx.vertexCache[srcVertexIdx] = dstIdx;
 
@@ -382,14 +386,11 @@ namespace EmEn::Base::VertexFactory
 
 				ctx.shape->vertices()[dstIdx].setTangent(attrs.tangent);
 				ctx.shape->vertices()[dstIdx].setTangentHandedness(attrs.tangentHandedness);
-				ctx.shape->vertices()[dstIdx].setInfluences(
-					attrs.influences[Math::X], attrs.influences[Math::Y],
-					attrs.influences[Math::Z], attrs.influences[Math::W]
-				);
-				ctx.shape->vertices()[dstIdx].setWeights(
-					attrs.weights[Math::X], attrs.weights[Math::Y],
-					attrs.weights[Math::Z], attrs.weights[Math::W]
-				);
+
+				if ( attrs.skinned )
+				{
+					ctx.shape->setVertexSkinning(dstIdx, attrs.influences, attrs.weights);
+				}
 
 				ctx.edgeCache[edgeKey] = dstIdx;
 
@@ -418,13 +419,11 @@ namespace EmEn::Base::VertexFactory
 				}
 
 				ShapeTriangle< vertex_data_t, index_data_t > triangle(v0, v1, v2);
-				triangle.setVertexColorIndex(0, c0);
-				triangle.setVertexColorIndex(1, c1);
-				triangle.setVertexColorIndex(2, c2);
 				triangle.setSurfaceNormal(surfaceNormal);
 				triangle.setSurfaceTangent(surfaceTangent);
 
 				ctx.shape->triangles().emplace_back(triangle);
+				ctx.shape->setTriangleVertexColorIndexes(static_cast< index_data_t >(ctx.shape->triangles().size() - 1), {c0, c1, c2});
 
 				if ( auto & groups = ctx.shape->groups(); groups.empty() )
 				{
@@ -438,15 +437,17 @@ namespace EmEn::Base::VertexFactory
 
 			static
 			void
-			emitSourceTriangle (const Shape< vertex_data_t, index_data_t > & source, const ShapeTriangle< vertex_data_t, index_data_t > & tri, int groupIndex, OutputContext & ctx) noexcept
+			emitSourceTriangle (const Shape< vertex_data_t, index_data_t > & source, index_data_t triangleIndex, int groupIndex, OutputContext & ctx) noexcept
 			{
+				const auto & tri = source.triangles()[triangleIndex];
+
 				const auto v0 = getOrCopyVertex(source, tri.vertexIndex(0), ctx);
 				const auto v1 = getOrCopyVertex(source, tri.vertexIndex(1), ctx);
 				const auto v2 = getOrCopyVertex(source, tri.vertexIndex(2), ctx);
 
-				const auto c0 = getOrCopyColor(source, tri.vertexColorIndex(0), ctx);
-				const auto c1 = getOrCopyColor(source, tri.vertexColorIndex(1), ctx);
-				const auto c2 = getOrCopyColor(source, tri.vertexColorIndex(2), ctx);
+				const auto c0 = getOrCopyColor(source, source.triangleVertexColorIndex(triangleIndex, 0), ctx);
+				const auto c1 = getOrCopyColor(source, source.triangleVertexColorIndex(triangleIndex, 1), ctx);
+				const auto c2 = getOrCopyColor(source, source.triangleVertexColorIndex(triangleIndex, 2), ctx);
 
 				emitTriangle(ctx, groupIndex, v0, v1, v2, c0, c1, c2, tri.surfaceNormal(), tri.surfaceTangent());
 			}
@@ -464,7 +465,7 @@ namespace EmEn::Base::VertexFactory
 				{
 					const auto groupIdx = (triIdx < groupLookup.size()) ? groupLookup[triIdx] : 0;
 
-					emitSourceTriangle(source, source.triangles()[triIdx], groupIdx, ctx);
+					emitSourceTriangle(source, static_cast< index_data_t >(triIdx), groupIdx, ctx);
 				}
 
 				if ( !output.empty() )
@@ -490,8 +491,9 @@ namespace EmEn::Base::VertexFactory
 				result.textureCoordinates = vertA.textureCoordinates() + (vertB.textureCoordinates() - vertA.textureCoordinates()) * t;
 				result.normal = (vertA.normal() + ((vertB.normal() - vertA.normal()) * t)).normalized();
 				result.tangent = (vertA.tangent() + ((vertB.tangent() - vertA.tangent()) * t)).normalized();
-				result.weights = vertA.weights() + (vertB.weights() - vertA.weights()) * t;
-				result.influences = (t < static_cast< vertex_data_t >(0.5)) ? vertA.influences() : vertB.influences();
+				result.weights = m_source.vertexWeights(idxA) + ((m_source.vertexWeights(idxB) - m_source.vertexWeights(idxA)) * t);
+				result.influences = (t < static_cast< vertex_data_t >(0.5)) ? m_source.vertexInfluences(idxA) : m_source.vertexInfluences(idxB);
+				result.skinned = m_source.isSkinningAvailable();
 				result.tangentHandedness = (t < static_cast< vertex_data_t >(0.5)) ? vertA.tangentHandedness() : vertB.tangentHandedness();
 
 				if ( !m_source.vertexColors().empty() )
@@ -506,7 +508,7 @@ namespace EmEn::Base::VertexFactory
 			}
 
 			void
-			handleEdgeCaseTriangle (const ShapeTriangle< vertex_data_t, index_data_t > & tri, const index_data_t vIdx[3], const index_data_t cIdx[3], const vertex_data_t dist[3], const int side[3], int groupIndex, OutputContext & frontCtx, OutputContext & backCtx, std::unordered_map< EdgeKey, InterpolatedAttributes, EdgeKeyHash > & attrCache) const noexcept
+			handleEdgeCaseTriangle (index_data_t triangleIndex, const index_data_t vIdx[3], const index_data_t cIdx[3], const vertex_data_t dist[3], const int side[3], int groupIndex, OutputContext & frontCtx, OutputContext & backCtx, std::unordered_map< EdgeKey, InterpolatedAttributes, EdgeKeyHash > & attrCache) const noexcept
 			{
 				int onPlane = -1;
 				int pos = -1;
@@ -532,11 +534,11 @@ namespace EmEn::Base::VertexFactory
 				{
 					if ( pos != -1 )
 					{
-						emitSourceTriangle(m_source, tri, groupIndex, frontCtx);
+						emitSourceTriangle(m_source, triangleIndex, groupIndex, frontCtx);
 					}
 					else
 					{
-						emitSourceTriangle(m_source, tri, groupIndex, backCtx);
+						emitSourceTriangle(m_source, triangleIndex, groupIndex, backCtx);
 					}
 
 					return;
@@ -544,7 +546,7 @@ namespace EmEn::Base::VertexFactory
 
 				if ( onPlane == -1 || pos == -1 || neg == -1 )
 				{
-					emitSourceTriangle(m_source, tri, groupIndex, frontCtx);
+					emitSourceTriangle(m_source, triangleIndex, groupIndex, frontCtx);
 					return;
 				}
 
@@ -1031,7 +1033,8 @@ namespace EmEn::Base::VertexFactory
 					const auto groupIdx = (triIdx < groupLookup.size()) ? groupLookup[triIdx] : 0;
 
 					const index_data_t vIdx[3] = { tri.vertexIndex(0), tri.vertexIndex(1), tri.vertexIndex(2) };
-					const index_data_t cIdx[3] = { tri.vertexColorIndex(0), tri.vertexColorIndex(1), tri.vertexColorIndex(2) };
+					const auto sourceIndex = static_cast< index_data_t >(triIdx);
+					const index_data_t cIdx[3] = { m_source.triangleVertexColorIndex(sourceIndex, 0), m_source.triangleVertexColorIndex(sourceIndex, 1), m_source.triangleVertexColorIndex(sourceIndex, 2) };
 
 					vertex_data_t dist[3];
 					int side[3];
@@ -1073,7 +1076,7 @@ namespace EmEn::Base::VertexFactory
 					/* Case 1: Entirely on front. */
 					if ( backCount == 0 )
 					{
-						emitSourceTriangle(m_source, tri, groupIdx, frontCtx);
+						emitSourceTriangle(m_source, sourceIndex, groupIdx, frontCtx);
 						anyFront = true;
 
 						continue;
@@ -1082,7 +1085,7 @@ namespace EmEn::Base::VertexFactory
 					/* Case 2: Entirely on back. */
 					if ( frontCount == 0 )
 					{
-						emitSourceTriangle(m_source, tri, groupIdx, backCtx);
+						emitSourceTriangle(m_source, sourceIndex, groupIdx, backCtx);
 						anyBack = true;
 
 						continue;
@@ -1091,7 +1094,7 @@ namespace EmEn::Base::VertexFactory
 					/* Case 3: All vertices on the plane — assign to front. */
 					if ( side[0] == 0 && side[1] == 0 && side[2] == 0 )
 					{
-						emitSourceTriangle(m_source, tri, groupIdx, frontCtx);
+						emitSourceTriangle(m_source, sourceIndex, groupIdx, frontCtx);
 						anyFront = true;
 
 						continue;
@@ -1128,7 +1131,7 @@ namespace EmEn::Base::VertexFactory
 
 					if ( loneLocal == -1 )
 					{
-						this->handleEdgeCaseTriangle(tri, vIdx, cIdx, dist, side, groupIdx, frontCtx, backCtx, attrCache);
+						this->handleEdgeCaseTriangle(sourceIndex, vIdx, cIdx, dist, side, groupIdx, frontCtx, backCtx, attrCache);
 
 						continue;
 					}

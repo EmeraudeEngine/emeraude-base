@@ -11,10 +11,16 @@
   is deliberately no version-1 read path — the format had no users yet (owner decision), and a loud
   refusal beats a plausible misparse. **Version 3 (2026-10-03)** appends the secondary texture
   coordinates LAST (92 bytes, `Vector< 2 >`): a version-2 record is then the exact prefix of a
-  version-3 one, so version 2 is still read (the secondary set at (0, 0)). `FileFormatNative`'s
-  `static_assert` pins that prefix. ⚠️ A future member must also go LAST to keep that property.
+  version-3 one, so version 2 is still read (the secondary set at (0, 0)). **Version 4 (2026-11-26)** takes the
+  skinning out of the vertex (92 → 60 bytes) and the color and edge indexes out of the triangle (64 → 40), into
+  optional tables after the colors (02-architecture § FileFormatNative); versions 2 and 3 are read through their former
+  records, kept in the reader (`LegacyVertex`, `LegacyTriangle`), so the prefix trick no longer constrains
+  `ShapeVertex`. `FileFormatNative`'s `static_assert`s pin both the legacy prefix and the version-4 record sizes, the
+  tests `VertexFactoryShapeVertex.sizeIsPinnedBecauseTheNativeFormatIsARawBlob` (60) and
+  `VertexFactoryNative.triangleRecordSizeIsPinned` (40).
 - **The secondary texture coordinates** (`ShapeVertex::secondaryTextureCoordinates()`, glTF's
-  `TEXCOORD_1`, owner 2026-10-03: a field, not a side array). Every vertex pays 8 bytes; every
+  `TEXCOORD_1`, owner 2026-10-03: a field, not a side array — **confirmed 2026-11-26** when the skinning and the
+  triangles' color and edge indexes became tables of the Shape: the second set stays in the vertex). Every vertex pays 8 bytes; every
   algorithm that copies a vertex carries them. `flipTextureV()` negates both sets (a file format's V
   convention applies to every set). `ShapeProcessor::deduplicateVertices()` keys on them: without
   that, it merged vertices differing only in their second unwrap (test
@@ -96,7 +102,7 @@
   is kept). Measured: the temple's black pixels 16.7 % → 7.0 % of its box (the rest is the night through the
   arches). Every OBJ of the data stores with hard edges or seams now loads its own normals and UVs: a look change
   for the better, and slightly more vertices (the seams are duplicated, as the GPU needs them).
-- **An unused influence slot is `-1` in a `ShapeVertex`, and matrix 0 in a vertex buffer** (2026-11-16, owner
+- **An unused influence slot is `-1` in the Shape's skinning table (in a `ShapeVertex` until 2026-11-26), and matrix 0 in a vertex buffer** (2026-11-16, owner
   decision). `Shape::writeInfluenceToVertexBuffer()` writes `max(influence, 0)`. A vertex buffer is read by shaders,
   which index the skinning matrices with EVERY slot, used or not: the `-1` it used to write made a consumer read
   before its matrices — a storage buffer read out of bounds, reported on a hardware device by the GPU-assisted

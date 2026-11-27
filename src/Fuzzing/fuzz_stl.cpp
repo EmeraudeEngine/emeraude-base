@@ -3,7 +3,8 @@
  * This file is part of Emeraude-Base
  *
  * libFuzzer target for the VertexFactory STL parser (Ave robustus! — A.3).
- * Feeds arbitrary bytes through FileFormatSTL::readStream (binary + ASCII STL) under ASan/UBSan.
+ * Feeds arbitrary bytes through FileFormatSTL::readStream (binary + ASCII STL) under ASan/UBSan, as read and welded
+ * (ReadOptions::weldVertices with requestNormal, 2026-11-26: the welder's table and the smooth normals).
  */
 
 /* STL inclusions. */
@@ -26,11 +27,25 @@ LLVMFuzzerTestOneInput (const uint8_t * data, size_t size)
 		reinterpret_cast< const std::byte * >(data) + size
 	};
 
-	IO::MemoryStream stream{buffer};
 	VertexFactory::FileFormatSTL< float, uint32_t > format;
-	VertexFactory::ShapeLoadResult< float, uint32_t > result;
 
-	(void)format.readStream(stream, result, {});
+	{
+		IO::MemoryStream stream{buffer};
+		VertexFactory::ShapeLoadResult< float, uint32_t > result;
+
+		(void)format.readStream(stream, result, {});
+	}
+
+	{
+		VertexFactory::ReadOptions options{};
+		options.weldVertices = true;
+		options.requestNormal = true;
+
+		IO::MemoryStream stream{buffer};
+		VertexFactory::ShapeLoadResult< float, uint32_t > result;
+
+		(void)format.readStream(stream, result, options);
+	}
 
 	return 0;
 }

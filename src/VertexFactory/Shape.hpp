@@ -221,6 +221,7 @@ namespace EmEn::Base::VertexFactory
 				m_vertices.resize(positionsCount);
 				m_vertexColors.resize(vertexColorsCount);
 				m_triangles.resize(facesCount);
+				this->alignAttributeTables();
 				m_edges.resize(edgesCount);
 				m_unpairedEdges.clear();
 				m_vertexIndex.clear();
@@ -237,6 +238,10 @@ namespace EmEn::Base::VertexFactory
 				m_vertices.clear();
 				m_vertexColors.clear();
 				m_triangles.clear();
+				m_vertexInfluences.clear();
+				m_vertexWeights.clear();
+				m_triangleVertexColorIndexes.clear();
+				m_triangleEdgeIndexes.clear();
 				m_edges.clear();
 				m_unpairedEdges.clear();
 				m_vertexIndex.clear();
@@ -353,6 +358,166 @@ namespace EmEn::Base::VertexFactory
 			vertexColor (index_data_t index) const noexcept
 			{
 				return m_vertexColors[index];
+			}
+
+			/**
+			 * @brief Returns whether the shape carries skinning: the bone influences and weights of its vertices
+			 * (setVertexSkinning()).
+			 * @return bool
+			 */
+			[[nodiscard]]
+			bool
+			isSkinningAvailable () const noexcept
+			{
+				return !m_vertexInfluences.empty();
+			}
+
+			/**
+			 * @brief Returns the four bone influences of a vertex, -1 for an unused slot.
+			 * @note (-1, -1, -1, -1) for a shape without skinning or a vertex past the table.
+			 * @param vertexIndex The index of the vertex.
+			 * @return const Math::Vector< 4, int32_t > &
+			 */
+			[[nodiscard]]
+			const Math::Vector< 4, int32_t > &
+			vertexInfluences (index_data_t vertexIndex) const noexcept
+			{
+				return vertexIndex < m_vertexInfluences.size() ? m_vertexInfluences[vertexIndex] : Shape::noInfluences();
+			}
+
+			/**
+			 * @brief Returns the four bone weights of a vertex.
+			 * @note (0, 0, 0, 0) for a shape without skinning or a vertex past the table.
+			 * @param vertexIndex The index of the vertex.
+			 * @return const Math::Vector< 4, vertex_data_t > &
+			 */
+			[[nodiscard]]
+			const Math::Vector< 4, vertex_data_t > &
+			vertexWeights (index_data_t vertexIndex) const noexcept
+			{
+				return vertexIndex < m_vertexWeights.size() ? m_vertexWeights[vertexIndex] : Shape::noWeights();
+			}
+
+			/**
+			 * @brief Sets the skinning of a vertex: its four bone influences and their weights.
+			 * @note -1 marks an unused slot, on the CPU side only: a vertex buffer names matrix 0 there
+			 * (writeInfluenceToVertexBuffer()), so an unused slot must keep a zero weight.
+			 * @note The first call that is not the defaults allocates the table for every vertex ((-1, -1, -1, -1), zero
+			 * weights); it follows the vertex count from then on (a vertex added later gets the defaults). Setting the
+			 * defaults on a shape without the table allocates nothing: such a shape stays without skinning.
+			 * @param vertexIndex The index of the vertex.
+			 * @param influences A reference to the four bone indices.
+			 * @param weights A reference to the four weights.
+			 */
+			void
+			setVertexSkinning (index_data_t vertexIndex, const Math::Vector< 4, int32_t > & influences, const Math::Vector< 4, vertex_data_t > & weights) noexcept
+			{
+				if ( m_vertexInfluences.empty() && influences == Shape::noInfluences() && weights == Shape::noWeights() )
+				{
+					return;
+				}
+
+				const auto required = std::max(m_vertices.size(), static_cast< size_t >(vertexIndex) + 1);
+
+				if ( m_vertexInfluences.size() < required )
+				{
+					m_vertexInfluences.resize(required, Shape::noInfluences());
+					m_vertexWeights.resize(required, Shape::noWeights());
+				}
+
+				m_vertexInfluences[vertexIndex] = influences;
+				m_vertexWeights[vertexIndex] = weights;
+			}
+
+			/**
+			 * @brief Returns the vertex color index of a triangle corner: an index into vertexColors().
+			 * @note 0 for a shape whose triangles name no color, or a triangle past the table.
+			 * @param triangleIndex The index of the triangle.
+			 * @param corner The corner, 0 to 2.
+			 * @return index_data_t
+			 */
+			[[nodiscard]]
+			index_data_t
+			triangleVertexColorIndex (index_data_t triangleIndex, index_data_t corner) const noexcept
+			{
+				return Shape::cornerSlot(triangleIndex, corner) < m_triangleVertexColorIndexes.size() ? m_triangleVertexColorIndexes[Shape::cornerSlot(triangleIndex, corner)] : index_data_t{0};
+			}
+
+			/**
+			 * @brief Sets the vertex color indexes of a triangle's three corners.
+			 * @note The first call that is not (0, 0, 0) allocates the table for every triangle (0, 0, 0); it follows the
+			 * triangle count from then on. Setting (0, 0, 0) on a shape without the table allocates nothing.
+			 * @param triangleIndex The index of the triangle.
+			 * @param colorIndexes A reference to the color indexes of the three corners, in corner order.
+			 */
+			void
+			setTriangleVertexColorIndexes (index_data_t triangleIndex, const std::array< index_data_t, 3 > & colorIndexes) noexcept
+			{
+				if ( m_triangleVertexColorIndexes.empty() && colorIndexes == std::array< index_data_t, 3 >{0, 0, 0} )
+				{
+					return;
+				}
+
+				const auto required = std::max(m_triangles.size(), static_cast< size_t >(triangleIndex) + 1);
+
+				if ( m_triangleVertexColorIndexes.size() < required * 3 )
+				{
+					m_triangleVertexColorIndexes.resize(required * 3, index_data_t{0});
+				}
+
+				const auto first = Shape::cornerSlot(triangleIndex, 0);
+
+				std::ranges::copy(colorIndexes, m_triangleVertexColorIndexes.begin() + static_cast< std::ptrdiff_t >(first));
+			}
+
+			/**
+			 * @brief Returns the edge index of a triangle corner (the edge from that corner to the next): an index into
+			 * edges(), set by addTriangle() and rebuildEdges().
+			 * @note "None" (the index type's maximum) for a shape without edges or a triangle past the table.
+			 * @param triangleIndex The index of the triangle.
+			 * @param corner The corner, 0 to 2.
+			 * @return index_data_t
+			 */
+			[[nodiscard]]
+			index_data_t
+			triangleEdgeIndex (index_data_t triangleIndex, index_data_t corner) const noexcept
+			{
+				return Shape::cornerSlot(triangleIndex, corner) < m_triangleEdgeIndexes.size() ? m_triangleEdgeIndexes[Shape::cornerSlot(triangleIndex, corner)] : NoEdge;
+			}
+
+			/**
+			 * @brief Renumbers the per-vertex tables after a pass that replaced the vertex list: the new vertex
+			 * remapping[old] takes the skinning of the FIRST old vertex mapped to it, as a copy of that whole vertex did
+			 * when the skinning lived in ShapeVertex (ShapeProcessor::deduplicateVertices()).
+			 * @note Call it after replacing vertices(); a shape without skinning is left as it is.
+			 * @param remapping The new index of every old vertex, as many entries as the table had.
+			 */
+			void
+			remapVertexAttributes (const std::vector< index_data_t > & remapping) noexcept
+			{
+				if ( m_vertexInfluences.empty() )
+				{
+					return;
+				}
+
+				std::vector< Math::Vector< 4, int32_t > > influences(m_vertices.size(), Shape::noInfluences());
+				std::vector< Math::Vector< 4, vertex_data_t > > weights(m_vertices.size(), Shape::noWeights());
+				std::vector< bool > assigned(m_vertices.size(), false);
+
+				for ( size_t oldIndex = 0; oldIndex < remapping.size() && oldIndex < m_vertexInfluences.size(); ++oldIndex )
+				{
+					const auto newIndex = static_cast< size_t >(remapping[oldIndex]);
+
+					if ( newIndex < assigned.size() && !assigned[newIndex] )
+					{
+						influences[newIndex] = m_vertexInfluences[oldIndex];
+						weights[newIndex] = m_vertexWeights[oldIndex];
+						assigned[newIndex] = true;
+					}
+				}
+
+				m_vertexInfluences = std::move(influences);
+				m_vertexWeights = std::move(weights);
 			}
 
 			/**
@@ -474,6 +639,10 @@ namespace EmEn::Base::VertexFactory
 				bytes += m_vertices.capacity() * sizeof(typename decltype(m_vertices)::value_type);
 				bytes += m_vertexColors.capacity() * sizeof(typename decltype(m_vertexColors)::value_type);
 				bytes += m_triangles.capacity() * sizeof(typename decltype(m_triangles)::value_type);
+				bytes += m_vertexInfluences.capacity() * sizeof(typename decltype(m_vertexInfluences)::value_type);
+				bytes += m_vertexWeights.capacity() * sizeof(typename decltype(m_vertexWeights)::value_type);
+				bytes += m_triangleVertexColorIndexes.capacity() * sizeof(typename decltype(m_triangleVertexColorIndexes)::value_type);
+				bytes += m_triangleEdgeIndexes.capacity() * sizeof(typename decltype(m_triangleEdgeIndexes)::value_type);
 				bytes += m_edges.capacity() * sizeof(typename decltype(m_edges)::value_type);
 				bytes += hashIndexBytes(m_unpairedEdges);
 				bytes += hashIndexBytes(m_vertexIndex);
@@ -658,22 +827,23 @@ namespace EmEn::Base::VertexFactory
 			bool
 			indicesInRange (bool withVertexColors = false) const noexcept
 			{
-				return std::ranges::all_of(m_triangles, [this, withVertexColors] (const auto & triangle) {
+				for ( size_t triangleIndex = 0; triangleIndex < m_triangles.size(); ++triangleIndex )
+				{
 					for ( index_data_t corner = 0; corner < 3; ++corner )
 					{
-						if ( static_cast< size_t >(triangle.vertexIndex(corner)) >= m_vertices.size() )
+						if ( static_cast< size_t >(m_triangles[triangleIndex].vertexIndex(corner)) >= m_vertices.size() )
 						{
 							return false;
 						}
 
-						if ( withVertexColors && static_cast< size_t >(triangle.vertexColorIndex(corner)) >= m_vertexColors.size() )
+						if ( withVertexColors && static_cast< size_t >(this->triangleVertexColorIndex(static_cast< index_data_t >(triangleIndex), corner)) >= m_vertexColors.size() )
 						{
 							return false;
 						}
 					}
+				}
 
-					return true;
-				});
+				return true;
 			}
 
 			/**
@@ -1233,6 +1403,8 @@ namespace EmEn::Base::VertexFactory
 			{
 				/* Gets a copy of the vertices position and clean the vector for replacement. */
 				const std::vector< ShapeVertex< vertex_data_t > > baseVertices(m_vertices);
+				const auto baseInfluences = std::exchange(m_vertexInfluences, {});
+				const auto baseWeights = std::exchange(m_vertexWeights, {});
 
 				m_vertices.clear();
 
@@ -1263,6 +1435,9 @@ namespace EmEn::Base::VertexFactory
 						m_vertices.emplace_back(baseVertex);
 
 						newIndex = static_cast< index_data_t >(m_vertices.size() - 1);
+
+						/* Nothing is allocated for a shape without skinning (the defaults). */
+						this->setVertexSkinning(newIndex, Shape::entryOr(baseInfluences, baseIndex, Shape::noInfluences()), Shape::entryOr(baseWeights, baseIndex, Shape::noWeights()));
 					}
 
 					/* Ne replacement requested. */
@@ -1284,20 +1459,28 @@ namespace EmEn::Base::VertexFactory
 					}
 				}
 
-				/* Removes invalid triangles. */
-				auto triangleIt = m_triangles.begin();
+				/* Removes invalid triangles, with their entries in the triangle tables. */
+				size_t kept = 0;
 
-				while ( triangleIt != m_triangles.end() )
+				for ( size_t triangleIndex = 0; triangleIndex < m_triangles.size(); ++triangleIndex )
 				{
-					if ( (*triangleIt).vertexIndex(0) == (*triangleIt).vertexIndex(1) || (*triangleIt).vertexIndex(0) == (*triangleIt).vertexIndex(2) || (*triangleIt).vertexIndex(1) == (*triangleIt).vertexIndex(2) )
+					const auto & triangle = m_triangles[triangleIndex];
+
+					if ( triangle.vertexIndex(0) == triangle.vertexIndex(1) || triangle.vertexIndex(0) == triangle.vertexIndex(2) || triangle.vertexIndex(1) == triangle.vertexIndex(2) )
 					{
-						triangleIt = m_triangles.erase(triangleIt);
+						continue;
 					}
-					else
-					{
-						++triangleIt;
-					}
+
+					m_triangles[kept] = triangle;
+
+					Shape::moveCorners(m_triangleVertexColorIndexes, triangleIndex, kept);
+					Shape::moveCorners(m_triangleEdgeIndexes, triangleIndex, kept);
+
+					++kept;
 				}
+
+				m_triangles.resize(kept);
+				this->alignAttributeTables();
 			}
 
 			/**
@@ -1311,13 +1494,7 @@ namespace EmEn::Base::VertexFactory
 				m_vertexColors.emplace_back(color);
 
 				/* Sets a color pointer to index 0, the unique color. */
-				for ( auto & triangle : m_triangles )
-				{
-					for ( index_data_t vertexIndex = 0; vertexIndex < 3; ++vertexIndex )
-					{
-						triangle.setVertexColorIndex(vertexIndex, 0);
-					}
-				}
+				m_triangleVertexColorIndexes.assign(m_triangles.size() * 3, index_data_t{0});
 			}
 
 			/**
@@ -1345,6 +1522,8 @@ namespace EmEn::Base::VertexFactory
 				{
 					triangle.flip();
 				}
+
+				this->swapFirstColorCorners();
 			}
 
 			/**
@@ -1360,6 +1539,8 @@ namespace EmEn::Base::VertexFactory
 				{
 					triangle.reverseWinding();
 				}
+
+				this->swapFirstColorCorners();
 			}
 
 			/**
@@ -1414,6 +1595,7 @@ namespace EmEn::Base::VertexFactory
 					return false;
 				}
 
+				this->alignAttributeTables();
 				this->updateProperties();
 
 				return true;
@@ -1440,8 +1622,10 @@ namespace EmEn::Base::VertexFactory
 
 				index_data_t indexBufferOffset = 0;
 
-				for ( const auto & triangle : m_triangles )
+				for ( size_t triangleIndex = 0; triangleIndex < m_triangles.size(); ++triangleIndex )
 				{
+					const auto & triangle = m_triangles[triangleIndex];
+
 					for ( index_data_t triangleVertexIndex = 0; triangleVertexIndex < 3; ++triangleVertexIndex)
 					{
 						const auto shapeVertexIndex = triangle.vertexIndex(triangleVertexIndex);
@@ -1510,7 +1694,7 @@ namespace EmEn::Base::VertexFactory
 						/* Vertex Colors */
 						if ( vertexColorType != VertexColorType::None )
 						{
-							const auto & vertexColor = m_vertexColors[triangle.vertexColorIndex(triangleVertexIndex)];
+							const auto & vertexColor = m_vertexColors[this->triangleVertexColorIndex(static_cast< index_data_t >(triangleIndex), triangleVertexIndex)];
 
 							switch ( vertexColorType )
 							{
@@ -1534,23 +1718,23 @@ namespace EmEn::Base::VertexFactory
 						switch ( skeletalAnimationType )
 						{
 							case SkeletalAnimationType::Average3:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 3, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 3, vertexBuffer, vertexBufferOffset);
 								break;
 
 							case SkeletalAnimationType::Average4:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 4, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 4, vertexBuffer, vertexBufferOffset);
 								break;
 
 							case SkeletalAnimationType::Weighted3:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 3, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 3, vertexBuffer, vertexBufferOffset);
 
-								Shape::writeVector3ToBuffer(vertex.weights(), vertexBuffer, vertexBufferOffset);
+								Shape::writeVector3ToBuffer(this->vertexWeights(shapeVertexIndex), vertexBuffer, vertexBufferOffset);
 								break;
 
 							case SkeletalAnimationType::Weighted4:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 4, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 4, vertexBuffer, vertexBufferOffset);
 
-								Shape::writeVector4ToBuffer(vertex.weights(), vertexBuffer, vertexBufferOffset);
+								Shape::writeVector4ToBuffer(this->vertexWeights(shapeVertexIndex), vertexBuffer, vertexBufferOffset);
 								break;
 
 							default:
@@ -1600,8 +1784,10 @@ namespace EmEn::Base::VertexFactory
 
 				index_data_t indexBufferOffset = 0;
 
-				for ( const auto & triangle : m_triangles )
+				for ( size_t triangleIndex = 0; triangleIndex < m_triangles.size(); ++triangleIndex )
 				{
+					const auto & triangle = m_triangles[triangleIndex];
+
 					for ( index_data_t triangleVertexIndex = 0; triangleVertexIndex < 3; ++triangleVertexIndex )
 					{
 						const auto shapeVertexIndex = triangle.vertexIndex(triangleVertexIndex);
@@ -1678,7 +1864,7 @@ namespace EmEn::Base::VertexFactory
 						/* Vertex Colors */
 						if ( vertexColorType != VertexColorType::None )
 						{
-							const auto & vertexColor = m_vertexColors[triangle.vertexColorIndex(triangleVertexIndex)];
+							const auto & vertexColor = m_vertexColors[this->triangleVertexColorIndex(static_cast< index_data_t >(triangleIndex), triangleVertexIndex)];
 
 							switch ( vertexColorType )
 							{
@@ -1702,23 +1888,23 @@ namespace EmEn::Base::VertexFactory
 						switch ( skeletalAnimationType )
 						{
 							case SkeletalAnimationType::Average3:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 3, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 3, vertexBuffer, vertexBufferOffset);
 								break;
 
 							case SkeletalAnimationType::Average4:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 4, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 4, vertexBuffer, vertexBufferOffset);
 								break;
 
 							case SkeletalAnimationType::Weighted3:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 3, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 3, vertexBuffer, vertexBufferOffset);
 
-								Shape::writeVector3ToBuffer(vertex.weights(), vertexBuffer, vertexBufferOffset);
+								Shape::writeVector3ToBuffer(this->vertexWeights(shapeVertexIndex), vertexBuffer, vertexBufferOffset);
 								break;
 
 							case SkeletalAnimationType::Weighted4:
-								Shape::writeInfluenceToVertexBuffer(vertex.influences(), 4, vertexBuffer, vertexBufferOffset);
+								Shape::writeInfluenceToVertexBuffer(this->vertexInfluences(shapeVertexIndex), 4, vertexBuffer, vertexBufferOffset);
 
-								Shape::writeVector4ToBuffer(vertex.weights(), vertexBuffer, vertexBufferOffset);
+								Shape::writeVector4ToBuffer(this->vertexWeights(shapeVertexIndex), vertexBuffer, vertexBufferOffset);
 								break;
 
 							default:
@@ -1776,13 +1962,20 @@ namespace EmEn::Base::VertexFactory
 				if ( vertexColorType != VertexColorType::None )
 				{
 					m_vertexColors.resize(vertexCount);
+					m_triangleVertexColorIndexes.resize(triangleCount * 3);
+				}
+
+				if ( skeletalAnimationType != SkeletalAnimationType::None )
+				{
+					m_vertexInfluences.resize(vertexCount, Shape::noInfluences());
+					m_vertexWeights.resize(vertexCount, Shape::noWeights());
 				}
 
 				for ( size_t vertexIndex = 0; vertexIndex < vertexCount; ++vertexIndex )
 				{
 					auto offset = vertexIndex * vertexElementCount;
 
-					Shape::readVertex(vertexBuffer, offset, m_vertices[vertexIndex], vertexColorType != VertexColorType::None ? &m_vertexColors[vertexIndex] : nullptr, normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
+					Shape::readVertex(vertexBuffer, offset, m_vertices[vertexIndex], vertexColorType != VertexColorType::None ? &m_vertexColors[vertexIndex] : nullptr, this->skinningOf(vertexIndex), normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
 				}
 
 				m_triangles.resize(triangleCount);
@@ -1796,8 +1989,12 @@ namespace EmEn::Base::VertexFactory
 						const auto vertexIndex = indexBuffer[(triangleIndex * 3) + corner];
 
 						triangle.setVertexIndex(corner, vertexIndex);
+
 						/* NOTE: The buffer holds one colour per vertex. */
-						triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? vertexIndex : index_data_t{0});
+						if ( vertexColorType != VertexColorType::None )
+						{
+							m_triangleVertexColorIndexes[Shape::cornerSlot(triangleIndex, corner)] = vertexIndex;
+						}
 					}
 				}
 
@@ -1844,6 +2041,13 @@ namespace EmEn::Base::VertexFactory
 				if ( vertexColorType != VertexColorType::None )
 				{
 					m_vertexColors.resize(vertexCount);
+					m_triangleVertexColorIndexes.resize(triangleCount * 3);
+				}
+
+				if ( skeletalAnimationType != SkeletalAnimationType::None )
+				{
+					m_vertexInfluences.resize(vertexCount, Shape::noInfluences());
+					m_vertexWeights.resize(vertexCount, Shape::noWeights());
 				}
 
 				m_triangles.resize(triangleCount);
@@ -1852,13 +2056,16 @@ namespace EmEn::Base::VertexFactory
 				{
 					auto offset = vertexIndex * vertexElementCount;
 
-					Shape::readVertex(vertexBuffer, offset, m_vertices[vertexIndex], vertexColorType != VertexColorType::None ? &m_vertexColors[vertexIndex] : nullptr, normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
+					Shape::readVertex(vertexBuffer, offset, m_vertices[vertexIndex], vertexColorType != VertexColorType::None ? &m_vertexColors[vertexIndex] : nullptr, this->skinningOf(vertexIndex), normalType, textureCoordinatesType, vertexColorType, skeletalAnimationType, secondaryTextureCoordinatesType);
 
 					const auto corner = static_cast< index_data_t >(vertexIndex % 3);
-					auto & triangle = m_triangles[vertexIndex / 3];
 
-					triangle.setVertexIndex(corner, static_cast< index_data_t >(vertexIndex));
-					triangle.setVertexColorIndex(corner, vertexColorType != VertexColorType::None ? static_cast< index_data_t >(vertexIndex) : index_data_t{0});
+					m_triangles[vertexIndex / 3].setVertexIndex(corner, static_cast< index_data_t >(vertexIndex));
+
+					if ( vertexColorType != VertexColorType::None )
+					{
+						m_triangleVertexColorIndexes[vertexIndex] = static_cast< index_data_t >(vertexIndex);
+					}
 				}
 
 				return this->finishReading(groups, triangleCount, textureCoordinatesType != TextureCoordinatesType::None, normalType != NormalType::None);
@@ -2038,10 +2245,10 @@ namespace EmEn::Base::VertexFactory
 				const auto vertexIsFinite = [&finite] (const ShapeVertex< vertex_data_t > & vertex) noexcept {
 					return finite(vertex.position()) && finite(vertex.tangent()) && finite(vertex.normal()) &&
 						finite(vertex.textureCoordinates()) && finite(vertex.secondaryTextureCoordinates()) &&
-						finite(vertex.weights()) && std::isfinite(vertex.tangentHandedness());
+						std::isfinite(vertex.tangentHandedness());
 				};
 
-				return std::ranges::all_of(m_vertices, vertexIsFinite) && std::ranges::all_of(m_vertexColors, finite);
+				return std::ranges::all_of(m_vertices, vertexIsFinite) && std::ranges::all_of(m_vertexColors, finite) && std::ranges::all_of(m_vertexWeights, finite);
 			}
 
 			/**
@@ -2057,25 +2264,26 @@ namespace EmEn::Base::VertexFactory
 			bool
 			hasConsistentIndices () const noexcept
 			{
-				constexpr auto NoEdge = std::numeric_limits< index_data_t >::max();
-
 				const auto vertexCount = m_vertices.size();
 				const auto colorCount = m_vertexColors.size();
 				const auto edgeCount = m_edges.size();
 
-				return std::ranges::all_of(m_triangles, [vertexCount, colorCount, edgeCount] (const ShapeTriangle< vertex_data_t, index_data_t > & triangle) noexcept {
+				for ( size_t triangleIndex = 0; triangleIndex < m_triangles.size(); ++triangleIndex )
+				{
+					const auto index = static_cast< index_data_t >(triangleIndex);
+
 					for ( index_data_t corner = 0; corner < 3; ++corner )
 					{
-						const auto edge = triangle.edgeIndex(corner);
+						const auto edge = this->triangleEdgeIndex(index, corner);
 
-						if ( triangle.vertexIndex(corner) >= vertexCount || (colorCount > 0 && triangle.vertexColorIndex(corner) >= colorCount) || (edge != NoEdge && edge >= edgeCount) )
+						if ( m_triangles[triangleIndex].vertexIndex(corner) >= vertexCount || (colorCount > 0 && this->triangleVertexColorIndex(index, corner) >= colorCount) || (edge != NoEdge && edge >= edgeCount) )
 						{
 							return false;
 						}
 					}
+				}
 
-					return true;
-				});
+				return true;
 			}
 
 			/**
@@ -2117,10 +2325,9 @@ namespace EmEn::Base::VertexFactory
 			void
 			addTriangle (ShapeTriangle< vertex_data_t > & triangle) noexcept
 			{
-				/* Creates edges */
-				triangle.setEdgeIndex(0, this->addEdge(triangle.vertexIndex(0), triangle.vertexIndex(1)));
-				triangle.setEdgeIndex(1, this->addEdge(triangle.vertexIndex(1), triangle.vertexIndex(2)));
-				triangle.setEdgeIndex(2, this->addEdge(triangle.vertexIndex(2), triangle.vertexIndex(0)));
+				/* Creates edges: one entry per triangle in the edge table, the triangles added without edges included. */
+				m_triangleEdgeIndexes.resize(m_triangles.size() * 3, NoEdge);
+				this->appendEdges(triangle);
 
 				m_triangles.emplace_back(triangle);
 
@@ -2163,11 +2370,12 @@ namespace EmEn::Base::VertexFactory
 				m_boundaryLoops.clear();
 				m_boundaryLoopsAnalyzed = false;
 
-				for ( auto & triangle : m_triangles )
+				m_triangleEdgeIndexes.clear();
+				m_triangleEdgeIndexes.reserve(m_triangles.size() * 3);
+
+				for ( const auto & triangle : m_triangles )
 				{
-					triangle.setEdgeIndex(0, this->addEdge(triangle.vertexIndex(0), triangle.vertexIndex(1)));
-					triangle.setEdgeIndex(1, this->addEdge(triangle.vertexIndex(1), triangle.vertexIndex(2)));
-					triangle.setEdgeIndex(2, this->addEdge(triangle.vertexIndex(2), triangle.vertexIndex(0)));
+					this->appendEdges(triangle);
 				}
 			}
 
@@ -2268,7 +2476,7 @@ namespace EmEn::Base::VertexFactory
 
 						if ( !obj.m_vertexColors.empty() )
 						{
-							const auto shapeColorIndex = triangle.vertexColorIndex(triangleVertexIndex);
+							const auto shapeColorIndex = obj.triangleVertexColorIndex(triangleIndex, triangleVertexIndex);
 
 							if ( static_cast< size_t >(shapeColorIndex) < obj.m_vertexColors.size() )
 							{
@@ -2306,6 +2514,173 @@ namespace EmEn::Base::VertexFactory
 			}
 
 		private:
+
+			/** @brief The edge index of a triangle corner that names no edge. */
+			static constexpr index_data_t NoEdge{std::numeric_limits< index_data_t >::max()};
+
+			/**
+			 * @brief Returns the influences of a vertex without skinning: (-1, -1, -1, -1).
+			 * @return const Math::Vector< 4, int32_t > &
+			 */
+			[[nodiscard]]
+			static
+			const Math::Vector< 4, int32_t > &
+			noInfluences () noexcept
+			{
+				static const Math::Vector< 4, int32_t > influences{-1, -1, -1, -1};
+
+				return influences;
+			}
+
+			/**
+			 * @brief Returns the weights of a vertex without skinning: (0, 0, 0, 0).
+			 * @return const Math::Vector< 4, vertex_data_t > &
+			 */
+			[[nodiscard]]
+			static
+			const Math::Vector< 4, vertex_data_t > &
+			noWeights () noexcept
+			{
+				static const Math::Vector< 4, vertex_data_t > weights{0, 0, 0, 0};
+
+				return weights;
+			}
+
+			/**
+			 * @brief Brings every allocated attribute table to the vertex or triangle count; an empty table stays empty.
+			 */
+			void
+			alignAttributeTables () noexcept
+			{
+				if ( !m_vertexInfluences.empty() )
+				{
+					m_vertexInfluences.resize(m_vertices.size(), Shape::noInfluences());
+					m_vertexWeights.resize(m_vertices.size(), Shape::noWeights());
+				}
+
+				if ( !m_triangleVertexColorIndexes.empty() )
+				{
+					m_triangleVertexColorIndexes.resize(m_triangles.size() * 3, index_data_t{0});
+				}
+
+				if ( !m_triangleEdgeIndexes.empty() )
+				{
+					m_triangleEdgeIndexes.resize(m_triangles.size() * 3, NoEdge);
+				}
+			}
+
+			/**
+			 * @brief Returns an entry of a table, or a fallback past its end.
+			 * @tparam entry_t The entry type.
+			 * @param table A reference to the table.
+			 * @param index The index of the entry.
+			 * @param fallback A reference to the value past the end.
+			 * @return entry_t A copy (a reference to the fallback could outlive a temporary).
+			 */
+			template< typename entry_t >
+			[[nodiscard]]
+			static
+			entry_t
+			entryOr (const std::vector< entry_t > & table, size_t index, const entry_t & fallback) noexcept
+			{
+				return index < table.size() ? table[index] : fallback;
+			}
+
+			/**
+			 * @brief Returns the slot of a triangle corner in a per-corner table (three entries a triangle).
+			 * @param triangleIndex The index of the triangle.
+			 * @param corner The corner, 0 to 2.
+			 * @return size_t
+			 */
+			[[nodiscard]]
+			static
+			size_t
+			cornerSlot (size_t triangleIndex, size_t corner) noexcept
+			{
+				return (triangleIndex * 3) + corner;
+			}
+
+			/**
+			 * @brief Moves the three entries of a triangle in a per-corner table to the slots of another, when the table
+			 * has them.
+			 * @param table A reference to the table.
+			 * @param fromTriangle The triangle whose entries move.
+			 * @param toTriangle The triangle that receives them.
+			 */
+			static
+			void
+			moveCorners (std::vector< index_data_t > & table, size_t fromTriangle, size_t toTriangle) noexcept
+			{
+				if ( Shape::cornerSlot(fromTriangle, 2) >= table.size() )
+				{
+					return;
+				}
+
+				for ( size_t corner = 0; corner < 3; ++corner )
+				{
+					table[Shape::cornerSlot(toTriangle, corner)] = table[Shape::cornerSlot(fromTriangle, corner)];
+				}
+			}
+
+			/**
+			 * @brief Adds the three edges of a triangle and their indexes to the edge table, in corner order (the edge
+			 * from each corner to the next).
+			 * @param triangle A reference to the triangle.
+			 */
+			void
+			appendEdges (const ShapeTriangle< vertex_data_t > & triangle) noexcept
+			{
+				m_triangleEdgeIndexes.push_back(this->addEdge(triangle.vertexIndex(0), triangle.vertexIndex(1)));
+				m_triangleEdgeIndexes.push_back(this->addEdge(triangle.vertexIndex(1), triangle.vertexIndex(2)));
+				m_triangleEdgeIndexes.push_back(this->addEdge(triangle.vertexIndex(2), triangle.vertexIndex(0)));
+			}
+
+			/**
+			 * @brief Swaps the color indexes of the first two corners of every triangle, as flipping a triangle swaps its
+			 * first two vertices.
+			 */
+			void
+			swapFirstColorCorners () noexcept
+			{
+				for ( size_t first = 0; first + 1 < m_triangleVertexColorIndexes.size(); first += 3 )
+				{
+					std::swap(m_triangleVertexColorIndexes[first], m_triangleVertexColorIndexes[first + 1]);
+				}
+			}
+
+			/**
+			 * @brief Returns pointers to a vertex's entries in the skinning tables, two nullptr without skinning.
+			 * @param vertexIndex The index of the vertex.
+			 * @return std::pair< Math::Vector< 4, int32_t > *, Math::Vector< 4, vertex_data_t > * >
+			 */
+			[[nodiscard]]
+			std::pair< Math::Vector< 4, int32_t > *, Math::Vector< 4, vertex_data_t > * >
+			skinningOf (size_t vertexIndex) noexcept
+			{
+				if ( vertexIndex >= m_vertexInfluences.size() )
+				{
+					return {nullptr, nullptr};
+				}
+
+				return {&m_vertexInfluences[vertexIndex], &m_vertexWeights[vertexIndex]};
+			}
+
+			/**
+			 * @brief Stores the skinning read from a vertex buffer, when the vertex has entries in the tables.
+			 * @param skinning Pointers to the vertex's influences and weights (skinningOf()).
+			 * @param influences The four bone indices.
+			 * @param weights The four weights.
+			 */
+			static
+			void
+			storeSkinning (std::pair< Math::Vector< 4, int32_t > *, Math::Vector< 4, vertex_data_t > * > skinning, const Math::Vector< 4, int32_t > & influences, const Math::Vector< 4, vertex_data_t > & weights) noexcept
+			{
+				if ( skinning.first != nullptr )
+				{
+					*skinning.first = influences;
+					*skinning.second = weights;
+				}
+			}
 
 			/**
 			 * @brief Returns whether every triangle refers to existing vertices, saying which computation refused otherwise.
@@ -3000,6 +3375,8 @@ namespace EmEn::Base::VertexFactory
 			 * @param offset The vertex's first element, advanced past it.
 			 * @param vertex A reference to the vertex to fill.
 			 * @param vertexColor A pointer to the colour to fill, or nullptr without colours.
+			 * @param skinning Pointers to the vertex's influences and weights in the skinning tables, or two nullptr
+			 * without skinning (skinningOf()).
 			 * @param normalType The normal format.
 			 * @param textureCoordinatesType The texture coordinates format.
 			 * @param vertexColorType The vertex colour format.
@@ -3008,7 +3385,7 @@ namespace EmEn::Base::VertexFactory
 			 */
 			static
 			void
-			readVertex (std::span< const vertex_data_t > vertexBuffer, size_t & offset, ShapeVertex< vertex_data_t > & vertex, Math::Vector< 4, vertex_data_t > * vertexColor, NormalType normalType, TextureCoordinatesType textureCoordinatesType, VertexColorType vertexColorType, SkeletalAnimationType skeletalAnimationType, TextureCoordinatesType secondaryTextureCoordinatesType) noexcept
+			readVertex (std::span< const vertex_data_t > vertexBuffer, size_t & offset, ShapeVertex< vertex_data_t > & vertex, Math::Vector< 4, vertex_data_t > * vertexColor, std::pair< Math::Vector< 4, int32_t > *, Math::Vector< 4, vertex_data_t > * > skinning, NormalType normalType, TextureCoordinatesType textureCoordinatesType, VertexColorType vertexColorType, SkeletalAnimationType skeletalAnimationType, TextureCoordinatesType secondaryTextureCoordinatesType) noexcept
 			{
 				const auto next = [&vertexBuffer, &offset] () {
 					return vertexBuffer[offset++];
@@ -3135,7 +3512,7 @@ namespace EmEn::Base::VertexFactory
 						const auto b = influence();
 						const auto c = influence();
 
-						vertex.setInfluences(a, b, c);
+						Shape::storeSkinning(skinning, {a, b, c, -1}, Shape::noWeights());
 						break;
 					}
 
@@ -3146,7 +3523,7 @@ namespace EmEn::Base::VertexFactory
 						const auto c = influence();
 						const auto d = influence();
 
-						vertex.setInfluences(a, b, c, d);
+						Shape::storeSkinning(skinning, {a, b, c, d}, Shape::noWeights());
 						break;
 					}
 
@@ -3157,8 +3534,7 @@ namespace EmEn::Base::VertexFactory
 						const auto c = influence();
 						const auto weights = next3();
 
-						vertex.setInfluences(a, b, c);
-						vertex.setWeights(weights[Math::X], weights[Math::Y], weights[Math::Z]);
+						Shape::storeSkinning(skinning, {a, b, c, -1}, {weights[Math::X], weights[Math::Y], weights[Math::Z], 0});
 						break;
 					}
 
@@ -3173,8 +3549,7 @@ namespace EmEn::Base::VertexFactory
 						const auto wc = next();
 						const auto wd = next();
 
-						vertex.setInfluences(a, b, c, d);
-						vertex.setWeights(wa, wb, wc, wd);
+						Shape::storeSkinning(skinning, {a, b, c, d}, {wa, wb, wc, wd});
 						break;
 					}
 
@@ -3249,6 +3624,15 @@ namespace EmEn::Base::VertexFactory
 			std::vector< ShapeVertex< vertex_data_t > > m_vertices;
 			std::vector< Math::Vector< 4, vertex_data_t > > m_vertexColors;
 			std::vector< ShapeTriangle< vertex_data_t, index_data_t > > m_triangles;
+			/* NOTE: The rare attributes live out of ShapeVertex and ShapeTriangle (2026-11-26, owner decision: a shape
+			 * without them does not pay for them). Each table is EMPTY until its first set*(), then holds one entry per
+			 * vertex (per triangle); alignAttributeTables() keeps that size, and every pass that renumbers or drops
+			 * vertices or triangles carries them. */
+			std::vector< Math::Vector< 4, int32_t > > m_vertexInfluences;
+			std::vector< Math::Vector< 4, vertex_data_t > > m_vertexWeights;
+			/* NOTE: Three entries a triangle, in corner order (cornerSlot()). */
+			std::vector< index_data_t > m_triangleVertexColorIndexes;
+			std::vector< index_data_t > m_triangleEdgeIndexes;
 			std::vector< ShapeEdge< index_data_t > > m_edges;
 			/* NOTE: Construction-time index only, it holds no geometry: addEdge() uses it to pair the
 			 * two half-edges of a shared edge in constant time. */
