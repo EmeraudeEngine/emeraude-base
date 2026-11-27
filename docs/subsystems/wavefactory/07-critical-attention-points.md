@@ -16,6 +16,12 @@
   playlist is left to load. It now keeps that error for a rendering that failed with no stop requested. Test
   `WaveFactoryMIDI.aRequestedStopRefusesBothRenderers` (it expected the two error lines until then: it pinned the
   fault): 2 informations, 0 error. After: the same shutdown, 0 such line.
+  macOS (base 3b8c452, Apple M6, Apple clang 21, 2026-11-27): the suite in Release 2902 passed / 0 failed / 7
+  skipped, the same under ASan + UBSan with 0 report; the testbed shut down right after `play()` on a MIDI playlist:
+  2 "stopped" informations, 0 error; the engine's track mixer stress under ThreadSanitizer: 10 "stopped", 0 error
+  (12 then 7 error lines before). Windows (MSVC 19.44 `/W4 /WX`, the same day): 2902 passed / 0 failed / 4 skipped;
+  the same shutdown: 2 "stopped", 0 error. ⚠️ Stop the application AT ONCE after `play()`: two seconds later both
+  tracks are rendered on these machines and the stop interrupts nothing.
 - **Long decodes and resamples are STOPPABLE (2026-10-27)**: `ReadOptions::stopToken` reaches every format's
   `readStream()` — libsndfile decodes in blocks of `DecodeBlockFrames` (16 384) with the stop checked between two (a
   stopped read returns false) — and `Processor::resample(frequency, stopToken)` feeds libsamplerate in chunks of
