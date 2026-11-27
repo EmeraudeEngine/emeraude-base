@@ -8,6 +8,14 @@
 - **MIDI End of Track**: Always handle meta event 0x2F to properly terminate parsing. See: `FileFormatMIDI.hpp:parseTrack()`
 - **MIDI Tempo Map**: Use `ticksToSamplesWithTempoMap()` for accurate timing with tempo changes. See: `FileFormatMIDI.hpp:ticksToSamplesWithTempoMap()`
 - **MIDI EOF Safety**: `readVariableLength()` must check for EOF to prevent infinite loops on truncated files. See: `FileFormatMIDI.hpp:readVariableLength()`
+- **A stopped read is not a failure: it logs an information, never an error (2026-11-27).** The caller gets
+  `false`; the format says "stopped" at the Info level (`FileFormatSNDFile`, `Processor::resample()`, both MIDI
+  renderers). `FileFormatMIDI::processIStream()` added "failed to render audio !" at the Error level on top of the
+  renderer's "stopped": one error line per MIDI track still rendering when an application shut down — 31 lines for a
+  playlist of 74 tracks stopped two seconds after its load began (the engine's testbed, Linux), none when the
+  playlist is left to load. It now keeps that error for a rendering that failed with no stop requested. Test
+  `WaveFactoryMIDI.aRequestedStopRefusesBothRenderers` (it expected the two error lines until then: it pinned the
+  fault): 2 informations, 0 error. After: the same shutdown, 0 such line.
 - **Long decodes and resamples are STOPPABLE (2026-10-27)**: `ReadOptions::stopToken` reaches every format's
   `readStream()` — libsndfile decodes in blocks of `DecodeBlockFrames` (16 384) with the stop checked between two (a
   stopped read returns false) — and `Processor::resample(frequency, stopToken)` feeds libsamplerate in chunks of

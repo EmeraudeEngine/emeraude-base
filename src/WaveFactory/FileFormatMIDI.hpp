@@ -447,7 +447,13 @@ namespace EmEn::Base::WaveFactory
 				/* Render notes to wave. */
 				if ( !this->renderToWave(wave, notes, controlEvents, tempoEvents, header, channelStates) )
 				{
-					Logging::error("WaveFactory::FileFormatMIDI", "processIStream(), failed to render audio !");
+					/* NOTE: A rendering given up on a requested stop is not a failure: the renderer said "stopped"
+					 * (an information), the caller still gets false. Each cancelled rendering used to add an error
+					 * line here — one per track still loading when an application shuts down. */
+					if ( !m_stopToken.stop_requested() )
+					{
+						Logging::error("WaveFactory::FileFormatMIDI", "processIStream(), failed to render audio !");
+					}
 
 					return false;
 				}

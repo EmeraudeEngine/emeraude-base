@@ -537,11 +537,14 @@ namespace EmEn::Base::WaveFactory
 
 		EXPECT_FALSE(decodeMidi(file, sampled, soundfont.get(), stop.get_token()));
 
-		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09). */
+		/* What the body logs (the suite's guard fails a test on any uncaptured diagnostic, 2026-11-09): one "stopped"
+		 * information per renderer and NO error — a requested stop is not a failure (2026-11-27: each cancelled
+		 * rendering used to log "failed to render audio", 31 error lines when an application shut down while a
+		 * playlist of MIDI tracks was loading). */
 		const auto captured = diagnosticsCapture.snapshot();
 		EXPECT_EQ(captured.count(EmEn::Base::Severity::Info, "WaveFactory::FileFormatMIDI"), 2U);
-		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 2U);
-		EXPECT_EQ(captured.countWithoutDebug(), 4U);
+		EXPECT_EQ(captured.count(EmEn::Base::Severity::Error, "WaveFactory::FileFormatMIDI"), 0U);
+		EXPECT_EQ(captured.countWithoutDebug(), 2U);
 		EXPECT_TRUE(captured.standardError.empty()) << captured.standardError;
 	}
 
