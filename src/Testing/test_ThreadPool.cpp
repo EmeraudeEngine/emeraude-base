@@ -345,6 +345,34 @@ TEST(ThreadPool, ConstructorWithOneThread)
 	EXPECT_EQ(pool.threadCount(), 1U);
 }
 
+TEST(ThreadPool, IsCurrentThreadWorkerTellsAWorkerFromTheCaller)
+{
+	/* The calling thread is no worker, before a pool exists and beside one. */
+	EXPECT_FALSE(ThreadPool::isCurrentThreadWorker());
+
+	ThreadPool pool(2);
+	std::atomic< int > answers{0};
+	std::atomic< int > workers{0};
+
+	for ( int index = 0; index < 8; ++index )
+	{
+		pool.enqueue([&answers, &workers] {
+			if ( ThreadPool::isCurrentThreadWorker() )
+			{
+				workers.fetch_add(1);
+			}
+
+			answers.fetch_add(1);
+		});
+	}
+
+	pool.wait();
+
+	EXPECT_EQ(answers.load(), 8);
+	EXPECT_EQ(workers.load(), 8);
+	EXPECT_FALSE(ThreadPool::isCurrentThreadWorker());
+}
+
 /* ============================================================================
  * enqueue tests
  * ============================================================================ */

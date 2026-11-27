@@ -497,6 +497,10 @@ that started it. Contract:
 - a group serves ONE pool (the first `submit()` records it; another pool is refused, traced);
 - `waitForAll()` is `wait()` refused from a pool worker (the strict form for an owner shutting down on the main thread;
   aborted in every build — the worker is marked by a `thread_local` set in `ThreadPool::worker()`);
+- `ThreadPool::isCurrentThreadWorker()` (static, 2026-11-27) answers that mark to a consumer: any wait on work that
+  needs a worker to complete refuses a worker there, as `waitForAll()` does (the engine's
+  `ResourceTrait::waitUntilLoaded()`). False on the thread on which a pool without worker runs its tasks inline.
+  Test `ThreadPool.IsCurrentThreadWorkerTellsAWorkerFromTheCaller`;
 - a task of the group waiting for its own group (or destroying its owner) aborts (D2: a `thread_local` chain of
   `TaskGroupRunScope`s, nested inline runs included);
 - the owner declares the group LAST (destroyed first). State: `Base::Mutex` + annotations (D12), notifications after

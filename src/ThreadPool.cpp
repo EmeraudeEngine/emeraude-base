@@ -504,6 +504,12 @@ namespace EmEn::Base
 		}
 	}
 
+	bool
+	ThreadPool::isCurrentThreadWorker () noexcept
+	{
+		return isPoolWorker();
+	}
+
 	void
 	ThreadPool::worker ()
 	{

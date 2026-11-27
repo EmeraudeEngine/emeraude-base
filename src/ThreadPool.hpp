@@ -35,9 +35,8 @@
 #include <cstddef>
 #include <deque>
 #include <functional>
-#include <future>
+#include <future> // IWYU pragma: keep (enqueueWithResult(), compiled only with exceptions: a downstream consumer)
 #include <memory>
-#include <mutex>
 #include <new>
 #include <optional>
 #include <stop_token>
@@ -1045,6 +1044,16 @@ namespace EmEn::Base
 			{
 				return m_workers.size();
 			}
+
+			/**
+			 * @brief Returns whether the calling thread is a worker of a ThreadPool (of any pool).
+			 * @note For a blocking wait on work that needs a worker to complete: called from a worker, on a saturated
+			 * pool, such a wait never ends. The caller refuses it there (as TaskGroup::waitForAll() does).
+			 * @return bool False on every other thread — the main thread, a Base::Thread, and the thread on which a pool
+			 * without worker runs its tasks.
+			 */
+			[[nodiscard]]
+			static bool isCurrentThreadWorker () noexcept;
 
 			/**
 			 * @brief Returns the number of workers currently executing tasks.
